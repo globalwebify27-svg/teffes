@@ -1,0 +1,577 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300..800;1,300..800&family=Inter:ital,wght@0,300..800;1,300..800&family=Outfit:wght@300;400;500;600;700;800;900&display=swap");
+@import "tailwindcss";
+
+/* ─── Stitch & Teffes Core Design System Tokens ─────────────────────────────────────────── */
+:root {
+  /* Stitch Butchery Colors */
+  --color-primary: #91000a;
+  --color-primary-dark: #6e0e0e;
+  --color-primary-hover: #750910;
+  --color-primary-container: #b71c1c;
+  --color-on-primary: #ffffff;
+  --color-on-primary-container: #ffcac4;
+  --color-primary-fixed: #ffdad6;
+  --color-primary-fixed-dim: #ffb4ab;
+
+  --color-surface: #fbf9f7;
+  --color-surface-card: #ffffff;
+  --color-surface-bright: #fbf9f7;
+  --color-surface-dim: #dbdad8;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f5f3f1;
+  --color-surface-container: #efedeb;
+  --color-surface-container-high: #eae8e6;
+  --color-surface-container-highest: #e4e2e0;
+  --color-on-surface: #1b1c1b;
+  --color-on-surface-variant: #5b403d;
+
+  --color-tertiary: #005122;
+  --color-tertiary-container: #006c30;
+  --color-tertiary-fixed: #95f8a7;
+  --color-tertiary-fixed-dim: #79db8d;
+  --color-on-tertiary: #ffffff;
+  --color-on-tertiary-container: #89ec9c;
+  --color-on-tertiary-fixed-variant: #005323;
+
+  --color-secondary: #545f73;
+  --color-secondary-container: #d5e0f8;
+  --color-secondary-fixed: #d8e3fb;
+  --color-on-secondary: #ffffff;
+  --color-on-secondary-container: #586377;
+
+  --color-tag-amber: #b45309;
+  --color-tag-amber-bg: #fef3c7;
+  --color-crimson-bright: #d32f2f;
+  --color-crimson-soft: #ffebee;
+  --color-slate-body: #475569;
+  --color-slate-subtle: #94a3b8;
+  --color-border-warm: #e7e2dd;
+  --color-border-hairline: #e5e7eb;
+
+  /* Teffes Legacy Variables for Full Backward Compatibility */
+  --brand-primary: #91000a;
+  --brand-primary-dark: #6e0e0e;
+  --brand-primary-light: #b71c1c;
+  --brand-primary-soft: #ffebee;
+  --brand-header-bg: #91000a;
+  --brand-amber: #b45309;
+  --brand-amber-light: #fef3c7;
+  --success: #005122;
+  --success-bg: #ecfdf5;
+  --success-border: #a7f3d0;
+  --error: #ba1a1a;
+  --error-bg: #fef2f2;
+  --gray-50: #faf8f5;
+  --gray-100: #f4f0ea;
+  --gray-200: #e6e0d6;
+  --gray-300: #d4ccbf;
+  --gray-400: #a3998b;
+  --gray-500: #73695b;
+  --gray-600: #574e42;
+  --gray-700: #423b32;
+  --gray-800: #29241e;
+  --gray-900: #1b1c1b;
+
+  /* Typography Fonts */
+  --font-plus-jakarta: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: var(--font-plus-jakarta);
+  --font-body: "Inter", var(--font-plus-jakarta), sans-serif;
+
+  /* Radii */
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.25rem;
+  --radius-full: 9999px;
+
+  /* Fluid Max Widths (expands generously on wide monitors) */
+  --container-max: 1680px;
+}
+
+/* ─── Global Reset ───────────────────────────────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--color-surface);
+  color: var(--color-on-surface);
+  min-height: 100vh;
+  line-height: 1.5;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+}
+
+/* ─── Material Symbols Outlined Icon Font ───────────────────────────────────── */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined', sans-serif !important;
+  font-weight: normal;
+  font-style: normal;
+  font-size: 20px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+  vertical-align: middle;
+}
+
+.material-symbols-outlined.filled {
+  font-variation-settings: 'FILL' 1, 'wght' 600, 'GRAD' 0, 'opsz' 24 !important;
+}
+
+/* ─── Stitch Color Classes ─────────────────────────────────────────────────── */
+.bg-primary { 
+  background-color: var(--color-primary) !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.bg-primary:hover {
+  background-color: var(--color-primary-hover) !important;
+  box-shadow: 0 6px 20px rgba(145, 0, 10, 0.3) !important;
+}
+.bg-primary:active {
+  background-color: var(--color-primary-dark) !important;
+}
+
+.bg-primary-container { background-color: var(--color-primary-container) !important; }
+.bg-surface { background-color: var(--color-surface) !important; }
+.bg-surface-card { background-color: var(--color-surface-card) !important; }
+.bg-surface-container-low { background-color: var(--color-surface-container-low) !important; }
+.bg-surface-container { background-color: var(--color-surface-container) !important; }
+.bg-surface-container-high { background-color: var(--color-surface-container-high) !important; }
+.bg-surface-container-highest { background-color: var(--color-surface-container-highest) !important; }
+.bg-surface-container-lowest { background-color: var(--color-surface-container-lowest) !important; }
+.bg-tertiary { background-color: var(--color-tertiary) !important; }
+.bg-tertiary-fixed { background-color: var(--color-tertiary-fixed) !important; }
+.bg-tertiary-fixed-dim { background-color: var(--color-tertiary-fixed-dim) !important; }
+.bg-tag-amber { background-color: var(--color-tag-amber) !important; }
+.bg-tag-amber-bg { background-color: var(--color-tag-amber-bg) !important; }
+.bg-crimson-bright { background-color: var(--color-crimson-bright) !important; }
+.bg-crimson-soft { background-color: var(--color-crimson-soft) !important; }
+.bg-secondary { background-color: var(--color-secondary) !important; }
+.bg-secondary-container { background-color: var(--color-secondary-container) !important; }
+
+.text-primary { color: var(--color-primary) !important; }
+.text-on-primary { color: var(--color-on-primary) !important; }
+.text-on-primary-container { color: var(--color-on-primary-container) !important; }
+.text-on-surface { color: var(--color-on-surface) !important; }
+.text-on-surface-variant { color: var(--color-on-surface-variant) !important; }
+.text-tertiary { color: var(--color-tertiary) !important; }
+.text-tertiary-fixed { color: var(--color-tertiary-fixed) !important; }
+.text-on-tertiary-fixed-variant { color: var(--color-on-tertiary-fixed-variant) !important; }
+.text-tag-amber { color: var(--color-tag-amber) !important; }
+.text-crimson-bright { color: var(--color-crimson-bright) !important; }
+.text-slate-body { color: var(--color-slate-body) !important; }
+.text-slate-subtle { color: var(--color-slate-subtle) !important; }
+
+/* ─── Stitch Typography System ─────────────────────────────────────────────── */
+.font-headline-xl {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: clamp(1.85rem, 3.6vw, 2.75rem) !important;
+  font-weight: 800 !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.02em !important;
+}
+
+.font-headline-lg {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: clamp(1.35rem, 2.5vw, 1.85rem) !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.015em !important;
+}
+
+.font-headline-md {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 1.25rem !important;
+  font-weight: 700 !important;
+  line-height: 1.35 !important;
+}
+
+.font-headline-sm {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 1rem !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+
+.font-body-lg {
+  font-family: var(--font-body) !important;
+  font-size: 1rem !important;
+  line-height: 1.6 !important;
+}
+
+.font-body-md {
+  font-family: var(--font-body) !important;
+  font-size: 0.875rem !important;
+  line-height: 1.5 !important;
+}
+
+.font-body-sm {
+  font-family: var(--font-body) !important;
+  font-size: 0.785rem !important;
+  line-height: 1.4 !important;
+}
+
+.font-label-lg {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 0.875rem !important;
+  font-weight: 600 !important;
+}
+
+.font-label-md {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 0.775rem !important;
+  font-weight: 600 !important;
+}
+
+.font-label-badge {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 0.7rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.025em !important;
+  line-height: 1.25 !important;
+}
+
+/* ─── Stitch Container & Spacing Classes (Fluid full-width coverage) ──────── */
+.max-w-container-max {
+  max-width: var(--container-max);
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+.container {
+  width: 100%;
+  max-width: var(--container-max);
+  margin: 0 auto;
+  padding: 0 clamp(1rem, 3vw, 2.5rem);
+}
+
+.px-gutter-desktop {
+  padding-left: clamp(1rem, 3vw, 2.5rem) !important;
+  padding-right: clamp(1rem, 3vw, 2.5rem) !important;
+}
+
+/* Horizontal padding utilities for buttons & pills */
+.px-space-2xs { padding-left: 0.35rem !important; padding-right: 0.35rem !important; }
+.px-space-xs { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
+.px-space-sm { padding-left: 1rem !important; padding-right: 1rem !important; }
+.px-space-md { padding-left: 1.35rem !important; padding-right: 1.35rem !important; }
+.px-space-lg { padding-left: 1.75rem !important; padding-right: 1.75rem !important; }
+.px-space-xl { padding-left: 2.25rem !important; padding-right: 2.25rem !important; }
+.px-space-2xl { padding-left: 2.75rem !important; padding-right: 2.75rem !important; }
+
+/* Vertical padding utilities */
+.py-space-2xs { padding-top: 0.25rem !important; padding-bottom: 0.25rem !important; }
+.py-space-xs { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+.py-space-sm { padding-top: 0.75rem !important; padding-bottom: 0.75rem !important; }
+.py-space-md { padding-top: 1rem !important; padding-bottom: 1rem !important; }
+.py-space-lg { padding-top: 1.5rem !important; padding-bottom: 1.5rem !important; }
+.py-space-2xl { padding-top: 3rem !important; padding-bottom: 3rem !important; }
+
+.p-space-xs { padding: 0.5rem !important; }
+.p-space-sm { padding: 0.75rem !important; }
+.p-space-md { padding: 1rem !important; }
+.p-space-lg { padding: 1.5rem !important; }
+.p-space-xl { padding: 2rem !important; }
+.p-space-2xl { padding: 3rem !important; }
+
+.gap-space-xs { gap: 0.5rem !important; }
+.gap-space-sm { gap: 0.75rem !important; }
+.gap-space-md { gap: 1rem !important; }
+.gap-space-lg { gap: 1.5rem !important; }
+.gap-space-xl { gap: 2rem !important; }
+.gap-space-2xl { gap: 3rem !important; }
+
+.mt-space-2xs { margin-top: 0.25rem !important; }
+.mt-space-xs { margin-top: 0.5rem !important; }
+.mt-space-sm { margin-top: 0.75rem !important; }
+.mt-space-md { margin-top: 1rem !important; }
+.mt-space-lg { margin-top: 1.5rem !important; }
+.mt-space-xl { margin-top: 2rem !important; }
+.mt-space-2xl { margin-top: 3rem !important; }
+.mt-space-3xl { margin-top: 4rem !important; }
+
+.mb-space-2xs { margin-bottom: 0.25rem !important; }
+.mb-space-xs { margin-bottom: 0.5rem !important; }
+.mb-space-sm { margin-bottom: 0.75rem !important; }
+.mb-space-md { margin-bottom: 1rem !important; }
+.mb-space-lg { margin-bottom: 1.5rem !important; }
+.mb-space-xl { margin-bottom: 2rem !important; }
+.mb-space-2xl { margin-bottom: 3rem !important; }
+.mb-space-3xl { margin-bottom: 4rem !important; }
+
+/* ─── Stitch Radius ────────────────────────────────────────────────────────── */
+.rounded-xl { border-radius: 0.75rem !important; }
+.rounded-2xl { border-radius: 1rem !important; }
+.rounded-3xl { border-radius: 1.5rem !important; }
+.rounded-full { border-radius: 9999px !important; }
+
+/* ─── Badge Pill Fix (Never overflows text) ─────────────────────────────────── */
+.badge-pill {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 4px 12px !important;
+  border-radius: 9999px !important;
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 0.725rem !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
+  width: auto !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+/* ─── Buttons & Interactive Elements ────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-plus-jakarta);
+  font-weight: 700;
+  font-size: 0.925rem;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  outline: none;
+  transition: all 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+  user-select: none;
+  text-decoration: none;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgba(145, 0, 10, 0.25);
+  border-color: transparent;
+}
+
+.btn-primary:hover {
+  background: var(--color-primary-hover) !important;
+  border-color: rgba(255, 218, 214, 0.4) !important;
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 20px rgba(145, 0, 10, 0.35);
+}
+
+.btn-primary:active {
+  transform: translateY(0);
+  background: var(--color-primary-dark) !important;
+}
+
+/* Hover effect on primary red action buttons */
+button.bg-primary:hover,
+a.bg-primary:hover {
+  background-color: var(--color-primary-hover) !important;
+  box-shadow: 0 6px 20px rgba(145, 0, 10, 0.35) !important;
+  transform: translateY(-1px);
+}
+
+/* ─── Card Elevating Shadows ───────────────────────────────────────────────── */
+.shadow-xs {
+  box-shadow: 0 1px 2px rgba(17, 28, 54, 0.04) !important;
+}
+
+.shadow-sm {
+  box-shadow: 0 2px 6px rgba(17, 28, 54, 0.05), 0 1px 3px rgba(17, 28, 54, 0.03) !important;
+}
+
+.shadow-md {
+  box-shadow: 0 10px 30px rgba(17, 28, 54, 0.08), 0 3px 8px rgba(17, 28, 54, 0.04) !important;
+}
+
+.shadow-xl {
+  box-shadow: 0 20px 40px rgba(17, 28, 54, 0.12), 0 4px 12px rgba(17, 28, 54, 0.06) !important;
+}
+
+/* ─── Cart Drawer & Mobile Drawer Overlays ──────────────────────────────────── */
+.drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+}
+
+.cart-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  max-width: 440px;
+  background: #ffffff;
+  z-index: 1001;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+}
+
+.mobile-nav-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+}
+
+.mobile-nav-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 85%;
+  max-width: 320px;
+  background: #ffffff;
+  color: var(--color-on-surface);
+  z-index: 1000;
+  box-shadow: 10px 0 30px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.mobile-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  font-family: var(--font-plus-jakarta);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-on-surface);
+  text-decoration: none;
+  border-radius: var(--radius-md);
+  transition: all 150ms ease;
+}
+
+.mobile-nav-link:hover,
+.mobile-nav-link.active {
+  background: var(--color-crimson-soft);
+  color: var(--color-primary);
+}
+
+/* Form Controls & Auth Input Styling */
+.form-group {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1.25rem;
+}
+
+.form-label {
+  display: block;
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 0.85rem !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+  margin-bottom: 0.5rem !important;
+  letter-spacing: -0.01em;
+}
+
+.form-input {
+  width: 100% !important;
+  height: 48px !important;
+  padding: 0 16px !important;
+  border-radius: 12px !important;
+  border: 1.5px solid #cbd5e1 !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  font-family: var(--font-body) !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  outline: none !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  box-sizing: border-box !important;
+}
+
+.form-input:hover {
+  border-color: #94a3b8 !important;
+}
+
+.form-input:focus {
+  border-color: var(--color-primary) !important;
+  box-shadow: 0 0 0 3px rgba(145, 0, 10, 0.12), 0 2px 6px rgba(0, 0, 0, 0.05) !important;
+  background-color: #ffffff !important;
+}
+
+.form-input::placeholder {
+  color: #94a3b8 !important;
+  font-weight: 400 !important;
+}
+
+.otp-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+}
+
+.otp-input {
+  width: 100%;
+  height: 52px;
+  text-align: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #0f172a;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.otp-input:focus,
+.otp-input.filled {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(145, 0, 10, 0.12);
+}
+
+.alert {
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alert-error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.alert-success {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+/* Hide scrollbar across webkit browsers */
+::-webkit-scrollbar {
+  display: none;
+}
+* {
+  scrollbar-width: none;
+}
+
