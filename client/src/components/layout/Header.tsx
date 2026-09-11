@@ -10,6 +10,26 @@ import { useWishlist } from "@/lib/wishlist";
 import NavbarSearch from "./NavbarSearch";
 import { useLocation } from "@/context/LocationContext";
 import LocationModal from "./LocationModal";
+import api from "@/lib/api";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faDrumstickBite,
+  faUtensils,
+  faFishFins,
+  faEgg,
+  faLayerGroup,
+  faStore,
+} from "@fortawesome/free-solid-svg-icons";
+
+function getCategoryFontAwesomeIcon(key: string) {
+  const k = (key || "").toLowerCase();
+  if (k.includes("chicken")) return faDrumstickBite;
+  if (k.includes("mutton")) return faUtensils;
+  if (k.includes("fish") || k.includes("seafood")) return faFishFins;
+  if (k.includes("egg")) return faEgg;
+  if (k.includes("all")) return faLayerGroup;
+  return faStore;
+}
 
 interface HeaderProps {
   searchQuery?: string;
@@ -23,6 +43,12 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("all");
+  const [navCategories, setNavCategories] = useState<any[]>([
+    { key: "chicken", label: "Fresh Chicken", href: "/category?type=chicken" },
+    { key: "mutton", label: "Rich Mutton", href: "/category?type=mutton" },
+    { key: "fish", label: "Fish & Seafood", href: "/category?type=fish" },
+    { key: "eggs", label: "Farm Eggs", href: "/category?type=eggs" },
+  ]);
   const { openCart, totalItemsCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { currentLocation, openLocationModal } = useLocation();
@@ -36,6 +62,27 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
   useEffect(() => {
     setUser(getStoredUser());
     setMobileMenuOpen(false);
+    setActiveCategory("all");
+
+    // Dynamic Categories from Backend API
+    api.get<{ success: boolean; categories: any[] }>("/categories")
+      .then((res) => {
+        if (res.data?.success && res.data.categories?.length > 0) {
+          const mapped = res.data.categories
+            .filter((c: any) => c.slug !== "all" && c.isActive !== false)
+            .map((c: any) => {
+              return {
+                key: c.slug,
+                label: c.name,
+                href: `/category?type=${c.slug}`,
+              };
+            });
+          if (mapped.length > 0) {
+            setNavCategories(mapped);
+          }
+        }
+      })
+      .catch((err) => console.warn("Failed to load header categories:", err));
 
     // Global listener to open login modal from anywhere
     const handleOpenLogin = () => setShowLoginModal(true);
@@ -291,26 +338,17 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
           <div className="bg-surface-card shadow-[0_1px_4px_rgba(0,0,0,0.03)] border-t border-gray-100 w-full">
             <div className="w-full max-w-container-max mx-auto px-gutter-desktop flex items-center justify-between gap-space-md overflow-x-auto py-2.5">
               <nav className="flex items-center gap-2 font-label-md text-label-md whitespace-nowrap">
-                {[
-                  { key: "chicken", label: "Chicken", icon: "restaurant", href: "/category?type=chicken" },
-                  { key: "mutton", label: "Mutton", icon: "kebab_dining", href: "/category?type=mutton" },
-                  { key: "fish", label: "Fish & Seafood", icon: "set_meal", href: "/category?type=fish" },
-                  { key: "eggs", label: "Fresh Eggs", icon: "egg", href: "/category?type=eggs" },
-                ].map((cat) => {
-                  const isActive = activeCategory === cat.key;
+                {navCategories.map((cat) => {
                   return (
                     <Link
                       key={cat.key}
                       href={cat.href}
-                      onClick={() => setActiveCategory(cat.key)}
-                      className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-1.5 text-decoration-none cursor-pointer text-[13px] ${isActive
-                        ? ""
-                        : "text-on-surface-variant bg-surface-container-low hover:bg-surface-container hover:text-on-surface font-semibold"
-                        }`}
+                      className="px-4 py-1.5 rounded-full transition-all flex items-center gap-2 text-decoration-none cursor-pointer text-[13px] text-on-surface-variant bg-surface-container-low hover:bg-primary hover:text-white hover:shadow-xs font-semibold group"
                     >
-                      <span className={`material-symbols-outlined text-[16px] ${isActive ? "text-white" : "text-slate-500"}`}>
-                        {cat.icon}
-                      </span>
+                      <FontAwesomeIcon
+                        icon={getCategoryFontAwesomeIcon(cat.key)}
+                        className="text-[13px] text-primary group-hover:text-white transition-colors"
+                      />
                       <span>{cat.label}</span>
                     </Link>
                   );
@@ -370,7 +408,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 className="mobile-nav-link"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="material-symbols-outlined text-primary text-[20px]">restaurant</span>
+                <FontAwesomeIcon icon={faDrumstickBite} className="text-primary text-[16px] w-5" />
                 <span>Chicken Cuts</span>
               </Link>
 
@@ -379,7 +417,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 className="mobile-nav-link"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="material-symbols-outlined text-primary text-[20px]">kebab_dining</span>
+                <FontAwesomeIcon icon={faUtensils} className="text-primary text-[16px] w-5" />
                 <span>Country Mutton</span>
               </Link>
 
@@ -388,7 +426,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 className="mobile-nav-link"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="material-symbols-outlined text-primary text-[20px]">set_meal</span>
+                <FontAwesomeIcon icon={faFishFins} className="text-primary text-[16px] w-5" />
                 <span>Freshwater Fish</span>
               </Link>
 
@@ -397,7 +435,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 className="mobile-nav-link"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                <span className="material-symbols-outlined text-tag-amber text-[20px]">egg</span>
+                <FontAwesomeIcon icon={faEgg} className="text-tag-amber text-[16px] w-5" />
                 <span>Farm &amp; Desi Eggs</span>
               </Link>
 

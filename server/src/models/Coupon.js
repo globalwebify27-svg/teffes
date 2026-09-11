@@ -39,6 +39,10 @@ const couponSchema = new mongoose.Schema(
       type: String,
       default: '31 Dec 2026',
     },
+    isSuperOffer: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

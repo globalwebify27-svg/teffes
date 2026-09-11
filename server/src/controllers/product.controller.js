@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Category = require('../models/Category');
 const Product = require('../models/Product');
 
@@ -24,7 +25,32 @@ const getCategories = async (req, res, next) => {
  */
 const createCategory = async (req, res, next) => {
   try {
-    const category = await Category.create(req.body);
+    let { name, slug, tagline, icon, image, order, isActive } = req.body;
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'Category name is required' });
+    }
+
+    if (!slug || typeof slug !== 'string' || !slug.trim()) {
+      slug = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    } else {
+      slug = slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+    }
+
+    const existing = await Category.findOne({ slug });
+    if (existing) {
+      return res.status(400).json({ success: false, message: `Category with slug "${slug}" already exists` });
+    }
+
+    const category = await Category.create({
+      name: name.trim(),
+      slug,
+      tagline: tagline || '',
+      icon: icon || '🥩',
+      image: image || '',
+      order: typeof order === 'number' ? order : 0,
+      isActive: typeof isActive === 'boolean' ? isActive : true,
+    });
+
     res.status(201).json({ success: true, category });
   } catch (error) {
     next(error);
@@ -38,8 +64,12 @@ const createCategory = async (req, res, next) => {
 const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const filter = mongoose.Types.ObjectId.isValid(id)
+      ? { $or: [{ slug: id }, { _id: id }] }
+      : { slug: id };
+
     const category = await Category.findOneAndUpdate(
-      { $or: [{ slug: id }, { _id: id }] },
+      filter,
       req.body,
       { new: true, runValidators: true }
     );
@@ -59,11 +89,15 @@ const updateCategory = async (req, res, next) => {
 const deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const category = await Category.findOneAndDelete({ $or: [{ slug: id }, { _id: id }] });
+    const filter = mongoose.Types.ObjectId.isValid(id)
+      ? { $or: [{ slug: id }, { _id: id }] }
+      : { slug: id };
+
+    const category = await Category.findOneAndDelete(filter);
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
-    res.status(200).json({ success: true, message: 'Category deleted' });
+    res.status(200).json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     next(error);
   }
@@ -171,9 +205,46 @@ const getProductById = async (req, res, next) => {
  */
 const createProduct = async (req, res, next) => {
   try {
-    const product = await Product.create(req.body);
+    const data = { ...req.body };
+    if (!data.name || !data.name.trim()) {
+      return res.status(400).json({ success: false, message: 'Product name is required' });
+    }
+    if (!data.category || !data.category.trim()) {
+      return res.status(400).json({ success: false, message: 'Category is required' });
+    }
+    if (typeof data.price === 'undefined' || isNaN(Number(data.price))) {
+      return res.status(400).json({ success: false, message: 'Valid price is required' });
+    }
+    data.price = Number(data.price);
+
+    if (!data.image || !data.image.trim()) {
+      return res.status(400).json({ success: false, message: 'Product image URL is required' });
+    }
+
+    if (!data.id || !data.id.trim()) {
+      const slugBase = data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      data.id = `prod-${slugBase}-${Date.now().toString().slice(-4)}`;
+    }
+    if (!data.originalPrice) {
+      data.originalPrice = data.price;
+    } else {
+      data.originalPrice = Number(data.originalPrice);
+    }
+
+    if (!data.categoryLabel && data.category) {
+      const catObj = await Category.findOne({ slug: data.category });
+      data.categoryLabel = catObj ? catObj.name : data.category.charAt(0).toUpperCase() + data.category.slice(1);
+    }
+    if (!data.netWeight || !data.netWeight.trim()) {
+      data.netWeight = '500g';
+    }
+
+    const product = await Product.create(data);
     res.status(201).json({ success: true, product });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'A product with this ID or name already exists' });
+    }
     next(error);
   }
 };
@@ -185,9 +256,23 @@ const createProduct = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const isMongoId = mongoose.Types.ObjectId.isValid(id);
+    const updates = { ...req.body };
+
+    if (updates.category) {
+      const catObj = await Category.findOne({ slug: updates.category });
+      updates.categoryLabel = catObj ? catObj.name : updates.category.charAt(0).toUpperCase() + updates.category.slice(1);
+    }
+    if (typeof updates.price !== 'undefined' && updates.price !== '') {
+      updates.price = Number(updates.price);
+    }
+    if (typeof updates.originalPrice !== 'undefined' && updates.originalPrice !== '') {
+      updates.originalPrice = Number(updates.originalPrice);
+    }
+
     const product = await Product.findOneAndUpdate(
-      { $or: [{ id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }] },
-      req.body,
+      { $or: [{ id }, ...(isMongoId ? [{ _id: id }] : [])] },
+      updates,
       { new: true, runValidators: true }
     );
     if (!product) {
@@ -206,8 +291,9 @@ const updateProduct = async (req, res, next) => {
 const deleteProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const isMongoId = mongoose.Types.ObjectId.isValid(id);
     const product = await Product.findOneAndDelete({
-      $or: [{ id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }],
+      $or: [{ id }, ...(isMongoId ? [{ _id: id }] : [])],
     });
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });

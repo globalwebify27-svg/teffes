@@ -190,14 +190,24 @@ function LiveOrdersTab() {
     fetchOrders();
   }, [filter]);
 
-  const advanceStatus = async (orderId: string, currentStatus: string) => {
-    const nextMap: Record<string, string> = {
-      "Pending": "Cutting",
-      "Cutting": "Ready",
-      "Ready": "Out for Delivery",
-      "Out for Delivery": "Delivered",
-    };
-    const next = nextMap[currentStatus];
+  const advanceStatus = async (orderId: string, currentStatus: string, isPickup: boolean = false) => {
+    let next = "";
+    if (isPickup) {
+      const pickupMap: Record<string, string> = {
+        "Pending": "Cutting",
+        "Cutting": "Ready",
+        "Ready": "Delivered", // Customer collected order at store counter
+      };
+      next = pickupMap[currentStatus];
+    } else {
+      const nextMap: Record<string, string> = {
+        "Pending": "Cutting",
+        "Cutting": "Ready",
+        "Ready": "Out for Delivery",
+        "Out for Delivery": "Delivered",
+      };
+      next = nextMap[currentStatus];
+    }
     if (!next) return;
 
     try {
@@ -208,11 +218,34 @@ function LiveOrdersTab() {
     }
   };
 
-  const nextStatusLabel: Record<string, string> = {
-    "Pending": "Mark Cutting",
-    "Cutting": "Mark Ready",
-    "Ready": "Out for Delivery",
-    "Out for Delivery": "Mark Delivered",
+  const getNextStatusLabel = (status: string, isPickup: boolean = false) => {
+    if (isPickup) {
+      const pickupLabels: Record<string, string> = {
+        "Pending": "Mark Cutting",
+        "Cutting": "Mark Ready for Pickup",
+        "Ready": "Mark Customer Picked Up",
+      };
+      return pickupLabels[status];
+    }
+    const deliveryLabels: Record<string, string> = {
+      "Pending": "Mark Cutting",
+      "Cutting": "Mark Ready",
+      "Ready": "Out for Delivery",
+      "Out for Delivery": "Mark Delivered",
+    };
+    return deliveryLabels[status];
+  };
+
+  const handleDelayPrep = async (orderId: string) => {
+    if (!window.confirm("Add +10 minutes rush preparation delay for this order?\n\nThe customer's arrival time will automatically be extended and updated in real-time.")) {
+      return;
+    }
+    try {
+      await api.post(`/store-admin/orders/${orderId}/delay-prep`, { extraMinutes: 10 });
+      fetchOrders();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to extend prep time");
+    }
   };
 
   return (
@@ -244,50 +277,171 @@ function LiveOrdersTab() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {orders.map(o => (
-            <div key={o.orderId || o.id} style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "18px 20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-                <div>
-                  <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.95rem" }}>#{o.orderId || o.id}</div>
-                  <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "2px" }}>
-                    {o.customer?.name} · {o.customer?.phone}
+          {orders.map(o => {
+            const isPickup =
+              o.fulfillmentType === "pickup" ||
+              o.pickupMode === true ||
+              o.deliverySlot?.toLowerCase().includes("pickup") ||
+              o.customer?.address?.toLowerCase().includes("pickup");
+            const nextLabel = getNextStatusLabel(o.status, isPickup);
+
+            return (
+              <div
+                key={o.orderId || o.id}
+                style={{
+                  background: "#fff",
+                  border: isPickup ? "1.5px solid #f59e0b" : "1px solid #ede8e0",
+                  borderRadius: "14px",
+                  padding: "18px 20px",
+                  boxShadow: isPickup ? "0 2px 10px rgba(245, 158, 11, 0.08)" : "none",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                      <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.95rem" }}>#{o.orderId || o.id}</div>
+                      {isPickup ? (
+                        <span style={{
+                          background: "#fef3c7",
+                          color: "#92400e",
+                          border: "1px solid #fde68a",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                        }}>
+                          🏪 STORE PICKUP (Customer Takeaway)
+                        </span>
+                      ) : (
+                        <span style={{
+                          background: "#e0f2fe",
+                          color: "#0369a1",
+                          border: "1px solid #bae6fd",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                        }}>
+                          🛵 HOME EXPRESS DELIVERY
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "3px" }}>
+                      {o.customer?.name} · {o.customer?.phone}
+                    </div>
+                    <div style={{
+                      color: isPickup ? "#b45309" : "#73695b",
+                      fontSize: "0.78rem",
+                      fontWeight: isPickup ? 600 : 400,
+                      marginTop: "2px",
+                    }}>
+                      {isPickup
+                        ? "🏪 Customer will collect at Kishore Ganj Butchery Counter"
+                        : `📍 ${o.customer?.address || "Ranchi"}`}
+                    </div>
                   </div>
-                  <div style={{ color: "#73695b", fontSize: "0.78rem" }}>📍 {o.customer?.address}</div>
+                  <div style={{ textAlign: "right" }}>
+                    <div style={{ fontWeight: 900, color: "#941717", fontSize: "1.15rem", fontFamily: "Outfit, sans-serif" }}>₹{o.amount}</div>
+                    <div style={{ color: "#73695b", fontSize: "0.75rem", fontWeight: 600 }}>{o.deliverySlot}</div>
+                  </div>
                 </div>
-                <div style={{ textAlign: "right" }}>
-                  <div style={{ fontWeight: 900, color: "#941717", fontSize: "1.15rem", fontFamily: "Outfit, sans-serif" }}>₹{o.amount}</div>
-                  <div style={{ color: "#73695b", fontSize: "0.75rem" }}>{o.deliverySlot}</div>
+
+                <div style={{ color: "#423b32", fontSize: "0.875rem", fontWeight: 600, marginBottom: "12px" }}>
+                  🛒 {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
                 </div>
-              </div>
 
-              <div style={{ color: "#423b32", fontSize: "0.875rem", fontWeight: 600, marginBottom: "12px" }}>
-                🛒 {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
-              </div>
+                {/* Dynamic Operational Prep & ETA Strip */}
+                <div style={{
+                  background: "#faf8f5",
+                  border: "1px solid #f1ede6",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  marginBottom: "12px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: "8px",
+                  fontSize: "0.78rem"
+                }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#574e42", flexWrap: "wrap" }}>
+                    <span>⏱️ Prep Time: <strong>{o.prepTimeMinutes || 25} mins</strong></span>
+                    <span>•</span>
+                    <span>
+                      🎯 Target Delivery: <strong>
+                        {o.targetDeliveryTime
+                          ? new Date(o.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                          : "Calculated"}
+                      </strong>
+                    </span>
+                    {o.status === "Out for Delivery" && (
+                      <>
+                        <span>•</span>
+                        <span style={{ color: "#0369a1", fontWeight: 700 }}>
+                          🛵 Rider in transit (~{o.remainingTransitMinutes != null ? o.remainingTransitMinutes : 15} mins away)
+                        </span>
+                      </>
+                    )}
+                  </div>
 
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-                <OrderStatusPipeline status={o.status} />
-                <div style={{ display: "flex", gap: "8px" }}>
-                  {nextStatusLabel[o.status] && (
+                  {(o.status === "Pending" || o.status === "Cutting") && (
                     <button
-                      onClick={() => advanceStatus(o.orderId || o.id, o.status)}
+                      onClick={() => handleDelayPrep(o.orderId || o.id)}
+                      title="Extend prep time by 10 mins during counter rush"
                       style={{
-                        background: "#941717", border: "none", borderRadius: "8px", padding: "7px 14px",
-                        color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer",
+                        background: "#fffbeb",
+                        border: "1px solid #fcd34d",
+                        borderRadius: "6px",
+                        padding: "4px 10px",
+                        fontSize: "0.72rem",
+                        fontWeight: 700,
+                        color: "#b45309",
+                        cursor: "pointer",
                       }}
                     >
-                      {nextStatusLabel[o.status]}
+                      +10m Rush Delay
                     </button>
                   )}
-                  <button style={{
-                    background: "none", border: "1px solid #ede8e0", borderRadius: "8px", padding: "7px 14px",
-                    color: "#423b32", fontSize: "0.8rem", cursor: "pointer",
-                  }}>
-                    {o.paymentStatus} ({o.paymentMethod})
-                  </button>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+                  <OrderStatusPipeline status={o.status} />
+                  <div style={{ display: "flex", gap: "8px" }}>
+                    {nextLabel && (
+                      <button
+                        onClick={() => advanceStatus(o.orderId || o.id, o.status, isPickup)}
+                        style={{
+                          background: isPickup ? "#d97706" : "#941717",
+                          border: "none",
+                          borderRadius: "8px",
+                          padding: "7px 14px",
+                          color: "#fff",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                        }}
+                      >
+                        {nextLabel}
+                      </button>
+                    )}
+                    <button style={{
+                      background: "none",
+                      border: "1px solid #ede8e0",
+                      borderRadius: "8px",
+                      padding: "7px 14px",
+                      color: "#423b32",
+                      fontSize: "0.8rem",
+                      cursor: "pointer",
+                    }}>
+                      {o.paymentStatus} ({o.paymentMethod})
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
@@ -819,10 +973,15 @@ function RidersTab() {
       ]);
       if (ridersRes.data.success) setRiders(ridersRes.data.riders || []);
       if (ordersRes.data.success) {
-        // Filter only Ready and Out for Delivery orders for the dispatch view
-        const relevantOrders = (ordersRes.data.orders || []).filter((o: any) => 
-          o.status === "Ready" || o.status === "Out for Delivery"
-        );
+        // Filter only Ready and Out for Delivery orders that require home delivery (exclude store takeaway)
+        const relevantOrders = (ordersRes.data.orders || []).filter((o: any) => {
+          const isPickup =
+            o.fulfillmentType === "pickup" ||
+            o.pickupMode === true ||
+            o.deliverySlot?.toLowerCase().includes("pickup") ||
+            o.customer?.address?.toLowerCase().includes("pickup");
+          return (o.status === "Ready" || o.status === "Out for Delivery") && !isPickup;
+        });
         setReadyOrders(relevantOrders);
       }
     } catch (err) {
@@ -884,7 +1043,12 @@ function RidersTab() {
       </div>
 
       {/* ─── ORDERS READY FOR DISPATCH ─── */}
-      <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", marginBottom: "12px" }}>📦 Orders Pending Dispatch</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+        <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>📦 Orders Pending Dispatch (Home Delivery Only)</h3>
+        <span style={{ fontSize: "0.78rem", color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", padding: "3px 10px", borderRadius: "99px", fontWeight: 700 }}>
+          🏪 Store Pickup orders are excluded (handled at counter)
+        </span>
+      </div>
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading dispatch board…</div>
       ) : (

@@ -359,6 +359,12 @@ const createRider = async (req, res, next) => {
       }
     }
 
+    let storeName = 'Ranchi Kishore Ganj';
+    if (storeId) {
+      const store = await Store.findOne({ storeId });
+      if (store) storeName = store.name;
+    }
+
     const rider = await User.create({
       name: name.trim(),
       email: email ? email.toLowerCase().trim() : `rider_${Date.now()}@teffes.com`,
@@ -366,6 +372,7 @@ const createRider = async (req, res, next) => {
       phone,
       vehicleNumber: (vehicleNumber && vehicleNumber.trim()) || 'JH01-XX-0000',
       storeId: storeId || 'S001',
+      storeName,
       role: 'rider',
       riderStatus: 'Available',
       isVerified: true,
@@ -381,6 +388,93 @@ const createRider = async (req, res, next) => {
       const msg = Object.values(error.errors).map(e => e.message).join(', ');
       return res.status(400).json({ success: false, message: msg });
     }
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/super-admin/riders/:id
+ * Update a rider: phone, vehicleNumber, assigned store, name, status
+ */
+const updateRider = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    let { name, email, phone, vehicleNumber, storeId, riderStatus, isActive, password } = req.body;
+
+    const rider = await User.findById(id);
+    if (!rider || rider.role !== 'rider') {
+      return res.status(404).json({ success: false, message: 'Rider not found' });
+    }
+
+    if (name && name.trim()) rider.name = name.trim();
+    if (email && email.trim()) rider.email = email.toLowerCase().trim();
+
+    if (phone && phone.trim()) {
+      let cleanPhone = phone.replace(/[\s\-()]/g, '');
+      if (cleanPhone.startsWith('0')) cleanPhone = cleanPhone.substring(1);
+      if (!cleanPhone.startsWith('+') && cleanPhone.length === 10) cleanPhone = '+91' + cleanPhone;
+
+      // Ensure phone is unique to this rider
+      const existing = await User.findOne({ phone: cleanPhone, _id: { $ne: id } });
+      if (existing) {
+        return res.status(400).json({
+          success: false,
+          message: `Phone number ${cleanPhone} is already assigned to ${existing.name || 'another user'}.`,
+        });
+      }
+      rider.phone = cleanPhone;
+    }
+
+    if (typeof vehicleNumber !== 'undefined') {
+      rider.vehicleNumber = vehicleNumber.trim();
+    }
+
+    if (typeof storeId !== 'undefined' && storeId.trim()) {
+      rider.storeId = storeId.trim();
+      const store = await Store.findOne({ storeId: rider.storeId });
+      if (store) {
+        rider.storeName = store.name;
+      }
+    }
+
+    if (riderStatus) {
+      rider.riderStatus = riderStatus;
+    }
+
+    if (typeof isActive !== 'undefined') {
+      rider.isActive = isActive;
+    }
+
+    if (password && password.trim()) {
+      rider.password = password.trim();
+    }
+
+    await rider.save();
+    res.status(200).json({ success: true, rider });
+  } catch (error) {
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern || {})[0] || 'Phone/Email';
+      return res.status(400).json({ success: false, message: `A user with this ${field} already exists.` });
+    }
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/super-admin/riders/:id
+ * Delete a rider
+ */
+const deleteRider = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const rider = await User.findById(id);
+    if (!rider || rider.role !== 'rider') {
+      return res.status(404).json({ success: false, message: 'Rider not found' });
+    }
+
+    await rider.deleteOne();
+    res.status(200).json({ success: true, message: 'Rider deleted successfully' });
+  } catch (error) {
     next(error);
   }
 };
@@ -419,6 +513,72 @@ const createCoupon = async (req, res, next) => {
   try {
     const coupon = await Coupon.create(req.body);
     res.status(201).json({ success: true, coupon });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/super-admin/coupons/:id
+ * Update coupon (status, validTill, discount, minOrder)
+ */
+const updateCoupon = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const coupon = await Coupon.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    if (!coupon) {
+      return res.status(404).json({ success: false, message: 'Coupon not found' });
+    }
+    res.status(200).json({ success: true, coupon });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/super-admin/coupons/:id
+ * Delete a coupon
+ */
+const deleteCoupon = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const coupon = await Coupon.findByIdAndDelete(id);
+    if (!coupon) {
+      return res.status(404).json({ success: false, message: 'Coupon not found' });
+    }
+    res.status(200).json({ success: true, message: 'Coupon deleted successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/super-admin/coupons/:id/super-offer
+ * Designate a coupon as the platform-wide Super Offer
+ */
+const setSuperOffer = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Unset isSuperOffer across all coupons
+    await Coupon.updateMany({}, { $set: { isSuperOffer: false } });
+
+    // Mark this coupon as the Super Offer and ensure it is active
+    const coupon = await Coupon.findByIdAndUpdate(
+      id,
+      { $set: { isSuperOffer: true, status: 'Active' } },
+      { new: true }
+    );
+
+    if (!coupon) {
+      return res.status(404).json({ success: false, message: 'Coupon not found' });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Coupon "${coupon.code}" set as platform Super Offer`,
+      coupon,
+    });
   } catch (error) {
     next(error);
   }
@@ -468,9 +628,14 @@ module.exports = {
   deleteStoreAdmin,
   getRiders,
   createRider,
+  updateRider,
+  deleteRider,
   getPlatformCustomers,
   getCoupons,
   createCoupon,
+  updateCoupon,
+  deleteCoupon,
+  setSuperOffer,
   getAllOrders,
   getSettings,
 };

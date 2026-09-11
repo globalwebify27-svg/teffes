@@ -608,16 +608,20 @@ export default function DashboardPage() {
       statusColor: "text-amber-700",
       badgeBg: "bg-amber-50",
       icon: "two_wheeler",
-      placedAt: "Today, 03:05 pm • Expected in 14 mins",
+      placedAt: "Today, 03:05 pm • Arriving in 14 min",
       amount: 485,
+      deliveryOtp: "4821",
+      remainingTransitMinutes: 14,
+      targetDeliveryTime: new Date(Date.now() + 14 * 60 * 1000).toISOString(),
+      etaStage: "IN_TRANSIT",
       rider: {
         name: "Md. Imran Ansari",
         phone: "+91 98351 22410",
         vehicle: "Honda Activa (JH-01-BX-4921)",
         rating: "4.9 ★",
         deliveriesCount: "840+",
-        bagTemp: "2.8°C (Insulated Cold-Box)",
-        eta: "14 mins",
+        bagTemp: "Fresh-Lock Insulated Box",
+        eta: "14 min",
       },
       items: [
         {
@@ -710,6 +714,38 @@ export default function DashboardPage() {
     const isCancelled = o.status === "Cancelled";
     const isInProgress = !isDelivered && !isCancelled;
 
+    const transitMins = o.remainingTransitMinutes != null ? o.remainingTransitMinutes : 14;
+    const isNearDoorstep = isOutForDelivery && (transitMins <= 5 || o.etaStage === "NEAR_DOORSTEP");
+
+    let etaText = "";
+    if (isDelivered || isCancelled) {
+      etaText = "";
+    } else if (isNearDoorstep) {
+      etaText = "Arriving in ~5 min";
+    } else if (isOutForDelivery) {
+      etaText = `Arriving in ${transitMins} min`;
+    } else if (o.targetDeliveryTime) {
+      try {
+        const dt = new Date(o.targetDeliveryTime);
+        const timeStr = dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true });
+        etaText = `Arriving by ${timeStr}`;
+      } catch {
+        etaText = "Preparing your cuts";
+      }
+    } else {
+      etaText = "Preparing your cuts";
+    }
+
+    const dateStr = o.createdAt
+      ? new Date(o.createdAt).toLocaleDateString("en-IN", {
+          day: "numeric",
+          month: "short",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "Just now";
+
     return {
       id: o.orderId || o.id || `TEF-${o._id?.slice(-6)}`,
       status: isInProgress ? "in-progress" : isDelivered ? "delivered" : "cancelled",
@@ -717,24 +753,20 @@ export default function DashboardPage() {
       statusColor: isDelivered ? "text-emerald-700" : isCancelled ? "text-slate-500" : "text-amber-700",
       badgeBg: isDelivered ? "bg-emerald-50" : isCancelled ? "bg-slate-100" : "bg-amber-50",
       icon: isDelivered ? "check_circle" : isCancelled ? "cancel" : isOutForDelivery ? "two_wheeler" : "schedule",
-      placedAt: o.createdAt
-        ? new Date(o.createdAt).toLocaleDateString("en-IN", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
-        : "Just now",
+      placedAt: etaText ? `${dateStr} • ${etaText}` : dateStr,
       amount: o.amount,
+      remainingTransitMinutes: o.remainingTransitMinutes,
+      targetDeliveryTime: o.targetDeliveryTime,
+      etaStage: o.etaStage,
+      deliveryOtp: o.deliveryOtp || o.rawOrder?.deliveryOtp || null,
       rider: {
         name: o.rider?.name || (o.deliverySlot === "Store Pickup" ? "Store Pickup Counter" : "Express Rider Assigned"),
         phone: o.rider?.phone || "+91 94311 00000",
         vehicle: o.rider?.vehicleNumber || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : "Insulated Cold-Box (JH-01)"),
         rating: "4.9 ★",
         deliveriesCount: "420+",
-        bagTemp: "2.8°C (Insulated Cold-Box)",
-        eta: o.deliverySlot === "Store Pickup" ? "Ready in ~15 mins" : "Express Delivery",
+        bagTemp: "Fresh-Lock Insulated Box",
+        eta: etaText,
       },
       items: (o.items || []).map((it: any) => ({
         name: `${it.name}${it.netWeight ? ` (${it.netWeight})` : ""}`,
@@ -752,7 +784,7 @@ export default function DashboardPage() {
     { title: "Feedback & Suggestions", desc: "Help us serve you better with your cut preferences and packing feedback." },
     { title: "Order / Products Related", desc: "Cut styles, custom meat portions, gross vs net weight assurance." },
     { title: "Gift Card & Teffes Cash", desc: "Redeeming wallet credits and promotional cashback." },
-    { title: "Freshness & 90-Min Guarantee", desc: "Our 0-4°C cold-chain standard and delivery dispatch from Kishore Ganj Chowk." },
+    { title: "Freshness & 90-Min Guarantee", desc: "Our 100% fresh butchery cuts and delivery dispatch from Kishore Ganj Chowk." },
     { title: "Wallet Related", desc: "Instant refunds credited directly to Teffes Cash wallet." },
     { title: "Teffes Butchery Club", desc: "Exclusive monthly subscription with free express deliveries." },
     { title: "Referral Program", desc: "Invite Ranchi friends and get ₹100 off on your next fresh meat order." },
@@ -920,7 +952,34 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 font-medium mt-0.5">
-                          {order.placedAt}
+                          {(() => {
+                            if (order.status === "in-progress") {
+                              const raw = order.rawOrder || order;
+                              const isOut = order.statusText === "Out for Delivery" || raw.status === "Out for Delivery";
+                              const transitMins = raw.remainingTransitMinutes ?? order.remainingTransitMinutes ?? 14;
+                              const isNear = isOut && (transitMins <= 5 || raw.etaStage === "NEAR_DOORSTEP" || order.etaStage === "NEAR_DOORSTEP");
+
+                              let dynamicEta = "";
+                              if (isNear) {
+                                dynamicEta = "Arriving in ~5 min";
+                              } else if (isOut) {
+                                dynamicEta = `Arriving in ${transitMins} min`;
+                              } else if (raw.targetDeliveryTime || order.targetDeliveryTime) {
+                                try {
+                                  const dt = new Date(raw.targetDeliveryTime || order.targetDeliveryTime);
+                                  dynamicEta = `Arriving by ${dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}`;
+                                } catch {
+                                  dynamicEta = "Preparing your cuts";
+                                }
+                              } else {
+                                dynamicEta = "Preparing your cuts";
+                              }
+
+                              const rawDate = (order.placedAt || "Recently").split(" • ")[0];
+                              return `${rawDate} • ${dynamicEta}`;
+                            }
+                            return order.placedAt;
+                          })()}
                         </p>
                       </div>
 
@@ -954,11 +1013,19 @@ export default function DashboardPage() {
                     {/* Action CTA: Track Rider for in-progress vs Order Again for completed */}
                     {order.status === "in-progress" ? (
                       <div className="p-3.5 bg-amber-50/80 border-t border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
-                          <span className="text-xs font-bold text-amber-950">
-                            Rider on the way • {order.rider?.name} ({order.rider?.eta})
-                          </span>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                            <span className="text-xs font-bold text-amber-950">
+                              Rider on the way • {order.rider?.name || "Delivery Partner"}
+                            </span>
+                          </div>
+                          {order.deliveryOtp && (
+                            <div className="flex items-center gap-1.5 bg-white border border-amber-300 px-2.5 py-0.5 rounded-lg text-xs shadow-2xs">
+                              <span className="text-[10.5px] font-bold text-amber-800 uppercase tracking-wide">OTP:</span>
+                              <span className="font-mono font-black text-primary text-sm tracking-wider">{order.deliveryOtp}</span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex items-center gap-2 w-full sm:w-auto">
@@ -1602,26 +1669,110 @@ export default function DashboardPage() {
 
             {/* Modal Body */}
             <div className="p-5 overflow-y-auto space-y-4">
-              {/* ETA Banner */}
-              <div className="bg-amber-50 rounded-2xl p-4 border border-amber-200/80 flex items-center justify-between">
-                <div>
-                  <span className="text-[11px] font-bold text-amber-700 uppercase tracking-wider block">
-                    Estimated Arrival
-                  </span>
-                  <span className="font-headline-md font-black text-amber-950 text-2xl">
-                    ~{liveRiderCoords?.eta || trackingOrder.rider?.eta || "14 mins"}
-                  </span>
-                  <span className="text-xs text-amber-800/80 block mt-0.5">
-                    Dispatched from {trackingOrder.storeName || "Kishore Ganj Butchery Hub"}
-                  </span>
-                </div>
+              {/* Dynamic Multi-Phase ETA Banner */}
+              {(() => {
+                const status = trackingOrder.status;
+                const isDelivered = status === "Delivered";
+                const isOutForDelivery = status === "Out for Delivery";
+                const transitMins = trackingOrder.remainingTransitMinutes != null ? trackingOrder.remainingTransitMinutes : 15;
+                const isNearDoorstep = isOutForDelivery && (transitMins <= 5 || trackingOrder.etaStage === "NEAR_DOORSTEP");
 
-                <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-800 flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[30px] animate-bounce">
-                    near_me
-                  </span>
+                let badgeText = "Order in Preparation";
+                let mainHeading = "Preparing your cuts";
+                let subHeading = `Arriving by ${
+                  trackingOrder.targetDeliveryTime
+                    ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                    : "30-40 mins"
+                }`;
+                let iconName = "skillet";
+                let bannerColor = "bg-amber-50 border-amber-200/80 text-amber-950";
+                let iconColor = "bg-amber-500/20 text-amber-800";
+
+                if (isDelivered) {
+                  badgeText = "Order Completed";
+                  mainHeading = "Delivered Fresh ✓";
+                  subHeading = "Delivered directly to your kitchen";
+                  iconName = "check_circle";
+                  bannerColor = "bg-emerald-50 border-emerald-200 text-emerald-950";
+                  iconColor = "bg-emerald-500/20 text-emerald-800";
+                } else if (isNearDoorstep) {
+                  badgeText = "Rider in Neighborhood";
+                  mainHeading = "Arriving in ~5 min";
+                  subHeading = "Keep your 4-digit doorstep delivery code ready";
+                  iconName = "near_me";
+                  bannerColor = "bg-orange-50 border-orange-300 text-orange-950";
+                  iconColor = "bg-orange-500 text-white animate-bounce";
+                } else if (isOutForDelivery) {
+                  badgeText = "Rider on the Road";
+                  mainHeading = `Arriving in ${transitMins} min`;
+                  subHeading = `Dispatched fresh from ${trackingOrder.storeName || "Kishore Ganj Butchery Hub"}`;
+                  iconName = "two_wheeler";
+                  bannerColor = "bg-sky-50 border-sky-200 text-sky-950";
+                  iconColor = "bg-sky-500/20 text-sky-800";
+                } else if (status === "Cutting") {
+                  badgeText = "Live Butchery Station";
+                  mainHeading = `Arriving by ${
+                    trackingOrder.targetDeliveryTime
+                      ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                      : "soon"
+                  }`;
+                  subHeading = "Master butcher slicing & packing your fresh cuts";
+                  iconName = "content_cut";
+                } else if (status === "Ready") {
+                  badgeText = "Packed & Ready";
+                  mainHeading = `Arriving by ${
+                    trackingOrder.targetDeliveryTime
+                      ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                      : "soon"
+                  }`;
+                  subHeading = "Insulated fresh pack assigned to delivery rider";
+                  iconName = "inventory_2";
+                }
+
+                return (
+                  <div className={`rounded-2xl p-4 border flex items-center justify-between shadow-2xs ${bannerColor}`}>
+                    <div>
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider block opacity-80">
+                        {badgeText}
+                      </span>
+                      <span className="font-headline-md font-black text-2xl tracking-tight block mt-0.5">
+                        {mainHeading}
+                      </span>
+                      <span className="text-xs opacity-90 block mt-1 font-medium">
+                        {subHeading}
+                      </span>
+                    </div>
+
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iconColor}`}>
+                      <span className="material-symbols-outlined text-[28px]">
+                        {iconName}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* 4-Digit Doorstep Delivery OTP Banner */}
+              {trackingOrder.deliveryOtp && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4 border-2 border-dashed border-amber-300 flex items-center justify-between shadow-2xs">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
+                      <span className="material-symbols-outlined text-[22px]">pin</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-extrabold uppercase tracking-wider text-amber-900 block">
+                        Doorstep Delivery Code
+                      </span>
+                      <span className="text-[11.5px] text-amber-800 font-medium">
+                        Share this 4-digit OTP with your rider upon arrival
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-white px-3.5 py-1.5 rounded-xl border border-amber-300 shadow-xs font-mono font-black text-xl tracking-widest text-primary">
+                    {trackingOrder.deliveryOtp}
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Google Live Map / GPS Interactive Radar Component */}
               <GoogleLiveMap
@@ -1691,15 +1842,15 @@ export default function DashboardPage() {
                   </a>
                 </div>
 
-                {/* Cold-Chain Hygiene Guarantee */}
+                {/* Fresh-Lock Hygiene Guarantee */}
                 <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-slate-600">
                   <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-sky-600 text-[16px]">ac_unit</span>
-                    <span>Cold Bag: <strong>{trackingOrder.rider?.bagTemp || "2.8°C"}</strong></span>
+                    <span className="material-symbols-outlined text-primary text-[16px]">local_shipping</span>
+                    <span>Packaging: <strong>{trackingOrder.rider?.bagTemp || "Fresh-Lock Insulated"}</strong></span>
                   </div>
                   <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
                     <span className="material-symbols-outlined text-[16px]">verified</span>
-                    <span>Freshness Guaranteed</span>
+                    <span>100% Fresh Cuts</span>
                   </div>
                 </div>
               </div>
@@ -1749,7 +1900,7 @@ export default function DashboardPage() {
                             {isCutting
                               ? "Clean cutting on sanitized butcher block in progress"
                               : isDone
-                                ? "Cleanly butchered upon order & vacuum chilled"
+                                ? "Cleanly butchered upon order & sealed fresh"
                                 : "Next up: Butchery preparation"}
                           </span>
                         </div>
@@ -1776,7 +1927,9 @@ export default function DashboardPage() {
                           </span>
                           <span className={`text-[11px] ${isDelivering ? "text-amber-800" : "text-slate-500"}`}>
                             {isDelivering
-                              ? `Rider is on Harmu Road (~${liveRiderCoords?.eta || "14 mins"} away)`
+                              ? (trackingOrder.remainingTransitMinutes != null && trackingOrder.remainingTransitMinutes <= 5
+                                  ? "Rider in neighborhood with insulated box"
+                                  : `Rider is on the way (arriving in ${trackingOrder.remainingTransitMinutes ?? 14} min)`)
                               : isDone
                                 ? "Dispatched & safely reached your address"
                                 : "Assigned to delivery fleet from Kishore Ganj"}
@@ -1800,7 +1953,11 @@ export default function DashboardPage() {
                         <div>
                           <span className="font-bold text-gray-900 block">Delivered to Doorstep</span>
                           <span className="text-slate-500 text-[11px]">
-                            {isDelivered ? "Handed over fresh & verified" : "Expected in 30-45 mins"}
+                            {isDelivered
+                              ? "Handed over fresh & verified"
+                              : trackingOrder.targetDeliveryTime
+                                ? `Arriving by ${new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                                : "Temperature-controlled doorstep delivery"}
                           </span>
                         </div>
                       </div>

@@ -1,19 +1,52 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
 import { PRODUCTS, Product, fetchProducts, fetchCategories, Category } from "@/lib/products";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faStar } from "@fortawesome/free-solid-svg-icons";
+import api from "@/lib/api";
 
 export default function HomePage() {
   const router = useRouter();
   const { addToCart, totalItemsCount, subtotal, openCart, getItemQuantity } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const [addedItem, setAddedItem] = useState<string | null>(null);
-  const [liveProducts, setLiveProducts] = useState<Product[]>(PRODUCTS);
+  const [liveProducts, setLiveProducts] = useState<Product[]>([]);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
+  const [superOffer, setSuperOffer] = useState<any>(null);
+
+  const trendingProducts = useMemo(() => {
+    const list = liveProducts.filter((p) => p.isBestseller || p.badge?.toLowerCase().includes("bestseller") || p.badge?.toLowerCase().includes("trending"));
+    return (list.length >= 5 ? list : liveProducts).slice(0, 5);
+  }, [liveProducts]);
+
+  const chickenProducts = useMemo(() => {
+    return liveProducts.filter((p) => p.category === "chicken").slice(0, 7);
+  }, [liveProducts]);
+
+  const muttonProducts = useMemo(() => {
+    return liveProducts.filter((p) => p.category === "mutton").slice(0, 3);
+  }, [liveProducts]);
+
+  const fishProducts = useMemo(() => {
+    return liveProducts.filter((p) => p.category === "fish").slice(0, 3);
+  }, [liveProducts]);
+
+  const eggProducts = useMemo(() => {
+    return liveProducts.filter((p) => p.category === "eggs");
+  }, [liveProducts]);
+
+  const displayCategories = useMemo(() => {
+    return liveCategories.filter((c) => c.slug !== "all" && (c as any).isActive !== false);
+  }, [liveCategories]);
+
+  const [heroBanners, setHeroBanners] = useState<any[]>([]);
+  const [activeBannerIndex, setActiveBannerIndex] = useState(0);
+  const [isBannerHovered, setIsBannerHovered] = useState(false);
 
   useEffect(() => {
     fetchProducts().then((prods) => {
@@ -26,11 +59,35 @@ export default function HomePage() {
         setLiveCategories(cats);
       }
     });
+    api.get<{ success: boolean; superOffer: any }>("/coupons/super-offer")
+      .then((res) => {
+        if (res.data?.success && res.data.superOffer) {
+          setSuperOffer(res.data.superOffer);
+        }
+      })
+      .catch((err) => console.warn("Failed to load super-offer:", err));
+
+    api.get<{ success: boolean; banners: any[] }>("/banners")
+      .then((res) => {
+        if (res.data?.success && res.data.banners?.length > 0) {
+          setHeroBanners(res.data.banners);
+        }
+      })
+      .catch((err) => console.warn("Failed to load hero banners:", err));
   }, []);
+
+  // Auto-slide hero window every 4.5 seconds
+  useEffect(() => {
+    if (heroBanners.length <= 1 || isBannerHovered) return;
+    const timer = setInterval(() => {
+      setActiveBannerIndex((prev) => (prev + 1) % heroBanners.length);
+    }, 4500);
+    return () => clearInterval(timer);
+  }, [heroBanners.length, isBannerHovered]);
 
   // Live product finder
   const findProduct = (id: string, fallback: Partial<Product>): Product => {
-    const found = liveProducts.find((p) => p.id === id) || PRODUCTS.find((p) => p.id === id);
+    const found = liveProducts.find((p) => p.id === id);
     if (found) return found;
     return {
       id,
@@ -55,46 +112,120 @@ export default function HomePage() {
     setTimeout(() => setAddedItem(null), 1800);
   };
 
+  const nextBanner = () => {
+    setActiveBannerIndex((prev) => (prev + 1) % heroBanners.length);
+  };
+
+  const prevBanner = () => {
+    setActiveBannerIndex((prev) => (prev - 1 + heroBanners.length) % heroBanners.length);
+  };
+
   return (
     <div className="w-full bg-surface text-on-surface font-body-md pb-20">
-      {/* ─── 1. Top Highlight Banner / Hero Section ────────────────────────────── */}
+      {/* ─── 1. Top Sliding Hero Window ────────────────────────────── */}
       <section className="w-full max-w-container-max mx-auto px-gutter-desktop pt-4 sm:pt-6">
-        <div className="relative overflow-hidden rounded-3xl bg-surface-card shadow-sm border border-gray-100 w-full">
-          <div className="relative w-full aspect-[2.6/1] sm:aspect-[2.9/1] min-h-[300px] md:min-h-[380px] max-h-[500px] overflow-hidden">
-            <img
-              alt="Teffes Fresh Chicken Banner"
-              className="w-full h-full object-cover object-center"
-              src="https://static.wixstatic.com/media/0655aa_0a9d6dc1f75e4274a933c1ee6095c384~mv2.webp/v1/fill/w_980,h_490,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/Untitled_design_16_1024x1024.webp"
-            />
-            <div className="absolute inset-0 bg-gradient-to-r from-black/85 via-black/40 to-transparent flex flex-col justify-center px-6 sm:px-12 md:px-16 lg:px-20 text-white">
-              <span className="inline-flex items-center gap-1.5 w-max px-3.5 py-1 rounded-full bg-crimson-bright text-white font-label-badge text-label-badge uppercase tracking-wider mb-space-xs font-bold shadow-xs whitespace-nowrap text-[11px]">
-                <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span> Daily Fresh Butchery
-              </span>
+        <div
+          className="relative overflow-hidden rounded-3xl bg-neutral-900 shadow-md border border-gray-100 w-full group"
+          onMouseEnter={() => setIsBannerHovered(true)}
+          onMouseLeave={() => setIsBannerHovered(false)}
+        >
+          {/* Sliding Window Container */}
+          <div className="relative w-full aspect-[2.4/1] sm:aspect-[3.1/1] md:aspect-[3.4/1] min-h-[220px] max-h-[460px] overflow-hidden">
+            <div
+              className="flex w-full h-full transition-transform duration-500 ease-out"
+              style={{
+                transform: `translateX(-${activeBannerIndex * 100}%)`,
+              }}
+            >
+              {heroBanners.map((banner, index) => {
+                const handleClick = () => {
+                  if (banner.link) {
+                    if (banner.link.startsWith("http")) {
+                      window.open(banner.link, "_blank");
+                    } else if (banner.link.includes("chicken")) {
+                      router.push("/category?type=chicken");
+                    } else if (banner.link.includes("mutton")) {
+                      router.push("/category?type=mutton");
+                    } else if (banner.link.includes("fish")) {
+                      router.push("/category?type=fish");
+                    } else if (banner.link.includes("eggs")) {
+                      router.push("/category?type=eggs");
+                    } else if (banner.link.startsWith("#")) {
+                      router.push("/category?type=all");
+                    } else {
+                      router.push(banner.link);
+                    }
+                  } else {
+                    router.push("/category?type=all");
+                  }
+                };
 
-              <h1 className="font-headline-xl text-white font-extrabold max-w-2xl leading-tight text-balance">
-                Fresh • Hygienic • Farm-Raised Cuts
-              </h1>
-
-              <p className="font-body-md text-white/90 max-w-xl mt-2 hidden sm:block text-balance leading-relaxed">
-                100% RO-water cleaned, antibiotic residue-free poultry, tender pasture goat, freshwater fish &amp; farm eggs prepped strictly post-order.
-              </p>
-
-              <div className="flex flex-wrap items-center gap-3 mt-5 sm:mt-7">
-                <a
-                  className="px-6 py-2.5 rounded-full bg-primary text-on-primary font-label-lg text-label-lg hover:bg-primary-container shadow-md transition-all flex items-center gap-2 font-bold cursor-pointer text-decoration-none whitespace-nowrap"
-                  href="#chicken-section"
-                >
-                  <span>Shop Fresh Cuts</span>
-                  <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                </a>
-                <a
-                  className="px-6 py-2.5 rounded-full bg-white/95 text-on-surface font-label-lg text-label-lg hover:bg-white shadow-sm backdrop-blur-sm transition-all font-bold cursor-pointer text-decoration-none whitespace-nowrap"
-                  href="#special-offer-ribbon"
-                >
-                  View Offers
-                </a>
-              </div>
+                return (
+                  <div
+                    key={banner.id || banner._id || index}
+                    className="w-full h-full shrink-0 relative overflow-hidden flex items-center justify-center bg-neutral-950"
+                    style={{ cursor: banner.link ? "pointer" : "default" }}
+                    onClick={handleClick}
+                  >
+                    <img
+                      src={banner.image}
+                      alt={banner.title || "Teffes Fresh Meat Hero"}
+                      className="w-full h-full object-cover object-center select-none"
+                      draggable={false}
+                    />
+                  </div>
+                );
+              })}
             </div>
+
+            {/* Left & Right Chevron Arrows */}
+            {heroBanners.length > 1 && (
+              <>
+                <button
+                  type="button"
+                  aria-label="Previous Banner"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    prevBanner();
+                  }}
+                  className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/75 text-white backdrop-blur-md flex items-center justify-center transition-all duration-200 shadow-md opacity-80 hover:opacity-100 hover:scale-105 z-10 border border-white/20"
+                >
+                  <span className="material-symbols-outlined text-[20px] sm:text-[24px]">chevron_left</span>
+                </button>
+                <button
+                  type="button"
+                  aria-label="Next Banner"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    nextBanner();
+                  }}
+                  className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/75 text-white backdrop-blur-md flex items-center justify-center transition-all duration-200 shadow-md opacity-80 hover:opacity-100 hover:scale-105 z-10 border border-white/20"
+                >
+                  <span className="material-symbols-outlined text-[20px] sm:text-[24px]">chevron_right</span>
+                </button>
+              </>
+            )}
+
+            {/* Indicator Dots */}
+            {heroBanners.length > 1 && (
+              <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 bg-black/35 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/15">
+                {heroBanners.map((_, dotIdx) => (
+                  <button
+                    key={dotIdx}
+                    type="button"
+                    aria-label={`Slide ${dotIdx + 1}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveBannerIndex(dotIdx);
+                    }}
+                    className={`transition-all duration-300 rounded-full ${activeBannerIndex === dotIdx
+                      ? "w-6 h-2 bg-crimson-bright shadow-xs"
+                      : "w-2 h-2 bg-white/60 hover:bg-white"
+                      }`}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Key Service Proof Points Strip */}
@@ -115,14 +246,14 @@ export default function HomePage() {
 
             <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-surface-card shadow-xs border border-gray-100">
               <div className="w-9 h-9 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary shrink-0">
-                <span className="material-symbols-outlined text-[20px]">ac_unit</span>
+                <span className="material-symbols-outlined text-[20px]">verified</span>
               </div>
               <div>
                 <span className="block font-headline-sm text-[13.5px] sm:text-[15px] text-on-surface leading-tight font-bold">
                   Never Frozen
                 </span>
                 <span className="block font-body-sm text-slate-body text-[11px] sm:text-[12px]">
-                  Chilled at pristine 0°–4°C
+                  100% Fresh Daily Cuts
                 </span>
               </div>
             </div>
@@ -158,35 +289,38 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ─── 2. Rice Promo Ribbon ─────────────────────────────────────────────── */}
-      <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-4 sm:mt-6" id="special-offer-ribbon">
-        <div className="bg-gradient-to-r from-tag-amber-bg via-surface-card to-tag-amber-bg rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm border border-tag-amber/30 w-full">
-          <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-tag-amber/15 flex items-center justify-center text-tag-amber shrink-0 shadow-xs">
-              <span className="material-symbols-outlined text-[32px]">rice_bowl</span>
-            </div>
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tag-amber text-white font-label-badge text-label-badge uppercase tracking-wider font-bold text-[10.5px] whitespace-nowrap mb-1">
-                Limited Celebration Offer
+      {/* ─── 2. Super Offer Promo Ribbon ─────────────────────────────────────── */}
+      {superOffer && (
+        <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-4 sm:mt-6" id="special-offer-ribbon">
+          <div className="bg-gradient-to-r from-tag-amber-bg via-surface-card to-tag-amber-bg rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row items-center justify-between gap-4 shadow-sm border border-tag-amber/30 w-full">
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-tag-amber/15 flex items-center justify-center text-tag-amber shrink-0 shadow-xs">
+                <span className="material-symbols-outlined text-[32px]">local_offer</span>
               </div>
-              <h2 className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem] sm:text-[1.3rem]">
-                Order ₹499+ of Chicken or Meat &amp; Get 300g Premium Basmati Rice Free!
-              </h2>
-              <p className="font-body-sm text-body-sm text-slate-body mt-0.5">
-                Auto-applied at checkout for all verified deliveries within Ranchi core zones.
-              </p>
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-tag-amber text-white font-label-badge text-label-badge uppercase tracking-wider font-bold text-[10.5px] whitespace-nowrap mb-1">
+                  <FontAwesomeIcon icon={faStar} className="text-white text-[11px]" />
+                  <span>Super Featured Offer</span>
+                </div>
+                <h2 className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem] sm:text-[1.3rem]">
+                  {superOffer.discount}
+                </h2>
+                <p className="font-body-sm text-body-sm text-slate-body mt-0.5">
+                  Apply code <strong className="font-mono font-bold text-gray-900 bg-amber-100/80 px-1.5 py-0.5 rounded border border-amber-200">{superOffer.code}</strong> at checkout. {superOffer.minOrder > 0 ? `Valid on orders above ₹${superOffer.minOrder}.` : ""} Valid till {superOffer.validTill}.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 shrink-0">
+              <Link
+                href="/offers"
+                className="px-6 py-2.5 rounded-full bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container shadow-md transition-all font-bold cursor-pointer text-decoration-none whitespace-nowrap"
+              >
+                Claim Offer →
+              </Link>
             </div>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
-            <a
-              className="px-6 py-2.5 rounded-full bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container shadow-md transition-all font-bold cursor-pointer text-decoration-none whitespace-nowrap"
-              href="#chicken-section"
-            >
-              Claim With Order
-            </a>
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* ─── 3. Category Exploration Rail (4 Categories: Chicken, Mutton, Fish, Eggs) ─ */}
       <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-2xl" id="categories">
@@ -205,141 +339,40 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* 1. Chicken Category Card */}
-          <a
-            className="group relative rounded-2xl overflow-hidden bg-surface-card shadow-sm hover:shadow-md transition-all flex flex-col border border-gray-100 text-decoration-none"
-            href="#chicken-section"
-          >
-            <div className="relative w-full aspect-[4/3] max-h-56 overflow-hidden bg-surface-container">
-              <img
-                alt="Farm Fresh Chicken"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                src="https://lh3.googleusercontent.com/aida/AEtjO1X2x7S4X3RVOuaQp-M739tR8AMhxqVDuwvLymnWWNXYRHsLYmAceoWr5Yo69MMbOf83sdy3iFg9dLFKdWOYGQzrmGvOAki-4qx9ObpzDxBf9JMXXvVdpDz_RTcJt-MiWzeAdPP_NtDgvcPN_kqT_ee8yzV-FDKwxN6Vp7f0gmpiSAukXyVlnw3inqBufr9Um92InX6WIf0UkSnm43lB2nnFguAMSw-98kPWfQQY4tk40g4zxH3AS1xO2g"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
-              <span className="absolute top-3 left-3 bg-surface-card/95 text-on-surface text-label-badge font-label-badge px-3 py-1 rounded-full uppercase tracking-wider font-bold shadow-xs whitespace-nowrap text-[10.5px] flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px] text-primary">restaurant</span> 10+ Daily Cuts
-              </span>
-              <div className="absolute bottom-3 left-4 text-white">
-                <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
-                  Farm Fresh Chicken
-                </span>
-                <span className="font-body-sm text-body-sm text-white/90 text-[12px]">
-                  Tender, juicy curry &amp; boneless cuts
-                </span>
-              </div>
-            </div>
-            <div className="p-3.5 flex items-center justify-between bg-surface-card">
-              <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                Shop Chicken <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-              </span>
-              <span className="font-label-badge text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
-                Starts ₹200
-              </span>
-            </div>
-          </a>
-
-          {/* 2. Mutton Category Card */}
-          <a
-            className="group relative rounded-2xl overflow-hidden bg-surface-card shadow-sm hover:shadow-md transition-all flex flex-col border border-gray-100 text-decoration-none"
-            href="#mutton-section"
-          >
-            <div className="relative w-full aspect-[4/3] max-h-56 overflow-hidden bg-surface-container">
-              <img
-                alt="Pasture Raised Mutton"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                src="https://lh3.googleusercontent.com/aida/AEtjO1W7yo26fyVvyTRVk0rinfTgPIaNT54WxnsZFeScD-PV1mMjYpyCKfFnW0u51rC9wOssRPUxh2HN0nHpMLvHKTMPSIQ6aSyQyIHg-rYsK5jB5wDF2UfWAYW7waSZ6GwemLuqJPwvBYlojZwsBvSqloAI6iOAiNZBZAzHXgGuZTmmM_u3Tn073zJ9bQUIH_a9u1k6KoTbKikdE-re_jPikE-J7qfO2DZqqw5on8JCSWnrAAyUnR081fo0"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
-              <span className="absolute top-3 left-3 bg-surface-card/95 text-on-surface text-label-badge font-label-badge px-3 py-1 rounded-full uppercase tracking-wider font-bold shadow-xs whitespace-nowrap text-[10.5px] flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px] text-primary">kebab_dining</span> Pasture Raised
-              </span>
-              <div className="absolute bottom-3 left-4 text-white">
-                <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
-                  Country Goat Mutton
-                </span>
-                <span className="font-body-sm text-body-sm text-white/90 text-[12px]">
-                  Rich, slow-cook tender chops
-                </span>
-              </div>
-            </div>
-            <div className="p-3.5 flex items-center justify-between bg-surface-card">
-              <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                Shop Mutton <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-              </span>
-              <span className="font-label-badge text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
-                Jharkhand Goat
-              </span>
-            </div>
-          </a>
-
-          {/* 3. Fish & Seafood Category Card */}
-          <a
-            className="group relative rounded-2xl overflow-hidden bg-surface-card shadow-sm hover:shadow-md transition-all flex flex-col border border-gray-100 text-decoration-none"
-            href="#fish-section"
-          >
-            <div className="relative w-full aspect-[4/3] max-h-56 overflow-hidden bg-surface-container">
-              <img
-                alt="Freshwater Fish and Seafood"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                src="https://lh3.googleusercontent.com/aida/AEtjO1WCh8DGxL6zlOLLU3E6xWHaQtyHtDhTelW2OumYow--ttadMg_wRKxaMHCrm8yEtybvz_BWGFQuUZvoCB6rg7zU3PrdJft9H10Mc22VcG35ow83Nwkk5uJap7QM8GWXvVgxIKopOKAfoDjs-gYTYV6-Qdzx17hbT6HnEq0MCEQebegIfWKbC3xhOfk6c8Jv2EgbAaIm7uxhHz6Tm3f7h5QTWFsOzE2QnlrEec8kBSCGAsAGzHF7gAfF-g"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
-              <span className="absolute top-3 left-3 bg-surface-card/95 text-on-surface text-label-badge font-label-badge px-3 py-1 rounded-full uppercase tracking-wider font-bold shadow-xs whitespace-nowrap text-[10.5px] flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px] text-primary">set_meal</span> Clean Steaks
-              </span>
-              <div className="absolute bottom-3 left-4 text-white">
-                <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
-                  Fresh Catch Rohu
-                </span>
-                <span className="font-body-sm text-body-sm text-white/90 text-[12px]">
-                  Descaled, cleaned &amp; sliced
-                </span>
-              </div>
-            </div>
-            <div className="p-3.5 flex items-center justify-between bg-surface-card">
-              <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                Shop Fish <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-              </span>
-              <span className="font-label-badge text-label-badge text-tag-amber bg-tag-amber-bg px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
-                Daily Catch
-              </span>
-            </div>
-          </a>
-
-          {/* 4. Eggs Category Card */}
-          <a
-            className="group relative rounded-2xl overflow-hidden bg-surface-card shadow-sm hover:shadow-md transition-all flex flex-col border border-gray-100 text-decoration-none"
-            href="#eggs-section"
-          >
-            <div className="relative w-full aspect-[4/3] max-h-56 overflow-hidden bg-surface-container">
-              <img
-                alt="Farm Fresh & Desi Eggs"
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                src="https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=800&q=80"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
-              <span className="absolute top-3 left-3 bg-surface-card/95 text-on-surface text-label-badge font-label-badge px-3 py-1 rounded-full uppercase tracking-wider font-bold shadow-xs whitespace-nowrap text-[10.5px] flex items-center gap-1">
-                <span className="material-symbols-outlined text-[15px] text-tag-amber">egg</span> Daily Harvest
-              </span>
-              <div className="absolute bottom-3 left-4 text-white">
-                <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
-                  Farm &amp; Desi Eggs
-                </span>
-                <span className="font-body-sm text-body-sm text-white/90 text-[12px]">
-                  Antibiotic-free, rich yellow yolk
-                </span>
-              </div>
-            </div>
-            <div className="p-3.5 flex items-center justify-between bg-surface-card">
-              <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                Shop Eggs <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-              </span>
-              <span className="font-label-badge text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
-                Starts ₹85
-              </span>
-            </div>
-          </a>
+          {displayCategories.map((cat) => {
+            return (
+              <Link
+                key={cat.id || cat.slug}
+                className="group relative rounded-2xl overflow-hidden bg-surface-card shadow-sm hover:shadow-md transition-all flex flex-col border border-gray-100 text-decoration-none cursor-pointer"
+                href={`/category?type=${cat.slug}`}
+              >
+                <div className="relative w-full aspect-[4/3] max-h-56 overflow-hidden bg-surface-container">
+                  <img
+                    alt={cat.name}
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    src={cat.image || "/teffes-logo-maroon.png"}
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
+                  <div className="absolute bottom-3 left-4 text-white pr-2">
+                    <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
+                      {cat.name}
+                    </span>
+                    <span className="font-body-sm text-body-sm text-white/90 text-[12px] line-clamp-1">
+                      {cat.tagline || "Fresh Daily Cuts"}
+                    </span>
+                  </div>
+                </div>
+                <div className="p-3.5 flex items-center justify-between bg-surface-card">
+                  <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                    Shop {cat.name} <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                  </span>
+                  <span className="font-label-badge text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
+                    Fresh Stock
+                  </span>
+                </div>
+              </Link>
+            );
+          })}
         </div>
       </section>
 
@@ -365,72 +398,12 @@ export default function HomePage() {
 
         {/* 5 Best Seller Items */}
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {[
-            {
-              id: "chicken-liver-1kg",
-              name: "Chicken Liver 1 Kg",
-              price: 265,
-              originalPrice: 300,
-              discount: "12% OFF",
-              netWeight: "1000g",
-              tag: "In Stock",
-              sub: "Rich in iron, cleaned & portioned",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1XzvcaeOH9nTHzVUinepJYQIwnsfZZOepX1jRYAfuyvIpLGu93x2ZmCQo52becW2q34ANvzhDL6MFn7LWBzwK5DaMliTgdZb9Vp6VR1Fk2EXPAqVHKR48ZeUQzLTa7zWKQyhVjJj__YDHLxIWgkKbogvTIvg4U5ngY4eXisUnsP9adJsKKfp2c0g2ckloVEf6VjmpOEaEdwvj6aNgdxHpsB7cty010vHxjQoDXXbZjcLi3DEbKIw962pA",
-            },
-            {
-              id: "chicken-whole-1kg",
-              name: "Chicken Whole 1kg",
-              price: 280,
-              originalPrice: 300,
-              discount: "7% OFF",
-              netWeight: "1000g",
-              tag: "Roast & Curry",
-              sub: "Dressed, gutted, pristine whole bird",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1XAFxevdds-xTIROk3LyLMXddl5eWBMyQGY0HcStRmGal_wzkkG14iM-jeWRAVQhBvdW3v0y15C2iVCMyQbNwENbDtwCXyTaoSEwprZIMCKCKlxNByrrhlvJEItq6xOvaLXZcEM7eNSBSOjOUlgVv0wwfc6PqAFeX2xFAbIO0bvjl1Uj_UDmVd4AN5Bg7ECMkckAJsAbWC8G8jApqI_InXFHz_8MtjDKtaDtYMCgC5b8PDJDH1KElSpHw",
-            },
-            {
-              id: "chicken-boneless-strips-1kg",
-              name: "Chicken Boneless Strips 1kg",
-              price: 370,
-              originalPrice: 420,
-              discount: "12% OFF",
-              netWeight: "1000g",
-              tag: "Gym & Diet",
-              sub: "Tender tenderloin & breast strips",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1U9gWcuOnnFzi-kuWO6LV6udpXTPTtM5NUGobT9ckutlUjs8jGUzsC2gl13ZV2Db3W6tAiIOH7_4kw0_wQW2CU_rmRaVkHs80wgupRc5wOXINypj_9ZJZdtLsXXSR9Z2ljmEa8njlkuIUwKcAohsAzeIHu7Ok0o49ox1j1oVF-pUfUgIpOcaXDfbw8IocV-Yto2hUP2knBOgjjP71n7SkzV01QFOVXsoYkuhIhdTq7rGEdEpJPFXmpR",
-            },
-            {
-              id: "chicken-boneless-strips-500g",
-              name: "Boneless Strips 500gm",
-              price: 200,
-              originalPrice: 225,
-              discount: "11% OFF",
-              netWeight: "500g",
-              tag: "Portion Pack",
-              sub: "Crispy fry & stir-fry ready cuts",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1WKENZxOoZOp7uzm1aUWbLU2CZ2RFpxuUvjgVLhiLy27qgPZFiXEKNj1nDI2TuqcILqR_EQxvdDIBeiWkQLnHxczUUQm74xr_hD9kHm9pZWPgd7EXDhzYhqBZSoqKne8QSkNAutN2oZ1FZ72f_KXwUY3ek7Vs6Z2SaK_YY40sRtBVwXzuztKEFT_nkehiuKOXxOJ7bXoJEr6Aq96fIslt4Ep-zRyvmBOHijtATE-bPngd4J_TLJaZvhMw",
-            },
-            {
-              id: "leg-boneless-1kg",
-              name: "Leg Boneless 1kg",
-              price: 370,
-              originalPrice: 400,
-              discount: "8% OFF",
-              netWeight: "1000g",
-              tag: "Tikka & Kabab",
-              sub: "Succulent thigh boneless meat",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1VMrDA-7mgMHM47GjuN6HPLWNvUrvz3JMJr8LnRAR9O-KI8pwRQ6dzzoeLVvDcc_Y0hyDAjSrLSa29KrBBK0Th4eoQayWlThUOLK-ychjspZ7IbaoxkuIEthOeRUXWONgd9nPZJy4_EBNX8_KyRGM7iRELCB9zY5xxr4itXHDRMHJLLU9nmMfDrSLi7JdcLHlzXzWw2fLVtHRGxhZVI4aINcX9ULM98uallUdE-HoLjtyVmk1XLzWYqTA",
-            },
-          ].map((item) => {
-            const product = findProduct(item.id, item);
+          {trendingProducts.map((item) => {
             const qty = getItemQuantity(item.id);
             const isJustAdded = addedItem === item.id;
             const wishlisted = isInWishlist(item.id);
+            const origPrice = item.originalPrice || item.price || 0;
+            const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
 
             return (
               <article
@@ -444,6 +417,9 @@ export default function HomePage() {
                       alt={item.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       src={item.image}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
+                      }}
                     />
 
                     {/* Top Left: Fresh Tag */}
@@ -472,9 +448,9 @@ export default function HomePage() {
                     </button>
 
                     {/* Bottom Left: Discount Badge */}
-                    {item.discount && (
+                    {discount && (
                       <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                        {item.discount}
+                        {discount}
                       </span>
                     )}
                   </div>
@@ -482,12 +458,12 @@ export default function HomePage() {
                   <div className="p-3.5 sm:p-4">
                     <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
                       <span>Net: {item.netWeight}</span>
-                      <span className="text-tertiary font-label-badge font-bold uppercase">{item.tag}</span>
+                      <span className="text-tertiary font-label-badge font-bold uppercase">{item.badge || "Fresh"}</span>
                     </div>
                     <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold line-clamp-1 group-hover:text-primary transition-colors text-[14.5px]">
                       {item.name}
                     </h3>
-                    <p className="font-body-sm text-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">{item.sub}</p>
+                    <p className="font-body-sm text-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">{item.description}</p>
                   </div>
                 </div>
 
@@ -496,9 +472,9 @@ export default function HomePage() {
                     <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.2rem]">
                       ₹{item.price}
                     </span>
-                    {item.originalPrice > item.price && (
+                    {origPrice > item.price && (
                       <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
-                        ₹{item.originalPrice}
+                        ₹{origPrice}
                       </span>
                     )}
                   </div>
@@ -508,7 +484,7 @@ export default function HomePage() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      handleAdd(product);
+                      handleAdd(item);
                     }}
                     className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
                       ? "bg-primary text-on-primary shadow-sm"
@@ -544,7 +520,7 @@ export default function HomePage() {
                 Pure Protein. Zero Preservatives.
               </h3>
               <p className="font-body-sm text-body-sm text-white/90 mt-1 hidden sm:block max-w-lg">
-                Chilled between 0°C to 4°C right until your doorstep to preserve tender muscle fibres.
+                Cut strictly fresh on order and delivered in insulated fresh-boxes to preserve tender muscle fibres.
               </p>
             </div>
             <a
@@ -582,103 +558,12 @@ export default function HomePage() {
 
         {/* 7 Chicken Items + 1 Custom Cuts Showcase */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            {
-              id: "chicken-curry-cut-1kg",
-              name: "Curry Cut 1 Kg",
-              price: 280,
-              originalPrice: 300,
-              discount: "7% OFF",
-              net: "Net: 1000g | Gross: 1050g",
-              pcs: "14-16 Pcs",
-              badge: "Best Seller",
-              desc: "Mix of bone-in & boneless prime pieces ideal for slow Sunday gravies.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1U14IRgfExyqM7RqzBVytYg4RKCip9oYuxZcI-LzlWKFL9AuxhdIvNT7i5pB2BWmYvPKPLXmiX14Acg637SmRFdcAqvmAmZ0AiFrF9rFqGEnX4veNvb9Ui1HrUDGcCZIoI2HITYg22oRubCfHHLTmmv3uowZ8wXkb-zXIcTIA8JInpgLLGx87YIE_YJ7fobrDjw1sXGJV_nM2q-GYdLKj1jgEC54kSi-_suQxMZrUWcARlYbxyUSbSW8A",
-            },
-            {
-              id: "chicken-lollipop-1kg",
-              name: "Chicken Lollipop 1kg",
-              price: 285,
-              originalPrice: 300,
-              discount: "5% OFF",
-              net: "Net: 1000g",
-              pcs: "18-20 Pcs",
-              badge: "Snack Special",
-              desc: "Clean frenched wingettes and drumettes sculpted for crispy frying.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1UNRNgmV2ikFoRKYpfYTm9xvRRnEhapfsFVLdQpMS-47HWqnVxP_kRPZlPw3PPgVr98slASBEc8zqu_22HbXOPYKMnmgqNcXSP77KPRXX5Pw87wiY_D5JCvgIsdANRI7f7o9XrVvfwEAiL93bx1ofDsG8vixmmQsXQ8t7NZ3AVX1eaWvAk5FT8r0orT-GsbHD5iIcRu7ibbPCfCxr6fYbdui8tkYvfAJX4dg8Ed-ZITWZYjXfeZKFtNbA",
-            },
-            {
-              id: "chicken-drumstick-1kg",
-              name: "Chicken Drumsticks 1 Kg",
-              price: 350,
-              originalPrice: 370,
-              discount: "5% OFF",
-              net: "Net: 1000g",
-              pcs: "8-10 Legs",
-              badge: "Biryani Essential",
-              desc: "Plump lower leg cuts, skinless and perfectly trimmed for juicy grilling.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1XEXYsorgCDQfJeF5rjP0qJL7pIgbOW5IT5JI8Da98U-AUlkyNhvKUm9VItAhsMOm--rHS2OUkkCSTj5ceAlZF409KUkUMZIhB0Mo4OnpYJ4ZGRx2Sm5TYVZ8bKdQ6g9ByjaIjE9Nmx3IL3WfH-96LZk9CnmOm0N9pRW5PUmB3aPuPMfyEMGvdq9WJd24NLFG5GhZKm1d9cK-l_6VjW9pxi_wR0URHcXhrILvt7HRIUr38HsZvxKWxjQQ",
-            },
-            {
-              id: "chicken-wings-1kg",
-              name: "Chicken Wings 1kg",
-              price: 245,
-              originalPrice: 265,
-              discount: "8% OFF",
-              net: "Net: 1000g",
-              pcs: "12-14 Wings",
-              badge: "Barbecue Cut",
-              desc: "Skin-on wings with unmatched richness and flavor when baked or tossed.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1VTFHCuK-cFltmasMDFqLaqzzp8aau4eW-CQ3E1pwV5pyu4HFPAlx-FzqMPQga4Y1jrJ9ZMVHqquoxDjhvtY8AeloOqNVnycThWV4uL_Y9f9CpaJ2THNQOd8ce1f_uVaWDRkfaIvlQeX_ngrlwIVMH1SHVQFuHNuVxzW72ULVWUeu-MMW16ZvGzRm3yhaVJ1pAm_PLCWqZipulbYKSHiGlNfuCIUQUPWDEzNIHbRRFF5_Mor1PlB2gnSw",
-            },
-            {
-              id: "chicken-ran-1kg",
-              name: "Chicken Ran (Full Leg) 1kg",
-              price: 290,
-              originalPrice: 310,
-              discount: "6% OFF",
-              net: "Net: 1000g",
-              pcs: "4 Full Legs",
-              badge: "Whole Leg",
-              desc: "Combined thigh and drumstick with skin off for deep tandoori roast.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1Uu1e3KgA9dUDsxfEpkpMzOM---tbHiu8Dhsm1Xe5FOm0Qhm-h8vrDCUbAYA8FlmS6BTLnp_g3qUFD2mY1lIeLzXktzih8hyMDLIqgWS6_yZeOY_u9_5sApLqlVC0La2JzJG4y-PqnGiXQkBNpp3ATxm9SFnf98KxNZkBUTp7u1yr2mxutai2Y5SwJAyPmGjRlIoHGA4ySsBiMRrUE6WGK-9QUJwitn5OWQpR0LHlHscKhMNYj8o3hr",
-            },
-            {
-              id: "chicken-keema-1kg",
-              name: "Chicken Keema 1kg",
-              price: 370,
-              originalPrice: 395,
-              discount: "6% OFF",
-              net: "Net: 1000g",
-              pcs: "100% Meat",
-              badge: "Double Ground",
-              desc: "Finely minced breast & thigh meat. Perfectly seasoned for parathas & koftas.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1W2TxnZd-j5N3uAWjH4mAamsuvHSfd033KiN1ZoiYINftrPAYCNqIsnh0JA0LuOImdSgY5Ojswk_2EdN4C-8Sp9XmnBRRMEbC7UIOG9gem2xcb-kuy8ZrDzpV-k78-4Bs3WnNi3rwjPhZ2tOniXZ1EQ7yALbz5Txl3RkBLaJPQI715YOOb4ZOShLUs4HTB90nd5o1Ut--fmP6-RCCCYGxd1_7QEiPfbToL93q_XHS1lniwTgGaUVYOvaQ",
-            },
-            {
-              id: "chicken-with-skin-whole-1kg",
-              name: "Chicken With Skin Whole 1kg",
-              price: 280,
-              originalPrice: 280,
-              discount: null,
-              net: "Net: 1000g",
-              pcs: "Whole Dressed",
-              badge: "Crispy Skin",
-              desc: "Retains natural skin fats for maximum moisture in oven roasting or grill.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1V-89ZaQuCvaTiSu7alVkUqFPb6_9nLy5WZ5Tqyc17o0MWSCvVrGa3vcymUzwPXXVrneSWrDWjTKjXQStBVzFGsgP493leBXmStPHFCJEZhu_pRLvseo5ePa01kic2C8BF8KTEH-OUX62_cWeW-aj6ksFlBH_2FjDiUkX4Fsk3YiAM-JHxwqgGGde9RDsUnY-TltA9011CuROGiWQQX0Ki82SLlb9aUiINpchSZ_z6m2h41wfV9GzUL",
-            },
-          ].map((item) => {
-            const product = findProduct(item.id, item);
+          {chickenProducts.map((item) => {
             const qty = getItemQuantity(item.id);
             const isJustAdded = addedItem === item.id;
             const wishlisted = isInWishlist(item.id);
+            const origPrice = item.originalPrice || item.price || 0;
+            const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
 
             return (
               <article
@@ -692,11 +577,14 @@ export default function HomePage() {
                       alt={item.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       src={item.image}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
+                      }}
                     />
 
                     {/* Top Left: Tag */}
                     <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tertiary font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> {item.badge}
+                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> {item.badge || "Fresh Cut"}
                     </span>
 
                     {/* Top Right: Wishlist Heart */}
@@ -720,22 +608,22 @@ export default function HomePage() {
                     </button>
 
                     {/* Bottom Left: Discount Badge */}
-                    {item.discount && (
+                    {discount && (
                       <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                        {item.discount}
+                        {discount}
                       </span>
                     )}
                   </div>
 
                   <div className="p-4">
                     <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                      <span>{item.net}</span>
-                      <span className="text-tertiary font-label-badge font-bold">{item.pcs}</span>
+                      <span>Net: {item.netWeight}</span>
+                      <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || "Standard Cut"}</span>
                     </div>
                     <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
                       {item.name}
                     </h3>
-                    <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px]">{item.desc}</p>
+                    <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">{item.description}</p>
                   </div>
                 </div>
 
@@ -744,9 +632,9 @@ export default function HomePage() {
                     <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.2rem]">
                       ₹{item.price}
                     </span>
-                    {item.originalPrice > item.price && (
+                    {origPrice > item.price && (
                       <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
-                        ₹{item.originalPrice}
+                        ₹{origPrice}
                       </span>
                     )}
                   </div>
@@ -756,7 +644,7 @@ export default function HomePage() {
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      handleAdd(product);
+                      handleAdd(item);
                     }}
                     className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
                       ? "bg-primary text-on-primary shadow-sm"
@@ -790,12 +678,12 @@ export default function HomePage() {
               <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
                 <span className="w-2 h-2 rounded-full bg-tertiary"></span> RO-Water Washed Before Packing
               </div>
-              <a
+              <Link
                 className="w-full py-2.5 rounded-full bg-primary text-on-primary font-label-md text-label-md text-center block hover:bg-primary-container transition-colors shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
-                href="#chicken-section"
+                href="/category?type=chicken"
               >
-                View All Chicken Cuts (12)
-              </a>
+                View All Chicken Cuts ({liveProducts.filter(p => p.category === 'chicken').length})
+              </Link>
             </div>
           </div>
         </div>
@@ -822,66 +710,34 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {[
-              {
-                id: "mutton-curry-cut-1kg",
-                name: "Mutton 1Kg (Curry Cut)",
-                price: 900,
-                originalPrice: 1000,
-                discount: "10% OFF",
-                net: "Net Wt: 1000g",
-                serves: "Serves 4-6",
-                desc: "Balanced mix of bone-in shank, shoulder, and ribs from young country goat.",
-                image:
-                  "https://lh3.googleusercontent.com/aida/AEtjO1V-XpmCoX5V0ku0QhROALLZlcULVA9vr8G1k2fa8EW68uv-gavSPVsEPypHbhiZC-ddjgMlOi9Fz5g3qmVu5dRRwIknVc7PXcGHahULjyuFPCCi7WxfPjaVzjiU6eu32azkVyNQlaAgocRPMLJOUS1aILr8jA34EpLcZ8DYTyxcvcAGm0hFid9qKInhMY5iNMDN76WQIjTMWbEbvYtzKkgBWHN_2qfWCzUfkD4TAVnKR5UZZ1M73FkPig",
-              },
-              {
-                id: "mutton-curry-cut-500g",
-                name: "Mutton 500gm (Curry Cut)",
-                price: 500,
-                originalPrice: 550,
-                discount: "9% OFF",
-                net: "Net Wt: 500g",
-                serves: "Serves 2-3",
-                desc: "Hand-chopped into bite-size pieces. Ideal for rich Rogan Josh or stew.",
-                image:
-                  "https://lh3.googleusercontent.com/aida/AEtjO1WpEtu-3k6GTNT_z8ePCWuVlJbQQtgzfbHBeFIPPpCGD134MLEowkQeotQeTT29Eml-5oCj-F0EfFu-pCyh3C6hWuw7GeyPbwY_wH5a9Pirk-O6zt_QYPz87ajm62wEHK7pVVtBHC3EvOfVjZZJjSl9wAZ7MJuHbVAHatzNch9UGf6Jjrk_7PZWWiSW8u9LepfjTcmDZmtWcSa1WABtGmRYQV7nyxo0N2daD1kTINisEiWW12mp29gBBQ",
-              },
-              {
-                id: "mutton-curry-cut-750g",
-                name: "Mutton 750gm (Family Pack)",
-                price: 750,
-                originalPrice: 800,
-                discount: "6% OFF",
-                net: "Net Wt: 750g",
-                serves: "Serves 3-4",
-                desc: "Finely portioned with rib chops and marrow pieces for rich flavour profile.",
-                image:
-                  "https://lh3.googleusercontent.com/aida/AEtjO1V-XpmCoX5V0ku0QhROALLZlcULVA9vr8G1k2fa8EW68uv-gavSPVsEPypHbhiZC-ddjgMlOi9Fz5g3qmVu5dRRwIknVc7PXcGHahULjyuFPCCi7WxfPjaVzjiU6eu32azkVyNQlaAgocRPMLJOUS1aILr8jA34EpLcZ8DYTyxcvcAGm0hFid9qKInhMY5iNMDN76WQIjTMWbEbvYtzKkgBWHN_2qfWCzUfkD4TAVnKR5UZZ1M73FkPig",
-              },
-            ].map((item) => {
-              const product = findProduct(item.id, item);
-              const qty = getItemQuantity(item.id);
-              const isJustAdded = addedItem === item.id;
-              const wishlisted = isInWishlist(item.id);
+            {muttonProducts.map((product) => {
+              const qty = getItemQuantity(product.id);
+              const isJustAdded = addedItem === product.id;
+              const wishlisted = isInWishlist(product.id);
+              const discountText = product.originalPrice && product.originalPrice > product.price
+                ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
+                : ((product as any).discount || "");
 
               return (
                 <article
-                  key={item.id}
-                  onClick={() => router.push(`/product/${item.id}`)}
+                  key={product.id}
+                  onClick={() => router.push(`/product/${product.id}`)}
                   className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
                 >
                   <div>
                     <div className="relative w-full aspect-[16/10] overflow-hidden bg-surface-container">
                       <img
-                        alt={item.name}
+                        alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        src={item.image}
+                        src={product.image || (product.images && product.images[0]) || "/images/mutton.png"}
+                        onError={(e) => {
+                          e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/p3pU05nL.webp";
+                        }}
                       />
 
                       {/* Top Left: Tag */}
                       <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tertiary font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Prime Cut
+                        <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> {product.badge || "Prime Cut"}
                       </span>
 
                       {/* Top Right: Wishlist Heart */}
@@ -890,7 +746,7 @@ export default function HomePage() {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          toggleWishlist(item.id);
+                          toggleWishlist(product.id);
                         }}
                         className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
                           }`}
@@ -905,31 +761,37 @@ export default function HomePage() {
                       </button>
 
                       {/* Bottom Left: Discount Badge */}
-                      <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                        {item.discount}
-                      </span>
+                      {discountText && (
+                        <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
+                          {discountText}
+                        </span>
+                      )}
                     </div>
 
                     <div className="p-4">
                       <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                        <span>{item.net}</span>
-                        <span className="text-tertiary font-label-badge font-bold">{item.serves}</span>
+                        <span>{product.netWeight || "Net Wt: Fresh Cut"}</span>
+                        <span className="text-tertiary font-label-badge font-bold">{product.serves || "Serves 3-4"}</span>
                       </div>
                       <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[15px]">
-                        {item.name}
+                        {product.name}
                       </h3>
-                      <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px]">{item.desc}</p>
+                      <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
+                        {product.description || "Fresh country mutton cut fresh after your order."}
+                      </p>
                     </div>
                   </div>
 
                   <div className="p-4 pt-0">
                     <div className="flex items-baseline gap-2 mb-3">
-                      <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.2rem]">
-                        ₹{item.price}
+                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[18px]">
+                        ₹{product.price}
                       </span>
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
-                        ₹{item.originalPrice}
-                      </span>
+                      {product.originalPrice && product.originalPrice > product.price && (
+                        <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[13px]">
+                          ₹{product.originalPrice}
+                        </span>
+                      )}
                     </div>
 
                     <button
@@ -978,54 +840,34 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[
-            {
-              id: "rohu-fish-1kg",
-              name: "Local Rohu Fish 1 Kg",
-              price: 280,
-              originalPrice: 350,
-              discount: "20% OFF",
-              net: "Net Wt: 1000g (Approx)",
-              spec: "Bengali Cut",
-              desc: "Whole cleaned Rohu cut into uniform round steaks and head pieces.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1VfFFoFe5gIVjAuAwoM0pUShBeiwZTgnmSjowL9yOjVP0LnK0yXZAY8O1U78Prxarny6htWvDGuULPb49rt2FyrsEkh6OtOJeR3pGIvikgQeEIWIo5k6sEE8IPVjcU-JRtropCjAveFMOmH6lfFIx7hiTgyQXRW0b0qgYC0NP0caxooqfQX1eN8NgYtEzgATics8qTPpTYe6GYbXQ3tlPcm4c-oDw9OfhsWdltmHa38gu6PQ6doutFz",
-            },
-            {
-              id: "rohu-fish-500g",
-              name: "Local Rohu Fish 500gm",
-              price: 145,
-              originalPrice: 200,
-              discount: "28% OFF",
-              net: "Net Wt: 500g",
-              spec: "5-6 Rings",
-              desc: "Tender freshwater Rohu fish center slices. Cleaned with RO water.",
-              image:
-                "https://lh3.googleusercontent.com/aida/AEtjO1VfFFoFe5gIVjAuAwoM0pUShBeiwZTgnmSjowL9yOjVP0LnK0yXZAY8O1U78Prxarny6htWvDGuULPb49rt2FyrsEkh6OtOJeR3pGIvikgQeEIWIo5k6sEE8IPVjcU-JRtropCjAveFMOmH6lfFIx7hiTgyQXRW0b0qgYC0NP0caxooqfQX1eN8NgYtEzgATics8qTPpTYe6GYbXQ3tlPcm4c-oDw9OfhsWdltmHa38gu6PQ6doutFz",
-            },
-          ].map((item) => {
-            const product = findProduct(item.id, item);
-            const qty = getItemQuantity(item.id);
-            const isJustAdded = addedItem === item.id;
-            const wishlisted = isInWishlist(item.id);
+          {fishProducts.map((product) => {
+            const qty = getItemQuantity(product.id);
+            const isJustAdded = addedItem === product.id;
+            const wishlisted = isInWishlist(product.id);
+            const discountText = product.originalPrice && product.originalPrice > product.price
+              ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
+              : ((product as any).discount || "");
 
             return (
               <article
-                key={item.id}
-                onClick={() => router.push(`/product/${item.id}`)}
+                key={product.id}
+                onClick={() => router.push(`/product/${product.id}`)}
                 className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
               >
                 <div>
                   <div className="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
                     <img
-                      alt={item.name}
+                      alt={product.name}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      src={item.image}
+                      src={product.image || (product.images && product.images[0]) || "/images/fish.png"}
+                      onError={(e) => {
+                        e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/4e3AEjkv.webp";
+                      }}
                     />
 
                     {/* Top Left: Tag */}
                     <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tertiary font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Fresh Water Cut
+                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> {product.badge || "Fresh Catch"}
                     </span>
 
                     {/* Top Right: Wishlist Heart */}
@@ -1034,7 +876,7 @@ export default function HomePage() {
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        toggleWishlist(item.id);
+                        toggleWishlist(product.id);
                       }}
                       className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
                         }`}
@@ -1049,31 +891,37 @@ export default function HomePage() {
                     </button>
 
                     {/* Bottom Left: Discount Badge */}
-                    <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                      {item.discount}
-                    </span>
+                    {discountText && (
+                      <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
+                        {discountText}
+                      </span>
+                    )}
                   </div>
 
                   <div className="p-4">
                     <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                      <span>{item.net}</span>
-                      <span className="text-tertiary font-label-badge font-bold">{item.spec}</span>
+                      <span>{product.netWeight || "Net Wt: 1000g"}</span>
+                      <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Bengali Cut"}</span>
                     </div>
-                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[15px]">
-                      {item.name}
+                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
+                      {product.name}
                     </h3>
-                    <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px]">{item.desc}</p>
+                    <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
+                      {product.description || "Fresh water fish locally sourced and procured."}
+                    </p>
                   </div>
                 </div>
 
                 <div className="p-4 pt-0">
                   <div className="flex items-baseline gap-2 mb-3">
-                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.2rem]">
-                      ₹{item.price}
+                    <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[18px]">
+                      ₹{product.price}
                     </span>
-                    <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
-                      ₹{item.originalPrice}
-                    </span>
+                    {product.originalPrice && product.originalPrice > product.price && (
+                      <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[13px]">
+                        ₹{product.originalPrice}
+                      </span>
+                    )}
                   </div>
 
                   <button
@@ -1118,7 +966,7 @@ export default function HomePage() {
                 </div>
                 <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[12.5px]">
                   <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
-                  <span>Packed in chilled food-grade thermo-seal trays</span>
+                  <span>Packed in food-grade fresh-seal trays</span>
                 </div>
               </div>
             </div>
@@ -1154,165 +1002,167 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[
-            {
-              id: "prod-egg-1",
-              name: "Farm Fresh Classic White Eggs (Pack of 12)",
-              price: 99,
-              originalPrice: 120,
-              discount: "18% OFF",
-              net: "12 Eggs",
-              spec: "Daily Harvest",
-              badge: "Farm Classic",
-              desc: "Freshly harvested antibiotic-free table eggs with vibrant yellow yolk. Cleaned and safely packed.",
-              image: "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=800&q=80",
-            },
-            {
-              id: "prod-egg-2",
-              name: "Nutritious Desi Brown Eggs (Pack of 6)",
-              price: 85,
-              originalPrice: 105,
-              discount: "19% OFF",
-              net: "6 Eggs",
-              spec: "Desi Organic",
-              badge: "High Nutrition",
-              desc: "Rich in omega-3 and proteins from naturally forage-fed hens. Deep orange yolk and thicker shells.",
-              image: "https://images.unsplash.com/photo-1516448620398-c5f44bf9f441?auto=format&fit=crop&w=800&q=80",
-            },
-            {
-              id: "prod-egg-3",
-              name: "Family Saver Fresh White Eggs (Crate of 30)",
-              price: 230,
-              originalPrice: 270,
-              discount: "15% OFF",
-              net: "30 Eggs",
-              spec: "Value Crate",
-              badge: "Family Saver",
-              desc: "Economy wholesale family pack of 30 farm-fresh table eggs. Clean, intact, and safe crate packaging.",
-              image: "https://images.unsplash.com/photo-1506976785307-8732e854ad03?auto=format&fit=crop&w=800&q=80",
-            },
-          ].map((item) => {
-            const product = findProduct(item.id, item);
-            const qty = getItemQuantity(item.id);
-            const isJustAdded = addedItem === item.id;
-            const wishlisted = isInWishlist(item.id);
+        {eggProducts.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {eggProducts.map((product) => {
+              const qty = getItemQuantity(product.id);
+              const isJustAdded = addedItem === product.id;
+              const wishlisted = isInWishlist(product.id);
+              const discountText = product.originalPrice && product.originalPrice > product.price
+                ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
+                : ((product as any).discount || "");
 
-            return (
-              <article
-                key={item.id}
-                onClick={() => router.push(`/product/${item.id}`)}
-                className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
-              >
-                <div>
-                  <div className="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
-                    <img
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      src={item.image}
-                    />
+              return (
+                <article
+                  key={product.id}
+                  onClick={() => router.push(`/product/${product.id}`)}
+                  className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
+                >
+                  <div>
+                    <div className="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
+                      <img
+                        alt={product.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        src={product.image || (product.images && product.images[0]) || "/images/eggs.png"}
+                        onError={(e) => {
+                          e.currentTarget.src = "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=800&q=80";
+                        }}
+                      />
 
-                    {/* Top Left: Tag */}
-                    <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tag-amber font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tag-amber"></span> {item.badge}
-                    </span>
+                      {/* Top Left: Tag */}
+                      <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tag-amber font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
+                        <span className="w-1.5 h-1.5 rounded-full bg-tag-amber"></span> {product.badge || "Farm Fresh"}
+                      </span>
 
-                    {/* Top Right: Wishlist Heart */}
+                      {/* Top Right: Wishlist Heart */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleWishlist(product.id);
+                        }}
+                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                          }`}
+                        aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                        title={wishlisted ? "Loved" : "Add to wishlist"}
+                      >
+                        <span
+                          className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                        >
+                          favorite
+                        </span>
+                      </button>
+
+                      {/* Bottom Left: Discount */}
+                      {discountText && (
+                        <span className="absolute bottom-2.5 left-2.5 bg-tag-amber-bg text-tag-amber font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
+                          {discountText}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="p-4">
+                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                        <span>{product.netWeight || "Daily Harvest"}</span>
+                        <span className="text-tag-amber font-label-badge font-bold">{product.pieces || "Antibiotic-free"}</span>
+                      </div>
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
+                        {product.name}
+                      </h3>
+                      <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
+                        {product.description || "Farm fresh eggs safely packaged."}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="p-4 pt-0">
+                    <div className="flex items-baseline gap-2 mb-3">
+                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[18px]">
+                        ₹{product.price}
+                      </span>
+                      {product.originalPrice && product.originalPrice > product.price && (
+                        <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
+                          ₹{product.originalPrice}
+                        </span>
+                      )}
+                    </div>
+
                     <button
                       type="button"
                       onClick={(e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        toggleWishlist(item.id);
+                        handleAdd(product);
                       }}
-                      className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                      className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
+                        ? "bg-primary text-on-primary shadow-sm"
+                        : "bg-surface-container-low text-primary hover:bg-primary hover:text-on-primary"
                         }`}
-                      aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                      title={wishlisted ? "Loved" : "Add to wishlist"}
                     >
-                      <span
-                        className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
-                      >
-                        favorite
+                      <span className="material-symbols-outlined text-[18px]">
+                        {qty > 0 || isJustAdded ? "done" : "add_shopping_cart"}
                       </span>
+                      <span>{qty > 0 ? `IN CART (${qty})` : "+ ADD TO CART"}</span>
                     </button>
-
-                    {/* Bottom Left: Discount */}
-                    <span className="absolute bottom-2.5 left-2.5 bg-tag-amber-bg text-tag-amber font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                      {item.discount}
-                    </span>
                   </div>
+                </article>
+              );
+            })}
 
-                  <div className="p-4">
-                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                      <span>{item.net}</span>
-                      <span className="text-tag-amber font-label-badge font-bold">{item.spec}</span>
-                    </div>
-                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
-                      {item.name}
-                    </h3>
-                    <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px]">{item.desc}</p>
-                  </div>
-                </div>
-
-                <div className="p-4 pt-0">
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.2rem]">
-                      ₹{item.price}
-                    </span>
-                    <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
-                      ₹{item.originalPrice}
-                    </span>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleAdd(product);
-                    }}
-                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
-                      ? "bg-primary text-on-primary shadow-sm"
-                      : "bg-surface-container-low text-primary hover:bg-primary hover:text-on-primary"
-                      }`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {qty > 0 || isJustAdded ? "done" : "add_shopping_cart"}
-                    </span>
-                    <span>{qty > 0 ? `IN CART (${qty})` : "+ ADD TO CART"}</span>
-                  </button>
-                </div>
-              </article>
-            );
-          })}
-
-          {/* Egg Harvest Promise Showcase */}
-          <div className="bg-surface-container-low rounded-2xl p-5 flex flex-col justify-between border border-gray-200/50">
-            <div>
-              <span className="material-symbols-outlined text-tag-amber text-[36px]">nest_multi_room</span>
-              <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-2 text-[1.2rem]">
-                Pure Farm Harvest
-              </h3>
-              <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
-                Carefully collected each dawn from biosecure poultry sheds. Shockproof cartons prevent cracking in
-                transit, ensuring every egg reaches you in pristine condition.
-              </p>
-            </div>
-
-            <div className="pt-4">
-              <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
-                <span className="w-2 h-2 rounded-full bg-tag-amber"></span> 100% Hormone &amp; Antibiotic Free
+            {/* Egg Harvest Promise Showcase */}
+            <div className="bg-surface-container-low rounded-2xl p-5 flex flex-col justify-between border border-gray-200/50">
+              <div>
+                <span className="material-symbols-outlined text-tag-amber text-[36px]">nest_multi_room</span>
+                <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-2 text-[1.2rem]">
+                  Pure Farm Harvest
+                </h3>
+                <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
+                  Carefully collected each dawn from biosecure poultry sheds. Shockproof cartons prevent cracking in
+                  transit, ensuring every egg reaches you in pristine condition.
+                </p>
               </div>
-              <a
-                className="w-full py-2.5 rounded-full bg-tag-amber text-white font-label-md text-label-md text-center block hover:opacity-90 transition-opacity shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
-                href="#eggs-section"
-              >
-                Explore Egg Packs
-              </a>
+
+              <div className="pt-4">
+                <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
+                  <span className="w-2 h-2 rounded-full bg-tag-amber"></span> 100% Hormone &amp; Antibiotic Free
+                </div>
+                <Link
+                  className="w-full py-2.5 rounded-full bg-tag-amber text-white font-label-md text-label-md text-center block hover:opacity-90 transition-opacity shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
+                  href="/category?type=eggs"
+                >
+                  Explore Egg Packs
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="bg-surface-card rounded-3xl p-6 sm:p-8 border border-amber-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="flex items-center gap-5">
+              <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
+                <span className="material-symbols-outlined text-[36px]">egg</span>
+              </div>
+              <div>
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-label-badge font-bold text-[11px] mb-2 border border-amber-200/60">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  Coming Soon to Teffe&apos;s
+                </div>
+                <h3 className="font-headline-md font-bold text-gray-900 text-[18px] sm:text-[20px]">
+                  Farm Fresh &amp; Desi Eggs Sourcing in Progress
+                </h3>
+                <p className="font-body-sm text-slate-body text-[13px] mt-1 max-w-xl leading-relaxed">
+                  We are partnering with certified local biosecure farms to bring you 100% antibiotic-free classic and desi eggs with rich yellow yolks. New batches will be live soon!
+                </p>
+              </div>
+            </div>
+            <Link
+              href="/category?type=chicken"
+              className="px-5 py-2.5 rounded-full bg-primary hover:bg-primary-dark text-white font-label-md text-xs font-bold transition-all shadow-sm whitespace-nowrap shrink-0"
+            >
+              Browse Fresh Chicken ({chickenProducts.length}) →
+            </Link>
+          </div>
+        )}
       </section>
 
       {/* ─── 10. Why Choose Teffe's Trust & Hygiene Banner ─────────────────────── */}

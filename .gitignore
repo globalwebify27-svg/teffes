@@ -26,6 +26,29 @@ Thumbs.db
 *.swp
 *.swo
 
-# Coverage
+# Coverage & Agent configs
 coverage/
 .agents/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+*.iml
+
+# Mobile OS & Build
+**/android/.gradle/
+**/android/local.properties
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+
+# Scratch & Temporary files
+scratch/
+server/scratch/
+server/src/scripts/update_files.js
+**/emulator_*.png
+downloaded_ui.html

@@ -4,6 +4,7 @@ const {
   getDashboardOverview,
   getOrders,
   updateOrderStatus,
+  delayPrepTime,
   getInventory,
   updateInventoryItem,
   getStoreCustomers,
@@ -26,6 +27,7 @@ router.get('/dashboard', getDashboardOverview);
 // 2. Orders
 router.get('/orders', getOrders);
 router.patch('/orders/:id/status', updateOrderStatus);
+router.post('/orders/:id/delay-prep', delayPrepTime);
 router.patch('/orders/:id/assign-rider', assignRiderToOrder);
 
 // 3. Inventory

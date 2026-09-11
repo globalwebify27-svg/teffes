@@ -27,6 +27,8 @@ const orderSchema = new mongoose.Schema(
       email: { type: String, default: '' },
       userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
       address: { type: String, required: true },
+      lat: { type: Number, default: 23.3512 },
+      lng: { type: Number, default: 85.3154 },
     },
     items: [orderItemSchema],
     itemSummary: {
@@ -53,15 +55,65 @@ const orderSchema = new mongoose.Schema(
       default: 'Kishore Ganj',
     },
     rider: {
+      riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
       name: { type: String, default: '' },
       phone: { type: String, default: '' },
       vehicleNumber: { type: String, default: '' },
       lat: { type: Number, default: 23.3441 },
       lng: { type: Number, default: 85.3096 },
     },
+    deliveryOtp: {
+      type: String,
+      default: null,
+    },
+    riderEarning: {
+      type: Number,
+      default: 65,
+    },
+    cashCollected: {
+      type: Number,
+      default: 0,
+    },
+    pickedUpAt: {
+      type: Date,
+      default: null,
+    },
+    deliveredAt: {
+      type: Date,
+      default: null,
+    },
     deliverySlot: {
       type: String,
       default: '90 Mins Express Delivery',
+    },
+    fulfillmentType: {
+      type: String,
+      enum: ['delivery', 'pickup'],
+      default: 'delivery',
+      index: true,
+    },
+    pickupMode: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    prepTimeMinutes: {
+      type: Number,
+      default: 25,
+    },
+    targetDeliveryTime: {
+      type: Date,
+      default: null,
+    },
+    remainingTransitMinutes: {
+      type: Number,
+      default: null,
+    },
+    etaStage: {
+      type: String,
+      enum: ['PREPARING', 'IN_TRANSIT', 'NEAR_DOORSTEP', 'DELIVERED'],
+      default: 'PREPARING',
+      index: true,
     },
     paymentMethod: {
       type: String,

@@ -21,11 +21,13 @@ router.use('/user', userRoutes); // provides persistent /user/cart, /user/wishli
 router.use('/orders', orderRoutes);
 router.use('/payment', paymentRoutes);
 router.use('/coupons', couponRoutes);
+router.use('/banners', require('./banner.routes'));
 router.use('/wallet', walletRoutes);
 router.use('/reviews', reviewRoutes);
 router.use('/transfers', require('./transfer.routes'));
 router.use('/store-admin', storeAdminRoutes);
 router.use('/super-admin', superAdminRoutes);
+router.use('/rider', require('./rider.routes'));
 
 // Public stores listing for customer store pickup & selection
 router.get('/stores', async (req, res, next) => {

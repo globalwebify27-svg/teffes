@@ -402,10 +402,47 @@ const assignRiderToOrder = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/store-admin/orders/:id/delay-prep
+ * Extend prep time if rush occurs at butchery counter
+ */
+const delayPrepTime = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const extraMinutes = Number(req.body.extraMinutes) || 10;
+
+    const order = await Order.findOne({
+      $or: [{ orderId: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }],
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    order.prepTimeMinutes = (order.prepTimeMinutes || 25) + extraMinutes;
+
+    // Recalculate target arrival clock time
+    const currentTarget = order.targetDeliveryTime ? new Date(order.targetDeliveryTime).getTime() : Date.now();
+    order.targetDeliveryTime = new Date(currentTarget + extraMinutes * 60 * 1000);
+
+    await order.save();
+    emitOrderStatusUpdate(order.orderId, order);
+
+    res.status(200).json({
+      success: true,
+      message: `Prep time extended by +${extraMinutes} mins. New customer ETA updated.`,
+      order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboardOverview,
   getOrders,
   updateOrderStatus,
+  delayPrepTime,
   getInventory,
   updateInventoryItem,
   getStoreCustomers,

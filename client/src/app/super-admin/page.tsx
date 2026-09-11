@@ -5,7 +5,16 @@ import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPowerOff } from "@fortawesome/free-solid-svg-icons";
+import {
+  faPowerOff,
+  faStar,
+  faTicket,
+  faStore,
+  faUserTie,
+  faMotorcycle,
+  faPen,
+  faTriangleExclamation,
+} from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
 
 // ─── Icon helpers ──────────────────────────────────────────────────────────────
@@ -15,16 +24,17 @@ const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
 
 // ─── Sidebar navigation items ──────────────────────────────────────────────────
 const TABS = [
-  { key: "dashboard",    label: "Dashboard",        icon: "dashboard" },
-  { key: "stores",       label: "Stores",            icon: "storefront" },
-  { key: "store-admins", label: "Store Admins",      icon: "admin_panel_settings" },
-  { key: "products",     label: "Products",          icon: "restaurant" },
-  { key: "categories",   label: "Categories",        icon: "category" },
-  { key: "orders",       label: "All Orders",        icon: "local_shipping" },
-  { key: "riders",       label: "Riders",            icon: "two_wheeler" },
-  { key: "customers",    label: "Customers",         icon: "group" },
-  { key: "coupons",      label: "Coupons & Offers",  icon: "sell" },
-  { key: "settings",     label: "Settings",          icon: "settings" },
+  { key: "dashboard", label: "Dashboard", icon: "dashboard" },
+  { key: "stores", label: "Stores", icon: "storefront" },
+  { key: "store-admins", label: "Store Admins", icon: "admin_panel_settings" },
+  { key: "products", label: "Products", icon: "restaurant" },
+  { key: "categories", label: "Categories", icon: "category" },
+  { key: "orders", label: "All Orders", icon: "local_shipping" },
+  { key: "riders", label: "Riders", icon: "two_wheeler" },
+  { key: "customers", label: "Customers", icon: "group" },
+  { key: "coupons", label: "Coupons & Offers", icon: "sell" },
+  { key: "banners", label: "Hero Banners", icon: "view_carousel" },
+  { key: "settings", label: "Settings", icon: "settings" },
 ];
 
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
@@ -65,6 +75,64 @@ const Badge = ({ label, color }: { label: string; color: string }) => (
     border: `1px solid ${color}40`,
     whiteSpace: "nowrap",
   }}>{label}</span>
+);
+
+const AdminEditButton = ({ onClick, title = "Edit", disabled, style }: { onClick: () => void; title?: string; disabled?: boolean; style?: React.CSSProperties }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled}
+    title={title}
+    style={{
+      width: "32px",
+      height: "32px",
+      minWidth: "32px",
+      borderRadius: "8px",
+      border: "1px solid #bfdbfe",
+      background: "#eff6ff",
+      color: "#1d4ed8",
+      cursor: disabled ? "not-allowed" : "pointer",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 0,
+      transition: "all 150ms ease",
+      boxSizing: "border-box",
+      opacity: disabled ? 0.6 : 1,
+      ...style,
+    }}
+  >
+    <span className="material-symbols-outlined text-[16px]">edit</span>
+  </button>
+);
+
+const AdminDeleteButton = ({ onClick, title = "Delete", disabled, loading, style }: { onClick: () => void; title?: string; disabled?: boolean; loading?: boolean; style?: React.CSSProperties }) => (
+  <button
+    type="button"
+    onClick={onClick}
+    disabled={disabled || loading}
+    title={title}
+    style={{
+      width: "32px",
+      height: "32px",
+      minWidth: "32px",
+      borderRadius: "8px",
+      border: "1px solid #fee2e2",
+      background: "#fff5f5",
+      color: "#dc2626",
+      cursor: (disabled || loading) ? "not-allowed" : "pointer",
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 0,
+      transition: "all 150ms ease",
+      boxSizing: "border-box",
+      opacity: (disabled || loading) ? 0.6 : 1,
+      ...style,
+    }}
+  >
+    <span className="material-symbols-outlined text-[16px]">delete</span>
+  </button>
 );
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
@@ -119,8 +187,8 @@ function DashboardTab() {
               <span style={{ fontSize: "0.78rem", color: "#73695b" }}>{a.store}</span>
               <Badge label={a.status} color={
                 a.status === "Delivered" ? "#059669" :
-                a.status === "Cutting" ? "#d97706" :
-                a.status === "Pending" ? "#941717" : "#0284c7"
+                  a.status === "Cutting" ? "#d97706" :
+                    a.status === "Pending" ? "#941717" : "#0284c7"
               } />
             </div>
           ))
@@ -256,33 +324,29 @@ function StoresTab() {
                   <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{s.orders || 0}</td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{s.phone || "—"}</td>
                   <td style={{ padding: "14px 16px" }}><Badge label={s.status} color={s.status === "Active" ? "#059669" : "#d97706"} /></td>
-                  <td style={{ padding: "14px 16px" }}>
-                    <button
-                      onClick={() => {
-                        setEditingStore({
-                          ...s,
-                          name: s.name || "",
-                          phone: s.phone || "",
-                          address: s.address || "",
-                          city: s.city || "Ranchi",
-                          timings: s.timings || "08:00 AM - 08:00 PM",
-                          status: s.status || "Active",
-                          pickupEnabled: s.pickupEnabled !== false,
-                          deliveryEnabled: s.deliveryEnabled !== false,
-                        });
-                      }}
-                      className="btn"
-                      style={{ padding: "5px 12px", fontSize: "12px", marginRight: "8px", background: "#f5f3ef", border: "1px solid #ede8e0", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setStoreToDelete(s)}
-                      className="btn"
-                      style={{ padding: "5px 12px", fontSize: "12px", color: "#dc2626", background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
-                    >
-                      Delete
-                    </button>
+                  <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                      <AdminEditButton
+                        onClick={() => {
+                          setEditingStore({
+                            ...s,
+                            name: s.name || "",
+                            phone: s.phone || "",
+                            address: s.address || "",
+                            city: s.city || "Ranchi",
+                            timings: s.timings || "08:00 AM - 08:00 PM",
+                            status: s.status || "Active",
+                            pickupEnabled: s.pickupEnabled !== false,
+                            deliveryEnabled: s.deliveryEnabled !== false,
+                          });
+                        }}
+                        title="Edit Store"
+                      />
+                      <AdminDeleteButton
+                        onClick={() => setStoreToDelete(s)}
+                        title="Delete Store"
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -290,7 +354,7 @@ function StoresTab() {
           </table>
         )}
       </div>
-      
+
       {/* ─── ADD STORE MODAL ─── */}
       {showAddStoreModal && (
         <div style={{
@@ -299,10 +363,12 @@ function StoresTab() {
         }}>
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "520px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)", maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>🏪 Add New Store Branch</h3>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
+                <FontAwesomeIcon icon={faStore} style={{ color: "#941717" }} /> Add New Store Branch
+              </h3>
               <button onClick={() => setShowAddStoreModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
             </div>
-            
+
             <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Store Name *</label>
@@ -413,12 +479,14 @@ function StoresTab() {
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "520px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)", maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>✏️ Edit Store</h3>
+                <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <FontAwesomeIcon icon={faPen} style={{ color: "#941717" }} /> Edit Store
+                </h3>
                 <span style={{ fontSize: "0.8rem", color: "#73695b" }}>Store ID: {editingStore.storeId || editingStore.id}</span>
               </div>
               <button onClick={() => setEditingStore(null)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
             </div>
-            
+
             <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Store Name *</label>
@@ -523,8 +591,8 @@ function StoresTab() {
         }}>
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "420px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-              <div style={{ background: "#fee2e2", color: "#dc2626", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>
-                ⚠️
+              <div style={{ background: "#fee2e2", color: "#dc2626", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>
+                <FontAwesomeIcon icon={faTriangleExclamation} />
               </div>
               <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#171410" }}>Delete Store Entry?</h3>
             </div>
@@ -684,21 +752,17 @@ function StoreAdminsTab() {
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{a.storeName || a.storeId || "All Stores"}</td>
                   <td style={{ padding: "14px 16px", color: "#73695b" }}>Store Admin</td>
                   <td style={{ padding: "14px 16px" }}><Badge label={a.isActive ? "Active" : "Inactive"} color={a.isActive ? "#059669" : "#d97706"} /></td>
-                  <td style={{ padding: "14px 16px" }}>
-                    <button
-                      onClick={() => setEditingAdmin({ ...a, password: "" })}
-                      className="btn"
-                      style={{ padding: "5px 12px", fontSize: "12px", marginRight: "8px", background: "#f5f3ef", border: "1px solid #ede8e0", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setAdminToDelete(a)}
-                      className="btn"
-                      style={{ padding: "5px 12px", fontSize: "12px", color: "#dc2626", background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "6px", cursor: "pointer", fontWeight: 600 }}
-                    >
-                      Delete
-                    </button>
+                  <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                      <AdminEditButton
+                        onClick={() => setEditingAdmin({ ...a, password: "" })}
+                        title="Edit Admin"
+                      />
+                      <AdminDeleteButton
+                        onClick={() => setAdminToDelete(a)}
+                        title="Delete Admin"
+                      />
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -706,7 +770,7 @@ function StoreAdminsTab() {
           </table>
         )}
       </div>
-      
+
       {/* ─── CREATE ADMIN MODAL ─── */}
       {showCreateModal && (
         <div style={{
@@ -714,7 +778,9 @@ function StoreAdminsTab() {
           background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
         }}>
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "420px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 16px 0", fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>👤 Create Store Admin</h3>
+            <h3 style={{ margin: "0 0 16px 0", fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
+              <FontAwesomeIcon icon={faUserTie} style={{ color: "#941717" }} /> Create Store Admin
+            </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Name *</label>
@@ -734,9 +800,9 @@ function StoreAdminsTab() {
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Assign to Store *</label>
-                <select 
-                  value={newAdmin.storeId} 
-                  onChange={e => setNewAdmin({ ...newAdmin, storeId: e.target.value })} 
+                <select
+                  value={newAdmin.storeId}
+                  onChange={e => setNewAdmin({ ...newAdmin, storeId: e.target.value })}
                   style={{ padding: "10px", borderRadius: "8px", border: "1px solid #ccc", width: "100%", boxSizing: "border-box", background: "#fff" }}
                 >
                   <option value="">Select a store...</option>
@@ -764,7 +830,9 @@ function StoreAdminsTab() {
           background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
         }}>
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "420px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 16px 0", fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>✏️ Edit Store Admin</h3>
+            <h3 style={{ margin: "0 0 16px 0", fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
+              <FontAwesomeIcon icon={faPen} style={{ color: "#941717" }} /> Edit Store Admin
+            </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginBottom: "20px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Name *</label>
@@ -809,8 +877,8 @@ function StoreAdminsTab() {
         }}>
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "420px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "16px" }}>
-              <div style={{ background: "#fee2e2", color: "#dc2626", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "20px" }}>
-                ⚠️
+              <div style={{ background: "#fee2e2", color: "#dc2626", borderRadius: "50%", width: "40px", height: "40px", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "18px" }}>
+                <FontAwesomeIcon icon={faTriangleExclamation} />
               </div>
               <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#171410" }}>Remove Store Admin?</h3>
             </div>
@@ -852,11 +920,47 @@ function StoreAdminsTab() {
 
 function ProductsTab() {
   const [products, setProducts] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [newProduct, setNewProduct] = useState({
+    name: "",
+    category: "chicken",
+    price: "",
+    originalPrice: "",
+    netWeight: "500g",
+    grossWeight: "",
+    pieces: "",
+    serves: "",
+    description: "",
+    badge: "",
+    image: "",
+    inStock: true,
+  });
+
+  // Edit product state
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [editProductForm, setEditProductForm] = useState({
+    name: "",
+    category: "chicken",
+    price: "",
+    originalPrice: "",
+    netWeight: "500g",
+    grossWeight: "",
+    pieces: "",
+    serves: "",
+    description: "",
+    badge: "",
+    image: "",
+    inStock: true,
+  });
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const fetchProds = () => {
     setLoading(true);
-    api.get<{ success: boolean; products: any[] }>("/products?limit=50&all=true")
+    api.get<{ success: boolean; products: any[] }>("/products?limit=100&all=true")
       .then(res => {
         if (res.data.success) {
           setProducts(res.data.products || []);
@@ -868,50 +972,284 @@ function ProductsTab() {
 
   useEffect(() => {
     fetchProds();
+    api.get<{ success: boolean; categories: any[] }>("/categories")
+      .then(res => {
+        if (res.data.success && res.data.categories) {
+          const valid = res.data.categories.filter((c: any) => c.slug !== "all");
+          setCategories(valid);
+          if (valid.length > 0 && !newProduct.category) {
+            setNewProduct(prev => ({ ...prev, category: valid[0].slug }));
+          }
+        }
+      })
+      .catch(err => console.warn("Failed to fetch categories:", err));
   }, []);
 
   const toggleStock = async (id: string, current: boolean) => {
+    setTogglingId(id);
     try {
       await api.put(`/products/${id}`, { inStock: !current });
       fetchProds();
     } catch (err) {
       alert("Failed to toggle status");
+    } finally {
+      setTogglingId(null);
+    }
+  };
+
+  const handleStartEdit = (p: any) => {
+    setEditingProduct(p);
+    setEditProductForm({
+      name: p.name || "",
+      category: p.category || (categories[0]?.slug || "chicken"),
+      price: p.price !== undefined ? String(p.price) : "",
+      originalPrice: p.originalPrice !== undefined ? String(p.originalPrice) : "",
+      netWeight: p.netWeight || "500g",
+      grossWeight: p.grossWeight || "",
+      pieces: p.pieces || "",
+      serves: p.serves || "",
+      description: p.description || "",
+      badge: p.badge || "",
+      image: p.image || "",
+      inStock: Boolean(p.inStock),
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingProduct) return;
+    if (!editProductForm.name.trim()) {
+      alert("Please enter a product name");
+      return;
+    }
+    if (!editProductForm.price || isNaN(Number(editProductForm.price))) {
+      alert("Please enter a valid price");
+      return;
+    }
+    if (!editProductForm.image.trim()) {
+      alert("Please enter a product image URL");
+      return;
+    }
+
+    setSubmittingEdit(true);
+    try {
+      const selectedCatObj = categories.find(c => c.slug === editProductForm.category);
+      await api.put(`/products/${editingProduct.id || editingProduct._id}`, {
+        name: editProductForm.name.trim(),
+        category: editProductForm.category,
+        categoryLabel: selectedCatObj ? selectedCatObj.name : editProductForm.category,
+        price: Number(editProductForm.price),
+        originalPrice: editProductForm.originalPrice ? Number(editProductForm.originalPrice) : Number(editProductForm.price),
+        netWeight: editProductForm.netWeight.trim() || "500g",
+        grossWeight: editProductForm.grossWeight.trim(),
+        pieces: editProductForm.pieces.trim(),
+        serves: editProductForm.serves.trim(),
+        description: editProductForm.description.trim(),
+        badge: editProductForm.badge.trim(),
+        image: editProductForm.image.trim(),
+        inStock: editProductForm.inStock,
+      });
+
+      fetchProds();
+      setEditingProduct(null);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to update product");
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  const handleAddProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProduct.name.trim()) {
+      alert("Please enter a product name");
+      return;
+    }
+    if (!newProduct.price || isNaN(Number(newProduct.price))) {
+      alert("Please enter a valid price");
+      return;
+    }
+    if (!newProduct.image.trim()) {
+      alert("Please enter a product image URL");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const selectedCatObj = categories.find(c => c.slug === newProduct.category);
+      await api.post("/products", {
+        name: newProduct.name.trim(),
+        category: newProduct.category,
+        categoryLabel: selectedCatObj ? selectedCatObj.name : newProduct.category,
+        price: Number(newProduct.price),
+        originalPrice: newProduct.originalPrice ? Number(newProduct.originalPrice) : Number(newProduct.price),
+        netWeight: newProduct.netWeight.trim() || "500g",
+        grossWeight: newProduct.grossWeight.trim(),
+        pieces: newProduct.pieces.trim(),
+        serves: newProduct.serves.trim(),
+        description: newProduct.description.trim(),
+        badge: newProduct.badge.trim(),
+        image: newProduct.image.trim(),
+        inStock: newProduct.inStock,
+      });
+
+      fetchProds();
+      setShowAddModal(false);
+      setNewProduct({
+        name: "",
+        category: categories[0]?.slug || "chicken",
+        price: "",
+        originalPrice: "",
+        netWeight: "500g",
+        grossWeight: "",
+        pieces: "",
+        serves: "",
+        description: "",
+        badge: "",
+        image: "",
+        inStock: true,
+      });
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to add product");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDeleteProduct = async (p: any) => {
+    if (!window.confirm(`Are you sure you want to delete product "${p.name}"? This action cannot be undone.`)) {
+      return;
+    }
+    try {
+      await api.delete(`/products/${p.id || p._id}`);
+      fetchProds();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to delete product");
     }
   };
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
         <SectionTitle title="Products" sub="Master catalog across all Teffes stores" />
+        <button
+          className="btn btn-primary"
+          onClick={() => setShowAddModal(true)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "10px 20px",
+            borderRadius: "10px",
+            fontWeight: 700,
+            cursor: "pointer",
+            backgroundColor: "#941717",
+            color: "#fff",
+            border: "none",
+          }}
+        >
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          Add New Product
+        </button>
       </div>
-      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
+
+      {/* Responsive styles for table actions and layout */}
+      <style>{`
+        @media (max-width: 1260px) {
+          .product-action-group {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 6px !important;
+            min-width: 95px !important;
+          }
+          .product-action-group .stock-btn {
+            width: 100% !important;
+          }
+          .product-action-icons {
+            display: flex !important;
+            justify-content: center !important;
+            gap: 8px !important;
+          }
+        }
+      `}</style>
+
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto", WebkitOverflowScrolling: "touch", width: "100%", boxShadow: "0 1px 4px rgba(0,0,0,0.02)" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading products catalog…</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "720px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
-                {["Product", "Category", "Net Weight", "Price", "Badge", "Status", "Action"].map(h => (
+                {["Product", "Category", "Net Weight", "Price", "Badge", "Status", "Actions"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "#423b32", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {products.map((p, i) => (
-                <tr key={p.id} style={{ borderBottom: i < products.length - 1 ? "1px solid #ede8e0" : "none" }}>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{p.name}</td>
+                <tr key={p.id || i} style={{ borderBottom: i < products.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      {p.image && (
+                        <img
+                          src={p.image}
+                          alt={p.name}
+                          style={{ width: "36px", height: "36px", borderRadius: "6px", objectFit: "cover" }}
+                          onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
+                        />
+                      )}
+                      <span>{p.name}</span>
+                    </div>
+                  </td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{p.categoryLabel || p.category}</td>
                   <td style={{ padding: "14px 16px", color: "#73695b" }}>{p.netWeight}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>₹{p.price}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>
+                    ₹{p.price}
+                    {p.originalPrice > p.price && (
+                      <span style={{ fontSize: "0.75rem", textDecoration: "line-through", color: "#a89f91", marginLeft: "5px" }}>₹{p.originalPrice}</span>
+                    )}
+                  </td>
                   <td style={{ padding: "14px 16px" }}>{p.badge ? <Badge label={p.badge} color="#d97706" /> : "—"}</td>
                   <td style={{ padding: "14px 16px" }}><Badge label={p.inStock ? "In Stock" : "Out of Stock"} color={p.inStock ? "#059669" : "#d97706"} /></td>
-                  <td style={{ padding: "14px 16px" }}>
-                    <button
-                      onClick={() => toggleStock(p.id, p.inStock)}
-                      style={{ background: "none", border: "1px solid #ede8e0", borderRadius: "6px", padding: "4px 10px", fontSize: "0.775rem", cursor: "pointer", color: "#423b32" }}
-                    >
-                      Toggle Stock
-                    </button>
+                  <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                    <div className="product-action-group" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      {/* Consistent Toggle Stock Button with Fixed Width */}
+                      <button
+                        className="stock-btn"
+                        onClick={() => toggleStock(p.id || p._id, p.inStock)}
+                        disabled={togglingId === (p.id || p._id)}
+                        style={{
+                          border: "1px solid #d1cbbf",
+                          borderRadius: "8px",
+                          padding: "6px 10px",
+                          fontSize: "0.775rem",
+                          fontWeight: 600,
+                          cursor: "pointer",
+                          background: p.inStock ? "#f5f2eb" : "#fef3c7",
+                          color: p.inStock ? "#423b32" : "#92400e",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "95px",
+                          height: "32px",
+                          boxSizing: "border-box",
+                        }}
+                        title={p.inStock ? "Currently In Stock. Click to set Out of Stock" : "Currently Out of Stock. Click to set In Stock"}
+                      >
+                        {togglingId === (p.id || p._id) ? "Updating…" : "Toggle Stock"}
+                      </button>
+
+                      <div className="product-action-icons" style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                        <AdminEditButton
+                          onClick={() => handleStartEdit(p)}
+                          title="Edit Product"
+                        />
+                        <AdminDeleteButton
+                          onClick={() => handleDeleteProduct(p)}
+                          title="Delete Product"
+                        />
+                      </div>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -919,6 +1257,334 @@ function ProductsTab() {
           </table>
         )}
       </div>
+
+      {/* ─── ADD PRODUCT MODAL ─── */}
+      {showAddModal && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "520px", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 10px 30px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>Add New Product</h3>
+              <button onClick={() => setShowAddModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleAddProduct} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Fresh Chicken Curry Cut, Rohu Fish Steaks"
+                  value={newProduct.name}
+                  onChange={e => setNewProduct({ ...newProduct, name: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Category *</label>
+                  <select
+                    value={newProduct.category}
+                    onChange={e => setNewProduct({ ...newProduct, category: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
+                  >
+                    {categories.length > 0 ? (
+                      categories.map(c => (
+                        <option key={c.slug} value={c.slug}>{c.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="chicken">Fresh Chicken</option>
+                        <option value="mutton">Rich Mutton</option>
+                        <option value="fish">Fish &amp; Seafood</option>
+                        <option value="eggs">Farm Eggs</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Badge (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Bestseller, Special Cut"
+                    value={newProduct.badge}
+                    onChange={e => setNewProduct({ ...newProduct, badge: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="e.g. 240"
+                    value={newProduct.price}
+                    onChange={e => setNewProduct({ ...newProduct, price: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Original / MRP (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 270"
+                    value={newProduct.originalPrice}
+                    onChange={e => setNewProduct({ ...newProduct, originalPrice: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Net Weight *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 500g, 1kg, 6 Pieces"
+                    value={newProduct.netWeight}
+                    onChange={e => setNewProduct({ ...newProduct, netWeight: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Gross Weight</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 550g"
+                    value={newProduct.grossWeight}
+                    onChange={e => setNewProduct({ ...newProduct, grossWeight: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Image URL *</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://images.unsplash.com/..."
+                  value={newProduct.image}
+                  onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                />
+                {newProduct.image.trim() && (
+                  <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
+                    <img src={newProduct.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Description</label>
+                <textarea
+                  rows={2}
+                  placeholder="Brief description of cut and freshness..."
+                  value={newProduct.description}
+                  onChange={e => setNewProduct({ ...newProduct, description: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box", resize: "vertical" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                <input
+                  type="checkbox"
+                  id="prodInStock"
+                  checked={newProduct.inStock}
+                  onChange={e => setNewProduct({ ...newProduct, inStock: e.target.checked })}
+                  style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                />
+                <label htmlFor="prodInStock" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                  Available in stock immediately
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
+                <button type="button" className="btn" disabled={submitting} onClick={() => setShowAddModal(false)} style={{ padding: "9px 18px", borderRadius: "8px" }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting} style={{ padding: "9px 24px", borderRadius: "8px" }}>
+                  {submitting ? "Adding…" : "Add Product"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── EDIT PRODUCT MODAL ─── */}
+      {editingProduct && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "520px", maxHeight: "90vh", overflowY: "auto", boxShadow: "0 10px 30px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>Edit Product</h3>
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#73695b" }}>Update price, name, category, or stock details</p>
+              </div>
+              <button onClick={() => setEditingProduct(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEdit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editProductForm.name}
+                  onChange={e => setEditProductForm({ ...editProductForm, name: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Category *</label>
+                  <select
+                    value={editProductForm.category}
+                    onChange={e => setEditProductForm({ ...editProductForm, category: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
+                  >
+                    {categories.length > 0 ? (
+                      categories.map(c => (
+                        <option key={c.slug} value={c.slug}>{c.name}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="chicken">Fresh Chicken</option>
+                        <option value="mutton">Rich Mutton</option>
+                        <option value="fish">Fish &amp; Seafood</option>
+                        <option value="eggs">Farm Eggs</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Badge</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Bestseller, Special Cut"
+                    value={editProductForm.badge}
+                    onChange={e => setEditProductForm({ ...editProductForm, badge: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Selling Price (₹) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    placeholder="e.g. 240"
+                    value={editProductForm.price}
+                    onChange={e => setEditProductForm({ ...editProductForm, price: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Original / MRP (₹)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    placeholder="e.g. 270"
+                    value={editProductForm.originalPrice}
+                    onChange={e => setEditProductForm({ ...editProductForm, originalPrice: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Net Weight *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 500g, 1kg, 6 Pieces"
+                    value={editProductForm.netWeight}
+                    onChange={e => setEditProductForm({ ...editProductForm, netWeight: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Gross Weight</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 550g"
+                    value={editProductForm.grossWeight}
+                    onChange={e => setEditProductForm({ ...editProductForm, grossWeight: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Image URL *</label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://images.unsplash.com/..."
+                  value={editProductForm.image}
+                  onChange={e => setEditProductForm({ ...editProductForm, image: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                />
+                {editProductForm.image.trim() && (
+                  <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
+                    <img src={editProductForm.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Description</label>
+                <textarea
+                  rows={2}
+                  placeholder="Brief description of cut and freshness..."
+                  value={editProductForm.description}
+                  onChange={e => setEditProductForm({ ...editProductForm, description: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box", resize: "vertical" }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                <input
+                  type="checkbox"
+                  id="editProdInStock"
+                  checked={editProductForm.inStock}
+                  onChange={e => setEditProductForm({ ...editProductForm, inStock: e.target.checked })}
+                  style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                />
+                <label htmlFor="editProdInStock" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                  Available in stock
+                </label>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
+                <button type="button" className="btn" disabled={submittingEdit} onClick={() => setEditingProduct(null)} style={{ padding: "9px 18px", borderRadius: "8px" }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submittingEdit} style={{ padding: "9px 24px", borderRadius: "8px" }}>
+                  {submittingEdit ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -926,8 +1592,21 @@ function ProductsTab() {
 function CategoriesTab() {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<any | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [newCat, setNewCat] = useState({
+    name: "",
+    slug: "",
+    tagline: "",
+    icon: "",
+    image: "",
+    order: 1,
+    isActive: true,
+  });
 
-  useEffect(() => {
+  const fetchCategories = () => {
+    setLoading(true);
     api.get<{ success: boolean; categories: any[] }>("/categories")
       .then(res => {
         if (res.data.success) {
@@ -936,25 +1615,402 @@ function CategoriesTab() {
       })
       .catch(err => console.warn("Failed to fetch categories:", err))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchCategories();
   }, []);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCat.name.trim()) {
+      alert("Please enter a category name");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const slug = newCat.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      await api.post("/super-admin/categories", {
+        name: newCat.name.trim(),
+        slug,
+        tagline: newCat.tagline,
+        image: newCat.image,
+        order: Number(newCat.order) || (categories.length + 1),
+        isActive: newCat.isActive,
+      });
+      fetchCategories();
+      setShowAddModal(false);
+      setNewCat({
+        name: "",
+        slug: "",
+        tagline: "",
+        icon: "",
+        image: "",
+        order: categories.length + 2,
+        isActive: true,
+      });
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to create category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCategory || !editingCategory.name.trim()) {
+      alert("Please enter category name");
+      return;
+    }
+    setSubmitting(true);
+    const targetId = editingCategory.slug || editingCategory._id || editingCategory.id;
+    try {
+      await api.put(`/super-admin/categories/${targetId}`, {
+        name: editingCategory.name,
+        tagline: editingCategory.tagline,
+        image: editingCategory.image,
+        order: Number(editingCategory.order) || 0,
+        isActive: editingCategory.isActive,
+      });
+      fetchCategories();
+      setEditingCategory(null);
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to update category");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (cat: any) => {
+    if (!window.confirm(`Are you sure you want to delete category "${cat.name}"? It will be removed from both the customer website and mobile app.`)) {
+      return;
+    }
+    const targetId = cat.slug || cat._id || cat.id;
+    try {
+      await api.delete(`/super-admin/categories/${targetId}`);
+      fetchCategories();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to delete category");
+    }
+  };
 
   return (
     <div>
-      <SectionTitle title="Categories" sub="Manage butchery categories and display order" />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
-        {categories.map(c => (
-          <div key={c.slug} style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "10px" }}>
-              <span style={{ fontSize: "2rem" }}>{c.icon}</span>
-              <div>
-                <div style={{ fontWeight: 800, color: "#171410", fontSize: "1.05rem" }}>{c.name}</div>
-                <div style={{ color: "#73695b", fontSize: "0.75rem" }}>Slug: {c.slug}</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <SectionTitle title="Categories Management" sub="Manage butchery categories that reflect live across website and mobile app" />
+        </div>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setNewCat({
+              name: "",
+              slug: "",
+              tagline: "",
+              icon: "",
+              image: "",
+              order: categories.length + 1,
+              isActive: true,
+            });
+            setShowAddModal(true);
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "10px 20px",
+            borderRadius: "10px",
+            fontWeight: 700,
+            cursor: "pointer",
+            backgroundColor: "#941717",
+            color: "#fff",
+            border: "none",
+          }}
+        >
+          <span className="material-symbols-outlined text-[18px]">add</span>
+          Add New Category
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "40px", color: "#73695b" }}>Loading categories…</div>
+      ) : categories.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 20px", background: "#fff", borderRadius: "14px", border: "1px solid #ede8e0" }}>
+          <span className="material-symbols-outlined text-[48px]" style={{ color: "#a89f91", marginBottom: "12px" }}>category</span>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#171410" }}>No Categories Configured</h3>
+          <p style={{ color: "#73695b", fontSize: "0.85rem", marginTop: "4px" }}>Add your first butchery category to populate products.</p>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "18px" }}>
+          {categories.map((c: any) => (
+            <div
+              key={c.slug}
+              style={{
+                background: "#fff",
+                border: "1px solid #ede8e0",
+                borderRadius: "14px",
+                overflow: "hidden",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+              }}
+            >
+              {/* Category Image Header / Banner */}
+              <div style={{ height: "130px", width: "100%", background: "#1c1815", position: "relative", overflow: "hidden" }}>
+                {c.image ? (
+                  <img
+                    src={c.image}
+                    alt={c.name}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
+                  />
+                ) : (
+                  <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", color: "#73695b" }}>
+                    <span className="material-symbols-outlined text-[42px]">image</span>
+                  </div>
+                )}
+                <div style={{ position: "absolute", top: "10px", right: "10px", display: "flex", gap: "6px" }}>
+                  <span style={{ background: "rgba(0,0,0,0.75)", color: "#fff", fontSize: "0.72rem", fontWeight: 800, padding: "3px 8px", borderRadius: "6px", backdropFilter: "blur(4px)" }}>
+                    Order #{c.order}
+                  </span>
+                  <span style={{ background: c.isActive ? "#059669" : "#64748b", color: "#fff", fontSize: "0.72rem", fontWeight: 800, padding: "3px 8px", borderRadius: "6px" }}>
+                    {c.isActive ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Body */}
+              <div style={{ padding: "16px" }}>
+                <div style={{ marginBottom: "8px" }}>
+                  <div style={{ fontWeight: 800, color: "#171410", fontSize: "1.15rem" }}>{c.name}</div>
+                </div>
+                <div style={{ color: "#73695b", fontSize: "0.85rem", minHeight: "36px" }}>{c.tagline || "No description"}</div>
+
+                {/* Actions */}
+                <div style={{ display: "flex", gap: "8px", borderTop: "1px solid #f1ece4", paddingTop: "12px", marginTop: "12px" }}>
+                  <button
+                    onClick={() => setEditingCategory({ ...c })}
+                    style={{
+                      flex: 1,
+                      padding: "8px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #ede8e0",
+                      background: "#f9f8f6",
+                      color: "#423b32",
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "5px",
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">edit</span>
+                    Edit
+                  </button>
+
+                  <button
+                    onClick={() => handleDelete(c)}
+                    style={{
+                      padding: "8px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #fee2e2",
+                      background: "#fff5f5",
+                      color: "#dc2626",
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">delete</span>
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
-            <div style={{ color: "#73695b", fontSize: "0.85rem" }}>{c.tagline}</div>
+          ))}
+        </div>
+      )}
+
+      {/* ─── ADD CATEGORY MODAL ─── */}
+      {showAddModal && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "480px", boxShadow: "0 10px 30px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>Add New Category</h3>
+              <button onClick={() => setShowAddModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreate} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Desi Chicken, Marinated & Ready-to-Cook"
+                  value={newCat.name}
+                  onChange={e => setNewCat({ ...newCat, name: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Tagline / Short Description</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Free-range country chicken cut fresh"
+                  value={newCat.tagline}
+                  onChange={e => setNewCat({ ...newCat, tagline: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Image URL</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/..."
+                  value={newCat.image}
+                  onChange={e => setNewCat({ ...newCat, image: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                />
+                {newCat.image.trim() && (
+                  <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
+                    <img src={newCat.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", alignItems: "center" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Display Order</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={newCat.order}
+                    onChange={e => setNewCat({ ...newCat, order: parseInt(e.target.value) || 1 })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div style={{ marginTop: "18px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 700, color: "#423b32", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={newCat.isActive}
+                      onChange={e => setNewCat({ ...newCat, isActive: e.target.checked })}
+                      style={{ width: "16px", height: "16px", accentColor: "#941717" }}
+                    />
+                    Active Live
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
+                <button type="button" className="btn" disabled={submitting} onClick={() => setShowAddModal(false)} style={{ padding: "9px 18px", borderRadius: "8px" }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting} style={{ padding: "9px 24px", borderRadius: "8px" }}>
+                  {submitting ? "Adding…" : "Create Category"}
+                </button>
+              </div>
+            </form>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* ─── EDIT CATEGORY MODAL ─── */}
+      {editingCategory && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)",
+          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "480px", boxShadow: "0 10px 30px rgba(0,0,0,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>Edit Category</h3>
+              <button onClick={() => setEditingCategory(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}>
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Category Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCategory.name}
+                  onChange={e => setEditingCategory({ ...editingCategory, name: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Tagline / Short Description</label>
+                <input
+                  type="text"
+                  value={editingCategory.tagline || ""}
+                  onChange={e => setEditingCategory({ ...editingCategory, tagline: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Image URL</label>
+                <input
+                  type="url"
+                  value={editingCategory.image || ""}
+                  onChange={e => setEditingCategory({ ...editingCategory, image: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                />
+                {editingCategory.image && (
+                  <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
+                    <img src={editingCategory.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", alignItems: "center" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Display Order</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editingCategory.order || 1}
+                    onChange={e => setEditingCategory({ ...editingCategory, order: parseInt(e.target.value) || 1 })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div style={{ marginTop: "18px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", fontWeight: 700, color: "#423b32", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={editingCategory.isActive}
+                      onChange={e => setEditingCategory({ ...editingCategory, isActive: e.target.checked })}
+                      style={{ width: "16px", height: "16px", accentColor: "#941717" }}
+                    />
+                    Active Live
+                  </label>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
+                <button type="button" className="btn" disabled={submitting} onClick={() => setEditingCategory(null)} style={{ padding: "9px 18px", borderRadius: "8px" }}>Cancel</button>
+                <button type="submit" className="btn btn-primary" disabled={submitting} style={{ padding: "9px 24px", borderRadius: "8px" }}>
+                  {submitting ? "Saving…" : "Save Changes"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -984,23 +2040,42 @@ function OrdersTab() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
-                {["Order ID", "Customer", "Store", "Amount", "Slot", "Payment", "Status"].map(h => (
+                {["Order ID", "Fulfillment", "Customer", "Store", "Amount", "Slot", "Payment", "Status"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "#423b32", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {orders.map((o, i) => (
-                <tr key={o.orderId || i} style={{ borderBottom: i < orders.length - 1 ? "1px solid #ede8e0" : "none" }}>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>#{o.orderId}</td>
-                  <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.customer?.name} ({o.customer?.phone})</td>
-                  <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.storeName || o.storeId}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>₹{o.amount}</td>
-                  <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{o.deliverySlot}</td>
-                  <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.paymentMethod}</td>
-                  <td style={{ padding: "14px 16px" }}><Badge label={o.status} color={o.status === "Delivered" ? "#059669" : o.status === "Pending" ? "#941717" : "#d97706"} /></td>
-                </tr>
-              ))}
+              {orders.map((o, i) => {
+                const isPickup =
+                  o.fulfillmentType === "pickup" ||
+                  o.pickupMode === true ||
+                  o.deliverySlot?.toLowerCase().includes("pickup") ||
+                  o.customer?.address?.toLowerCase().includes("pickup");
+
+                return (
+                  <tr key={o.orderId || i} style={{ borderBottom: i < orders.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>#{o.orderId}</td>
+                    <td style={{ padding: "14px 16px" }}>
+                      {isPickup ? (
+                        <span style={{ background: "#fef3c7", color: "#92400e", border: "1px solid #fde68a", padding: "2px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <FontAwesomeIcon icon={faStore} /> Store Pickup
+                        </span>
+                      ) : (
+                        <span style={{ background: "#e0f2fe", color: "#0369a1", border: "1px solid #bae6fd", padding: "2px 8px", borderRadius: "6px", fontSize: "0.72rem", fontWeight: 800, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <FontAwesomeIcon icon={faMotorcycle} /> Home Delivery
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.customer?.name} ({o.customer?.phone})</td>
+                    <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.storeName || o.storeId}</td>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>₹{o.amount}</td>
+                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{o.deliverySlot}</td>
+                    <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.paymentMethod}</td>
+                    <td style={{ padding: "14px 16px" }}><Badge label={o.status} color={o.status === "Delivered" ? "#059669" : o.status === "Pending" ? "#941717" : "#d97706"} /></td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
@@ -1020,6 +2095,18 @@ function RidersTab() {
     storeId: "S001",
   });
   const [submitting, setSubmitting] = useState(false);
+
+  // Edit rider state
+  const [editingRider, setEditingRider] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    phone: "",
+    vehicleNumber: "",
+    storeId: "S001",
+    riderStatus: "Available",
+  });
+  const [submittingEdit, setSubmittingEdit] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const fetchRiders = () => {
     setLoading(true);
@@ -1061,34 +2148,138 @@ function RidersTab() {
     }
   };
 
+  const handleStartEdit = (r: any) => {
+    setEditingRider(r);
+    setEditForm({
+      name: r.name || "",
+      phone: r.phone || "",
+      vehicleNumber: r.vehicleNumber || "",
+      storeId: r.storeId || "S001",
+      riderStatus: r.riderStatus || "Available",
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingRider?._id) return;
+    if (!editForm.phone.trim()) {
+      alert("Phone number cannot be empty");
+      return;
+    }
+    setSubmittingEdit(true);
+    try {
+      const res = await api.put(`/super-admin/riders/${editingRider._id}`, {
+        name: editForm.name.trim(),
+        phone: editForm.phone.trim(),
+        vehicleNumber: editForm.vehicleNumber.trim(),
+        storeId: editForm.storeId,
+        riderStatus: editForm.riderStatus,
+      });
+      if (res.data.success) {
+        setEditingRider(null);
+        fetchRiders();
+      } else {
+        alert(res.data.message || "Failed to update rider");
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to update rider");
+    } finally {
+      setSubmittingEdit(false);
+    }
+  };
+
+  const handleDeleteRider = async (r: any) => {
+    const confirmMsg = `Are you sure you want to remove rider "${r.name}" (${r.phone})?\n\nThis will permanently remove the rider account.`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setDeletingId(r._id);
+    try {
+      const res = await api.delete(`/super-admin/riders/${r._id}`);
+      if (res.data.success) {
+        fetchRiders();
+      } else {
+        alert(res.data.message || "Failed to delete rider");
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to delete rider");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <SectionTitle title="Delivery Riders" sub="Manage express delivery delivery staff" />
+        <SectionTitle title="Delivery Riders" sub="Manage express delivery staff, assigned stores, and vehicle info" />
         <button onClick={() => setShowAddRiderModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Add Rider</button>
       </div>
-      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
+      {/* Responsive styles for rider actions and layout */}
+      <style>{`
+        @media (max-width: 1260px) {
+          .rider-action-group {
+            flex-direction: column !important;
+            align-items: stretch !important;
+            gap: 5px !important;
+            min-width: 80px !important;
+          }
+          .rider-action-group button {
+            width: 100% !important;
+            min-width: 0 !important;
+            justify-content: center !important;
+            height: 28px !important;
+            font-size: 0.75rem !important;
+            padding: 4px 6px !important;
+          }
+        }
+      `}</style>
+
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto", WebkitOverflowScrolling: "touch", width: "100%", boxShadow: "0 1px 4px rgba(0,0,0,0.02)" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading riders…</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "640px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
-                {["Rider Name", "Phone", "Vehicle Number", "Assigned Store", "Live Shift Status"].map(h => (
+                {["Rider Name", "Phone", "Vehicle Number", "Assigned Store", "Live Shift Status", "Actions"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "#423b32", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {riders.map((r, i) => (
-                <tr key={r.phone || i} style={{ borderBottom: i < riders.length - 1 ? "1px solid #ede8e0" : "none" }}>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{r.name}</td>
-                  <td style={{ padding: "14px 16px", color: "#423b32" }}>{r.phone}</td>
-                  <td style={{ padding: "14px 16px", color: "#73695b" }}>{r.vehicleNumber || "JH01-EC-4821"}</td>
-                  <td style={{ padding: "14px 16px", color: "#423b32" }}>{r.storeName || "Kishore Ganj"}</td>
-                  <td style={{ padding: "14px 16px" }}><Badge label={r.riderStatus || "Available"} color={r.riderStatus === "Available" ? "#059669" : "#0284c7"} /></td>
+              {riders.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>No delivery riders registered yet. Click &quot;+ Add Rider&quot; above.</td>
                 </tr>
-              ))}
+              ) : (
+                riders.map((r, i) => (
+                  <tr key={r._id || r.phone || i} style={{ borderBottom: i < riders.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{r.name}</td>
+                    <td style={{ padding: "14px 16px", color: "#423b32", fontFamily: "monospace" }}>{r.phone}</td>
+                    <td style={{ padding: "14px 16px", color: "#73695b", fontWeight: 600 }}>{r.vehicleNumber || "—"}</td>
+                    <td style={{ padding: "14px 16px", color: "#423b32" }}>
+                      <span style={{ background: "#f5f2eb", padding: "4px 8px", borderRadius: "6px", fontSize: "0.8rem", fontWeight: 600 }}>
+                        {r.storeId ? `${r.storeId} — ` : ""}{r.storeName || "Kishore Ganj"}
+                      </span>
+                    </td>
+                    <td style={{ padding: "14px 16px" }}>
+                      <Badge label={r.riderStatus || "Available"} color={r.riderStatus === "Available" ? "#059669" : r.riderStatus === "On Delivery" ? "#0284c7" : "#64748b"} />
+                    </td>
+                    <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                      <div className="rider-action-group" style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+                        <AdminEditButton
+                          onClick={() => handleStartEdit(r)}
+                          title="Edit Rider"
+                        />
+                        <AdminDeleteButton
+                          onClick={() => handleDeleteRider(r)}
+                          disabled={deletingId === r._id}
+                          loading={deletingId === r._id}
+                          title="Delete Rider"
+                        />
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         )}
@@ -1102,7 +2293,9 @@ function RidersTab() {
         }}>
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "460px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>🛵 Add Delivery Rider</h3>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
+                <FontAwesomeIcon icon={faMotorcycle} style={{ color: "#941717" }} /> Add Delivery Rider
+              </h3>
               <button onClick={() => setShowAddRiderModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
             </div>
 
@@ -1158,6 +2351,94 @@ function RidersTab() {
               <button className="btn" onClick={() => setShowAddRiderModal(false)} disabled={submitting} style={{ padding: "8px 16px", borderRadius: "8px" }}>Cancel</button>
               <button className="btn btn-primary" onClick={handleAddRider} disabled={submitting} style={{ padding: "8px 20px", borderRadius: "8px" }}>
                 {submitting ? "Adding…" : "Add Rider"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── EDIT RIDER MODAL ─── */}
+      {editingRider && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "480px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <FontAwesomeIcon icon={faPen} style={{ color: "#941717" }} /> Edit Rider Details
+                </h3>
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#73695b" }}>Update phone, vehicle number, and store assignment</p>
+              </div>
+              <button onClick={() => setEditingRider(null)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Rider Name</label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={e => setEditForm({ ...editForm, name: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Phone Number *</label>
+                <input
+                  type="text"
+                  placeholder="+91 98765 43210"
+                  value={editForm.phone}
+                  onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+                <span style={{ fontSize: "0.75rem", color: "#73695b" }}>Rider logs into the rider app with this phone number</span>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Vehicle Registration Number</label>
+                <input
+                  type="text"
+                  placeholder="JH01-EC-4821"
+                  value={editForm.vehicleNumber}
+                  onChange={e => setEditForm({ ...editForm, vehicleNumber: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Assigned Store Branch</label>
+                <select
+                  value={editForm.storeId}
+                  onChange={e => setEditForm({ ...editForm, storeId: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
+                >
+                  <option value="S001">S001 — Ranchi Kishore Ganj</option>
+                  <option value="S002">S002 — Ranchi Doranda</option>
+                  <option value="S003">S003 — Ranchi Lalpur</option>
+                </select>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Live Shift Status</label>
+                <select
+                  value={editForm.riderStatus}
+                  onChange={e => setEditForm({ ...editForm, riderStatus: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
+                >
+                  <option value="Available">Available (Ready for delivery)</option>
+                  <option value="On Delivery">On Delivery</option>
+                  <option value="Offline">Offline</option>
+                </select>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button className="btn" onClick={() => setEditingRider(null)} disabled={submittingEdit} style={{ padding: "8px 16px", borderRadius: "8px" }}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSaveEdit} disabled={submittingEdit} style={{ padding: "8px 20px", borderRadius: "8px" }}>
+                {submittingEdit ? "Saving…" : "Save Changes"}
               </button>
             </div>
           </div>
@@ -1606,10 +2887,14 @@ function CouponsTab() {
   const [newCoupon, setNewCoupon] = useState({
     code: "",
     discount: "",
+    discountType: "percentage",
     discountValue: 20,
     minOrder: 399,
+    validTill: "2026-12-31",
+    isSuperOffer: false,
   });
   const [submitting, setSubmitting] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const fetchCoupons = () => {
     setLoading(true);
@@ -1627,25 +2912,87 @@ function CouponsTab() {
     fetchCoupons();
   }, []);
 
+  const handleSetSuperOffer = async (coupon: any) => {
+    const couponId = coupon._id || coupon.id;
+    setActionLoading(couponId);
+    try {
+      await api.put(`/super-admin/coupons/${couponId}/super-offer`);
+      fetchCoupons();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to set Super Offer");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleToggleStatus = async (coupon: any) => {
+    const couponId = coupon._id || coupon.id;
+    const nextStatus = coupon.status === "Active" ? "Expired" : "Active";
+    setActionLoading(couponId);
+    try {
+      await api.put(`/super-admin/coupons/${couponId}`, {
+        status: nextStatus,
+      });
+      fetchCoupons();
+    } catch (err) {
+      alert("Failed to update coupon status");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleDeleteCoupon = async (coupon: any) => {
+    const couponId = coupon._id || coupon.id;
+    if (!window.confirm(`Are you sure you want to permanently delete coupon "${coupon.code}"?\n\nThis will immediately remove it from the website Offers page and Customer App.`)) {
+      return;
+    }
+    setActionLoading(couponId);
+    try {
+      await api.delete(`/super-admin/coupons/${couponId}`);
+      fetchCoupons();
+    } catch (err) {
+      alert("Failed to delete coupon");
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
   const handleAddCoupon = async () => {
     if (!newCoupon.code.trim()) {
-      alert("Please enter a coupon code");
+      alert("Please enter a promo code");
       return;
     }
     setSubmitting(true);
     try {
+      const defaultDesc = newCoupon.discountType === 'percentage'
+        ? `${newCoupon.discountValue}% instant discount on orders above ₹${newCoupon.minOrder}`
+        : newCoupon.discountType === 'free_delivery'
+          ? `100% Free express delivery on orders above ₹${newCoupon.minOrder}`
+          : `₹${newCoupon.discountValue} flat off on orders above ₹${newCoupon.minOrder}`;
+
       await api.post("/super-admin/coupons", {
-        code: newCoupon.code.toUpperCase(),
-        discount: newCoupon.discount || `${newCoupon.discountValue}% off on ₹${newCoupon.minOrder}`,
-        discountValue: Number(newCoupon.discountValue) || 20,
-        minOrder: Number(newCoupon.minOrder) || 399,
+        code: newCoupon.code.toUpperCase().trim(),
+        discount: newCoupon.discount.trim() || defaultDesc,
+        discountType: newCoupon.discountType,
+        discountValue: Number(newCoupon.discountValue) || 0,
+        minOrder: Number(newCoupon.minOrder) || 0,
+        validTill: newCoupon.validTill || "2026-12-31",
+        isSuperOffer: Boolean(newCoupon.isSuperOffer),
         status: "Active",
       });
       fetchCoupons();
       setShowAddCouponModal(false);
-      setNewCoupon({ code: "", discount: "", discountValue: 20, minOrder: 399 });
-    } catch (err) {
-      alert("Failed to add coupon");
+      setNewCoupon({
+        code: "",
+        discount: "",
+        discountType: "percentage",
+        discountValue: 20,
+        minOrder: 399,
+        validTill: "2026-12-31",
+        isSuperOffer: false,
+      });
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to add coupon");
     } finally {
       setSubmitting(false);
     }
@@ -1653,22 +3000,179 @@ function CouponsTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <SectionTitle title="Coupons & Offers" sub="Discount codes and marketing promotions" />
-        <button onClick={() => setShowAddCouponModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Create Coupon</button>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+        <SectionTitle title="Coupons & Offers" sub="Manage promotional discount codes visible on website & customer app" />
+        <button onClick={() => setShowAddCouponModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>
+          + Create Coupon
+        </button>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
-        {coupons.map(c => (
-          <div key={c.code} style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <span style={{ fontSize: "1.1rem", fontWeight: 900, color: "#941717", fontFamily: "Outfit, sans-serif" }}>{c.code}</span>
-              <Badge label={c.status} color={c.status === "Active" ? "#059669" : "#73695b"} />
-            </div>
-            <div style={{ color: "#423b32", fontSize: "0.875rem", marginBottom: "6px" }}>{c.discount}</div>
-            <div style={{ fontSize: "0.75rem", color: "#73695b" }}>Used {c.used || 0} times · Valid till {c.validTill}</div>
+
+      <div style={{
+        background: "#fffbeb",
+        border: "1px solid #fef3c7",
+        borderRadius: "12px",
+        padding: "12px 16px",
+        marginBottom: "24px",
+        fontSize: "0.8rem",
+        color: "#92400e",
+        display: "flex",
+        alignItems: "center",
+        gap: "10px"
+      }}>
+        <span style={{ fontSize: "1.1rem", color: "#f59e0b" }}>
+          <FontAwesomeIcon icon={faStar} />
+        </span>
+        <div>
+          <strong>Super Offer System:</strong> Whichever offer is marked with <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> is featured platform-wide across:
+          (1) <strong>Announcement Bar</strong> (above navbar), (2) <strong>Home Page</strong> celebration ribbon, and (3) <strong>Offers Page</strong> banner.
+          If no offer is manually selected, the <strong>first latest active offer</strong> is automatically designated as the Super Offer.
+        </div>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading coupons…</div>
+      ) : coupons.length === 0 ? (
+        <div style={{ padding: "48px", textAlign: "center", background: "#fff", borderRadius: "16px", border: "1px dashed #d1cbbf" }}>
+          <div style={{ fontSize: "2rem", marginBottom: "8px", color: "#941717" }}>
+            <FontAwesomeIcon icon={faTicket} />
           </div>
-        ))}
-      </div>
+          <div style={{ fontWeight: 700, color: "#171410", marginBottom: "4px" }}>No Coupons Created Yet</div>
+          <p style={{ color: "#73695b", fontSize: "0.85rem", marginBottom: "16px" }}>Create your first promotional code to display on the customer app and website offers page.</p>
+          <button onClick={() => setShowAddCouponModal(true)} className="btn btn-primary" style={{ fontSize: "0.85rem" }}>
+            + Create Coupon
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "18px" }}>
+          {coupons.map((c, idx) => {
+            const couponId = c._id || c.id;
+            const isBusy = actionLoading === couponId;
+            const isActive = c.status === "Active";
+            // Check if this is super offer or automatic fallback
+            const hasAnyExplicitSuper = coupons.some(x => x.isSuperOffer && x.status === "Active");
+            const isEffectiveSuper = c.isSuperOffer || (!hasAnyExplicitSuper && isActive && idx === 0);
+
+            return (
+              <div key={couponId || c.code} style={{
+                background: "#fff",
+                border: isEffectiveSuper ? "2px solid #f59e0b" : "1px solid #ede8e0",
+                borderRadius: "16px",
+                padding: "20px",
+                boxShadow: isEffectiveSuper ? "0 4px 14px rgba(245, 158, 11, 0.15)" : "0 2px 8px rgba(0,0,0,0.02)",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                gap: "14px",
+                position: "relative"
+              }}>
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "8px" }}>
+                    <div>
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
+                        <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "#941717", fontFamily: "Outfit, sans-serif", letterSpacing: "1px" }}>
+                          {c.code}
+                        </span>
+                        <span style={{
+                          fontSize: "0.68rem",
+                          fontWeight: 800,
+                          textTransform: "uppercase",
+                          padding: "2px 7px",
+                          borderRadius: "6px",
+                          background: "#f1ede6",
+                          color: "#574e42"
+                        }}>
+                          {c.discountType === "percentage" ? "Percentage" : c.discountType === "free_delivery" ? "Free Delivery" : "Flat Cash"}
+                        </span>
+                      </div>
+                      {isEffectiveSuper && (
+                        <div style={{
+                          background: "#fef3c7",
+                          color: "#92400e",
+                          border: "1px solid #fde68a",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.7rem",
+                          fontWeight: 800,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "5px",
+                          marginTop: "2px"
+                        }}>
+                          <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Active Super Offer {c.isSuperOffer ? "(Admin Selected)" : "(Latest Fallback)"}
+                        </div>
+                      )}
+                    </div>
+                    <Badge label={c.status} color={isActive ? "#059669" : "#dc2626"} />
+                  </div>
+
+                  <div style={{ color: "#171410", fontSize: "0.9rem", fontWeight: 600, marginBottom: "8px", lineHeight: "1.35" }}>
+                    {c.discount}
+                  </div>
+
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", fontSize: "0.76rem", color: "#73695b", background: "#faf8f5", padding: "8px 12px", borderRadius: "8px" }}>
+                    <span>Min Order: <strong>₹{c.minOrder || 0}</strong></span>
+                    <span>•</span>
+                    <span>Used: <strong>{c.used || 0} times</strong></span>
+                    <span>•</span>
+                    <span>Valid Till: <strong>{c.validTill || "Open"}</strong></span>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", paddingTop: "12px", borderTop: "1px solid #f1ede6" }}>
+                  {isActive && !c.isSuperOffer && (
+                    <button
+                      onClick={() => handleSetSuperOffer(c)}
+                      disabled={isBusy}
+                      style={{
+                        background: "#fffbeb",
+                        color: "#b45309",
+                        border: "1px solid #fcd34d",
+                        borderRadius: "8px",
+                        padding: "7px 12px",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: isBusy ? "not-allowed" : "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px"
+                      }}
+                    >
+                      <FontAwesomeIcon icon={faStar} style={{ fontSize: "13px" }} />
+                      <span>Set as Super Offer</span>
+                    </button>
+                  )}
+
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <button
+                      onClick={() => handleToggleStatus(c)}
+                      disabled={isBusy}
+                      style={{
+                        background: isActive ? "#fef2f2" : "#f0fdf4",
+                        color: isActive ? "#b91c1c" : "#15803d",
+                        border: `1px solid ${isActive ? "#fecaca" : "#bbf7d0"}`,
+                        borderRadius: "8px",
+                        padding: "6px 12px",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        cursor: isBusy ? "not-allowed" : "pointer"
+                      }}
+                    >
+                      {isBusy ? "Updating…" : isActive ? "Mark Expired" : "Mark Active"}
+                    </button>
+
+                    <AdminDeleteButton
+                      onClick={() => handleDeleteCoupon(c)}
+                      disabled={isBusy}
+                      title="Delete Coupon"
+                    />
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* ─── ADD COUPON MODAL ─── */}
       {showAddCouponModal && (
@@ -1676,9 +3180,11 @@ function CouponsTab() {
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
           background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
         }}>
-          <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "440px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
+          <div style={{ background: "#fff", padding: "28px", borderRadius: "18px", width: "100%", maxWidth: "460px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>🎟️ Create New Coupon</h3>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
+                <FontAwesomeIcon icon={faTicket} style={{ color: "#941717" }} /> Create New Coupon
+              </h3>
               <button onClick={() => setShowAddCouponModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
             </div>
 
@@ -1690,13 +3196,27 @@ function CouponsTab() {
                   placeholder="e.g. MEAT25"
                   value={newCoupon.code}
                   onChange={e => setNewCoupon({ ...newCoupon, code: e.target.value.toUpperCase() })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", fontWeight: 700, letterSpacing: "1px", boxSizing: "border-box" }}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.95rem", fontWeight: 800, letterSpacing: "1px", boxSizing: "border-box" }}
                 />
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Discount %</label>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Discount Type</label>
+                  <select
+                    value={newCoupon.discountType}
+                    onChange={e => setNewCoupon({ ...newCoupon, discountType: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box", background: "#fff" }}
+                  >
+                    <option value="percentage">Percentage (%)</option>
+                    <option value="fixed">Flat Amount (₹)</option>
+                    <option value="free_delivery">Free Delivery</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                    {newCoupon.discountType === "percentage" ? "Percentage (%)" : "Discount (₹)"}
+                  </label>
                   <input
                     type="number"
                     placeholder="20"
@@ -1705,6 +3225,9 @@ function CouponsTab() {
                     style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                   />
                 </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Min Order (₹)</label>
                   <input
@@ -1715,17 +3238,39 @@ function CouponsTab() {
                     style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                   />
                 </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Valid Till</label>
+                  <input
+                    type="date"
+                    value={newCoupon.validTill}
+                    onChange={e => setNewCoupon({ ...newCoupon, validTill: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Display Description</label>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Display Description (Optional)</label>
                 <input
                   type="text"
-                  placeholder="e.g. 25% off on orders above ₹499"
+                  placeholder="e.g. 20% instant discount on orders above ₹399"
                   value={newCoupon.discount}
                   onChange={e => setNewCoupon({ ...newCoupon, discount: e.target.value })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                 />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#fffbeb", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fef3c7" }}>
+                <input
+                  type="checkbox"
+                  id="makeSuperOffer"
+                  checked={Boolean(newCoupon.isSuperOffer)}
+                  onChange={e => setNewCoupon({ ...newCoupon, isSuperOffer: e.target.checked })}
+                  style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                />
+                <label htmlFor="makeSuperOffer" style={{ fontSize: "0.8rem", fontWeight: 700, color: "#92400e", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Set as Super Offer (Feature on Top Bar, Home Banner &amp; Offers Page)
+                </label>
               </div>
             </div>
 
@@ -1786,6 +3331,426 @@ function SettingsTab() {
   );
 }
 
+function BannersTab() {
+  const [banners, setBanners] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [newBanner, setNewBanner] = useState({
+    title: "",
+    image: "",
+    link: "",
+    order: 1,
+    isActive: true,
+  });
+
+  const fetchBanners = () => {
+    setLoading(true);
+    api.get<{ success: boolean; banners: any[] }>("/super-admin/banners")
+      .then(res => {
+        if (res.data.success) {
+          setBanners(res.data.banners || []);
+        }
+      })
+      .catch(err => console.warn("Failed to fetch banners:", err))
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchBanners();
+  }, []);
+
+  const handleCreateBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBanner.image.trim()) {
+      alert("Please provide an image URL for the banner.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const res = await api.post("/super-admin/banners", newBanner);
+      if (res.data?.success) {
+        setShowAddModal(false);
+        setNewBanner({
+          title: "",
+          image: "",
+          link: "",
+          order: banners.length + 2,
+          isActive: true,
+        });
+        fetchBanners();
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to create banner");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleToggleActive = async (banner: any) => {
+    const id = banner._id || banner.id;
+    try {
+      await api.put(`/super-admin/banners/${id}`, {
+        isActive: !banner.isActive,
+      });
+      fetchBanners();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to update banner status");
+    }
+  };
+
+  const handleDeleteBanner = async (banner: any) => {
+    const id = banner._id || banner.id;
+    if (!window.confirm(`Are you sure you want to remove this banner?`)) return;
+    try {
+      await api.delete(`/super-admin/banners/${id}`);
+      fetchBanners();
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to delete banner");
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#171410", margin: 0 }}>Hero Sliding Banners</h2>
+          <p style={{ color: "#73695b", fontSize: "0.875rem", marginTop: "4px" }}>
+            Add and manage dynamic sliding banners displayed at the top of the Customer Website and Customer Mobile App.
+          </p>
+        </div>
+        <button
+          className="btn btn-primary"
+          onClick={() => {
+            setNewBanner({
+              title: "",
+              image: "",
+              link: "",
+              order: banners.length + 1,
+              isActive: true,
+            });
+            setShowAddModal(true);
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "8px",
+            padding: "10px 20px",
+            borderRadius: "10px",
+            fontWeight: 700,
+            cursor: "pointer",
+            backgroundColor: "#941717",
+            color: "#fff",
+            border: "none",
+          }}
+        >
+          <span className="material-symbols-outlined text-[18px]">add_photo_alternate</span>
+          Add New Banner
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "40px", color: "#73695b" }}>Loading hero banners…</div>
+      ) : banners.length === 0 ? (
+        <div style={{ textAlign: "center", padding: "60px 20px", background: "#fff", borderRadius: "14px", border: "1px solid #ede8e0" }}>
+          <span className="material-symbols-outlined text-[48px]" style={{ color: "#a89f91", marginBottom: "12px" }}>view_carousel</span>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#171410" }}>No Banners Configured</h3>
+          <p style={{ color: "#73695b", fontSize: "0.85rem", marginTop: "4px" }}>Add your first hero banner to engage customers on web and mobile.</p>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(360px, 1fr))", gap: "20px" }}>
+          {banners.map((b: any, idx: number) => (
+            <div
+              key={b._id || idx}
+              style={{
+                background: "#ffffff",
+                borderRadius: "14px",
+                border: "1px solid #ede8e0",
+                overflow: "hidden",
+                boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+                display: "flex",
+                flexDirection: "column",
+                transition: "transform 150ms ease, box-shadow 150ms ease",
+              }}
+            >
+              {/* Image Preview Container */}
+              <div
+                style={{
+                  width: "100%",
+                  height: "170px",
+                  background: "#181412",
+                  position: "relative",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  overflow: "hidden",
+                }}
+              >
+                <img
+                  src={b.image}
+                  alt={b.title || "Banner Preview"}
+                  style={{
+                    width: "100%",
+                    height: "100%",
+                    objectFit: "cover",
+                  }}
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "10px",
+                    left: "10px",
+                    display: "flex",
+                    gap: "6px",
+                  }}
+                >
+                  <span
+                    style={{
+                      background: "rgba(0,0,0,0.75)",
+                      color: "#fff",
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                      backdropFilter: "blur(4px)",
+                    }}
+                  >
+                    #{b.order ?? idx + 1}
+                  </span>
+                  <span
+                    style={{
+                      background: b.isActive ? "#059669" : "#64748b",
+                      color: "#fff",
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      padding: "3px 8px",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    {b.isActive ? "ACTIVE" : "INACTIVE"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Details & Actions */}
+              <div style={{ padding: "16px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "14px" }}>
+                <div>
+                  <h4 style={{ margin: "0 0 8px 0", fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+                    {b.title || <span style={{ color: "#a89f91", fontStyle: "italic" }}>No Title Specified</span>}
+                  </h4>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", borderTop: "1px solid #f1ece4", paddingTop: "12px" }}>
+                  <button
+                    onClick={() => handleToggleActive(b)}
+                    style={{
+                      flex: 1,
+                      height: "38px",
+                      padding: "0 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #ede8e0",
+                      background: b.isActive ? "#fef2f2" : "#f0fdf4",
+                      color: b.isActive ? "#b91c1c" : "#15803d",
+                      fontSize: "0.8rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      boxSizing: "border-box",
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">{b.isActive ? "visibility_off" : "visibility"}</span>
+                    {b.isActive ? "Deactivate" : "Activate"}
+                  </button>
+
+                  <AdminDeleteButton
+                    onClick={() => handleDeleteBanner(b)}
+                    title="Delete Banner"
+                    style={{ height: "38px", width: "38px", minWidth: "38px" }}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add Banner Modal */}
+      {showAddModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            backdropFilter: "blur(4px)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "20px",
+          }}
+        >
+          <div
+            style={{
+              background: "#fff",
+              borderRadius: "16px",
+              padding: "28px",
+              width: "100%",
+              maxWidth: "540px",
+              boxShadow: "0 20px 40px rgba(0,0,0,0.25)",
+            }}
+          >
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+              <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>Add New Hero Banner</h3>
+              <button
+                onClick={() => setShowAddModal(false)}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#73695b" }}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateBanner} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  Image URL <span style={{ color: "#dc2626" }}>*</span>
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://.../banner.webp"
+                  required
+                  value={newBanner.image}
+                  onChange={(e) => setNewBanner({ ...newBanner, image: e.target.value })}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    fontSize: "0.9rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              {/* Live Image Preview */}
+              {newBanner.image.trim() && (
+                <div style={{ borderRadius: "10px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#181412" }}>
+                  <div style={{ fontSize: "0.72rem", color: "#a89f91", padding: "6px 10px", background: "#26201c" }}>
+                    Live Preview:
+                  </div>
+                  <div style={{ height: "140px", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <img
+                      src={newBanner.image}
+                      alt="Banner Preview"
+                      style={{ maxHeight: "100%", maxWidth: "100%", objectFit: "contain" }}
+                      onError={(e) => {
+                        (e.target as HTMLElement).style.display = "none";
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  Title / Description (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Fresh Butchery Cut • Delivered in 90 Mins"
+                  value={newBanner.title}
+                  onChange={(e) => setNewBanner({ ...newBanner, title: e.target.value })}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    fontSize: "0.9rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  Display Order
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  value={newBanner.order}
+                  onChange={(e) => setNewBanner({ ...newBanner, order: parseInt(e.target.value) || 1 })}
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    fontSize: "0.9rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
+                <input
+                  type="checkbox"
+                  id="bannerActive"
+                  checked={newBanner.isActive}
+                  onChange={(e) => setNewBanner({ ...newBanner, isActive: e.target.checked })}
+                  style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                />
+                <label htmlFor="bannerActive" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                  Active immediately on Website &amp; Mobile App
+                </label>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px", marginTop: "16px" }}>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  disabled={submitting}
+                  style={{
+                    padding: "9px 18px",
+                    borderRadius: "8px",
+                    border: "1px solid #ede8e0",
+                    background: "#f7f5f0",
+                    color: "#423b32",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  style={{
+                    padding: "9px 24px",
+                    borderRadius: "8px",
+                    border: "none",
+                    background: "#941717",
+                    color: "#fff",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  {submitting ? "Saving…" : "Add Banner"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Super Admin Page ──────────────────────────────────────────────────────
 export default function SuperAdminPage() {
   const router = useRouter();
@@ -1794,12 +3759,18 @@ export default function SuperAdminPage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
-  // Auto-collapse sidebar on tablet/mobile
+  // Auto-collapse sidebar earlier (below 1200px) so wide catalog and admin tables have maximum breathing room
   useEffect(() => {
     const checkWidth = () => {
-      const mobile = window.innerWidth < 992;
+      const width = window.innerWidth;
+      const mobile = width < 768;
       setIsMobile(mobile);
-      setSidebarCollapsed(mobile);
+      // Collapse sidebar earlier (under 1200px) to provide ample space for wide tables
+      if (width < 1200) {
+        setSidebarCollapsed(true);
+      } else {
+        setSidebarCollapsed(false);
+      }
     };
     checkWidth();
     window.addEventListener("resize", checkWidth);
@@ -1823,16 +3794,17 @@ export default function SuperAdminPage() {
   if (!user) return null;
 
   const tabComponents: Record<string, React.ReactNode> = {
-    dashboard:    <DashboardTab />,
-    stores:       <StoresTab />,
+    dashboard: <DashboardTab />,
+    stores: <StoresTab />,
     "store-admins": <StoreAdminsTab />,
-    products:     <ProductsTab />,
-    categories:   <CategoriesTab />,
-    orders:       <OrdersTab />,
-    riders:       <RidersTab />,
-    customers:    <CustomersTab />,
-    coupons:      <CouponsTab />,
-    settings:     <SettingsTab />,
+    products: <ProductsTab />,
+    categories: <CategoriesTab />,
+    orders: <OrdersTab />,
+    riders: <RidersTab />,
+    customers: <CustomersTab />,
+    coupons: <CouponsTab />,
+    banners: <BannersTab />,
+    settings: <SettingsTab />,
   };
 
   return (
@@ -1945,36 +3917,35 @@ export default function SuperAdminPage() {
             </div>
           )}
 
-          {/* Collapse toggle — hide on mobile where sidebar is always icon-only */}
-          {!isMobile && (
-            <button
-              onClick={() => setSidebarCollapsed(v => !v)}
-              title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-              style={{
-                width: "100%",
-                background: "rgba(255,255,255,0.07)",
-                border: "none",
-                borderRadius: "8px",
-                padding: "7px",
-                color: "rgba(255,255,255,0.6)",
-                cursor: "pointer",
-                fontSize: "0.78rem",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-              }}
-            >
-              {sidebarCollapsed ? "→" : "← Collapse"}
-            </button>
-          )}
+          {/* Collapse toggle */}
+          <button
+            onClick={() => setSidebarCollapsed(v => !v)}
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            style={{
+              width: "100%",
+              background: "rgba(255,255,255,0.07)",
+              border: "none",
+              borderRadius: "8px",
+              padding: "7px",
+              color: "rgba(255,255,255,0.7)",
+              cursor: "pointer",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+            }}
+          >
+            {sidebarCollapsed ? "→" : "← Collapse"}
+          </button>
         </div>
       </aside>
 
       {/* ─── Main Content ────────────────────────────────────────────── */}
-      <main style={{ flex: 1, padding: isMobile ? "16px" : "32px", overflowY: "auto", minWidth: 0 }}>
+      <main style={{ flex: 1, padding: isMobile ? "16px 12px" : "28px 24px", overflowY: "auto", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
         {/* Top bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px", flexWrap: "wrap", gap: "14px" }}>
           <div>
             <div style={{ fontSize: "0.78rem", color: "#73695b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>
               Super Admin Portal · Teffes Headquarters

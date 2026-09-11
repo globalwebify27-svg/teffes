@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
 const mongoose = require('mongoose');
+const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
 
 const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -15,6 +16,7 @@ const createOrder = async (req, res, next) => {
     const {
       items,
       amount,
+      totalAmount,
       storeId,
       storeName,
       deliverySlot,
@@ -24,6 +26,8 @@ const createOrder = async (req, res, next) => {
       razorpayPaymentId,
       addressId,
       pickupMode,
+      fulfillmentType,
+      shippingAddress,
     } = req.body;
     
     if (!items || items.length === 0) {
@@ -33,17 +37,35 @@ const createOrder = async (req, res, next) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
-    let orderAddress = 'Store Pickup';
-    if (!pickupMode && addressId) {
+    // Determine whether order is Store Pickup or Home Delivery
+    const isPickup =
+      pickupMode === true ||
+      fulfillmentType === 'pickup' ||
+      deliverySlot?.toLowerCase().includes('pickup') ||
+      shippingAddress?.toLowerCase().includes('store pickup');
+
+    const resolvedFulfillmentType = isPickup ? 'pickup' : 'delivery';
+    const finalAmount = amount !== undefined ? amount : (totalAmount || 0);
+
+    let orderAddress = isPickup
+      ? '🏪 Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi (Takeaway Counter)'
+      : (shippingAddress || 'Ranchi Delivery');
+
+    if (!isPickup && addressId) {
       const addr = user.addresses ? user.addresses.id(addressId) : null;
       if (addr) {
         orderAddress = `${addr.line1}, ${addr.line2 ? addr.line2 + ', ' : ''}${addr.city} - ${addr.pincode}`;
-      } else {
+      } else if (!shippingAddress) {
         return res.status(400).json({ success: false, message: 'Invalid address selected' });
       }
     }
 
     const isOnline = paymentMethod?.toLowerCase().includes('online') || paymentMethod?.toLowerCase().includes('razorpay');
+
+    // Dynamic initial ETA calculation
+    const prepMinutes = Number(req.body.prepTimeMinutes) || 25;
+    const initialTransit = isPickup ? 0 : 15;
+    const targetDelivery = calculateTargetDeliveryTime(new Date(), prepMinutes, initialTransit);
 
     const newOrder = new Order({
       orderId: generateOrderId(),
@@ -53,13 +75,21 @@ const createOrder = async (req, res, next) => {
         email: user.email || '',
         userId: user._id,
         address: orderAddress,
+        lat: req.body.customerLat || 23.3512,
+        lng: req.body.customerLng || 85.3154,
       },
       items,
-      amount,
+      amount: finalAmount,
       storeId: storeId || 'S001',
       storeName: storeName || 'Kishore Ganj',
-      deliverySlot: pickupMode ? 'Store Pickup' : (deliverySlot || '90 Mins Express Delivery'),
-      paymentMethod: paymentMethod || 'Cash on Delivery',
+      deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
+      fulfillmentType: resolvedFulfillmentType,
+      pickupMode: isPickup,
+      prepTimeMinutes: prepMinutes,
+      targetDeliveryTime: targetDelivery,
+      remainingTransitMinutes: initialTransit,
+      etaStage: 'PREPARING',
+      paymentMethod: paymentMethod || (isPickup ? 'Pay at Store Counter' : 'Cash on Delivery'),
       paymentStatus: paymentStatus || (isOnline ? 'Paid' : 'Pending'),
       razorpayOrderId: razorpayOrderId || '',
       razorpayPaymentId: razorpayPaymentId || '',
@@ -111,9 +141,15 @@ const createOrder = async (req, res, next) => {
 const getUserOrders = async (req, res, next) => {
   try {
     const orders = await Order.find({ 'customer.userId': req.user._id }).sort({ createdAt: -1 });
+    const enrichedOrders = orders.map(o => {
+      const obj = o.toObject ? o.toObject() : o;
+      obj.etaDetails = getEtaDetails(o);
+      return obj;
+    });
+
     res.status(200).json({
       success: true,
-      orders,
+      orders: enrichedOrders,
     });
   } catch (error) {
     next(error);
@@ -137,9 +173,12 @@ const getOrderById = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Unauthorized' });
     }
 
+    const orderObj = order.toObject ? order.toObject() : order;
+    orderObj.etaDetails = getEtaDetails(order);
+
     res.status(200).json({
       success: true,
-      order,
+      order: orderObj,
     });
   } catch (error) {
     next(error);
@@ -159,7 +198,13 @@ const getMyOrders = async (req, res, next) => {
       ],
     }).sort({ createdAt: -1 });
 
-    res.status(200).json({ success: true, count: orders.length, orders });
+    const enrichedOrders = orders.map(o => {
+      const obj = o.toObject ? o.toObject() : o;
+      obj.etaDetails = getEtaDetails(o);
+      return obj;
+    });
+
+    res.status(200).json({ success: true, count: enrichedOrders.length, orders: enrichedOrders });
   } catch (error) {
     next(error);
   }

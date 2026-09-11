@@ -18,9 +18,10 @@ export default function ProductCard({ product }: { product: Product }) {
   const isLiked = isInWishlist(product.id);
   const quantity = getItemQuantity(product.id);
 
-  const discount = Math.round(
-    ((product.originalPrice - product.price) / product.originalPrice) * 100
-  );
+  const origPrice = product.originalPrice || product.price || 0;
+  const discount = origPrice > product.price
+    ? Math.round(((origPrice - product.price) / origPrice) * 100)
+    : 0;
 
   const handleWishlistClick = (e: React.MouseEvent) => {
     e.stopPropagation();

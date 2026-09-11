@@ -16,12 +16,9 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
   const resolvedParams = use(params);
   const productId = resolvedParams.id;
 
-  const [product, setProduct] = useState<Product | undefined>(() => getProductById(productId));
-  const [relatedProducts, setRelatedProducts] = useState<Product[]>(() => {
-    const p = getProductById(productId);
-    return p ? getRelatedProducts(p, 4) : [];
-  });
-  const [loading, setLoading] = useState(!product);
+  const [product, setProduct] = useState<Product | undefined>(undefined);
+  const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let isMounted = true;

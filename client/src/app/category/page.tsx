@@ -3,30 +3,63 @@
 import React, { useState, useMemo, useEffect, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { PRODUCTS, Product, fetchProducts } from "@/lib/products";
+import { Product, fetchProducts, fetchCategories } from "@/lib/products";
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faDrumstickBite,
+  faUtensils,
+  faFishFins,
+  faEgg,
+  faLayerGroup,
+  faStore,
+} from "@fortawesome/free-solid-svg-icons";
 
-type CategoryType = "chicken" | "mutton" | "fish" | "eggs";
 type SortOption = "featured" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
+
+function getCategoryFontAwesomeIcon(key: string) {
+  const k = (key || "").toLowerCase();
+  if (k.includes("chicken")) return faDrumstickBite;
+  if (k.includes("mutton")) return faUtensils;
+  if (k.includes("fish") || k.includes("seafood")) return faFishFins;
+  if (k.includes("egg")) return faEgg;
+  if (k.includes("all")) return faLayerGroup;
+  return faStore;
+}
+
+const DEFAULT_TABS = [
+  { key: "chicken", label: "Chicken", icon: "drumstick-bite", desc: "Curry cuts, lollipops, boneless & wings" },
+  { key: "mutton", label: "Mutton", icon: "utensils", desc: "Tender goat cuts, curry pieces & ribs" },
+  { key: "fish", label: "Fish & Seafood", icon: "fish-fins", desc: "Freshwater Rohu, Catla & steaks" },
+  { key: "eggs", label: "Fresh Eggs", icon: "egg", desc: "Farm fresh, organic desi & brown eggs" },
+];
 
 function CategoryContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
+  const [categoriesList, setCategoriesList] = useState<any[]>([]);
   // Read initial category from query param if available, default to "chicken"
-  const typeParam = searchParams.get("type") as CategoryType | null;
-  const [selectedCategory, setSelectedCategory] = useState<CategoryType>(
-    typeParam && ["chicken", "mutton", "fish", "eggs"].includes(typeParam)
-      ? typeParam
-      : "chicken"
-  );
+  const typeParam = searchParams.get("type");
+  const [selectedCategory, setSelectedCategory] = useState<string>(typeParam || "chicken");
   const [sortBy, setSortBy] = useState<SortOption>("featured");
+
+  useEffect(() => {
+    fetchCategories().then((cats) => {
+      if (cats && cats.length > 0) {
+        const filtered = cats.filter((c) => c.slug !== "all" && (c as any).isActive !== false);
+        if (filtered.length > 0) {
+          setCategoriesList(filtered);
+        }
+      }
+    });
+  }, []);
 
   // Sync state if URL query param changes
   useEffect(() => {
-    const currentType = searchParams.get("type") as CategoryType | null;
-    if (currentType && ["chicken", "mutton", "fish", "eggs"].includes(currentType)) {
+    const currentType = searchParams.get("type");
+    if (currentType) {
       setSelectedCategory(currentType);
     }
   }, [searchParams]);
@@ -34,13 +67,18 @@ function CategoryContent() {
   const { addToCart, updateQuantity, getItemQuantity } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
-  // 4 Category Tabs
-  const tabs = [
-    { key: "chicken" as CategoryType, label: "Chicken", icon: "restaurant", desc: "Curry cuts, lollipops, boneless & wings" },
-    { key: "mutton" as CategoryType, label: "Mutton", icon: "kebab_dining", desc: "Tender goat cuts, curry pieces & ribs" },
-    { key: "fish" as CategoryType, label: "Fish & Seafood", icon: "set_meal", desc: "Freshwater Rohu, Catla & steaks" },
-    { key: "eggs" as CategoryType, label: "Fresh Eggs", icon: "egg", desc: "Farm fresh, organic desi & brown eggs" },
-  ];
+  // Dynamic Category Tabs
+  const tabs = useMemo(() => {
+    if (categoriesList.length > 0) {
+      return categoriesList.map((c) => ({
+        key: c.slug,
+        label: c.name,
+        icon: c.icon || "restaurant",
+        desc: c.tagline || `Fresh ${c.name} cuts`,
+      }));
+    }
+    return DEFAULT_TABS;
+  }, [categoriesList]);
 
   const [productsList, setProductsList] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,9 +107,18 @@ function CategoryContent() {
 
   const sortedProducts = productsList;
 
-  const activeTabMeta = tabs.find((t) => t.key === selectedCategory) || tabs[0];
+  const activeTabMeta = useMemo(() => {
+    return (
+      tabs.find((t) => t.key === selectedCategory) || {
+        key: selectedCategory,
+        label: selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1),
+        icon: "restaurant",
+        desc: "Fresh daily butcher cuts",
+      }
+    );
+  }, [tabs, selectedCategory]);
 
-  const handleTabChange = (key: CategoryType) => {
+  const handleTabChange = (key: string) => {
     setSelectedCategory(key);
     router.push(`/category?type=${key}`);
   };
@@ -137,9 +184,10 @@ function CategoryContent() {
                       : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
                   }`}
                 >
-                  <span className={`material-symbols-outlined text-[18px] ${isSelected ? "text-white" : "text-slate-500"}`}>
-                    {tab.icon}
-                  </span>
+                  <FontAwesomeIcon
+                    icon={getCategoryFontAwesomeIcon(tab.key)}
+                    className={`text-[15px] ${isSelected ? "text-white" : "text-primary"}`}
+                  />
                   <span>{tab.label}</span>
                 </button>
               );
@@ -177,17 +225,44 @@ function CategoryContent() {
 
         {/* ─── Product Grid ─────────────────────────────────────────────────── */}
         {sortedProducts.length === 0 ? (
-          <div className="bg-white rounded-3xl p-12 text-center border border-gray-200 shadow-xs my-8">
-            <span className="material-symbols-outlined text-[48px] text-slate-300 mb-2">restaurant</span>
-            <h3 className="font-headline-sm font-bold text-gray-900 text-lg">No fresh cuts found</h3>
-            <p className="text-xs text-slate-500 mt-1">Please select another category above.</p>
+          <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-gray-200 shadow-xs my-8 max-w-lg mx-auto">
+            <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
+              <span className="material-symbols-outlined text-[36px]">
+                {selectedCategory === 'eggs' ? "egg" : "restaurant"}
+              </span>
+            </div>
+            <h3 className="font-headline-sm font-bold text-gray-900 text-lg">
+              {selectedCategory === 'eggs' ? "Farm Fresh Eggs Coming Soon" : "No fresh cuts found"}
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+              {selectedCategory === 'eggs'
+                ? "We are onboarding certified local organic farms for antibiotic-free desi and table eggs. In the meantime, explore our fresh chicken, mutton, and fish cuts!"
+                : "Please select another category above or clear your filters."}
+            </p>
+            {selectedCategory === 'eggs' ? (
+              <button
+                type="button"
+                onClick={() => handleTabChange('chicken')}
+                className="mt-5 px-5 py-2 rounded-full bg-primary hover:bg-primary-dark text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Browse Chicken Cuts →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleTabChange('all')}
+                className="mt-5 px-5 py-2 rounded-full bg-primary hover:bg-primary-dark text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                View All Cuts
+              </button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 mb-16">
             {sortedProducts.map((item: Product) => {
               const qty = getItemQuantity(item.id);
               const isLiked = isInWishlist(item.id);
-              const discount = item.originalPrice > item.price
+              const discount = (item.originalPrice && item.originalPrice > item.price)
                 ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
                 : 0;
 
@@ -201,9 +276,12 @@ function CategoryContent() {
                     {/* Image Box */}
                     <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-3 border border-gray-100">
                       <img
-                        src={item.image}
+                        src={item.image || (item.images && item.images[0]) || "/images/chicken.png"}
                         alt={item.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/LtbiqVBO.jpeg";
+                        }}
                       />
 
                       {/* Freshness Badge */}

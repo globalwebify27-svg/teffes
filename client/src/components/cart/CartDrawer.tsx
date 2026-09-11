@@ -42,53 +42,6 @@ interface StoreOption {
   pickupEnabled?: boolean;
 }
 
-const DEFAULT_STORES: StoreOption[] = [
-  {
-    storeId: "S001",
-    name: "TeFFe's — Kishore Ganj",
-    city: "Ranchi",
-    address: "Plot 42, Main Road, Kishore Ganj, Ranchi 834001",
-    phone: "+91 9779687955",
-    timings: "08:00 AM - 08:00 PM",
-    distance: "0.8 km away",
-    status: "Active",
-    pickupEnabled: true,
-  },
-  {
-    storeId: "S002",
-    name: "TeFFe's — Doranda Hub",
-    city: "Ranchi",
-    address: "Doranda Bazar, Near High Court, Ranchi 834002",
-    phone: "+91 9279682955",
-    timings: "08:00 AM - 08:00 PM",
-    distance: "2.4 km away",
-    status: "Active",
-    pickupEnabled: true,
-  },
-  {
-    storeId: "S003",
-    name: "TeFFe's — Harmu Road",
-    city: "Ranchi",
-    address: "Harmu Housing Colony, Ranchi 834002",
-    phone: "+91 9876543210",
-    timings: "08:00 AM - 08:00 PM",
-    distance: "1.6 km away",
-    status: "Active",
-    pickupEnabled: true,
-  },
-  {
-    storeId: "S004",
-    name: "Teffes - Doranda store",
-    city: "Ranchi",
-    address: "North office pada doranda, Ranchi 834002",
-    phone: "+91 1234567891",
-    timings: "08:00 AM - 08:00 PM",
-    distance: "3.1 km away",
-    status: "Active",
-    pickupEnabled: true,
-  },
-];
-
 export default function CartDrawer() {
   const {
     items,
@@ -109,8 +62,8 @@ export default function CartDrawer() {
   const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">("delivery");
 
   // Stores for self-pickup
-  const [stores, setStores] = useState<StoreOption[]>(DEFAULT_STORES);
-  const [selectedStoreId, setSelectedStoreId] = useState<string>("S001");
+  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [pickupNote, setPickupNote] = useState<string>("");
 
   // Navigation views: "cart" -> "payment" -> "success"
@@ -128,9 +81,13 @@ export default function CartDrawer() {
           if (res.data.success && Array.isArray(res.data.stores) && res.data.stores.length > 0) {
             const mapped = res.data.stores.map((s, idx) => ({
               ...s,
-              distance: s.distance || (idx === 0 ? "0.8 km away" : idx === 1 ? "2.4 km away" : idx === 2 ? "1.6 km away" : "3.1 km away"),
+              distance: s.distance || `${(0.8 + idx * 0.8).toFixed(1)} km away`,
             }));
             setStores(mapped);
+            if (!selectedStoreId && mapped.length > 0) {
+              const firstActive = mapped.find((x) => x.pickupEnabled !== false && x.status !== "Inactive");
+              setSelectedStoreId(firstActive ? firstActive.storeId : mapped[0].storeId);
+            }
           }
         })
         .catch((err) => console.warn("Failed to fetch stores for pickup:", err));
@@ -200,7 +157,7 @@ export default function CartDrawer() {
   const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + effectiveTip - discountAmount);
 
   const selectedStore =
-    stores.find((s) => s.storeId === selectedStoreId) || stores[0] || DEFAULT_STORES[0];
+    stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
 
   const riceProgress = Math.min(100, Math.round((subtotal / freeRiceThreshold) * 100));
   const amountForFreeRice = Math.max(0, freeRiceThreshold - subtotal);
