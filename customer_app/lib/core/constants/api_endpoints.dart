@@ -7,6 +7,12 @@ class ApiEndpoints {
   /// Resolves the base URL dynamically based on whether running in Web, Android Emulator,
   /// iOS Simulator, or a custom device/production URL.
   static String get baseUrl {
+    // Custom full URL passed via --dart-define=API_BASE_URL=https://your-backend.com
+    const String customBaseUrl = String.fromEnvironment('API_BASE_URL');
+    if (customBaseUrl.isNotEmpty) {
+      return customBaseUrl.endsWith('/api') ? customBaseUrl : '$customBaseUrl/api';
+    }
+
     // Override with custom IP if testing on a physical device on the same Wi-Fi
     const String customHost = String.fromEnvironment('API_HOST');
     if (customHost.isNotEmpty) {

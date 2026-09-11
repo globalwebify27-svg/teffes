@@ -5,6 +5,12 @@ class ApiEndpoints {
   ApiEndpoints._();
 
   static String get baseUrl {
+    // Custom full URL passed via --dart-define=API_BASE_URL=https://your-backend.com
+    const String customBaseUrl = String.fromEnvironment('API_BASE_URL');
+    if (customBaseUrl.isNotEmpty) {
+      return customBaseUrl.endsWith('/api') ? customBaseUrl : '$customBaseUrl/api';
+    }
+
     const String customHost = String.fromEnvironment('API_HOST');
     if (customHost.isNotEmpty) {
       return 'http://$customHost:5000/api';
