@@ -245,6 +245,48 @@ class ProductsProvider with ChangeNotifier {
     }).toList();
   }
 
+  List<ProductModel> get homeChickenCuts {
+    final list = _products
+        .where((p) => p.inStock && (p.category.toLowerCase() == 'chicken' || p.category.toLowerCase() == 'desi-chicken'))
+        .take(4)
+        .toList();
+    if (list.length < 4) {
+      final additional = _products
+          .where((p) => (p.category.toLowerCase() == 'chicken' || p.category.toLowerCase() == 'desi-chicken') && !list.any((x) => x.id == p.id))
+          .take(4 - list.length);
+      list.addAll(additional);
+    }
+    return list;
+  }
+
+  List<ProductModel> get homeFishCuts {
+    final list = _products
+        .where((p) => p.inStock && (p.category.toLowerCase() == 'fish-seafood' || p.category.toLowerCase() == 'fish'))
+        .take(2)
+        .toList();
+    if (list.length < 2) {
+      final additional = _products
+          .where((p) => (p.category.toLowerCase() == 'fish-seafood' || p.category.toLowerCase() == 'fish') && !list.any((x) => x.id == p.id))
+          .take(2 - list.length);
+      list.addAll(additional);
+    }
+    return list;
+  }
+
+  List<ProductModel> get homeMuttonCuts {
+    final list = _products
+        .where((p) => p.inStock && p.category.toLowerCase() == 'mutton')
+        .take(2)
+        .toList();
+    if (list.length < 2) {
+      final additional = _products
+          .where((p) => p.category.toLowerCase() == 'mutton' && !list.any((x) => x.id == p.id))
+          .take(2 - list.length);
+      list.addAll(additional);
+    }
+    return list;
+  }
+
   List<ProductModel> get freshButcheryCuts {
     // Exclude eggs strictly from Fresh Butchery Cuts
     final meatAndSeafood = _products

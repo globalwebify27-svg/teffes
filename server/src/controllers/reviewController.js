@@ -1,24 +1,43 @@
 const Review = require('../models/Review');
 const Order = require('../models/Order');
+const Product = require('../models/Product');
+
+// Helper to calculate weighted combined rating (Baseline Seed + Live Customer Reviews)
+const computeProductRatingStats = async (productId) => {
+  const product = await Product.findOne({ id: productId });
+  const baseRating = Number(product?.baseRating || 4.8);
+  const baseCount = Number(product?.baseRatingCount || 100);
+
+  const reviews = await Review.find({ productId }).populate('userId', 'name').sort({ createdAt: -1 });
+  const liveReviewsCount = reviews.length;
+  const liveRatingsSum = reviews.reduce((acc, r) => acc + Number(r.rating || 0), 0);
+
+  // Weighted formula preserves existing catalog ratings and blends new live reviews
+  const totalRatings = baseCount + liveReviewsCount;
+  const averageRating = totalRatings > 0
+    ? parseFloat((((baseRating * baseCount) + liveRatingsSum) / totalRatings).toFixed(1))
+    : baseRating;
+
+  return {
+    reviews,
+    stats: {
+      totalRatings,
+      averageRating,
+      liveReviewsCount,
+    },
+  };
+};
 
 // Get reviews for a product
 exports.getProductReviews = async (req, res, next) => {
   try {
     const { productId } = req.params;
-    const reviews = await Review.find({ productId }).populate('userId', 'name').sort({ createdAt: -1 });
-
-    const totalRatings = reviews.length;
-    const averageRating = totalRatings > 0
-      ? (reviews.reduce((acc, r) => acc + r.rating, 0) / totalRatings).toFixed(1)
-      : 0;
+    const { reviews, stats } = await computeProductRatingStats(productId);
 
     res.status(200).json({
       success: true,
       reviews,
-      stats: {
-        totalRatings,
-        averageRating,
-      },
+      stats,
     });
   } catch (error) {
     next(error);
@@ -45,16 +64,29 @@ exports.addReview = async (req, res, next) => {
     const review = await Review.create({
       productId,
       userId,
-      rating,
-      title,
-      comment,
+      rating: Number(rating),
+      title: title || '',
+      comment: comment || '',
       isVerifiedPurchase: !!hasPurchased,
     });
+
+    // Populate user info so caller receives user name immediately
+    await review.populate('userId', 'name');
+
+    // Recalculate combined stats (Baseline + Live Customer Reviews)
+    const { stats } = await computeProductRatingStats(productId);
+
+    // Persist and sync directly into MongoDB Atlas Product document
+    await Product.findOneAndUpdate(
+      { id: productId },
+      { rating: stats.averageRating, ratingCount: stats.totalRatings }
+    );
 
     res.status(201).json({
       success: true,
       message: 'Review added successfully',
       review,
+      stats,
     });
   } catch (error) {
     next(error);

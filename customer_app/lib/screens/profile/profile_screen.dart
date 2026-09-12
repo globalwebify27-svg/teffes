@@ -819,71 +819,162 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: AppDimensions.spaceMd),
 
-            // 2. Teffe's Cash Wallet Card with "+ Add Money" Razorpay Flow
-            Container(
-              padding: const EdgeInsets.all(AppDimensions.spaceMd),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF91000A), Color(0xFFB70B01)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            // When Not Logged In: Show Member Privileges & Login CTA Card
+            if (!auth.isAuthenticated) ...[
+              Container(
+                padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppDimensions.roundedLg,
+                  border: Border.all(color: AppColors.borderHairline),
+                  boxShadow: AppDimensions.cardShadow,
                 ),
-                borderRadius: AppDimensions.roundedLg,
-                boxShadow: AppDimensions.cardShadow,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        "TEFFE'S CASH WALLET",
-                        style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.5),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white24,
-                          borderRadius: BorderRadius.circular(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: AppColors.primaryLight,
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.stars_rounded, color: AppColors.primaryMaroon, size: 22),
                         ),
-                        child: Text(
-                          auth.user?.loyaltyTier ?? 'Gold Tier',
-                          style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Unlock Teffe's Patron Privileges",
+                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                "Login to access Teffe's Cash Wallet, saved delivery addresses & orders",
+                                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        CurrencyFormatter.format(auth.user?.walletBalance ?? 0),
-                        style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
-                      ),
-                      ElevatedButton.icon(
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: AppColors.borderHairline),
+                    const SizedBox(height: 12),
+                    _buildGuestBenefitRow(
+                      icon: Icons.account_balance_wallet_outlined,
+                      title: "Teffe's Cash Wallet",
+                      subtitle: "Instant 1-click payment & cashback rewards",
+                    ),
+                    const SizedBox(height: 10),
+                    _buildGuestBenefitRow(
+                      icon: Icons.location_on_outlined,
+                      title: "Saved Delivery Addresses",
+                      subtitle: "Save home, kitchen & office locations for 90-min delivery",
+                    ),
+                    const SizedBox(height: 10),
+                    _buildGuestBenefitRow(
+                      icon: Icons.receipt_long_outlined,
+                      title: "Live Butchery Order Tracking",
+                      subtitle: "Track butchery cutting progress & GPS delivery in real-time",
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primaryMaroon,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                          backgroundColor: AppColors.primaryMaroon,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
                           shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
                         ),
-                        icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                        label: const Text('+ Add Money', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-                        onPressed: () => _showAddMoneySheet(context, auth),
+                        icon: const Icon(Icons.login_rounded, color: Colors.white, size: 16),
+                        label: const Text(
+                          'Login / Register with OTP',
+                          style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13),
+                        ),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            SmoothPageRoute(page: const LoginScreen()),
+                          );
+                        },
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Instant 1-click checkout with Razorpay wallet auto-topup',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: AppDimensions.spaceMd),
+              const SizedBox(height: AppDimensions.spaceMd),
+            ],
+
+            // 2. Teffe's Cash Wallet Card with "+ Add Money" Razorpay Flow (Only visible when Logged In)
+            if (auth.isAuthenticated) ...[
+              Container(
+                padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF91000A), Color(0xFFB70B01)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: AppDimensions.roundedLg,
+                  boxShadow: AppDimensions.cardShadow,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "TEFFE'S CASH WALLET",
+                          style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            auth.user?.loyaltyTier ?? 'Gold Tier',
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          CurrencyFormatter.format(auth.user?.walletBalance ?? 0),
+                          style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900),
+                        ),
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: AppColors.primaryMaroon,
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                          ),
+                          icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
+                          label: const Text('+ Add Money', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+                          onPressed: () => _showAddMoneySheet(context, auth),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Instant 1-click checkout with Razorpay wallet auto-topup',
+                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppDimensions.spaceMd),
+            ],
 
             // 3. Active Current Live Order Section (if any order is active)
             if (auth.activeOrder != null) ...[
@@ -1157,106 +1248,108 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: AppDimensions.spaceMd),
             ],
 
-            // 5. Saved Addresses Section with Edit & Delete Options
-            Container(
-              padding: const EdgeInsets.all(AppDimensions.spaceMd),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: AppDimensions.roundedLg,
-                border: Border.all(color: AppColors.borderHairline),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text('Saved Delivery Addresses', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
-                      GestureDetector(
-                        onTap: () => _showAddAddressDialog(context, location),
-                        child: const Text('+ Add New', style: TextStyle(fontSize: 11.5, color: AppColors.primaryMaroon, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  ...location.savedAddresses.map((addr) {
-                    final isDefault = addr.isDefault;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceSubtle,
-                        borderRadius: AppDimensions.roundedMd,
-                        border: Border.all(color: isDefault ? AppColors.primaryMaroon : AppColors.borderHairline),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            addr.tag.toLowerCase() == 'home' ? Icons.home_rounded : Icons.business_rounded,
-                            size: 20,
-                            color: isDefault ? AppColors.primaryMaroon : AppColors.textSecondary,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(addr.tag, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
-                                    if (isDefault) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.primaryLight,
-                                          borderRadius: BorderRadius.circular(4),
+            // 5. Saved Addresses Section with Edit & Delete Options (Only visible when Logged In)
+            if (auth.isAuthenticated) ...[
+              Container(
+                padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppDimensions.roundedLg,
+                  border: Border.all(color: AppColors.borderHairline),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Saved Delivery Addresses', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+                        GestureDetector(
+                          onTap: () => _showAddAddressDialog(context, location),
+                          child: const Text('+ Add New', style: TextStyle(fontSize: 11.5, color: AppColors.primaryMaroon, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ...location.savedAddresses.map((addr) {
+                      final isDefault = addr.isDefault;
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceSubtle,
+                          borderRadius: AppDimensions.roundedMd,
+                          border: Border.all(color: isDefault ? AppColors.primaryMaroon : AppColors.borderHairline),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              addr.tag.toLowerCase() == 'home' ? Icons.home_rounded : Icons.business_rounded,
+                              size: 20,
+                              color: isDefault ? AppColors.primaryMaroon : AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(addr.tag, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12.5)),
+                                      if (isDefault) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.primaryLight,
+                                            borderRadius: BorderRadius.circular(4),
+                                          ),
+                                          child: const Text('Default', style: TextStyle(color: AppColors.primaryMaroon, fontSize: 9.5, fontWeight: FontWeight.bold)),
                                         ),
-                                        child: const Text('Default', style: TextStyle(color: AppColors.primaryMaroon, fontSize: 9.5, fontWeight: FontWeight.bold)),
-                                      ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(addr.fullAddress, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 17, color: AppColors.primaryMaroon),
+                                  tooltip: 'Edit Address',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _showEditAddressDialog(context, location, addr),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(addr.fullAddress, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                                const SizedBox(width: 8),
+                                IconButton(
+                                  icon: Icon(Icons.delete_outline_rounded, size: 17, color: Colors.red.shade400),
+                                  tooltip: 'Delete Address',
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () async {
+                                    await location.deleteAddress(addr.id);
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Address removed.')),
+                                      );
+                                    }
+                                  },
+                                ),
                               ],
                             ),
-                          ),
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 17, color: AppColors.primaryMaroon),
-                                tooltip: 'Edit Address',
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                onPressed: () => _showEditAddressDialog(context, location, addr),
-                              ),
-                              const SizedBox(width: 8),
-                              IconButton(
-                                icon: Icon(Icons.delete_outline_rounded, size: 17, color: Colors.red.shade400),
-                                tooltip: 'Delete Address',
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                                onPressed: () async {
-                                  await location.deleteAddress(addr.id);
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Address removed.')),
-                                    );
-                                  }
-                                },
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
+                          ],
+                        ),
+                      );
+                    }),
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: AppDimensions.spaceMd),
+              const SizedBox(height: AppDimensions.spaceMd),
+            ],
 
             // 6. Butchery Hub Support
             Container(
@@ -1319,6 +1412,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildGuestBenefitRow({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: AppColors.primaryMaroon),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+              ),
+              Text(
+                subtitle,
+                style: const TextStyle(fontSize: 10.5, color: AppColors.textSecondary),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

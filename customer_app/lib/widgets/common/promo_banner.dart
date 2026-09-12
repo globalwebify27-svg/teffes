@@ -111,128 +111,122 @@ class _PromoBannerState extends State<PromoBanner> {
             ? productsProvider.banners
             : _fallbackBanners;
 
-        return Container(
-          margin: const EdgeInsets.symmetric(
+        return Padding(
+          padding: const EdgeInsets.symmetric(
             horizontal: AppDimensions.spaceMd,
             vertical: AppDimensions.spaceXs,
           ),
-          height: 156,
-          decoration: BoxDecoration(
-            borderRadius: AppDimensions.roundedLg,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.18),
-                blurRadius: 14,
-                offset: const Offset(0, 5),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: AppColors.borderHairline.withOpacity(0.9),
+                width: 1.2,
               ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: AppDimensions.roundedLg,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // 1. Sliding Window PageView
-                PageView.builder(
-                  controller: _pageController,
-                  physics: const BouncingScrollPhysics(),
-                  itemCount: bannerList.length,
-                  onPageChanged: (index) {
-                    setState(() {
-                      _currentPage = index;
-                    });
-                  },
-                  itemBuilder: (context, index) {
-                    final banner = bannerList[index];
-                    return GestureDetector(
-                      onTap: () => _handleBannerTap(banner, productsProvider),
-                      child: Container(
-                        color: const Color(0xFF14100E),
-                        child: CachedNetworkImage(
-                          imageUrl: banner.image,
-                          fit: BoxFit.cover,
-                          alignment: Alignment.center,
-                          placeholder: (context, url) => Container(
-                            color: const Color(0xFF1E1A18),
-                            child: const Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
-                                ),
-                              ),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) => Container(
-                            color: const Color(0xFF1E1A18),
-                            child: const Center(
-                              child: Icon(
-                                Icons.broken_image_rounded,
-                                color: Colors.white38,
-                                size: 36,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.06),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
                 ),
-
-                // 2. Dots Indicator
-                if (bannerList.length > 1)
-                  Positioned(
-                    bottom: 10,
-                    left: 0,
-                    right: 0,
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.38),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: Colors.white.withOpacity(0.15),
-                            width: 0.8,
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: List.generate(
-                            bannerList.length,
-                            (index) {
-                              final isActive = _currentPage == index;
-                              return AnimatedContainer(
-                                duration: const Duration(milliseconds: 250),
-                                curve: Curves.easeOutCubic,
-                                margin: const EdgeInsets.symmetric(horizontal: 3),
-                                width: isActive ? 20 : 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: isActive
-                                      ? AppColors.primary
-                                      : Colors.white.withOpacity(0.6),
-                                  borderRadius: BorderRadius.circular(3),
-                                  boxShadow: isActive
-                                      ? [
-                                          BoxShadow(
-                                            color: AppColors.primary.withOpacity(0.6),
-                                            blurRadius: 4,
-                                            offset: const Offset(0, 1),
-                                          )
-                                        ]
-                                      : null,
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              clipBehavior: Clip.antiAliasWithSaveLayer,
+              child: AspectRatio(
+                aspectRatio: 3.25,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // 1. Sliding Window PageView
+                    PageView.builder(
+                      controller: _pageController,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: bannerList.length,
+                      onPageChanged: (index) {
+                        setState(() {
+                          _currentPage = index;
+                        });
+                      },
+                      itemBuilder: (context, index) {
+                        final banner = bannerList[index];
+                        return GestureDetector(
+                          onTap: () => _handleBannerTap(banner, productsProvider),
+                          child: CachedNetworkImage(
+                            imageUrl: banner.image,
+                            fit: BoxFit.fitWidth,
+                            alignment: Alignment.center,
+                            placeholder: (context, url) => Container(
+                              color: AppColors.surfaceSubtle,
+                              child: const Center(
+                                child: SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(AppColors.primary),
+                                  ),
                                 ),
-                              );
-                            },
+                              ),
+                            ),
+                            errorWidget: (context, url, error) => Container(
+                              color: AppColors.surfaceSubtle,
+                              child: const Center(
+                                child: Icon(
+                                  Icons.broken_image_rounded,
+                                  color: AppColors.textMuted,
+                                  size: 32,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+
+                    // 2. Dots Indicator
+                    if (bannerList.length > 1)
+                      Positioned(
+                        bottom: 5,
+                        left: 0,
+                        right: 0,
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.35),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: List.generate(
+                                bannerList.length,
+                                (index) {
+                                  final isActive = _currentPage == index;
+                                  return AnimatedContainer(
+                                    duration: const Duration(milliseconds: 250),
+                                    curve: Curves.easeOutCubic,
+                                    margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                                    width: isActive ? 16 : 5,
+                                    height: 5,
+                                    decoration: BoxDecoration(
+                                      color: isActive
+                                          ? AppColors.primary
+                                          : Colors.white.withOpacity(0.6),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-              ],
+                  ],
+                ),
+              ),
             ),
           ),
         );

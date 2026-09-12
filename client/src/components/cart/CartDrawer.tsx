@@ -5,6 +5,7 @@ import { useCart } from "@/lib/cart";
 import { isAuthenticated, getStoredUser } from "@/lib/auth";
 import api from "@/lib/api";
 import { useLocation } from "@/context/LocationContext";
+import { toast } from "@/lib/toast";
 
 interface Address {
   _id: string;
@@ -214,7 +215,7 @@ export default function CartDrawer() {
       }
     } catch (err) {
       console.error("Failed to add address:", err);
-      alert("Failed to save address");
+      toast.error("Failed to save address. Please try again.", "Address Error");
     }
   };
 
@@ -246,7 +247,7 @@ export default function CartDrawer() {
   const handleConfirmOrder = async () => {
     if (isPlacingOrder) return;
     if (fulfillmentType === "delivery" && !selectedAddressId && addresses.length > 0) {
-      alert("Please select a delivery address.");
+      toast.warning("Please select a delivery address to proceed.", "Address Required");
       return;
     }
 
@@ -280,7 +281,7 @@ export default function CartDrawer() {
       }
     } catch (err: any) {
       console.error("Failed to place order:", err);
-      alert(err.response?.data?.message || "Failed to place order. Please try again.");
+      toast.error(err.response?.data?.message || "Failed to place order. Please try again.", "Order Failed");
     } finally {
       setIsPlacingOrder(false);
     }
@@ -290,7 +291,7 @@ export default function CartDrawer() {
   const handleRazorpayPayment = async () => {
     if (isPlacingOrder) return;
     if (fulfillmentType === "delivery" && !selectedAddressId && addresses.length > 0) {
-      alert("Please select a delivery address.");
+      toast.warning("Please select a delivery address to proceed.", "Address Required");
       return;
     }
 
@@ -368,7 +369,7 @@ export default function CartDrawer() {
 
         const rzp = new (window as any).Razorpay(options);
         rzp.on("payment.failed", function (resp: any) {
-          alert("Payment failed: " + resp.error.description);
+          toast.error("Payment failed: " + (resp.error?.description || "Transaction declined"), "Payment Error");
           setIsPlacingOrder(false);
         });
         rzp.open();
@@ -385,7 +386,10 @@ export default function CartDrawer() {
       }
     } catch (err: any) {
       console.error("Razorpay error:", err);
-      alert(err.response?.data?.message || "Payment initiation failed. Please try again or choose Cash on Delivery.");
+      toast.error(
+        err.response?.data?.message || "Payment initiation failed. Please try again or choose Cash on Delivery.",
+        "Payment Failed"
+      );
       setIsPlacingOrder(false);
     }
   };

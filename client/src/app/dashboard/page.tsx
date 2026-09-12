@@ -9,6 +9,7 @@ import { getProductById } from "@/lib/products";
 import api from "@/lib/api";
 import GoogleLiveMap from "@/components/tracking/GoogleLiveMap";
 import { getSocket } from "@/lib/socket";
+import { toast } from "@/lib/toast";
 
 type TabKey = "orders" | "support" | "addresses" | "profile" | "policy";
 
@@ -440,33 +441,39 @@ export default function DashboardPage() {
   };
 
   const handleDeleteAddress = async (id: string) => {
-    if (!window.confirm("Are you sure you want to delete this address?")) return;
-    setAddressActionLoading(true);
-    setAddressFeedback(null);
-    try {
-      const res = await api.delete<{ success: boolean; addresses: any[] }>(`/user/addresses/${id}`);
-      if (res.data.success && Array.isArray(res.data.addresses)) {
-        setAddresses(
-          res.data.addresses.map((a: any) => ({
-            id: a._id || a.id,
-            label: a.tag || "Home",
-            address: formatAddressString(a),
-            isDefault: !!a.isDefault,
-            line1: a.line1 || "",
-            line2: a.line2 || "",
-            city: a.city || "Ranchi",
-            pincode: a.pincode || "834001",
-            landmark: a.landmark || "",
-          }))
-        );
-        setAddressFeedback({ type: "success", message: "Address deleted successfully!" });
-        setTimeout(() => setAddressFeedback(null), 3500);
-      }
-    } catch (err: any) {
-      setAddressFeedback({ type: "error", message: err.response?.data?.message || "Failed to delete address" });
-    } finally {
-      setAddressActionLoading(false);
-    }
+    toast.confirm({
+      title: "Delete Address?",
+      message: "Are you sure you want to delete this delivery address? This action cannot be undone.",
+      confirmText: "Delete",
+      type: "danger",
+      onConfirm: async () => {
+        setAddressActionLoading(true);
+        setAddressFeedback(null);
+        try {
+          const res = await api.delete<{ success: boolean; addresses: any[] }>(`/user/addresses/${id}`);
+          if (res.data.success && Array.isArray(res.data.addresses)) {
+            setAddresses(
+              res.data.addresses.map((a: any) => ({
+                id: a._id || a.id,
+                label: a.tag || "Home",
+                address: formatAddressString(a),
+                isDefault: !!a.isDefault,
+                line1: a.line1 || "",
+                line2: a.line2 || "",
+                city: a.city || "Ranchi",
+                pincode: a.pincode || "834001",
+                landmark: a.landmark || "",
+              }))
+            );
+            toast.success("Address deleted successfully", "Address Removed");
+          }
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Failed to delete address", "Delete Failed");
+        } finally {
+          setAddressActionLoading(false);
+        }
+      },
+    });
   };
 
   const handleSetDefaultAddress = async (id: string) => {

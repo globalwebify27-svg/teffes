@@ -11,6 +11,7 @@ import NavbarSearch from "./NavbarSearch";
 import { useLocation } from "@/context/LocationContext";
 import LocationModal from "./LocationModal";
 import api from "@/lib/api";
+import { toast } from "@/lib/toast";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faDrumstickBite,
@@ -158,7 +159,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
 
     // Generate random OTP alert as requested
     const randomOtp = Math.floor(100000 + Math.random() * 900000);
-    alert(`Your Teffe's Login OTP is: ${randomOtp}`);
+    toast.info(`Your Teffe's Login OTP is: ${randomOtp}`, "Verification OTP", 10000);
 
     const newUser: User = {
       id: "cust-" + cleanPhone,
@@ -205,17 +206,18 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             <button
               type="button"
               onClick={openLocationModal}
+              suppressHydrationWarning
               className="hidden xl:flex items-center gap-2 px-3.5 py-2 bg-surface-container-low rounded-xl cursor-pointer hover:bg-surface-container transition-colors border border-gray-200/40 text-left"
             >
               <span className="material-symbols-outlined text-primary text-[22px]">location_on</span>
-              <div className="flex flex-col text-left">
+              <span className="flex flex-col text-left">
                 <span className="font-label-badge text-label-badge uppercase text-tertiary font-bold tracking-wider text-[10.5px]">
                   {currentLocation.label || "Deliver to (90 Mins)"}
                 </span>
                 <span className="font-label-md text-label-md text-on-surface font-semibold max-w-[170px] truncate text-[13px]">
                   {currentLocation.shortAddress || "Select Location"}
                 </span>
-              </div>
+              </span>
               <span className="material-symbols-outlined text-on-surface-variant text-[18px]">expand_more</span>
             </button>
           </div>
@@ -525,23 +527,24 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               {/* Deliver To Location (Mobile) */}
               <button
                 type="button"
+                suppressHydrationWarning
                 onClick={() => {
                   setMobileMenuOpen(false);
                   openLocationModal();
                 }}
                 className="w-full p-3 rounded-2xl bg-surface-container-low border border-gray-200 flex items-center justify-between text-left cursor-pointer mb-3"
               >
-                <div className="flex items-center gap-2.5">
+                <span className="flex items-center gap-2.5">
                   <span className="material-symbols-outlined text-primary text-[22px]">location_on</span>
-                  <div>
+                  <span className="flex flex-col text-left">
                     <span className="text-[10.5px] font-bold uppercase text-tertiary tracking-wider block">
                       Deliver to (90 Mins)
                     </span>
                     <span className="text-xs font-bold text-gray-900 truncate block max-w-[200px]">
                       {currentLocation.shortAddress || "Select Location"}
                     </span>
-                  </div>
-                </div>
+                  </span>
+                </span>
                 <span className="material-symbols-outlined text-gray-500 text-[18px]">expand_more</span>
               </button>
             </div>

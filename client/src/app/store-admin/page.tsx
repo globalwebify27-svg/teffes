@@ -7,6 +7,7 @@ import type { User } from "@/lib/auth";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPowerOff } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
@@ -212,9 +213,10 @@ function LiveOrdersTab() {
 
     try {
       await api.patch(`/store-admin/orders/${orderId}/status`, { status: next });
+      toast.success(`Order advanced to: ${next}`, "Order Updated");
       fetchOrders();
     } catch (err) {
-      alert("Failed to advance order status");
+      toast.error("Failed to advance order status", "Order Error");
     }
   };
 
@@ -237,15 +239,21 @@ function LiveOrdersTab() {
   };
 
   const handleDelayPrep = async (orderId: string) => {
-    if (!window.confirm("Add +10 minutes rush preparation delay for this order?\n\nThe customer's arrival time will automatically be extended and updated in real-time.")) {
-      return;
-    }
-    try {
-      await api.post(`/store-admin/orders/${orderId}/delay-prep`, { extraMinutes: 10 });
-      fetchOrders();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to extend prep time");
-    }
+    toast.confirm({
+      title: "Add Rush Delay?",
+      message: "Add +10 minutes rush preparation delay for this order?\n\nThe customer's arrival time will automatically be extended and updated in real-time.",
+      confirmText: "Add +10 Mins",
+      type: "warning",
+      onConfirm: async () => {
+        try {
+          await api.post(`/store-admin/orders/${orderId}/delay-prep`, { extraMinutes: 10 });
+          toast.success("Prep time extended by 10 minutes", "Delay Added");
+          fetchOrders();
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Failed to extend prep time", "Delay Error");
+        }
+      },
+    });
   };
 
   return (
@@ -471,9 +479,10 @@ function ProductsStockTab() {
   const toggleStock = async (id: string, currentStock: boolean) => {
     try {
       await api.put(`/products/${id}`, { inStock: !currentStock });
+      toast.success(!currentStock ? "Product marked in stock" : "Product marked out of stock", "Stock Updated");
       fetchProducts();
     } catch (err) {
-      alert("Failed to toggle stock status");
+      toast.error("Failed to toggle stock status", "Stock Error");
     }
   };
 
@@ -561,19 +570,20 @@ function InventoryTab() {
   const handleUpdateStock = async () => {
     if (!selectedItem) return;
     if (operation !== "set" && (!quantity || inputQty <= 0)) {
-      alert("Please enter a valid quantity");
+      toast.warning("Please enter a valid quantity", "Invalid Input");
       return;
     }
     setSubmitting(true);
     try {
       const id = selectedItem.itemId || selectedItem.id;
       await api.patch(`/store-admin/inventory/${id}`, { stock: projectedStock });
+      toast.success("Inventory stock updated successfully", "Stock Updated");
       fetchInventory();
       setShowStockModal(false);
       setSelectedItem(null);
       setQuantity("");
     } catch (err) {
-      alert("Failed to update stock quantity");
+      toast.error("Failed to update stock quantity", "Inventory Error");
     } finally {
       setSubmitting(false);
     }
@@ -1002,12 +1012,13 @@ function RidersTab() {
       await api.patch(`/store-admin/orders/${selectedOrder.orderId || selectedOrder.id}/assign-rider`, {
         riderId: selectedRiderId
       });
+      toast.success("Rider assigned to order successfully", "Rider Assigned");
       fetchData();
       setShowAssignModal(false);
       setSelectedOrder(null);
       setSelectedRiderId("");
     } catch (err) {
-      alert("Failed to assign rider to order");
+      toast.error("Failed to assign rider to order", "Dispatch Error");
     } finally {
       setSubmitting(false);
     }
@@ -1184,9 +1195,10 @@ function ReturnsTab() {
   const updateStatus = async (requestId: string, status: string) => {
     try {
       await api.patch(`/store-admin/returns/${requestId}/status`, { status });
+      toast.success(`Exchange status updated to: ${status}`, "Request Updated");
       fetchReturns();
     } catch (err) {
-      alert("Failed to update exchange status");
+      toast.error("Failed to update exchange status", "Exchange Error");
     }
   };
 

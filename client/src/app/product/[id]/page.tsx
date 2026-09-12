@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { getProductById, getRelatedProducts, fetchProductById, Product } from "@/lib/products";
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
+import { toast } from "@/lib/toast";
 
 interface ProductPageProps {
   params: Promise<{ id: string }>;
@@ -22,13 +23,20 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
 
   useEffect(() => {
     let isMounted = true;
-    fetchProductById(productId).then((res) => {
-      if (isMounted && res) {
-        setProduct(res.product);
-        setRelatedProducts(res.related);
-        setLoading(false);
-      }
-    });
+    setLoading(true);
+    fetchProductById(productId)
+      .then((res) => {
+        if (isMounted) {
+          if (res) {
+            setProduct(res.product);
+            setRelatedProducts(res.related);
+          }
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (isMounted) setLoading(false);
+      });
     return () => {
       isMounted = false;
     };
@@ -47,6 +55,26 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
   const [reviewStats, setReviewStats] = useState({ totalRatings: 0, averageRating: "0" });
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [reviewForm, setReviewForm] = useState({ rating: 5, title: "", comment: "" });
+  const [reviewPage, setReviewPage] = useState(1);
+  const reviewsPerPage = 5;
+  const totalReviewPages = Math.ceil(reviews.length / reviewsPerPage) || 1;
+
+  const displayedReviews = useMemo(() => {
+    const start = (reviewPage - 1) * reviewsPerPage;
+    return reviews.slice(start, start + reviewsPerPage);
+  }, [reviews, reviewPage]);
+
+  // Only use real database images: if product has 1 image, show 1 image; if multiple, show all real images
+  const allImages = useMemo(() => {
+    if (!product) return [];
+    if (product.images && product.images.length > 0) {
+      return product.images.filter((img) => typeof img === "string" && img.trim().length > 0);
+    }
+    if (product.image && product.image.trim().length > 0) {
+      return [product.image];
+    }
+    return [];
+  }, [product]);
   
   useEffect(() => {
     import("@/lib/api").then(({ default: api }) => {
@@ -65,13 +93,18 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
       const api = (await import("@/lib/api")).default;
       const res = await api.post("/reviews", { ...reviewForm, productId });
       if (res.data.success) {
-        alert("Review added successfully!");
+        toast.success("Review submitted successfully! Thank you for your feedback.", "Review Added");
         setReviews([res.data.review, ...reviews]);
+        if (res.data.stats) setReviewStats(res.data.stats);
+        setReviewPage(1);
         setIsReviewModalOpen(false);
         setReviewForm({ rating: 5, title: "", comment: "" });
       }
     } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to add review. Please login and ensure you have purchased this item.");
+      toast.error(
+        err.response?.data?.message || "Failed to add review. Please login and ensure you have purchased this item.",
+        "Review Not Added"
+      );
     }
   };
 
@@ -81,6 +114,18 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
     setZoomOrigin({ x, y });
   };
+
+  // Loading State
+  if (loading) {
+    return (
+      <div className="min-h-[70vh] bg-surface-container-low flex items-center justify-center p-6">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
+          <p className="font-label-md text-slate-body">Loading fresh artisanal cut...</p>
+        </div>
+      </div>
+    );
+  }
 
   // If product not found
   if (!product) {
@@ -109,41 +154,6 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0;
 
-  // Build high quality multi-image list for the gallery
-  const allImages = useMemo(() => {
-    if (product.images && product.images.length > 1) {
-      return product.images;
-    }
-    // If only 1 image, supply aesthetic culinary alternate angles
-    const baseImg = product.image;
-    if (product.category === "chicken") {
-      return [
-        baseImg,
-        "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=1200&q=80",
-      ];
-    } else if (product.category === "mutton") {
-      return [
-        baseImg,
-        "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&w=1200&q=80",
-      ];
-    } else if (product.category === "fish") {
-      return [
-        baseImg,
-        "https://images.unsplash.com/photo-1534482421-64566f976cfa?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=1200&q=80",
-      ];
-    } else if (product.category === "eggs") {
-      return [
-        baseImg,
-        "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=1200&q=80",
-        "https://images.unsplash.com/photo-1506976785307-8732e854ad03?auto=format&fit=crop&w=1200&q=80",
-      ];
-    }
-    return [baseImg];
-  }, [product]);
-
   const activeImage = allImages[selectedImageIndex] || allImages[0] || product.image;
 
   const handleAddToCart = () => {
@@ -164,6 +174,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
       if (navigator.clipboard) {
         await navigator.clipboard.writeText(window.location.href);
         setCopiedShare(true);
+        toast.success("Product link copied to clipboard!", "Link Copied");
         setTimeout(() => setCopiedShare(false), 2200);
       }
     } catch {
@@ -470,36 +481,98 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
               <p className="text-xs text-gray-500">Be the first to review this cut!</p>
             </div>
           ) : (
-            <div className="space-y-6">
-              {reviews.map((rev) => (
-                <div key={rev._id} className="pb-6 border-b border-gray-100 last:border-0 last:pb-0">
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
-                        {rev.userId?.name || "Customer"}
-                        {rev.isVerifiedPurchase && (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5">
-                            <span className="material-symbols-outlined text-[12px]">verified</span> Verified
-                          </span>
-                        )}
-                      </h4>
-                      <div className="flex text-amber-400 mt-1">
-                        {[...Array(5)].map((_, i) => (
-                          <span key={i} className={`material-symbols-outlined text-[14px] ${i < rev.rating ? "filled" : ""}`}>
-                            star
-                          </span>
-                        ))}
+            <>
+              <div className="space-y-6">
+                {displayedReviews.map((rev) => (
+                  <div key={rev._id} className="pb-6 border-b border-gray-100 last:border-0 last:pb-0">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <h4 className="font-bold text-gray-900 text-sm flex items-center gap-2">
+                          {rev.userId?.name || "Customer"}
+                          {rev.isVerifiedPurchase && (
+                            <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded uppercase font-bold flex items-center gap-0.5">
+                              <span className="material-symbols-outlined text-[12px]">verified</span> Verified
+                            </span>
+                          )}
+                        </h4>
+                        <div className="flex text-amber-400 mt-1">
+                          {[...Array(5)].map((_, i) => (
+                            <span key={i} className={`material-symbols-outlined text-[14px] ${i < rev.rating ? "filled" : ""}`}>
+                              star
+                            </span>
+                          ))}
+                        </div>
                       </div>
+                      <span className="text-xs text-gray-400">
+                        {new Date(rev.createdAt).toLocaleDateString()}
+                      </span>
                     </div>
-                    <span className="text-xs text-gray-400">
-                      {new Date(rev.createdAt).toLocaleDateString()}
-                    </span>
+                    {rev.title && <h5 className="font-bold text-gray-800 text-sm mb-1">{rev.title}</h5>}
+                    {rev.comment && <p className="text-sm text-slate-600 leading-relaxed">{rev.comment}</p>}
                   </div>
-                  {rev.title && <h5 className="font-bold text-gray-800 text-sm mb-1">{rev.title}</h5>}
-                  {rev.comment && <p className="text-sm text-slate-600 leading-relaxed">{rev.comment}</p>}
+                ))}
+              </div>
+
+              {/* ─── Fancy Right-Aligned Pagination ───────────────────────── */}
+              {totalReviewPages > 1 && (
+                <div className="flex flex-col sm:flex-row items-center justify-between mt-8 pt-6 border-t border-gray-100 gap-4">
+                  <div className="text-xs font-semibold text-slate-500">
+                    Showing <span className="text-gray-900 font-bold">{(reviewPage - 1) * reviewsPerPage + 1}</span>–<span className="text-gray-900 font-bold">{Math.min(reviewPage * reviewsPerPage, reviews.length)}</span> of <span className="text-gray-900 font-bold">{reviews.length}</span> customer reviews
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-end sm:self-auto">
+                    {/* Previous Button */}
+                    <button
+                      type="button"
+                      onClick={() => setReviewPage((prev) => Math.max(1, prev - 1))}
+                      disabled={reviewPage === 1}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all border ${
+                        reviewPage === 1
+                          ? "border-gray-200 text-gray-300 cursor-not-allowed bg-gray-50"
+                          : "border-gray-200 text-gray-700 hover:text-primary hover:border-primary/40 hover:bg-primary/5 cursor-pointer bg-white shadow-xs active:scale-95"
+                      }`}
+                      aria-label="Previous reviews page"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                    </button>
+
+                    {/* Page Number Pills */}
+                    {Array.from({ length: totalReviewPages }, (_, i) => i + 1).map((page) => {
+                      const isActive = page === reviewPage;
+                      return (
+                        <button
+                          key={page}
+                          type="button"
+                          onClick={() => setReviewPage(page)}
+                          className={`min-w-9 h-9 px-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                            isActive
+                              ? "bg-primary text-white border-primary shadow-sm shadow-primary/20 ring-2 ring-primary/20 scale-105"
+                              : "bg-white text-gray-700 border-gray-200 hover:border-gray-300 hover:bg-gray-50 active:scale-95"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      );
+                    })}
+
+                    {/* Next Button */}
+                    <button
+                      type="button"
+                      onClick={() => setReviewPage((prev) => Math.min(totalReviewPages, prev + 1))}
+                      disabled={reviewPage === totalReviewPages}
+                      className={`w-9 h-9 rounded-xl flex items-center justify-center transition-all border ${
+                        reviewPage === totalReviewPages
+                          ? "border-gray-200 text-gray-300 cursor-not-allowed bg-gray-50"
+                          : "border-gray-200 text-gray-700 hover:text-primary hover:border-primary/40 hover:bg-primary/5 cursor-pointer bg-white shadow-xs active:scale-95"
+                      }`}
+                      aria-label="Next reviews page"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                    </button>
+                  </div>
                 </div>
-              ))}
-            </div>
+              )}
+            </>
           )}
         </section>
 

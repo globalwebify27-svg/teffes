@@ -175,14 +175,25 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
       final api = ApiClient();
       try {
-        await api.post(ApiEndpoints.createOrder, data: payload);
+        final res = await api.post(ApiEndpoints.createOrder, data: payload);
+        if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
+          final serverOrder = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
+          auth.addOrder(serverOrder);
+          cart.clearCart();
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
+            );
+          }
+          return;
+        }
       } catch (_) {}
 
-      // Add to AuthProvider live orders list
+      // Add to AuthProvider live orders list (fallback if offline)
       final createdOrder = OrderModel(
         id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
         orderId: orderId,
-        status: isPickup ? 'Ready' : 'Dispatched in Insulated Cold-Box',
+        status: 'Pending',
         amount: effectiveGrandTotal,
         placedAt: 'Just Now',
         items: cart.items.values.map((i) => {
@@ -203,7 +214,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         pickupMode: isPickup,
         targetDeliveryTime: DateTime.now().add(const Duration(minutes: 35)).toIso8601String(),
         prepTimeMinutes: 25,
-        remainingTransitMinutes: 12,
+        remainingTransitMinutes: isPickup ? 0 : 12,
         etaStage: 'PREPARING',
         rider: isPickup
             ? null

@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import api from "@/lib/api";
 import { isAuthenticated } from "@/lib/auth";
+import { toast } from "@/lib/toast";
 
 export interface UserAddress {
   _id?: string;
@@ -99,7 +100,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   // GPS Location Detection via browser navigator.geolocation
   const detectLocation = async (): Promise<boolean> => {
     if (!navigator.geolocation) {
-      alert("Geolocation is not supported by your browser");
+      toast.warning("Geolocation is not supported by your browser.", "Location Unsupported");
       return false;
     }
 
@@ -135,6 +136,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
             setIsDetecting(false);
             setIsLocationModalOpen(false);
+            toast.success(`Location detected: ${short}`, "Location Updated");
             resolve(true);
           } catch (err) {
             console.warn("Reverse geocode fallback:", err);
@@ -149,6 +151,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem("teffes_current_location", JSON.stringify(fallbackLoc));
             setIsDetecting(false);
             setIsLocationModalOpen(false);
+            toast.success(`Location set to GPS: ${lat.toFixed(3)}, ${lng.toFixed(3)}`, "Location Set");
             resolve(true);
           }
         },
@@ -158,7 +161,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           if (error.code === error.PERMISSION_DENIED) {
             msg = "Location permission denied. Please allow location access in your browser or select an address below.";
           }
-          alert(msg);
+          toast.warning(msg, "Location Access");
           resolve(false);
         },
         { timeout: 10000, enableHighAccuracy: true }

@@ -4,6 +4,7 @@ class ProductModel {
   final double price;
   final double originalPrice;
   final String image;
+  final List<String> images;
   final String netWeight;
   final String? grossWeight;
   final String category;
@@ -26,6 +27,7 @@ class ProductModel {
     required this.price,
     required this.originalPrice,
     required this.image,
+    this.images = const [],
     required this.netWeight,
     this.grossWeight,
     required this.category,
@@ -43,13 +45,36 @@ class ProductModel {
     this.description = '',
   });
 
+  // Strictly return real database images only: no artificial fallback stock images
+  List<String> get allImages {
+    if (images.isNotEmpty) {
+      final validImages = images.where((e) => e.trim().isNotEmpty).toList();
+      if (validImages.isNotEmpty) return validImages;
+    }
+    if (image.trim().isNotEmpty) return [image.trim()];
+    return [];
+  }
+
   factory ProductModel.fromJson(Map<String, dynamic> json) {
+    final rawImages = json['images'];
+    List<String> parsedImages = [];
+    if (rawImages is List) {
+      parsedImages = rawImages
+          .where((e) => e != null && e.toString().trim().isNotEmpty)
+          .map((e) => e.toString().trim())
+          .toList();
+    }
+    if (parsedImages.isEmpty && json['image'] != null && json['image'].toString().trim().isNotEmpty) {
+      parsedImages = [json['image'].toString().trim()];
+    }
+
     return ProductModel(
       id: json['id'] ?? json['_id'] ?? '',
       name: json['name'] ?? '',
       price: (json['price'] as num?)?.toDouble() ?? 0.0,
       originalPrice: (json['originalPrice'] as num?)?.toDouble() ?? (json['price'] as num?)?.toDouble() ?? 0.0,
-      image: json['image'] ?? '',
+      image: json['image'] ?? (parsedImages.isNotEmpty ? parsedImages.first : ''),
+      images: parsedImages,
       netWeight: json['netWeight'] ?? '500g',
       grossWeight: json['grossWeight'],
       category: json['category'] ?? 'chicken',
@@ -75,6 +100,7 @@ class ProductModel {
       'price': price,
       'originalPrice': originalPrice,
       'image': image,
+      'images': images,
       'netWeight': netWeight,
       'grossWeight': grossWeight,
       'category': category,

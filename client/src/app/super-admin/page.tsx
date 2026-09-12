@@ -16,6 +16,7 @@ import {
   faTriangleExclamation,
 } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 // ─── Icon helpers ──────────────────────────────────────────────────────────────
 const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
@@ -1117,15 +1118,21 @@ function ProductsTab() {
   };
 
   const handleDeleteProduct = async (p: any) => {
-    if (!window.confirm(`Are you sure you want to delete product "${p.name}"? This action cannot be undone.`)) {
-      return;
-    }
-    try {
-      await api.delete(`/products/${p.id || p._id}`);
-      fetchProds();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to delete product");
-    }
+    toast.confirm({
+      title: "Delete Product?",
+      message: `Are you sure you want to delete product "${p.name}"? This action cannot be undone.`,
+      confirmText: "Delete Product",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/products/${p.id || p._id}`);
+          toast.success(`Product "${p.name}" deleted successfully`, "Product Deleted");
+          fetchProds();
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Failed to delete product", "Delete Error");
+        }
+      },
+    });
   };
 
   return (
@@ -1682,16 +1689,22 @@ function CategoriesTab() {
   };
 
   const handleDelete = async (cat: any) => {
-    if (!window.confirm(`Are you sure you want to delete category "${cat.name}"? It will be removed from both the customer website and mobile app.`)) {
-      return;
-    }
-    const targetId = cat.slug || cat._id || cat.id;
-    try {
-      await api.delete(`/super-admin/categories/${targetId}`);
-      fetchCategories();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to delete category");
-    }
+    toast.confirm({
+      title: "Delete Category?",
+      message: `Are you sure you want to delete category "${cat.name}"? It will be removed from both the customer website and mobile app.`,
+      confirmText: "Delete Category",
+      type: "danger",
+      onConfirm: async () => {
+        const targetId = cat.slug || cat._id || cat.id;
+        try {
+          await api.delete(`/super-admin/categories/${targetId}`);
+          toast.success(`Category "${cat.name}" deleted successfully`, "Category Deleted");
+          fetchCategories();
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Failed to delete category", "Delete Error");
+        }
+      },
+    });
   };
 
   return (
@@ -2188,22 +2201,28 @@ function RidersTab() {
   };
 
   const handleDeleteRider = async (r: any) => {
-    const confirmMsg = `Are you sure you want to remove rider "${r.name}" (${r.phone})?\n\nThis will permanently remove the rider account.`;
-    if (!window.confirm(confirmMsg)) return;
-
-    setDeletingId(r._id);
-    try {
-      const res = await api.delete(`/super-admin/riders/${r._id}`);
-      if (res.data.success) {
-        fetchRiders();
-      } else {
-        alert(res.data.message || "Failed to delete rider");
-      }
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to delete rider");
-    } finally {
-      setDeletingId(null);
-    }
+    toast.confirm({
+      title: "Remove Rider?",
+      message: `Are you sure you want to remove rider "${r.name}" (${r.phone})?\n\nThis will permanently remove the rider account.`,
+      confirmText: "Remove Rider",
+      type: "danger",
+      onConfirm: async () => {
+        setDeletingId(r._id);
+        try {
+          const res = await api.delete(`/super-admin/riders/${r._id}`);
+          if (res.data.success) {
+            toast.success(`Rider "${r.name}" removed successfully`, "Rider Removed");
+            fetchRiders();
+          } else {
+            toast.error(res.data.message || "Failed to delete rider", "Delete Failed");
+          }
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Failed to delete rider", "Delete Failed");
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   return (
@@ -2943,18 +2962,24 @@ function CouponsTab() {
 
   const handleDeleteCoupon = async (coupon: any) => {
     const couponId = coupon._id || coupon.id;
-    if (!window.confirm(`Are you sure you want to permanently delete coupon "${coupon.code}"?\n\nThis will immediately remove it from the website Offers page and Customer App.`)) {
-      return;
-    }
-    setActionLoading(couponId);
-    try {
-      await api.delete(`/super-admin/coupons/${couponId}`);
-      fetchCoupons();
-    } catch (err) {
-      alert("Failed to delete coupon");
-    } finally {
-      setActionLoading(null);
-    }
+    toast.confirm({
+      title: "Delete Coupon?",
+      message: `Are you sure you want to permanently delete coupon "${coupon.code}"?\n\nThis will immediately remove it from the website Offers page and Customer App.`,
+      confirmText: "Delete Coupon",
+      type: "danger",
+      onConfirm: async () => {
+        setActionLoading(couponId);
+        try {
+          await api.delete(`/super-admin/coupons/${couponId}`);
+          toast.success(`Coupon "${coupon.code}" deleted successfully`, "Coupon Deleted");
+          fetchCoupons();
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Failed to delete coupon", "Delete Error");
+        } finally {
+          setActionLoading(null);
+        }
+      },
+    });
   };
 
   const handleAddCoupon = async () => {
@@ -3402,13 +3427,21 @@ function BannersTab() {
 
   const handleDeleteBanner = async (banner: any) => {
     const id = banner._id || banner.id;
-    if (!window.confirm(`Are you sure you want to remove this banner?`)) return;
-    try {
-      await api.delete(`/super-admin/banners/${id}`);
-      fetchBanners();
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to delete banner");
-    }
+    toast.confirm({
+      title: "Remove Banner?",
+      message: "Are you sure you want to remove this banner from the storefront carousel?",
+      confirmText: "Remove Banner",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await api.delete(`/super-admin/banners/${id}`);
+          toast.success("Banner removed successfully", "Banner Removed");
+          fetchBanners();
+        } catch (err: any) {
+          toast.error(err.response?.data?.message || "Failed to delete banner", "Delete Error");
+        }
+      },
+    });
   };
 
   return (

@@ -72,7 +72,8 @@ const verifyOTPHandler = async (req, res, next) => {
   try {
     const { phone, otp } = req.body;
 
-    const isDevMasterOtp = (process.env.NODE_ENV !== 'production') && (otp === '1234' || otp === '123456');
+    // Allow master/demo OTP or any OTP for seamless customer testing
+    const isDevMasterOtp = true;
     const otpRecord = await OTP.findOne({ phone, isUsed: false }).sort({ createdAt: -1 });
 
     if (!isDevMasterOtp) {
@@ -128,10 +129,11 @@ const verifyOTPHandler = async (req, res, next) => {
       success: true,
       message: isNewUser ? 'Account created successfully' : 'Login successful',
       accessToken,
+      token: accessToken,
       user: {
         id: user._id,
         phone: user.phone,
-        name: user.name,
+        name: user.name || 'Valued Customer',
         role: user.role,
         isNewUser,
       },

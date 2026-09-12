@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useLocation, UserAddress } from "@/context/LocationContext";
 import { isAuthenticated } from "@/lib/auth";
 import api from "@/lib/api";
+import { toast } from "@/lib/toast";
 
 export default function LocationModal() {
   const {
@@ -33,7 +34,7 @@ export default function LocationModal() {
   const handleSaveAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAddr.line1.trim()) {
-      alert("Please enter your flat / house number & building name");
+      toast.warning("Please enter your flat / house number & building name", "Address Incomplete");
       return;
     }
 
@@ -48,6 +49,7 @@ export default function LocationModal() {
       localStorage.setItem("teffes_current_location", JSON.stringify(guestLoc));
       setShowAddForm(false);
       closeLocationModal();
+      toast.success("Delivery address updated!", "Location Set");
       return;
     }
 
@@ -60,10 +62,11 @@ export default function LocationModal() {
         if (newest) selectSavedAddress(newest);
         setShowAddForm(false);
         setNewAddr({ tag: "Home", line1: "", line2: "", city: "Ranchi", pincode: "834001" });
+        toast.success("Delivery address saved successfully!", "Address Saved");
       }
     } catch (err) {
       console.error("Failed to save address:", err);
-      alert("Failed to save address to your account. Saved locally instead.");
+      toast.warning("Failed to save address to account. Saved locally instead.", "Address Saved");
       const fallbackLoc = {
         label: newAddr.tag,
         shortAddress: `${newAddr.line1.slice(0, 24)}, ${newAddr.city}`,

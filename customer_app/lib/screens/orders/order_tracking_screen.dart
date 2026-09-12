@@ -93,10 +93,17 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
           'sub': 'Collect at: ${order.storeName ?? "Kishore Ganj Hub"} Counter',
         };
       }
+      if (status == 'Cutting') {
+        return {
+          'badge': 'LIVE BUTCHERY STATION',
+          'title': 'Butcher Preparing Cuts',
+          'sub': 'Live butchery station: ${order.storeName ?? "Kishore Ganj Hub"}',
+        };
+      }
       return {
-        'badge': 'LIVE STATUS FROM STORE ADMIN',
-        'title': 'Butcher Preparing Cuts',
-        'sub': 'Live butchery station: ${order.storeName ?? "Kishore Ganj Hub"}',
+        'badge': 'ORDER RECEIVED',
+        'title': 'Order Confirmed',
+        'sub': 'Verified for counter pickup at ${order.storeName ?? "Kishore Ganj Hub"}',
       };
     }
 
@@ -486,7 +493,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                         ),
                       ),
 
-                      // Live Moving Rider Marker (Center)
+                      // Center Marker: Store Counter (Pickup) vs Moving Rider (Delivery)
                       Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -494,15 +501,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: status == 'Delivered' ? AppColors.hygieneEmerald : Colors.amber.shade600,
+                                color: status == 'Delivered'
+                                    ? AppColors.hygieneEmerald
+                                    : (order.isPickup && status == 'Ready')
+                                        ? AppColors.hygieneEmerald
+                                        : Colors.amber.shade600,
                                 shape: BoxShape.circle,
                                 border: Border.all(color: Colors.white, width: 2.5),
                                 boxShadow: [
-                                  BoxShadow(color: (status == 'Delivered' ? Colors.green : Colors.amber).withOpacity(0.5), blurRadius: 10, spreadRadius: 3),
+                                  BoxShadow(
+                                    color: (status == 'Delivered' || (order.isPickup && status == 'Ready')
+                                            ? Colors.green
+                                            : Colors.amber)
+                                        .withOpacity(0.5),
+                                    blurRadius: 10,
+                                    spreadRadius: 3,
+                                  ),
                                 ],
                               ),
                               child: Icon(
-                                status == 'Delivered' ? Icons.check_circle_rounded : Icons.two_wheeler_rounded,
+                                status == 'Delivered'
+                                    ? Icons.check_circle_rounded
+                                    : order.isPickup
+                                        ? Icons.storefront_rounded
+                                        : Icons.two_wheeler_rounded,
                                 color: Colors.white,
                                 size: 20,
                               ),
@@ -511,16 +533,32 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                               decoration: BoxDecoration(
-                                color: status == 'Delivered' ? AppColors.hygieneLight : Colors.amber.shade100,
+                                color: status == 'Delivered'
+                                    ? AppColors.hygieneLight
+                                    : (order.isPickup && status == 'Ready')
+                                        ? AppColors.hygieneLight
+                                        : Colors.amber.shade100,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: status == 'Delivered' ? AppColors.hygieneDark.withOpacity(0.3) : Colors.amber.shade300),
+                                border: Border.all(
+                                  color: status == 'Delivered'
+                                      ? AppColors.hygieneDark.withOpacity(0.3)
+                                      : (order.isPickup && status == 'Ready')
+                                          ? AppColors.hygieneDark.withOpacity(0.3)
+                                          : Colors.amber.shade300,
+                                ),
                               ),
                               child: Text(
-                                status == 'Delivered' ? 'Order Delivered' : '${order.rider?.name ?? "Rider"} is here',
+                                status == 'Delivered'
+                                    ? (order.isPickup ? 'Picked Up from Counter' : 'Order Delivered')
+                                    : order.isPickup
+                                        ? (status == 'Ready' ? 'Ready at Takeaway Counter' : 'Preparing at Store Counter')
+                                        : '${order.rider?.name ?? "Rider"} is here',
                                 style: TextStyle(
                                   fontWeight: FontWeight.w800,
                                   fontSize: 10,
-                                  color: status == 'Delivered' ? AppColors.hygieneDark : const Color(0xFF78350F),
+                                  color: status == 'Delivered' || (order.isPickup && status == 'Ready')
+                                      ? AppColors.hygieneDark
+                                      : const Color(0xFF78350F),
                                 ),
                               ),
                             ),
@@ -582,7 +620,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'Live GPS · ${order.status} (Insulated Fresh-Box)',
+                                'Live GPS · ${order.status} (${order.isPickup ? "Store Takeaway Counter" : "Insulated Fresh-Box"})',
                                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 9.5, color: AppColors.textPrimary),
                               ),
                             ],
@@ -751,8 +789,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                       desc: order.isPickup
                           ? 'Verified for counter pickup at ${order.storeName ?? "Kishore Ganj Hub"}'
                           : 'Verified by butchery manager',
-                      isCompleted: true,
-                      isActive: false,
+                      isCompleted: status != 'Pending',
+                      isActive: status == 'Pending',
                       showLine: true,
                     ),
 

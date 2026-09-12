@@ -81,6 +81,14 @@ const productSchema = new mongoose.Schema(
       type: Number,
       default: 100,
     },
+    baseRating: {
+      type: Number,
+      default: 4.8,
+    },
+    baseRatingCount: {
+      type: Number,
+      default: 100,
+    },
     inStock: {
       type: Boolean,
       default: true,

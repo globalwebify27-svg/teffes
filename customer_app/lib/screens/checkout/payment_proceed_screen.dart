@@ -116,14 +116,26 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
       };
 
       try {
-        await _api.post(ApiEndpoints.createOrder, data: orderPayload);
+        final res = await _api.post(ApiEndpoints.createOrder, data: orderPayload);
+        if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
+          final serverOrder = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
+          auth.addOrder(serverOrder);
+          cart.clearCart();
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
+              (route) => route.isFirst,
+            );
+          }
+          return;
+        }
       } catch (_) {}
 
-      // 5. Add order to AuthProvider active orders
+      // 5. Fallback local order if offline / server call fails
       final createdOrder = OrderModel(
         id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
         orderId: newOrderId,
-        status: widget.isPickup ? 'Ready' : 'Dispatched in Insulated Cold-Box',
+        status: 'Pending',
         amount: widget.payableAmount,
         placedAt: 'Just Now',
         items: cart.items.values.map((i) => {
@@ -140,7 +152,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         pickupMode: widget.isPickup,
         targetDeliveryTime: DateTime.now().add(const Duration(minutes: 35)).toIso8601String(),
         prepTimeMinutes: 25,
-        remainingTransitMinutes: 12,
+        remainingTransitMinutes: widget.isPickup ? 0 : 12,
         etaStage: 'PREPARING',
         rider: widget.isPickup
             ? null

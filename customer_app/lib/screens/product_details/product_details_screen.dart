@@ -8,16 +8,40 @@ import '../../core/utils/page_transitions.dart';
 import '../../models/product_model.dart';
 import '../../providers/cart_provider.dart';
 import '../../providers/wishlist_provider.dart';
+import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../widgets/common/quantity_stepper.dart';
 import '../cart/cart_checkout_screen.dart';
 
-class ProductDetailsScreen extends StatelessWidget {
+class ProductDetailsScreen extends StatefulWidget {
   final ProductModel product;
 
   const ProductDetailsScreen({super.key, required this.product});
 
   @override
+  State<ProductDetailsScreen> createState() => _ProductDetailsScreenState();
+}
+
+class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
+  late final PageController _pageController;
+  int _selectedImageIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final product = widget.product;
+    final images = product.allImages;
     final cart = context.watch<CartProvider>();
     final quantity = cart.getQuantity(product.id);
     final discountText = CurrencyFormatter.formatDiscount(product.originalPrice, product.price);
@@ -60,7 +84,32 @@ class ProductDetailsScreen extends StatelessWidget {
           ),
           IconButton(
             icon: const Icon(Icons.share_outlined, size: 20),
-            onPressed: () {},
+            tooltip: 'Share Product',
+            onPressed: () async {
+              final shareText =
+                  "Check out ${product.name} on Teffe's Artisanal Butchery!\n"
+                  "Fresh, tender & hygienically packed.\n"
+                  "Order now: https://teffes.com/product/${product.id}";
+              try {
+                // ignore: deprecated_member_use
+                await Share.share(
+                  shareText,
+                  subject: "Fresh ${product.name} from Teffe's",
+                );
+              } catch (_) {
+                await Clipboard.setData(ClipboardData(text: shareText));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Product link copied to clipboard!'),
+                      behavior: SnackBarBehavior.floating,
+                      backgroundColor: AppColors.primaryMaroon,
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              }
+            },
           ),
           IconButton(
             icon: Stack(
@@ -101,21 +150,33 @@ class ProductDetailsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Hero Image
+                  // Multi-Image Carousel
                   Stack(
                     children: [
                       AspectRatio(
                         aspectRatio: 1.25,
-                        child: CachedNetworkImage(
-                          imageUrl: product.image,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(color: AppColors.surfaceSubtle),
-                          errorWidget: (context, url, error) => Container(
-                            color: AppColors.surfaceSubtle,
-                            child: const Icon(Icons.restaurant_rounded, size: 48, color: AppColors.textMuted),
-                          ),
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: images.length,
+                          onPageChanged: (index) {
+                            setState(() {
+                              _selectedImageIndex = index;
+                            });
+                          },
+                          itemBuilder: (context, index) {
+                            return CachedNetworkImage(
+                              imageUrl: images[index],
+                              fit: BoxFit.cover,
+                              placeholder: (context, url) => Container(color: AppColors.surfaceSubtle),
+                              errorWidget: (context, url, error) => Container(
+                                color: AppColors.surfaceSubtle,
+                                child: const Icon(Icons.restaurant_rounded, size: 48, color: AppColors.textMuted),
+                              ),
+                            );
+                          },
                         ),
                       ),
+                      // Temperature Tag
                       Positioned(
                         bottom: 12,
                         left: 16,
@@ -131,8 +192,90 @@ class ProductDetailsScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                      // Image Counter Indicator (if more than 1 image)
+                      if (images.length > 1)
+                        Positioned(
+                          bottom: 12,
+                          right: 16,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.75),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.photo_library_outlined, color: Colors.white, size: 12),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${_selectedImageIndex + 1}/${images.length}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
                     ],
                   ),
+
+                  // Horizontal Thumbnails Strip (if more than 1 image)
+                  if (images.length > 1)
+                    Container(
+                      height: 62,
+                      margin: const EdgeInsets.only(top: 10, left: 16, right: 16),
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        itemCount: images.length,
+                        separatorBuilder: (_, __) => const SizedBox(width: 10),
+                        itemBuilder: (context, idx) {
+                          final isSelected = idx == _selectedImageIndex;
+                          return GestureDetector(
+                            onTap: () {
+                              _pageController.animateToPage(
+                                idx,
+                                duration: const Duration(milliseconds: 300),
+                                curve: Curves.easeInOut,
+                              );
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              width: 58,
+                              height: 58,
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isSelected ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                  width: isSelected ? 2.5 : 1,
+                                ),
+                                boxShadow: isSelected
+                                    ? [
+                                        BoxShadow(
+                                          color: AppColors.primaryMaroon.withOpacity(0.2),
+                                          blurRadius: 4,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: CachedNetworkImage(
+                                  imageUrl: images[idx],
+                                  fit: BoxFit.cover,
+                                  placeholder: (_, __) => Container(color: AppColors.surfaceSubtle),
+                                  errorWidget: (_, __, ___) => const Icon(Icons.broken_image, size: 20, color: AppColors.textMuted),
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
 
                   // Content
                   Padding(

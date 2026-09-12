@@ -56,7 +56,9 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final productsProvider = context.watch<ProductsProvider>();
     final categories = productsProvider.categories;
-    final freshCuts = productsProvider.freshButcheryCuts;
+    final chickenCuts = productsProvider.homeChickenCuts;
+    final fishCuts = productsProvider.homeFishCuts;
+    final muttonCuts = productsProvider.homeMuttonCuts;
     final farmFreshEggs = productsProvider.farmFreshEggs;
     final searchResults = _activeQuery.isNotEmpty
         ? productsProvider.searchAllProducts(_activeQuery)
@@ -238,82 +240,36 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: AppDimensions.spaceMd),
 
-                  // 5. Fresh Butchery Cuts Section
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Fresh Butchery Cuts',
-                                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w800,
-                                        color: AppColors.textPrimary,
-                                      ),
-                                ),
-                                const SizedBox(height: 1),
-                                Text(
-                                  'Antibiotic-free, freshly butchered today',
-                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                        fontSize: 12,
-                                        color: AppColors.textSecondary,
-                                      ),
-                                ),
-                              ],
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  SmoothPageRoute(page: const CategoryListingScreen()),
-                                );
-                              },
-                              child: const Text(
-                                'View all',
-                                style: TextStyle(
-                                  color: AppColors.primaryMaroon,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
+                  // 5. Fresh Chicken Cuts Section (4 items)
+                  _buildProductSection(
+                    context: context,
+                    title: 'Fresh Chicken Cuts',
+                    subtitle: 'Antibiotic-free, freshly butchered today',
+                    categoryKey: 'chicken',
+                    products: chickenCuts,
+                    productsProvider: productsProvider,
+                  ),
+                  const SizedBox(height: AppDimensions.spaceLg),
 
-                        // 2-Column Grid of Cuts with fixed tight height (no blank bottom space)
-                        GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 12,
-                            mainAxisSpacing: 14,
-                            mainAxisExtent: 235,
-                          ),
-                          itemCount: freshCuts.length,
-                          itemBuilder: (context, index) {
-                            final product = freshCuts[index];
-                            return ProductCard(
-                              product: product,
-                              layout: ProductCardLayout.compactGrid,
-                              onTap: () {
-                                Navigator.of(context).push(
-                                  SmoothPageRoute(page: ProductDetailsScreen(product: product)),
-                                );
-                              },
-                            );
-                          },
-                        ),
-                      ],
-                    ),
+                  // 6. Fresh Fish & Seafood Section (2 items)
+                  _buildProductSection(
+                    context: context,
+                    title: 'Fresh Fish & Seafood',
+                    subtitle: 'Daily chemical-free catch, cleaned & fresh',
+                    categoryKey: 'fish-seafood',
+                    products: fishCuts,
+                    productsProvider: productsProvider,
+                  ),
+                  const SizedBox(height: AppDimensions.spaceLg),
+
+                  // 7. Fresh Mutton Cuts Section (2 items with new heading)
+                  _buildProductSection(
+                    context: context,
+                    title: 'Fresh Mutton Cuts',
+                    subtitle: 'Tender pasture-raised rich cuts',
+                    categoryKey: 'mutton',
+                    products: muttonCuts,
+                    productsProvider: productsProvider,
                   ),
 
                   if (farmFreshEggs.isNotEmpty) ...[
@@ -404,4 +360,92 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
   }
+
+  Widget _buildProductSection({
+    required BuildContext context,
+    required String title,
+    required String subtitle,
+    required String categoryKey,
+    required List<ProductModel> products,
+    required ProductsProvider productsProvider,
+  }) {
+    if (products.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                  ),
+                ],
+              ),
+              GestureDetector(
+                onTap: () {
+                  productsProvider.selectCategory(categoryKey);
+                  Navigator.of(context).push(
+                    SmoothPageRoute(page: const CategoryListingScreen()),
+                  );
+                },
+                child: const Text(
+                  'View all',
+                  style: TextStyle(
+                    color: AppColors.primaryMaroon,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          GridView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 14,
+              mainAxisExtent: 235,
+            ),
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              final product = products[index];
+              return ProductCard(
+                product: product,
+                layout: ProductCardLayout.compactGrid,
+                onTap: () {
+                  Navigator.of(context).push(
+                    SmoothPageRoute(page: ProductDetailsScreen(product: product)),
+                  );
+                },
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
 }
+

@@ -12,6 +12,7 @@ import Footer from "@/components/layout/Footer";
 import CartDrawer from "@/components/cart/CartDrawer";
 import AdminLayoutWrapper from "@/components/layout/AdminLayoutWrapper";
 import { LocationProvider } from "@/context/LocationContext";
+import { ToastContainer } from "@/lib/toast";
 
 export const metadata: Metadata = {
   title: {
@@ -49,13 +50,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
       </head>
-      <body className={`${plusJakartaSans.variable} font-body-md text-body-md text-on-surface antialiased bg-background`}>
+      <body
+        className={`${plusJakartaSans.variable} font-body-md text-body-md text-on-surface antialiased bg-background`}
+        suppressHydrationWarning
+      >
         <LocationProvider>
           <CartProvider>
             <WishlistProvider>
@@ -71,6 +75,7 @@ export default function RootLayout({
                 {children}
               </AdminLayoutWrapper>
               <CartDrawer />
+              <ToastContainer />
             </WishlistProvider>
           </CartProvider>
         </LocationProvider>

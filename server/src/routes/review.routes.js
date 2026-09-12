@@ -5,6 +5,7 @@ const { protect } = require('../middlewares/auth');
 const router = Router();
 
 router.get('/:productId', getProductReviews);
+router.get('/product/:productId', getProductReviews);
 router.post('/', protect, addReview);
 
 module.exports = router;

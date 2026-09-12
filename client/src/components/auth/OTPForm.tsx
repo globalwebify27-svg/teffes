@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveAuth } from "@/lib/auth";
+import { toast } from "@/lib/toast";
 
 export default function OTPForm() {
   const router = useRouter();
@@ -25,8 +26,8 @@ export default function OTPForm() {
     // Generate random OTP
     const randomOtp = Math.floor(100000 + Math.random() * 900000);
 
-    // Show random OTP in alert as requested
-    alert(`Your Teffe's Login OTP is: ${randomOtp}`);
+    // Show random OTP in toast
+    toast.info(`Your Teffe's Login OTP is: ${randomOtp}`, "Verification OTP", 10000);
 
     // Set demo authenticated customer session
     saveAuth("teffes-jwt-token-" + Date.now(), {
