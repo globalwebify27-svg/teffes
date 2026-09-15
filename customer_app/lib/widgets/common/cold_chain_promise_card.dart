@@ -54,39 +54,6 @@ class ColdChainPromiseCard extends StatelessWidget {
               ],
             ),
           ),
-
-          // 100% HALAL badge
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.3)),
-            ),
-            child: const Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  "100%",
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.primaryMaroon,
-                    height: 1.0,
-                  ),
-                ),
-                Text(
-                  "HALAL",
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                    color: AppColors.primaryMaroon,
-                    height: 1.1,
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );

@@ -64,6 +64,7 @@ class ApiEndpoints {
   // Coupons
   static const String validateCoupon = '/coupons/validate';
   static const String activeCoupons = '/coupons/active';
+  static const String superOffer = '/coupons/super-offer';
 
   // Orders
   static const String createOrder = '/orders';

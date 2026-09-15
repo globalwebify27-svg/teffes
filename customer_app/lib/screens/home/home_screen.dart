@@ -7,11 +7,11 @@ import '../../core/utils/page_transitions.dart';
 import '../../models/product_model.dart';
 import '../../providers/products_provider.dart';
 import '../../widgets/common/category_card.dart';
-import '../../widgets/common/cold_chain_promise_card.dart';
 import '../../widgets/common/location_header.dart';
 import '../../widgets/common/product_card.dart';
 import '../../widgets/common/promo_banner.dart';
 import '../../widgets/common/search_input_bar.dart';
+import '../../widgets/common/super_offer_card.dart';
 import '../category/category_listing_screen.dart';
 import '../product_details/product_details_screen.dart';
 
@@ -24,6 +24,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocusNode = FocusNode();
   Timer? _debounce;
   String _activeQuery = '';
 
@@ -31,7 +32,27 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _debounce?.cancel();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  void _unfocusSearch() {
+    _searchFocusNode.unfocus();
+    FocusScope.of(context).unfocus();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  Future<void> _navigateTo(Widget page) async {
+    _unfocusSearch();
+    await Navigator.of(context).push(SmoothPageRoute(page: page));
+    if (mounted) {
+      _unfocusSearch();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _unfocusSearch();
+        }
+      });
+    }
   }
 
   void _onSearchChanged(String query) {
@@ -47,6 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _clearSearch() {
     _searchController.clear();
+    _unfocusSearch();
     setState(() {
       _activeQuery = '';
     });
@@ -66,27 +88,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfacePorcelain,
-      body: SafeArea(
-        child: RefreshIndicator(
-          color: AppColors.primaryMaroon,
-          onRefresh: () => productsProvider.fetchCatalog(),
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
-            padding: const EdgeInsets.only(bottom: 100),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 1. Top Location Header (Home ⌄ + Address + Bell)
-                const LocationHeader(),
+      body: GestureDetector(
+        onTap: _unfocusSearch,
+        behavior: HitTestBehavior.translucent,
+        child: SafeArea(
+          child: RefreshIndicator(
+            color: AppColors.primaryMaroon,
+            onRefresh: () => productsProvider.fetchCatalog(),
+            child: SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+              padding: const EdgeInsets.only(bottom: 100),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 1. Top Location Header (Home ⌄ + Address + Bell)
+                  const LocationHeader(),
 
-                // 2. Search Bar - Active on Home screen with Debounce
-                SearchInputBar(
-                  controller: _searchController,
-                  readOnly: false,
-                  hintText: 'Search all meats, cuts, chicken, mutton...',
-                  onChanged: _onSearchChanged,
-                ),
-                const SizedBox(height: 6),
+                  // 2. Search Bar - Active on Home screen with Debounce
+                  SearchInputBar(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    readOnly: false,
+                    hintText: 'Search all meats, cuts, chicken, mutton...',
+                    onChanged: _onSearchChanged,
+                  ),
+                  const SizedBox(height: 6),
 
                 // If user is searching on Home, show Search Results view
                 if (_activeQuery.isNotEmpty) ...[
@@ -159,11 +186,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           return ProductCard(
                             product: product,
                             layout: ProductCardLayout.compactGrid,
-                            onTap: () {
-                              Navigator.of(context).push(
-                                SmoothPageRoute(page: ProductDetailsScreen(product: product)),
-                              );
-                            },
+                            onTap: () => _navigateTo(ProductDetailsScreen(product: product)),
                           );
                         },
                       ),
@@ -173,9 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   PromoBanner(
                     onShopNow: () {
                       productsProvider.selectCategory('chicken');
-                      Navigator.of(context).push(
-                        SmoothPageRoute(page: const CategoryListingScreen()),
-                      );
+                      _navigateTo(const CategoryListingScreen());
                     },
                   ),
                   const SizedBox(height: AppDimensions.spaceMd),
@@ -221,9 +242,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               category: cat,
                               onTap: () {
                                 productsProvider.selectCategory(cat.key);
-                                Navigator.of(context).push(
-                                  SmoothPageRoute(page: const CategoryListingScreen()),
-                                );
+                                _navigateTo(const CategoryListingScreen());
                               },
                             );
                           },
@@ -233,12 +252,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   const SizedBox(height: AppDimensions.spaceMd),
 
-                  // Cold Chain Promise Card
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
-                    child: ColdChainPromiseCard(),
-                  ),
-                  const SizedBox(height: AppDimensions.spaceMd),
+                  // 5. Super Offer Banner (Super Admin configured or fallback latest active offer)
+                  if (productsProvider.superOffer != null) ...[
+                    SuperOfferCard(offer: productsProvider.superOffer!),
+                    const SizedBox(height: AppDimensions.spaceLg),
+                  ],
 
                   // 5. Fresh Chicken Cuts Section (4 items)
                   _buildProductSection(
@@ -308,9 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               GestureDetector(
                                 onTap: () {
                                   productsProvider.selectCategory('eggs');
-                                  Navigator.of(context).push(
-                                    SmoothPageRoute(page: const CategoryListingScreen()),
-                                  );
+                                  _navigateTo(const CategoryListingScreen());
                                 },
                                 child: const Text(
                                   'View all',
@@ -340,11 +356,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               return ProductCard(
                                 product: product,
                                 layout: ProductCardLayout.compactGrid,
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    SmoothPageRoute(page: ProductDetailsScreen(product: product)),
-                                  );
-                                },
+                                onTap: () => _navigateTo(ProductDetailsScreen(product: product)),
                               );
                             },
                           ),
@@ -358,7 +370,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildProductSection({
@@ -404,9 +417,7 @@ class _HomeScreenState extends State<HomeScreen> {
               GestureDetector(
                 onTap: () {
                   productsProvider.selectCategory(categoryKey);
-                  Navigator.of(context).push(
-                    SmoothPageRoute(page: const CategoryListingScreen()),
-                  );
+                  _navigateTo(const CategoryListingScreen());
                 },
                 child: const Text(
                   'View all',
@@ -435,11 +446,7 @@ class _HomeScreenState extends State<HomeScreen> {
               return ProductCard(
                 product: product,
                 layout: ProductCardLayout.compactGrid,
-                onTap: () {
-                  Navigator.of(context).push(
-                    SmoothPageRoute(page: ProductDetailsScreen(product: product)),
-                  );
-                },
+                onTap: () => _navigateTo(ProductDetailsScreen(product: product)),
               );
             },
           ),

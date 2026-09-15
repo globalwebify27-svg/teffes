@@ -15,7 +15,12 @@ import '../cart/cart_checkout_screen.dart';
 import '../product_details/product_details_screen.dart';
 
 class CategoryListingScreen extends StatefulWidget {
-  const CategoryListingScreen({super.key});
+  final bool showBackButton;
+
+  const CategoryListingScreen({
+    super.key,
+    this.showBackButton = true,
+  });
 
   @override
   State<CategoryListingScreen> createState() => _CategoryListingScreenState();
@@ -68,6 +73,7 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                 child: TextField(
                   controller: _searchController,
                   autofocus: true,
+                  onTapOutside: (event) => FocusScope.of(context).unfocus(),
                   onChanged: (val) => _onSearchChanged(val, productsProvider),
                   decoration: InputDecoration(
                     hintText: 'Search ${currentCatObj.label} cuts...',
@@ -135,6 +141,7 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                     )
                   : ListView.builder(
                       physics: const BouncingScrollPhysics(),
+                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd, vertical: 4),
                       itemCount: products.length,
                       itemBuilder: (context, index) {
@@ -167,21 +174,28 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd, vertical: 8),
       child: Row(
         children: [
-          // Back Button in circular container
-          GestureDetector(
-            onTap: () => Navigator.maybePop(context),
-            child: Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                color: AppColors.surfaceSubtle,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.borderHairline),
+          // Back Button in circular container (only visible if opened from a sub-page/card)
+          if (widget.showBackButton) ...[
+            GestureDetector(
+              onTap: () {
+                FocusScope.of(context).unfocus();
+                if (Navigator.canPop(context)) {
+                  Navigator.pop(context);
+                }
+              },
+              child: Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceSubtle,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.borderHairline),
+                ),
+                child: const Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: AppColors.textPrimary),
               ),
-              child: const Icon(Icons.arrow_back_ios_new_rounded, size: 16, color: AppColors.textPrimary),
             ),
-          ),
-          const SizedBox(width: 12),
+            const SizedBox(width: 12),
+          ],
 
           // Title & Location
           Expanded(

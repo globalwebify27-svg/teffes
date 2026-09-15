@@ -58,7 +58,7 @@ export default function AboutPage() {
                 <div className="p-3.5 rounded-2xl bg-surface-container-low text-center border border-gray-200/60 shadow-2xs">
                   <span className="font-headline-lg text-secondary font-black block text-2xl">100%</span>
                   <span className="font-body-sm text-slate-body uppercase font-bold text-[10px]">
-                    Fresh &amp; Halal
+                    Fresh
                   </span>
                 </div>
               </div>

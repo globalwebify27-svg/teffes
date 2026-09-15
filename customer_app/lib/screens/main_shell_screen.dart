@@ -21,6 +21,7 @@ class MainShellScreen extends StatefulWidget {
 
 class _MainShellScreenState extends State<MainShellScreen> {
   int _currentIndex = 0;
+  int _previousIndex = 0;
 
   late final List<Widget> _pages;
 
@@ -29,29 +30,48 @@ class _MainShellScreenState extends State<MainShellScreen> {
     super.initState();
     _pages = [
       const HomeScreen(),
-      WishlistScreen(onExplore: () => setState(() => _currentIndex = 2)),
-      const CategoryListingScreen(),
+      WishlistScreen(onExplore: () => _switchTab(2)),
+      const CategoryListingScreen(showBackButton: false),
       const ProfileScreen(),
     ];
+  }
+
+  void _switchTab(int index) {
+    if (_currentIndex != index) {
+      setState(() {
+        _previousIndex = _currentIndex;
+        _currentIndex = index;
+      });
+    }
+  }
+
+  void _handleCategoryBack() {
+    setState(() {
+      _currentIndex = (_previousIndex == 2) ? 0 : _previousIndex;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
 
-    return Scaffold(
-      body: IndexedStack(
-        index: _currentIndex,
-        children: _pages,
-      ),
-      bottomNavigationBar: TeffeBottomNavBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-        },
-      ),
+    return PopScope(
+      canPop: _currentIndex == 0,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_currentIndex != 0) {
+          _handleCategoryBack();
+        }
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: _currentIndex,
+          children: _pages,
+        ),
+        bottomNavigationBar: TeffeBottomNavBar(
+          currentIndex: _currentIndex,
+          onTap: _switchTab,
+        ),
       // Floating Cart Preview Bar (Zepto / Blinkit / Teffe's quick checkout bar)
       bottomSheet: cart.itemCount > 0 && _currentIndex != 2
           ? Container(
@@ -122,6 +142,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
               ),
             )
           : null,
+      ),
     );
   }
 }

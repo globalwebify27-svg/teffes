@@ -4,18 +4,22 @@ import '../../core/constants/app_dimensions.dart';
 
 class SearchInputBar extends StatelessWidget {
   final TextEditingController? controller;
+  final FocusNode? focusNode;
   final ValueChanged<String>? onChanged;
   final VoidCallback? onTap;
   final String hintText;
   final bool readOnly;
+  final void Function(PointerDownEvent)? onTapOutside;
 
   const SearchInputBar({
     super.key,
     this.controller,
+    this.focusNode,
     this.onChanged,
     this.onTap,
     this.hintText = 'Type product name to search',
     this.readOnly = false,
+    this.onTapOutside,
   });
 
   @override
@@ -31,8 +35,10 @@ class SearchInputBar extends StatelessWidget {
         ),
         child: TextField(
           controller: controller,
+          focusNode: focusNode,
           readOnly: readOnly,
           onTap: onTap,
+          onTapOutside: onTapOutside ?? (event) => FocusScope.of(context).unfocus(),
           onChanged: onChanged,
           textAlignVertical: TextAlignVertical.center,
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(

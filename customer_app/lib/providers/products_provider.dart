@@ -3,6 +3,7 @@ import '../core/constants/api_endpoints.dart';
 import '../core/network/api_client.dart';
 import '../models/banner_model.dart';
 import '../models/category_model.dart';
+import '../models/coupon_model.dart';
 import '../models/product_model.dart';
 
 class ProductsProvider with ChangeNotifier {
@@ -11,6 +12,7 @@ class ProductsProvider with ChangeNotifier {
   List<CategoryModel> _categories = [];
   List<ProductModel> _products = [];
   List<BannerModel> _banners = [];
+  CouponModel? _superOffer;
   bool _isLoading = false;
   String? _error;
 
@@ -21,6 +23,7 @@ class ProductsProvider with ChangeNotifier {
   List<CategoryModel> get categories => _categories;
   List<ProductModel> get products => _products;
   List<BannerModel> get banners => _banners;
+  CouponModel? get superOffer => _superOffer;
   bool get isLoading => _isLoading;
   String? get error => _error;
   String get selectedCategory => _selectedCategory;
@@ -30,8 +33,10 @@ class ProductsProvider with ChangeNotifier {
   ProductsProvider() {
     _initDefaultCategories();
     _initDefaultBanners();
+    _initDefaultSuperOffer();
     fetchCatalog();
     fetchBanners();
+    fetchSuperOffer();
   }
 
   void _initDefaultCategories() {
@@ -90,6 +95,35 @@ class ProductsProvider with ChangeNotifier {
         isActive: true,
       ),
     ];
+  }
+
+  void _initDefaultSuperOffer() {
+    _superOffer = const CouponModel(
+      id: 'default-super-offer',
+      code: 'FIRST50',
+      discount: '₹50 flat off on first order above ₹299',
+      discountType: 'fixed',
+      discountValue: 50.0,
+      minOrder: 299.0,
+      status: 'Active',
+      validTill: '31 Dec 2026',
+      isSuperOffer: true,
+    );
+  }
+
+  Future<void> fetchSuperOffer() async {
+    try {
+      final res = await _api.get(ApiEndpoints.superOffer);
+      if (res.data['success'] == true && res.data['superOffer'] != null) {
+        _superOffer = CouponModel.fromJson(Map<String, dynamic>.from(res.data['superOffer'] as Map));
+        notifyListeners();
+      } else {
+        _superOffer = null;
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error fetching super offer: $e');
+    }
   }
 
   Future<void> fetchBanners() async {
@@ -191,6 +225,8 @@ class ProductsProvider with ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+      fetchSuperOffer();
+      fetchBanners();
     }
   }
 
