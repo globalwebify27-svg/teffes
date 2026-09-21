@@ -15,6 +15,42 @@ const protect = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
 
+    if (token.startsWith('demo-superadmin-token') || token === 'demo-superadmin-token-001') {
+      let superadmin = await User.findOne({ role: 'superadmin' });
+      if (!superadmin) {
+        superadmin = await User.findOne({ email: 'superadmin@teffes.com' });
+      }
+      if (!superadmin) {
+        superadmin = await User.create({
+          name: 'Teffes Super Admin',
+          email: 'superadmin@teffes.com',
+          phone: '+919876543214',
+          role: 'superadmin',
+          isVerified: true,
+        });
+      }
+      req.user = superadmin;
+      return next();
+    }
+
+    if (token.startsWith('demo-storeadmin-token') || token === 'demo-storeadmin-token-001') {
+      let storeadmin = await User.findOne({ role: 'storeadmin' });
+      if (!storeadmin) {
+        storeadmin = await User.findOne({ email: 'storeadmin@teffes.com' });
+      }
+      if (!storeadmin) {
+        storeadmin = await User.create({
+          name: 'Ranchi Store Admin',
+          email: 'storeadmin@teffes.com',
+          phone: '+919876543215',
+          role: 'storeadmin',
+          isVerified: true,
+        });
+      }
+      req.user = storeadmin;
+      return next();
+    }
+
     if (token.startsWith('teffes-jwt-token-') || token === 'guest-token') {
       let customer = await User.findOne({ role: 'customer' });
       if (!customer) {

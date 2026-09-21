@@ -143,7 +143,7 @@ function CategoryContent() {
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-crimson-soft text-primary font-label-badge text-label-badge uppercase font-bold text-[11px] mb-2">
                 <span className="material-symbols-outlined text-[15px]">verified</span>
-                <span>Ranchi Fresh Butchery Counter</span>
+                <span>Ranchi's Fresh Counter</span>
               </div>
               <h1 className="font-headline-xl text-2xl sm:text-3xl md:text-4xl font-black text-on-surface tracking-tight">
                 Fresh {activeTabMeta.label} Cuts
@@ -178,11 +178,10 @@ function CategoryContent() {
                   key={tab.key}
                   type="button"
                   onClick={() => handleTabChange(tab.key)}
-                  className={`px-5 py-2.5 rounded-full flex items-center gap-2 font-headline-sm font-bold text-xs sm:text-sm cursor-pointer transition-all border-none whitespace-nowrap ${
-                    isSelected
+                  className={`px-5 py-2.5 rounded-full flex items-center gap-2 font-headline-sm font-bold text-xs sm:text-sm cursor-pointer transition-all border-none whitespace-nowrap ${isSelected
                       ? "bg-primary text-white shadow-sm ring-2 ring-primary/20 scale-105"
                       : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
-                  }`}
+                    }`}
                 >
                   <FontAwesomeIcon
                     icon={getCategoryFontAwesomeIcon(tab.key)}
@@ -284,11 +283,6 @@ function CategoryContent() {
                         }}
                       />
 
-                      {/* Freshness Badge */}
-                      <span className="absolute top-2.5 left-2.5 bg-white/95 backdrop-blur-xs text-tertiary font-label-badge text-[10.5px] px-2.5 py-0.5 rounded-full font-bold shadow-xs">
-                        {item.badge || "Fresh Batch"}
-                      </span>
-
                       {/* Wishlist Heart */}
                       <button
                         type="button"
@@ -296,9 +290,8 @@ function CategoryContent() {
                           e.stopPropagation();
                           toggleWishlist(item.id);
                         }}
-                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-sm cursor-pointer transition-all border border-gray-100 hover:scale-110 active:scale-95 ${
-                          isLiked ? "bg-white text-crimson-bright" : "bg-white/90 text-slate-body hover:text-primary"
-                        }`}
+                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-sm cursor-pointer transition-all border border-gray-100 hover:scale-110 active:scale-95 ${isLiked ? "bg-white text-crimson-bright" : "bg-white/90 text-slate-body hover:text-primary"
+                          }`}
                         aria-label="Toggle Wishlist"
                       >
                         <span className={`material-symbols-outlined text-[18px] ${isLiked ? "filled text-crimson-bright" : ""}`}>
@@ -330,7 +323,7 @@ function CategoryContent() {
                           ₹{item.price}
                         </span>
                         {item.originalPrice > item.price && (
-                          <span className="font-body-sm text-slate-subtle line-through text-[11px]">
+                          <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11px]">
                             ₹{item.originalPrice}
                           </span>
                         )}
@@ -348,7 +341,7 @@ function CategoryContent() {
                         <button
                           type="button"
                           onClick={() => addToCart(item)}
-                          className="px-4 py-1.5 rounded-full bg-primary hover:bg-primary-dark text-white font-label-badge font-bold text-xs shadow-xs transition-all cursor-pointer border-none flex items-center gap-1"
+                          className="px-4 py-1.5 rounded-full font-label-badge font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1 btn-hover-fill"
                         >
                           <span>+</span>
                           <span>ADD</span>

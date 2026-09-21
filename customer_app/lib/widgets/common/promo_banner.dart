@@ -81,8 +81,8 @@ class _PromoBannerState extends State<PromoBanner> {
       Navigator.of(context).push(
         SmoothPageRoute(page: const CategoryListingScreen()),
       );
-    } else if (link.contains('egg')) {
-      productsProvider.selectCategory('eggs');
+    } else if (link.contains('marinated')) {
+      productsProvider.selectCategory('marinated');
       Navigator.of(context).push(
         SmoothPageRoute(page: const CategoryListingScreen()),
       );

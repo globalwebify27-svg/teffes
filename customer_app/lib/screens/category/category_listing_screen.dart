@@ -11,6 +11,7 @@ import '../../providers/products_provider.dart';
 import '../../widgets/common/category_icon_pill.dart';
 import '../../widgets/common/cold_chain_promise_card.dart';
 import '../../widgets/common/product_card.dart';
+import '../../widgets/common/brand_watermark_footer.dart';
 import '../cart/cart_checkout_screen.dart';
 import '../product_details/product_details_screen.dart';
 
@@ -143,8 +144,11 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                       physics: const BouncingScrollPhysics(),
                       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
                       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd, vertical: 4),
-                      itemCount: products.length,
+                      itemCount: products.length + 1,
                       itemBuilder: (context, index) {
+                        if (index == products.length) {
+                          return const BrandWatermarkFooter(showExploreButton: false);
+                        }
                         final product = products[index];
                         return ProductCard(
                           product: product,

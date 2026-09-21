@@ -24,8 +24,8 @@ export default function LocationModal() {
     tag: "Home",
     line1: "",
     line2: "",
-    city: "Ranchi",
-    pincode: "834001",
+    city: "",
+    pincode: "",
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -35,6 +35,14 @@ export default function LocationModal() {
     e.preventDefault();
     if (!newAddr.line1.trim()) {
       toast.warning("Please enter your flat / house number & building name", "Address Incomplete");
+      return;
+    }
+    if (!newAddr.city.trim()) {
+      toast.warning("Please enter your city", "City Missing");
+      return;
+    }
+    if (!newAddr.pincode.trim()) {
+      toast.warning("Please enter your pincode", "Pincode Missing");
       return;
     }
 
@@ -61,7 +69,7 @@ export default function LocationModal() {
         const newest = res.data.addresses[res.data.addresses.length - 1];
         if (newest) selectSavedAddress(newest);
         setShowAddForm(false);
-        setNewAddr({ tag: "Home", line1: "", line2: "", city: "Ranchi", pincode: "834001" });
+        setNewAddr({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
         toast.success("Delivery address saved successfully!", "Address Saved");
       }
     } catch (err) {
@@ -282,20 +290,25 @@ export default function LocationModal() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">City</label>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">City *</label>
                   <input
                     type="text"
+                    required
+                    placeholder="e.g. Ranchi"
                     value={newAddr.city}
-                    disabled
-                    className="w-full px-3 py-2 text-xs rounded-xl border border-gray-200 bg-gray-100 text-gray-600"
+                    onChange={(e) => setNewAddr({ ...newAddr, city: e.target.value })}
+                    className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 bg-white focus:outline-primary"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Pincode</label>
+                  <label className="text-[11px] font-bold text-gray-700 block mb-1">Pincode *</label>
                   <input
                     type="text"
+                    required
+                    placeholder="e.g. 834001"
+                    maxLength={6}
                     value={newAddr.pincode}
-                    onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value })}
+                    onChange={(e) => setNewAddr({ ...newAddr, pincode: e.target.value.replace(/\D/g, "") })}
                     className="w-full px-3 py-2 text-xs rounded-xl border border-gray-300 bg-white focus:outline-primary"
                   />
                 </div>

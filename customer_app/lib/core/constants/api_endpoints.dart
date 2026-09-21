@@ -20,18 +20,18 @@ class ApiEndpoints {
     }
 
     if (kIsWeb) {
-      return 'http://localhost:5000/api';
+      return 'https://teffes.onrender.com/api';
     }
 
     try {
       if (Platform.isAndroid) {
         // 10.0.2.2 is the standard alias to your host loopback interface in Android emulator
-        return 'http://10.0.2.2:5000/api';
+        return 'https://teffes.onrender.com/api';
       }
     } catch (_) {
       // Platform check may throw on unsupported environments
     }
-    return 'http://localhost:5000/api';
+    return 'https://teffes.onrender.com/api';
   }
 
   // Auth

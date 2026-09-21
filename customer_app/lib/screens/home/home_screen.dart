@@ -12,6 +12,7 @@ import '../../widgets/common/product_card.dart';
 import '../../widgets/common/promo_banner.dart';
 import '../../widgets/common/search_input_bar.dart';
 import '../../widgets/common/super_offer_card.dart';
+import '../../widgets/common/brand_watermark_footer.dart';
 import '../category/category_listing_screen.dart';
 import '../product_details/product_details_screen.dart';
 
@@ -81,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final chickenCuts = productsProvider.homeChickenCuts;
     final fishCuts = productsProvider.homeFishCuts;
     final muttonCuts = productsProvider.homeMuttonCuts;
-    final farmFreshEggs = productsProvider.farmFreshEggs;
+    final marinatedCuts = productsProvider.marinatedCuts;
     final searchResults = _activeQuery.isNotEmpty
         ? productsProvider.searchAllProducts(_activeQuery)
         : <ProductModel>[];
@@ -162,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'Try searching for chicken, mutton, fish, keema, or eggs',
+                            'Try searching for chicken, mutton, fish, keema, or marinated',
                             style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
                           ),
                         ],
@@ -290,9 +291,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     productsProvider: productsProvider,
                   ),
 
-                  if (farmFreshEggs.isNotEmpty) ...[
+                  if (marinatedCuts.isNotEmpty) ...[
                     const SizedBox(height: AppDimensions.spaceLg),
-                    // 6. Farm Fresh Eggs Section
+                    // 6. Marinated Cuts Section
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
                       child: Column(
@@ -306,7 +307,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Farm Fresh Eggs',
+                                    'Marinated Cuts',
                                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w800,
@@ -315,7 +316,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   const SizedBox(height: 1),
                                   Text(
-                                    'Naturally laid, nutrient-rich & hygienic',
+                                    'Ready-to-cook spiced meats & fresh seafood',
                                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                           fontSize: 12,
                                           color: AppColors.textSecondary,
@@ -325,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               GestureDetector(
                                 onTap: () {
-                                  productsProvider.selectCategory('eggs');
+                                  productsProvider.selectCategory('marinated');
                                   _navigateTo(const CategoryListingScreen());
                                 },
                                 child: const Text(
@@ -350,9 +351,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               mainAxisSpacing: 14,
                               mainAxisExtent: 235,
                             ),
-                            itemCount: farmFreshEggs.length,
+                            itemCount: marinatedCuts.length,
                             itemBuilder: (context, index) {
-                              final product = farmFreshEggs[index];
+                              final product = marinatedCuts[index];
                               return ProductCard(
                                 product: product,
                                 layout: ProductCardLayout.compactGrid,
@@ -365,6 +366,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ],
                 ],
+
+                // Brand Watermark Footer (visible upon scrolling down to bottom - Blinkit style)
+                BrandWatermarkFooter(
+                  onExploreAllTap: () => _navigateTo(const CategoryListingScreen()),
+                ),
               ],
             ),
           ),

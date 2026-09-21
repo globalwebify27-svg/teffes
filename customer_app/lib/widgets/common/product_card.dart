@@ -170,6 +170,8 @@ class ProductCard extends StatelessWidget {
                               CurrencyFormatter.format(product.originalPrice),
                               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                     decoration: TextDecoration.lineThrough,
+                                    decorationColor: AppColors.primaryMaroon,
+                                    decorationThickness: 2.0,
                                     fontSize: 10.5,
                                   ),
                             ),
@@ -379,9 +381,12 @@ class ProductCard extends StatelessWidget {
                         spacing: 6,
                         runSpacing: 4,
                         children: [
-                          _buildSpecChip('Net: ${product.netWeight}'),
-                          if (product.cutType != null) _buildSpecChip(product.cutType!),
-                          if (product.pieces != null) _buildSpecChip(product.pieces!),
+                          if (product.netWeight.trim().isNotEmpty && product.netWeight.trim() != 'Net:')
+                            _buildSpecChip('Net: ${product.netWeight.trim()}'),
+                          if (product.cutType != null && product.cutType!.trim().isNotEmpty)
+                            _buildSpecChip(product.cutType!.trim()),
+                          if (product.pieces != null && product.pieces!.trim().isNotEmpty)
+                            _buildSpecChip(product.pieces!.trim()),
                         ],
                       ),
                       const SizedBox(height: 10),
@@ -411,6 +416,8 @@ class ProductCard extends StatelessWidget {
                                       CurrencyFormatter.format(product.originalPrice),
                                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                             decoration: TextDecoration.lineThrough,
+                                            decorationColor: AppColors.primaryMaroon,
+                                            decorationThickness: 2.0,
                                             fontSize: 11,
                                           ),
                                     ),
@@ -449,6 +456,8 @@ class ProductCard extends StatelessWidget {
   }
 
   Widget _buildSpecChip(String label) {
+    final clean = label.trim();
+    if (clean.isEmpty || clean == 'Net:' || clean == 'Net') return const SizedBox.shrink();
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
       decoration: BoxDecoration(
@@ -457,7 +466,7 @@ class ProductCard extends StatelessWidget {
         border: Border.all(color: AppColors.borderHairline.withOpacity(0.6)),
       ),
       child: Text(
-        label,
+        clean,
         style: const TextStyle(
           color: AppColors.textSecondary,
           fontSize: 10,

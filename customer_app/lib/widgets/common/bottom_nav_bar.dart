@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
+import '../../providers/wishlist_provider.dart';
 
 class TeffeBottomNavBar extends StatelessWidget {
   final int currentIndex;
@@ -32,10 +34,10 @@ class TeffeBottomNavBar extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _buildNavItem(0, Icons.home_rounded, Icons.home_outlined, 'Home'),
-              _buildNavItem(1, Icons.favorite_rounded, Icons.favorite_border_rounded, 'Wishlist'),
-              _buildNavItem(2, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Categories'),
-              _buildNavItem(3, Icons.person_rounded, Icons.person_outline_rounded, 'Account'),
+              _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'Home'),
+              _buildNavItem(context, 1, Icons.favorite_rounded, Icons.favorite_border_rounded, 'Wishlist'),
+              _buildNavItem(context, 2, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Categories'),
+              _buildNavItem(context, 3, Icons.person_rounded, Icons.person_outline_rounded, 'Account'),
             ],
           ),
         ),
@@ -43,9 +45,29 @@ class TeffeBottomNavBar extends StatelessWidget {
     );
   }
 
-  Widget _buildNavItem(int index, IconData activeIcon, IconData inactiveIcon, String label) {
+  Widget _buildNavItem(BuildContext context, int index, IconData activeIcon, IconData inactiveIcon, String label) {
     final isSelected = currentIndex == index;
     final color = isSelected ? AppColors.primaryMaroon : AppColors.textMuted;
+
+    Widget iconWidget = Icon(
+      isSelected ? activeIcon : inactiveIcon,
+      size: 22,
+      color: color,
+    );
+
+    if (index == 1) {
+      final wishlistCount = context.watch<WishlistProvider>().count;
+      if (wishlistCount > 0) {
+        iconWidget = Badge(
+          label: Text(
+            wishlistCount.toString(),
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          backgroundColor: AppColors.primaryMaroon,
+          child: iconWidget,
+        );
+      }
+    }
 
     return GestureDetector(
       onTap: () => onTap(index),
@@ -55,11 +77,7 @@ class TeffeBottomNavBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? activeIcon : inactiveIcon,
-              size: 22,
-              color: color,
-            ),
+            iconWidget,
             const SizedBox(height: 3),
             Text(
               label,

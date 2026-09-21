@@ -157,6 +157,9 @@ const getProducts = async (req, res, next) => {
 
     const total = await Product.countDocuments(query);
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.status(200).json({
       success: true,
       count: products.length,
@@ -189,6 +192,9 @@ const getProductById = async (req, res, next) => {
       id: { $ne: product.id },
     }).limit(4);
 
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.status(200).json({
       success: true,
       product,
@@ -216,6 +222,21 @@ const createProduct = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Valid price is required' });
     }
     data.price = Number(data.price);
+
+    if (Array.isArray(data.images)) {
+      data.images = data.images.map(s => String(s).trim()).filter(Boolean);
+      if (!data.image && data.images.length > 0) {
+        data.image = data.images[0];
+      }
+    }
+    if (data.image && (!data.images || data.images.length === 0)) {
+      data.images = [data.image.trim()];
+    }
+    if (typeof data.videoURLs === 'string') {
+      data.videoURLs = data.videoURLs.trim() ? [data.videoURLs.trim()] : [];
+    } else if (Array.isArray(data.videoURLs)) {
+      data.videoURLs = data.videoURLs.map(s => String(s).trim()).filter(Boolean);
+    }
 
     if (!data.image || !data.image.trim()) {
       return res.status(400).json({ success: false, message: 'Product image URL is required' });
@@ -259,6 +280,18 @@ const updateProduct = async (req, res, next) => {
     const isMongoId = mongoose.Types.ObjectId.isValid(id);
     const updates = { ...req.body };
 
+    if (Array.isArray(updates.images)) {
+      updates.images = updates.images.map(s => String(s).trim()).filter(Boolean);
+      if (!updates.image && updates.images.length > 0) {
+        updates.image = updates.images[0];
+      }
+    }
+    if (typeof updates.videoURLs === 'string') {
+      updates.videoURLs = updates.videoURLs.trim() ? [updates.videoURLs.trim()] : [];
+    } else if (Array.isArray(updates.videoURLs)) {
+      updates.videoURLs = updates.videoURLs.map(s => String(s).trim()).filter(Boolean);
+    }
+
     if (updates.category) {
       const catObj = await Category.findOne({ slug: updates.category });
       updates.categoryLabel = catObj ? catObj.name : updates.category.charAt(0).toUpperCase() + updates.category.slice(1);
@@ -272,12 +305,15 @@ const updateProduct = async (req, res, next) => {
 
     const product = await Product.findOneAndUpdate(
       { $or: [{ id }, ...(isMongoId ? [{ _id: id }] : [])] },
-      updates,
+      { $set: updates },
       { new: true, runValidators: true }
     );
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.status(200).json({ success: true, product });
   } catch (error) {
     next(error);

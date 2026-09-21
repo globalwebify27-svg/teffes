@@ -55,6 +55,10 @@ const productSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    videoURLs: {
+      type: [String],
+      default: [],
+    },
     netWeight: {
       type: String,
       required: true,

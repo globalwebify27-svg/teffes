@@ -745,12 +745,12 @@ export default function DashboardPage() {
 
     const dateStr = o.createdAt
       ? new Date(o.createdAt).toLocaleDateString("en-IN", {
-          day: "numeric",
-          month: "short",
-          year: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
       : "Just now";
 
     return {
@@ -786,14 +786,14 @@ export default function DashboardPage() {
   const ordersList: any[] = [...mappedLiveOrders, ...mockOrdersList];
 
   const faqItems = [
-    { title: "General Inquiry", desc: "Know about Teffe's butchery timings, Ranchi delivery zones, and customer care." },
+    { title: "General Inquiry", desc: "Know about Teffe's shop timings, Ranchi delivery zones, and customer care." },
     { title: "Payment Related", desc: "Refunds, UPI payments, Cash on Delivery, and invoice queries." },
     { title: "Feedback & Suggestions", desc: "Help us serve you better with your cut preferences and packing feedback." },
     { title: "Order / Products Related", desc: "Cut styles, custom meat portions, gross vs net weight assurance." },
     { title: "Gift Card & Teffes Cash", desc: "Redeeming wallet credits and promotional cashback." },
-    { title: "Freshness & 90-Min Guarantee", desc: "Our 100% fresh butchery cuts and delivery dispatch from Kishore Ganj Chowk." },
+    { title: "Freshness & 90-Min Guarantee", desc: "Our 100% fresh shop cuts and delivery dispatch from Kishore Ganj Chowk." },
     { title: "Wallet Related", desc: "Instant refunds credited directly to Teffes Cash wallet." },
-    { title: "Teffes Butchery Club", desc: "Exclusive monthly subscription with free express deliveries." },
+    { title: "Teffes shop Club", desc: "Exclusive monthly subscription with free express deliveries." },
     { title: "Referral Program", desc: "Invite Ranchi friends and get ₹100 off on your next fresh meat order." },
   ];
 
@@ -1133,11 +1133,10 @@ export default function DashboardPage() {
                 {/* Feedback Alert */}
                 {addressFeedback && (
                   <div
-                    className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2.5 shadow-2xs ${
-                      addressFeedback.type === "success"
+                    className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2.5 shadow-2xs ${addressFeedback.type === "success"
                         ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                         : "bg-red-50 text-red-700 border-red-200"
-                    }`}
+                      }`}
                   >
                     <span className="material-symbols-outlined text-[18px]">
                       {addressFeedback.type === "success" ? "check_circle" : "error"}
@@ -1189,17 +1188,16 @@ export default function DashboardPage() {
                       {addresses.map((addr) => (
                         <div
                           key={addr.id}
-                          className={`bg-white rounded-2xl border p-4 shadow-2xs flex items-start justify-between gap-4 transition-all ${
-                            addr.isDefault ? "border-primary/40 ring-1 ring-primary/20" : "border-gray-200/90"
-                          }`}
+                          className={`bg-white rounded-2xl border p-4 shadow-2xs flex items-start justify-between gap-4 transition-all ${addr.isDefault ? "border-primary/40 ring-1 ring-primary/20" : "border-gray-200/90"
+                            }`}
                         >
                           <div className="flex items-start gap-3">
                             <span className="material-symbols-outlined text-gray-700 text-[20px] mt-0.5">
                               {addr.label.toLowerCase() === "home"
                                 ? "home"
                                 : addr.label.toLowerCase() === "office"
-                                ? "business"
-                                : "location_on"}
+                                  ? "business"
+                                  : "location_on"}
                             </span>
                             <div>
                               <div className="flex items-center gap-2">
@@ -1286,11 +1284,10 @@ export default function DashboardPage() {
                           key={lbl}
                           type="button"
                           onClick={() => setEditingAddress({ ...editingAddress, label: lbl })}
-                          className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${
-                            editingAddress.label === lbl
+                          className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${editingAddress.label === lbl
                               ? "bg-primary text-white border-primary"
                               : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                          }`}
+                            }`}
                         >
                           {lbl}
                         </button>
@@ -1349,11 +1346,10 @@ export default function DashboardPage() {
                           key={lbl}
                           type="button"
                           onClick={() => setNewLabelInput(lbl)}
-                          className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${
-                            newLabelInput === lbl
+                          className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${newLabelInput === lbl
                               ? "bg-primary text-white border-primary"
                               : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                          }`}
+                            }`}
                         >
                           {lbl}
                         </button>
@@ -1686,11 +1682,10 @@ export default function DashboardPage() {
 
                 let badgeText = "Order in Preparation";
                 let mainHeading = "Preparing your cuts";
-                let subHeading = `Arriving by ${
-                  trackingOrder.targetDeliveryTime
+                let subHeading = `Arriving by ${trackingOrder.targetDeliveryTime
                     ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
                     : "30-40 mins"
-                }`;
+                  }`;
                 let iconName = "skillet";
                 let bannerColor = "bg-amber-50 border-amber-200/80 text-amber-950";
                 let iconColor = "bg-amber-500/20 text-amber-800";
@@ -1718,20 +1713,18 @@ export default function DashboardPage() {
                   iconColor = "bg-sky-500/20 text-sky-800";
                 } else if (status === "Cutting") {
                   badgeText = "Live Butchery Station";
-                  mainHeading = `Arriving by ${
-                    trackingOrder.targetDeliveryTime
+                  mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
                       ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
                       : "soon"
-                  }`;
+                    }`;
                   subHeading = "Master butcher slicing & packing your fresh cuts";
                   iconName = "content_cut";
                 } else if (status === "Ready") {
                   badgeText = "Packed & Ready";
-                  mainHeading = `Arriving by ${
-                    trackingOrder.targetDeliveryTime
+                  mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
                       ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
                       : "soon"
-                  }`;
+                    }`;
                   subHeading = "Insulated fresh pack assigned to delivery rider";
                   iconName = "inventory_2";
                 }
@@ -1935,8 +1928,8 @@ export default function DashboardPage() {
                           <span className={`text-[11px] ${isDelivering ? "text-amber-800" : "text-slate-500"}`}>
                             {isDelivering
                               ? (trackingOrder.remainingTransitMinutes != null && trackingOrder.remainingTransitMinutes <= 5
-                                  ? "Rider in neighborhood with insulated box"
-                                  : `Rider is on the way (arriving in ${trackingOrder.remainingTransitMinutes ?? 14} min)`)
+                                ? "Rider in neighborhood with insulated box"
+                                : `Rider is on the way (arriving in ${trackingOrder.remainingTransitMinutes ?? 14} min)`)
                               : isDone
                                 ? "Dispatched & safely reached your address"
                                 : "Assigned to delivery fleet from Kishore Ganj"}
@@ -2228,11 +2221,10 @@ export default function DashboardPage() {
             <div className="p-5 sm:p-6">
               {returnFeedback && (
                 <div
-                  className={`p-3 rounded-2xl mb-4 flex items-center gap-2.5 text-xs font-bold animate-fade-in ${
-                    returnFeedback.type === "success"
+                  className={`p-3 rounded-2xl mb-4 flex items-center gap-2.5 text-xs font-bold animate-fade-in ${returnFeedback.type === "success"
                       ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
                       : "bg-red-50 text-red-800 border border-red-200"
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[18px] shrink-0">
                     {returnFeedback.type === "success" ? "check_circle" : "error"}
@@ -2256,11 +2248,10 @@ export default function DashboardPage() {
                       <div
                         key={reason}
                         onClick={() => setReturnReasonInput(reason)}
-                        className={`p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all flex items-center justify-between ${
-                          returnReasonInput === reason
+                        className={`p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all flex items-center justify-between ${returnReasonInput === reason
                             ? "bg-primary/5 border-primary text-primary"
                             : "bg-gray-50 border-gray-200 text-gray-700 hover:border-gray-300"
-                        }`}
+                          }`}
                       >
                         <span>{reason}</span>
                         {returnReasonInput === reason && (
@@ -2306,7 +2297,7 @@ export default function DashboardPage() {
 
       {/* ─── DELETE ACCOUNT MODAL ────────────────────────────────────── */}
       {isDeleteModalOpen && (
-        <div 
+        <div
           className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
           onClick={(e) => {
             if (e.target === e.currentTarget) setIsDeleteModalOpen(false);

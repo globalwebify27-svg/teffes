@@ -15,6 +15,7 @@ import '../orders/order_tracking_screen.dart';
 import '../checkout/payment_proceed_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
+import '../../models/store_model.dart';
 
 class CartCheckoutScreen extends StatefulWidget {
   const CartCheckoutScreen({super.key});
@@ -25,26 +26,251 @@ class CartCheckoutScreen extends StatefulWidget {
 
 class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   final TextEditingController _couponController = TextEditingController();
+  final TextEditingController _customTipController = TextEditingController();
+  final TextEditingController _pickupInstructionController = TextEditingController();
   String _fulfillmentType = 'delivery'; // 'delivery' or 'pickup'
   String _selectedPaymentMethod = 'razorpay'; // 'razorpay', 'cod', 'wallet'
   String _selectedSlot = '90 Mins Express Delivery';
   bool _isPlacingOrder = false;
+  int _selectedTip = 0;
+  bool _showCustomTipInput = false;
+  String _deliveryInstruction = '';
+
+  List<StoreModel> _stores = [];
+  String _selectedStoreId = 'S001';
+
+  @override
+  void initState() {
+    super.initState();
+    _initDefaultStores();
+    _fetchStores();
+  }
+
+  void _initDefaultStores() {
+    _stores = [
+      const StoreModel(
+        storeId: 'S001',
+        name: "TeFFe's — Kishore Ganj",
+        address: 'Plot 42, Main Road, Kishore Ganj, Ranchi, Jharkhand 834001',
+        city: 'Ranchi',
+        phone: '+91 9779687955',
+        status: 'Active',
+        pickupEnabled: true,
+        timings: '08:00 AM - 08:00 PM',
+        distance: '0.8 km away',
+      ),
+      const StoreModel(
+        storeId: 'S002',
+        name: "TeFFe's — Doranda Hub",
+        address: 'Doranda Bazar, Near High Court, Ranchi, Jharkhand 834002',
+        city: 'Ranchi',
+        phone: '+91 9279682955',
+        status: 'Active',
+        pickupEnabled: true,
+        timings: '08:00 AM - 08:00 PM',
+        distance: '1.6 km away',
+      ),
+      const StoreModel(
+        storeId: 'S004',
+        name: 'Teffes - Doranda store',
+        address: 'North office pada doranda, Ranchi',
+        city: 'Ranchi',
+        phone: '1234567891',
+        status: 'Active',
+        pickupEnabled: true,
+        timings: '08:00 AM - 08:00 PM',
+        distance: '2.4 km away',
+      ),
+    ];
+    _selectedStoreId = _stores.first.storeId;
+  }
+
+  Future<void> _fetchStores() async {
+    try {
+      final api = ApiClient();
+      final res = await api.get(ApiEndpoints.stores);
+      if (res.data != null && res.data['success'] == true && res.data['stores'] is List) {
+        final list = (res.data['stores'] as List)
+            .asMap()
+            .entries
+            .map((entry) => StoreModel.fromJson(entry.value as Map<String, dynamic>, entry.key))
+            .where((s) => s.pickupEnabled && s.status.toLowerCase() != 'inactive')
+            .toList();
+
+        if (list.isNotEmpty && mounted) {
+          setState(() {
+            _stores = list;
+            if (!_stores.any((s) => s.storeId == _selectedStoreId)) {
+              _selectedStoreId = _stores.first.storeId;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching stores for pickup: $e');
+    }
+  }
+
+  StoreModel? get _selectedStore {
+    try {
+      return _stores.firstWhere((s) => s.storeId == _selectedStoreId);
+    } catch (_) {
+      return _stores.isNotEmpty ? _stores.first : null;
+    }
+  }
 
   @override
   void dispose() {
     _couponController.dispose();
+    _customTipController.dispose();
+    _pickupInstructionController.dispose();
     super.dispose();
+  }
+
+  void _showAddAddressDialog(BuildContext context, LocationProvider location) {
+    String selectedTag = 'Home';
+    final line1Controller = TextEditingController();
+    final landmarkController = TextEditingController();
+    final pincodeController = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: AppDimensions.spaceMd,
+                right: AppDimensions.spaceMd,
+                top: AppDimensions.spaceMd,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Add New Delivery Address', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
+                      IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: ['Home', 'Office', 'Other'].map((tag) {
+                      final isSelected = selectedTag == tag;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(tag),
+                          selected: isSelected,
+                          selectedColor: AppColors.primaryLight,
+                          labelStyle: TextStyle(
+                            color: isSelected ? AppColors.primaryMaroon : AppColors.textPrimary,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          ),
+                          onSelected: (_) => setModalState(() => selectedTag = tag),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: line1Controller,
+                    decoration: InputDecoration(
+                      hintText: 'Flat / House No. / Street Address',
+                      filled: true,
+                      fillColor: AppColors.surfaceSubtle,
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: landmarkController,
+                    decoration: InputDecoration(
+                      hintText: 'Landmark (e.g. Near CMPDI / Circular Road)',
+                      filled: true,
+                      fillColor: AppColors.surfaceSubtle,
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: pincodeController,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: 'Enter 6-digit Pincode',
+                      filled: true,
+                      fillColor: AppColors.surfaceSubtle,
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon),
+                      onPressed: () async {
+                        if (line1Controller.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter your house/street address')),
+                          );
+                          return;
+                        }
+                        if (pincodeController.text.trim().isEmpty || pincodeController.text.trim().length < 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter a valid 6-digit pincode')),
+                          );
+                          return;
+                        }
+                        await location.addAddress(
+                          tag: selectedTag,
+                          line1: line1Controller.text.trim(),
+                          landmark: landmarkController.text.trim(),
+                          pincode: pincodeController.text.trim(),
+                          city: 'Ranchi',
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Address saved & selected for delivery!')),
+                          );
+                        }
+                      },
+                      child: const Text('Save Address', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showAddressPicker(BuildContext context, LocationProvider location) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
         return Container(
-          padding: const EdgeInsets.all(AppDimensions.spaceMd),
+          padding: EdgeInsets.only(
+            left: AppDimensions.spaceMd,
+            right: AppDimensions.spaceMd,
+            top: AppDimensions.spaceMd,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
+          ),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -52,31 +278,125 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Select Delivery Address', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
+                  const Text('Select Delivery Address', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
                     onPressed: () => Navigator.pop(ctx),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              ...location.savedAddresses.map((addr) {
-                final isSelected = location.selectedAddress?.id == addr.id;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: Icon(
-                    addr.tag.toLowerCase() == 'home' ? Icons.home_rounded : Icons.business_rounded,
-                    color: isSelected ? AppColors.primaryMaroon : AppColors.textSecondary,
+              const SizedBox(height: 10),
+              InkWell(
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showAddAddressDialog(context, location);
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryMaroon.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.25)),
                   ),
-                  title: Text(addr.tag, style: TextStyle(fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600)),
-                  subtitle: Text(addr.fullAddress, style: const TextStyle(fontSize: 11.5)),
-                  trailing: isSelected ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryMaroon) : null,
-                  onTap: () {
-                    location.selectAddress(addr);
-                    Navigator.pop(ctx);
-                  },
-                );
-              }),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.add_location_alt_rounded, color: AppColors.primaryMaroon, size: 20),
+                      SizedBox(width: 10),
+                      Text(
+                        '+ Add New Delivery Address',
+                        style: TextStyle(
+                          color: AppColors.primaryMaroon,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (location.savedAddresses.isEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(vertical: 24),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    'No saved addresses yet.\nTap above to add your delivery address.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
+                  ),
+                )
+              else
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: location.savedAddresses.length,
+                    separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderHairline),
+                    itemBuilder: (context, idx) {
+                      final addr = location.savedAddresses[idx];
+                      final isSelected = location.selectedAddress?.id == addr.id;
+                      return ListTile(
+                        contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.primaryLight : AppColors.surfaceSubtle,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            addr.tag.toLowerCase().contains('work') || addr.tag.toLowerCase().contains('office')
+                                ? Icons.business_rounded
+                                : Icons.home_rounded,
+                            color: isSelected ? AppColors.primaryMaroon : AppColors.textSecondary,
+                            size: 20,
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Text(
+                              addr.tag,
+                              style: TextStyle(
+                                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
+                                color: isSelected ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                            if (addr.isDefault) ...[
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                decoration: BoxDecoration(
+                                  color: Colors.green.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'DEFAULT',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        subtitle: Text(
+                          addr.fullAddress,
+                          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                        ),
+                        trailing: isSelected
+                            ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryMaroon, size: 22)
+                            : const Icon(Icons.radio_button_unchecked_rounded, color: AppColors.borderHairline, size: 22),
+                        onTap: () {
+                          location.selectAddress(addr);
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
+                ),
             ],
           ),
         );
@@ -86,8 +406,26 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
   Future<void> _handlePlaceOrder(CartProvider cart, LocationProvider location, AuthProvider auth) async {
     final isPickup = _fulfillmentType == 'pickup';
+
+    if (!isPickup && location.selectedAddress == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please add a delivery address to proceed with your order.')),
+      );
+      _showAddAddressDialog(context, location);
+      return;
+    }
+
     final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
-    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee - cart.couponDiscount).clamp(0.0, double.infinity);
+    final effectiveTip = isPickup ? 0 : _selectedTip;
+    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
+
+    final selStore = _selectedStore;
+    final storeName = isPickup ? (selStore?.name ?? "TeFFe's — Kishore Ganj") : "TeFFe's — Kishore Ganj";
+    final storeId = isPickup ? (selStore?.storeId ?? 'S001') : 'S001';
+    final shippingAddress = isPickup
+        ? 'Store Pickup: ${selStore?.name ?? "TeFFe's Hub"}, ${selStore?.address ?? "Ranchi"}'
+        : location.activeAddressString;
+    final activeInstruction = isPickup ? _pickupInstructionController.text.trim() : _deliveryInstruction;
 
     // 1. If Razorpay is selected, navigate directly to dedicated Payment Proceed Screen
     if (_selectedPaymentMethod == 'razorpay') {
@@ -95,11 +433,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         SmoothPageRoute(
           page: PaymentProceedScreen(
             payableAmount: effectiveGrandTotal,
-            deliveryAddress: isPickup ? 'Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi' : location.activeAddressString,
+            deliveryAddress: shippingAddress,
             deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : _selectedSlot,
             paymentMethod: 'razorpay',
             isPickup: isPickup,
             fulfillmentType: _fulfillmentType,
+            storeId: storeId,
+            storeName: storeName,
+            instruction: activeInstruction,
           ),
         ),
       );
@@ -162,15 +503,18 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         'totalAmount': effectiveGrandTotal,
         'fulfillmentType': _fulfillmentType,
         'pickupMode': isPickup,
+        'tip': effectiveTip,
+        'deliveryInstruction': activeInstruction,
         'paymentMethod': _selectedPaymentMethod == 'wallet'
             ? "Teffe's Cash Wallet"
             : isPickup
                 ? 'Pay at Store Counter'
                 : 'Cash on Delivery (COD)',
         'paymentStatus': _selectedPaymentMethod == 'wallet' ? 'Paid' : 'Pending',
-        'shippingAddress': isPickup ? 'Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi' : location.activeAddressString,
+        'shippingAddress': shippingAddress,
         'deliverySlot': isPickup ? 'Store Pickup (Counter Takeaway)' : _selectedSlot,
-        'storeName': 'Kishore Ganj Hub',
+        'storeId': storeId,
+        'storeName': storeName,
       };
 
       final api = ApiClient();
@@ -202,14 +546,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
           'price': i.product.price,
           'weight': i.selectedWeight,
         }).toList(),
-        deliveryAddress: isPickup ? 'Store Pickup: Kishore Ganj Hub, Ranchi' : location.activeAddressString,
+        deliveryAddress: shippingAddress,
         paymentMethod: _selectedPaymentMethod == 'wallet'
             ? "Teffe's Cash Wallet"
             : isPickup
                 ? 'Pay at Store Counter'
                 : 'Cash on Delivery (COD)',
         paymentStatus: _selectedPaymentMethod == 'wallet' ? 'Paid' : 'Pending',
-        storeName: 'Kishore Ganj Hub',
+        storeName: storeName,
         fulfillmentType: _fulfillmentType,
         pickupMode: isPickup,
         targetDeliveryTime: DateTime.now().add(const Duration(minutes: 35)).toIso8601String(),
@@ -258,7 +602,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     final items = cart.items.values.toList();
     final isPickup = _fulfillmentType == 'pickup';
     final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
-    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee - cart.couponDiscount).clamp(0.0, double.infinity);
+    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + _selectedTip - cart.couponDiscount).clamp(0.0, double.infinity);
 
     return Scaffold(
       backgroundColor: AppColors.surfacePorcelain,
@@ -369,52 +713,229 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     ),
                   ),
 
-                  // 1. Address / Store Pickup Card
+                  // 1. Store Pickup Section (Store List Selector)
                   if (isPickup)
                     Container(
-                      margin: const EdgeInsets.all(AppDimensions.spaceMd),
-                      padding: const EdgeInsets.all(AppDimensions.spaceMd),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: AppDimensions.roundedLg,
-                        border: Border.all(color: AppColors.borderHairline),
-                        boxShadow: AppDimensions.cardShadow,
-                      ),
+                      margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, AppDimensions.spaceMd, AppDimensions.spaceMd, AppDimensions.spaceSm),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: AppColors.primaryLight,
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: const Icon(Icons.storefront_rounded, color: AppColors.primaryMaroon, size: 20),
+                              const Row(
+                                children: [
+                                  Icon(Icons.location_searching_rounded, size: 18, color: AppColors.primaryMaroon),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Select Pickup Store nearby you',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13.5,
+                                      color: AppColors.textPrimary,
+                                    ),
+                                  ),
+                                ],
                               ),
-                              const SizedBox(width: 10),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text('Kishore Ganj Artisanal Butchery Hub', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
-                                    SizedBox(height: 2),
-                                    Text('Kishore Ganj Chowk, Harmu Road, Ranchi - 834001', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
-                                  ],
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: AppColors.discountGreen.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(color: AppColors.discountGreen.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  '${_stores.length} Available',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.discountGreen,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          const Divider(height: 1, color: AppColors.borderHairline),
-                          const SizedBox(height: 8),
-                          const Row(
-                            children: [
-                              Icon(Icons.timer_outlined, size: 14, color: AppColors.hygieneDark),
-                              SizedBox(width: 6),
-                              Text('Ready in 30 Mins • Free Fresh-Lock Insulated Bag', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.hygieneDark)),
-                            ],
+                          const SizedBox(height: 10),
+                          ..._stores.map((store) {
+                            final isSelected = store.storeId == _selectedStoreId;
+                            return GestureDetector(
+                              onTap: () => setState(() => _selectedStoreId = store.storeId),
+                              child: Container(
+                                margin: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: isSelected ? AppColors.primaryLight.withOpacity(0.35) : Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isSelected ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                    width: isSelected ? 1.5 : 1.0,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [BoxShadow(color: AppColors.primaryMaroon.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))]
+                                      : [const BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
+                                ),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    // Radio circle indicator
+                                    Container(
+                                      width: 18,
+                                      height: 18,
+                                      margin: const EdgeInsets.only(top: 2, right: 10),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: isSelected ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                          width: 2,
+                                        ),
+                                        color: isSelected ? AppColors.primaryMaroon : Colors.white,
+                                      ),
+                                      child: isSelected
+                                          ? Center(
+                                              child: Container(
+                                                width: 6,
+                                                height: 6,
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
+                                            )
+                                          : null,
+                                    ),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Row(
+                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                            children: [
+                                              Expanded(
+                                                child: Text(
+                                                  store.name,
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 13.5,
+                                                    color: isSelected ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                                  ),
+                                                ),
+                                              ),
+                                              if (isSelected)
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.primaryMaroon,
+                                                    borderRadius: BorderRadius.circular(4),
+                                                  ),
+                                                  child: const Text(
+                                                    'SELECTED',
+                                                    style: TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 9,
+                                                      fontWeight: FontWeight.w900,
+                                                      letterSpacing: 0.5,
+                                                    ),
+                                                  ),
+                                                ),
+                                            ],
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            store.address,
+                                            style: const TextStyle(
+                                              fontSize: 11.5,
+                                              color: AppColors.textSecondary,
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 6),
+                                          Row(
+                                            children: [
+                                              Container(
+                                                width: 6,
+                                                height: 6,
+                                                decoration: const BoxDecoration(
+                                                  shape: BoxShape.circle,
+                                                  color: AppColors.discountGreen,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 4),
+                                              const Text(
+                                                'Open for Pickup',
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: AppColors.discountGreen,
+                                                ),
+                                              ),
+                                              const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
+                                              Text(
+                                                store.timings,
+                                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                              ),
+                                              if (store.distance.isNotEmpty) ...[
+                                                const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
+                                                Text(
+                                                  store.distance,
+                                                  style: const TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: AppColors.primaryMaroon,
+                                                  ),
+                                                ),
+                                              ],
+                                            ],
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          }),
+                          const SizedBox(height: 4),
+                          // Quick Pickup Alert Box (matching website)
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFFBEB),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                            ),
+                            child: const Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(Icons.schedule_rounded, size: 18, color: Color(0xFFD97706)),
+                                SizedBox(width: 8),
+                                Expanded(
+                                  child: Text.rich(
+                                    TextSpan(
+                                      text: 'Quick Pickup: ',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 11.5,
+                                        color: Color(0xFF78350F),
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text: 'Order will be freshly carved and packaged within ',
+                                          style: TextStyle(fontWeight: FontWeight.normal),
+                                        ),
+                                        TextSpan(
+                                          text: '15 minutes',
+                                          style: TextStyle(fontWeight: FontWeight.w800),
+                                        ),
+                                        TextSpan(
+                                          text: '. Collect anytime before 8:00 PM today!',
+                                          style: TextStyle(fontWeight: FontWeight.normal),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
@@ -432,62 +953,92 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Icon(Icons.location_on_rounded, color: AppColors.primaryMaroon, size: 22),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          'Delivering to ${location.activeLabel}',
-                                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
-                                        ),
-                                        GestureDetector(
-                                          onTap: () => _showAddressPicker(context, location),
-                                          child: const Text(
-                                            'CHANGE',
-                                            style: TextStyle(
-                                              color: AppColors.primaryMaroon,
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 11.5,
+                          if (location.selectedAddress == null) ...[
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primaryMaroon.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: const Icon(Icons.add_location_alt_rounded, color: AppColors.primaryMaroon, size: 20),
+                                ),
+                                const SizedBox(width: 10),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'No delivery address added',
+                                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.textPrimary),
+                                      ),
+                                      SizedBox(height: 2),
+                                      Text(
+                                        'Add an address to deliver your order',
+                                        style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryMaroon,
+                                    foregroundColor: Colors.white,
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    elevation: 0,
+                                  ),
+                                  onPressed: () => _showAddAddressDialog(context, location),
+                                  child: const Text('+ ADD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5)),
+                                ),
+                              ],
+                            ),
+                          ] else ...[
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.location_on_rounded, color: AppColors.primaryMaroon, size: 22),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            'Delivering to ${location.activeLabel}',
+                                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+                                          ),
+                                          GestureDetector(
+                                            onTap: () => _showAddressPicker(context, location),
+                                            child: const Text(
+                                              'CHANGE',
+                                              style: TextStyle(
+                                                color: AppColors.primaryMaroon,
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 11.5,
+                                              ),
                                             ),
                                           ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      location.activeAddressString,
-                                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                                    ),
-                                  ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        location.activeAddressString,
+                                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          const Divider(height: 1, color: AppColors.borderHairline),
-                          const SizedBox(height: 8),
-                          const Row(
-                            children: [
-                              Icon(Icons.bolt_rounded, size: 14, color: AppColors.deliveryAmber),
-                              SizedBox(width: 4),
-                              Text(
-                                'Dispatched from Kishore Ganj Artisanal Butchery Hub',
-                                style: TextStyle(
-                                  color: AppColors.deliveryAmber,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -523,13 +1074,19 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        isPickup ? '⚡ Ready in 30 Mins' : '⚡ Express 90 Mins',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 11.5,
-                                          color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.textPrimary,
-                                        ),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.bolt_rounded, size: 16, color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.textPrimary),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            isPickup ? 'Ready in 30 Mins' : 'Express 90 Mins',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 11.5,
+                                              color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                       const SizedBox(height: 2),
                                       Text(isPickup ? 'Freshly packed' : 'Priority butchering', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
@@ -554,13 +1111,19 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        isPickup ? '🌅 Evening (5-8 PM)' : '🌅 Evening (6-9 PM)',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 11.5,
-                                          color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.textPrimary,
-                                        ),
+                                      Row(
+                                        children: [
+                                          Icon(Icons.schedule_rounded, size: 15, color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.textPrimary),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            isPickup ? 'Evening (5-8 PM)' : 'Evening (6-9 PM)',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w800,
+                                              fontSize: 11.5,
+                                              color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                       const SizedBox(height: 2),
                                       const Text('Evening fresh cuts', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
@@ -664,6 +1227,238 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       ],
                     ),
                   ),
+
+                  // 3.5 Tip & Instructions (Home Delivery vs Store Pickup)
+                  if (!isPickup) ...[
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
+                      padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: AppDimensions.roundedLg,
+                        border: Border.all(color: AppColors.borderHairline),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Tip for Rider', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+                          const SizedBox(height: 6),
+                          const Text('100% of this tip goes to your delivery partner.', style: TextStyle(fontSize: 11, color: AppColors.textSecondary)),
+                          const SizedBox(height: 10),
+                          Row(
+                            children: [
+                              ...[10, 35, 50].map((tip) {
+                                final isSelected = _selectedTip == tip && !_showCustomTipInput;
+                                return Expanded(
+                                  child: GestureDetector(
+                                    onTap: () => setState(() {
+                                      _showCustomTipInput = false;
+                                      _selectedTip = isSelected ? 0 : tip;
+                                    }),
+                                    child: Container(
+                                      margin: const EdgeInsets.only(right: 8),
+                                      padding: const EdgeInsets.symmetric(vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isSelected ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
+                                        borderRadius: AppDimensions.roundedMd,
+                                        border: Border.all(color: isSelected ? AppColors.primaryMaroon : AppColors.borderHairline),
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          '₹$tip',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 13,
+                                            color: isSelected ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              }),
+                              // Option: Custom
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() {
+                                    _showCustomTipInput = !_showCustomTipInput;
+                                  }),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: (_showCustomTipInput || (_selectedTip > 0 && ![10, 35, 50].contains(_selectedTip)))
+                                          ? AppColors.primaryLight.withOpacity(0.35)
+                                          : AppColors.surfaceSubtle,
+                                      borderRadius: AppDimensions.roundedMd,
+                                      border: Border.all(
+                                        color: (_showCustomTipInput || (_selectedTip > 0 && ![10, 35, 50].contains(_selectedTip)))
+                                            ? AppColors.primaryMaroon
+                                            : AppColors.borderHairline,
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        (_selectedTip > 0 && ![10, 35, 50].contains(_selectedTip))
+                                            ? '₹$_selectedTip'
+                                            : 'Custom',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12.5,
+                                          color: (_showCustomTipInput || (_selectedTip > 0 && ![10, 35, 50].contains(_selectedTip)))
+                                              ? AppColors.primaryMaroon
+                                              : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          if (_showCustomTipInput) ...[
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Container(
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.5)),
+                                    ),
+                                    child: TextField(
+                                      controller: _customTipController,
+                                      keyboardType: TextInputType.number,
+                                      autofocus: true,
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                                      decoration: const InputDecoration(
+                                        prefixText: '₹ ',
+                                        prefixStyle: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textPrimary),
+                                        hintText: 'Enter amount (e.g. 25)',
+                                        hintStyle: TextStyle(fontSize: 11.5, color: AppColors.textMuted),
+                                        contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                        border: InputBorder.none,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                SizedBox(
+                                  height: 38,
+                                  child: ElevatedButton(
+                                    onPressed: () {
+                                      final val = int.tryParse(_customTipController.text.trim()) ?? 0;
+                                      setState(() {
+                                        _selectedTip = val;
+                                        _showCustomTipInput = false;
+                                      });
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primaryMaroon,
+                                      foregroundColor: Colors.white,
+                                      elevation: 0,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                    child: const Text('Add', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                                  ),
+                                ),
+                                const SizedBox(width: 2),
+                                IconButton(
+                                  icon: const Icon(Icons.close_rounded, size: 20, color: AppColors.textMuted),
+                                  onPressed: () {
+                                    setState(() {
+                                      _showCustomTipInput = false;
+                                      if (![10, 35, 50].contains(_selectedTip)) {
+                                        _selectedTip = 0;
+                                      }
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ],
+                          const SizedBox(height: 16),
+                          const Text('Delivery Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+                          const SizedBox(height: 8),
+                          TextField(
+                            onChanged: (val) => _deliveryInstruction = val,
+                            decoration: const InputDecoration(
+                              hintText: 'E.g. Leave at door, Don\'t ring bell',
+                              hintStyle: TextStyle(fontSize: 12),
+                              border: OutlineInputBorder(),
+                              contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.spaceMd),
+                  ] else ...[
+                    // 3.5 Store Pickup Notes Box (matching website)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
+                      padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: AppDimensions.roundedLg,
+                        border: Border.all(color: AppColors.borderHairline),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.edit_note_rounded, color: AppColors.primaryMaroon, size: 20),
+                              SizedBox(width: 6),
+                              Text(
+                                'Pickup Instructions / Notes (Optional)',
+                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          TextField(
+                            controller: _pickupInstructionController,
+                            decoration: InputDecoration(
+                              hintText: 'e.g. Keep marinated separately / Pack in double bag',
+                              hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                              fillColor: AppColors.surfaceSubtle,
+                              filled: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.borderHairline),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.borderHairline),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.primaryMaroon),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          const Row(
+                            children: [
+                              Icon(Icons.verified_rounded, size: 15, color: AppColors.discountGreen),
+                              SizedBox(width: 5),
+                              Expanded(
+                                child: Text(
+                                  'Your order will be packed and ready to collect at the counter!',
+                                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppDimensions.spaceMd),
+                  ],
 
                   // 4. Coupon Input Box
                   Container(
@@ -781,6 +1576,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         ),
                         if (cart.couponDiscount > 0)
                           _buildBillRow('Coupon Discount', '- ${CurrencyFormatter.format(cart.couponDiscount)}', isHighlight: true),
+                        if (!isPickup && _selectedTip > 0)
+                          _buildBillRow('Tip for Rider', CurrencyFormatter.format(_selectedTip.toDouble())),
                         const Divider(height: 18, color: AppColors.borderHairline),
                         _buildBillRow('To Pay', CurrencyFormatter.format(effectiveGrandTotal), isBold: true),
                       ],

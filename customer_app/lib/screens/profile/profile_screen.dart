@@ -338,7 +338,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String selectedTag = 'Home';
     final line1Controller = TextEditingController();
     final landmarkController = TextEditingController();
-    final pincodeController = TextEditingController(text: '834001');
+    final pincodeController = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -410,7 +410,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     controller: pincodeController,
                     keyboardType: TextInputType.number,
                     decoration: InputDecoration(
-                      hintText: 'Pincode (Ranchi)',
+                      hintText: 'Enter 6-digit Pincode',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
@@ -423,7 +423,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon),
                       onPressed: () async {
-                        if (line1Controller.text.trim().isEmpty) return;
+                        if (line1Controller.text.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter your house/street address')),
+                          );
+                          return;
+                        }
+                        if (pincodeController.text.trim().isEmpty || pincodeController.text.trim().length < 6) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter a valid 6-digit pincode')),
+                          );
+                          return;
+                        }
                         await location.addAddress(
                           tag: selectedTag,
                           line1: line1Controller.text.trim(),
@@ -1371,7 +1382,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.phone_rounded, size: 16),
-                          label: const Text('Call Butchery Hub'),
+                          label: const Text('Call Teffe\'s'),
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Calling Kishore Ganj Hub at +91 94311 88204...')),

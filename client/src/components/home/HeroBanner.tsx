@@ -56,7 +56,7 @@ export default function HeroBanner({ selectedCategory, onSelectCategory }: HeroB
   const [activeCoupons, setActiveCoupons] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/coupons/active")
+    fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://teffes.onrender.com/api"}/coupons/active`)
       .then((res) => res.json())
       .then((data) => {
         if (data.success && data.coupons) {

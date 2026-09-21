@@ -39,12 +39,12 @@ const categories = [
     isActive: true,
   },
   {
-    slug: 'eggs',
-    name: 'Farm Eggs',
-    tagline: 'Classic white, brown & country eggs',
-    icon: '🥚',
-    image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=400&q=80',
-    order: 5,
+    slug: 'marinated',
+    name: 'Marinated',
+    tagline: 'Ready-to-cook spiced chicken & seafood',
+    icon: '🍖',
+    image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=600&q=80',
+    order: 4,
     isActive: true,
   },
 ];

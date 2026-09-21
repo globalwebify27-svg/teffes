@@ -19,6 +19,9 @@ class PaymentProceedScreen extends StatefulWidget {
   final String paymentMethod; // 'razorpay', 'cod', 'wallet'
   final bool isPickup;
   final String fulfillmentType;
+  final String storeId;
+  final String storeName;
+  final String instruction;
 
   const PaymentProceedScreen({
     super.key,
@@ -28,6 +31,9 @@ class PaymentProceedScreen extends StatefulWidget {
     this.paymentMethod = 'razorpay',
     this.isPickup = false,
     this.fulfillmentType = 'delivery',
+    this.storeId = 'S001',
+    this.storeName = 'Kishore Ganj Hub',
+    this.instruction = '',
   });
 
   @override
@@ -112,7 +118,9 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         'razorpayPaymentId': paymentId,
         'shippingAddress': widget.deliveryAddress.isNotEmpty ? widget.deliveryAddress : location.activeAddressString,
         'deliverySlot': widget.isPickup ? 'Store Pickup (Counter Takeaway)' : widget.deliverySlot,
-        'storeName': 'Kishore Ganj Hub',
+        'storeId': widget.storeId,
+        'storeName': widget.storeName,
+        'deliveryInstruction': widget.instruction,
       };
 
       try {
@@ -147,7 +155,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         deliveryAddress: widget.deliveryAddress,
         paymentMethod: 'Online Payment (Razorpay)',
         paymentStatus: 'Paid',
-        storeName: 'Kishore Ganj Hub',
+        storeName: widget.storeName,
         fulfillmentType: widget.isPickup ? 'pickup' : widget.fulfillmentType,
         pickupMode: widget.isPickup,
         targetDeliveryTime: DateTime.now().add(const Duration(minutes: 35)).toIso8601String(),

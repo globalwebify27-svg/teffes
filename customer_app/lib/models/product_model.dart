@@ -20,6 +20,7 @@ class ProductModel {
   final String? badgeType; // e.g. "antibiotic", "bestseller", "cut-fresh"
   final bool inStock;
   final String description;
+  final List<String> videoURLs;
 
   ProductModel({
     required this.id,
@@ -28,6 +29,7 @@ class ProductModel {
     required this.originalPrice,
     required this.image,
     this.images = const [],
+    this.videoURLs = const [],
     required this.netWeight,
     this.grossWeight,
     required this.category,
@@ -68,6 +70,15 @@ class ProductModel {
       parsedImages = [json['image'].toString().trim()];
     }
 
+    final rawVideos = json['videoURLs'] ?? json['videos'];
+    List<String> parsedVideos = [];
+    if (rawVideos is List) {
+      parsedVideos = rawVideos
+          .where((e) => e != null && e.toString().trim().isNotEmpty)
+          .map((e) => e.toString().trim())
+          .toList();
+    }
+
     return ProductModel(
       id: json['id'] ?? json['_id'] ?? '',
       name: json['name'] ?? '',
@@ -75,6 +86,7 @@ class ProductModel {
       originalPrice: (json['originalPrice'] as num?)?.toDouble() ?? (json['price'] as num?)?.toDouble() ?? 0.0,
       image: json['image'] ?? (parsedImages.isNotEmpty ? parsedImages.first : ''),
       images: parsedImages,
+      videoURLs: parsedVideos,
       netWeight: json['netWeight'] ?? '500g',
       grossWeight: json['grossWeight'],
       category: json['category'] ?? 'chicken',
@@ -101,6 +113,7 @@ class ProductModel {
       'originalPrice': originalPrice,
       'image': image,
       'images': images,
+      'videoURLs': videoURLs,
       'netWeight': netWeight,
       'grossWeight': grossWeight,
       'category': category,

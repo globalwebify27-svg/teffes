@@ -386,6 +386,43 @@ a.bg-primary:hover {
   transform: translateY(-1px);
 }
 
+/* ─── Persistent Maroon Strikethrough for Discounted Prices Everywhere ─── */
+.line-through,
+[style*="line-through"],
+del,
+s {
+  text-decoration: line-through !important;
+  text-decoration-color: #800020 !important;
+  -webkit-text-decoration-color: #800020 !important;
+  text-decoration-thickness: 1.5px !important;
+}
+
+/* ─── Smooth Hardware-Accelerated Left-to-Right Button Hover Fill ─────────── */
+.btn-hover-fill {
+  position: relative;
+  background-color: #fdf5f5 !important;
+  background-image: linear-gradient(to right, #800020, #800020) !important;
+  background-repeat: no-repeat !important;
+  background-size: 0% 100% !important;
+  background-position: left center !important;
+  color: #800020 !important;
+  border: 1.5px solid #800020 !important;
+  transition: background-size 0.28s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease !important;
+  will-change: background-size;
+}
+
+.btn-hover-fill:hover {
+  background-size: 100% 100% !important;
+  color: #ffffff !important;
+  border-color: #800020 !important;
+  box-shadow: 0 4px 14px rgba(128, 0, 32, 0.22) !important;
+}
+
+.btn-hover-fill:hover * {
+  color: #ffffff !important;
+  transition: color 0.2s ease;
+}
+
 /* ─── Card Elevating Shadows ───────────────────────────────────────────────── */
 .shadow-xs {
   box-shadow: 0 1px 2px rgba(17, 28, 54, 0.04) !important;
@@ -574,4 +611,21 @@ a.bg-primary:hover {
 * {
   scrollbar-width: none;
 }
+
+/* Announcement Bar Left-to-Right Offer Slide Animation */
+@keyframes offerSlideLeftToRight {
+  0% {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-offer-slide {
+  animation: offerSlideLeftToRight 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
 

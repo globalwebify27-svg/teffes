@@ -67,14 +67,15 @@ export default function CartDrawer() {
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
   const [pickupNote, setPickupNote] = useState<string>("");
 
-  // Navigation views: "cart" -> "payment" -> "success"
-  const [view, setView] = useState<"cart" | "payment" | "success">("cart");
+  // Navigation views: "cart" -> "payment" -> "success" | "address"
+  const [view, setView] = useState<"cart" | "payment" | "success" | "address">("cart");
   const [slot, setSlot] = useState<"express" | "evening">("express");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       setIsLoggedIn(isAuthenticated());
+      fetchAddresses();
 
       // Fetch live stores list from backend API
       api.get<{ success: boolean; stores: StoreOption[] }>("/stores")
@@ -92,6 +93,9 @@ export default function CartDrawer() {
           }
         })
         .catch((err) => console.warn("Failed to fetch stores for pickup:", err));
+    } else {
+      setView("cart");
+      setShowAddAddressForm(false);
     }
   }, [isOpen]);
 
@@ -108,7 +112,8 @@ export default function CartDrawer() {
   const [addresses, setAddresses] = useState<Address[]>([]);
   const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [showAddAddressForm, setShowAddAddressForm] = useState<boolean>(false);
-  const [newAddress, setNewAddress] = useState({ tag: "Home", line1: "", line2: "", city: "Ranchi", pincode: "" });
+  const [isSavingAddress, setIsSavingAddress] = useState<boolean>(false);
+  const [newAddress, setNewAddress] = useState({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
 
   const [orderSummary, setOrderSummary] = useState<{
@@ -185,7 +190,7 @@ export default function CartDrawer() {
     }
   };
 
-  const { currentLocation } = useLocation();
+  const { currentLocation, selectSavedAddress, refreshSavedAddresses } = useLocation();
 
   // Fetch user addresses from backend
   const fetchAddresses = async () => {
@@ -204,20 +209,68 @@ export default function CartDrawer() {
 
   const handleAddNewAddress = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newAddress.line1.trim()) {
+      toast.warning("Please enter your house/street address.", "Missing Address");
+      return;
+    }
+    if (!newAddress.city.trim()) {
+      toast.warning("Please enter your city.", "Missing City");
+      return;
+    }
+    if (!newAddress.pincode.trim() || newAddress.pincode.length < 6) {
+      toast.warning("Please enter a valid 6-digit pincode.", "Invalid Pincode");
+      return;
+    }
+
+    setIsSavingAddress(true);
     try {
-      const res = await api.post<{ success: boolean; addresses: Address[] }>("/user/addresses", newAddress);
-      if (res.data.success && res.data.addresses) {
+      if (!isAuthenticated()) {
+        closeCart();
+        window.dispatchEvent(new CustomEvent("open-login"));
+        setIsSavingAddress(false);
+        return;
+      }
+
+      const res = await api.post<{ success: boolean; addresses: Address[] }>("/user/addresses", {
+        ...newAddress,
+        isDefault: true,
+      });
+
+      if (res.data.success && Array.isArray(res.data.addresses)) {
         setAddresses(res.data.addresses);
         const newest = res.data.addresses[res.data.addresses.length - 1];
-        if (newest) setSelectedAddressId(newest._id);
+        if (newest) {
+          setSelectedAddressId(newest._id);
+          selectSavedAddress({
+            _id: newest._id,
+            tag: newest.tag,
+            line1: newest.line1,
+            line2: newest.line2,
+            city: newest.city,
+            pincode: newest.pincode,
+            isDefault: newest.isDefault,
+          });
+        }
+        await refreshSavedAddresses();
         setShowAddAddressForm(false);
-        setNewAddress({ tag: "Home", line1: "", line2: "", city: "Ranchi", pincode: "" });
+        setView("cart");
+        setNewAddress({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
+        toast.success("Delivery address saved and selected!", "Address Saved");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to add address:", err);
-      toast.error("Failed to save address. Please try again.", "Address Error");
+      toast.error(err.response?.data?.message || "Failed to save address. Please try again.", "Address Error");
+    } finally {
+      setIsSavingAddress(false);
     }
   };
+
+  const activeAddress =
+    addresses.find((a) => a._id === selectedAddressId) ||
+    addresses.find((a) => a._id === currentLocation.addressId) ||
+    addresses.find((a) => a.isDefault) ||
+    addresses[0] ||
+    null;
 
   // Proceed from cart to payment view inside drawer
   const handleProceedToPayment = async () => {
@@ -229,8 +282,14 @@ export default function CartDrawer() {
 
     if (fulfillmentType === "delivery") {
       await fetchAddresses();
+      if (addresses.length === 0 && !selectedAddressId) {
+        toast.warning("Please add a delivery address to proceed.", "Address Required");
+        setShowAddAddressForm(true);
+        setView("address");
+        return;
+      }
     }
-    
+
     try {
       const res = await api.get<{ success: boolean; balance: number }>("/wallet/details");
       if (res.data.success) {
@@ -239,7 +298,7 @@ export default function CartDrawer() {
     } catch (err) {
       console.warn("Failed to fetch wallet balance:", err);
     }
-    
+
     setView("payment");
   };
 
@@ -402,10 +461,16 @@ export default function CartDrawer() {
     closeCart();
   };
 
+  const handleCloseCart = () => {
+    setView("cart");
+    setShowAddAddressForm(false);
+    closeCart();
+  };
+
   return (
     <>
       {/* Backdrop */}
-      <div className="drawer-backdrop" onClick={closeCart} />
+      <div className="drawer-backdrop" onClick={handleCloseCart} />
 
       {/* Slide-over Drawer */}
       <div className="cart-drawer" role="dialog" aria-modal="true" aria-label="Shopping Cart">
@@ -426,7 +491,7 @@ export default function CartDrawer() {
                 </div>
               </div>
               <button
-                onClick={closeCart}
+                onClick={handleCloseCart}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 w-8 h-8 rounded-full flex items-center justify-center cursor-pointer border-none transition-colors"
                 aria-label="Close Cart"
               >
@@ -442,11 +507,10 @@ export default function CartDrawer() {
                   type="button"
                   id="tab-delivery-flow"
                   onClick={() => setFulfillmentType("delivery")}
-                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-[13px] transition-all border-none cursor-pointer ${
-                    fulfillmentType === "delivery"
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "delivery"
                       ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
                       : "bg-transparent text-slate-body hover:text-on-surface"
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">two_wheeler</span>
                   <span>Home Delivery</span>
@@ -457,17 +521,15 @@ export default function CartDrawer() {
                   type="button"
                   id="tab-pickup-flow"
                   onClick={() => setFulfillmentType("pickup")}
-                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 font-bold text-[13px] transition-all border-none cursor-pointer ${
-                    fulfillmentType === "pickup"
+                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "pickup"
                       ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
                       : "bg-transparent text-slate-body hover:text-on-surface"
-                  }`}
+                    }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">storefront</span>
                   <span>Store Pickup</span>
-                  <span className={`text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full ${
-                    fulfillmentType === "pickup" ? "bg-emerald-100 text-emerald-800" : "bg-emerald-50 text-emerald-700"
-                  }`}>
+                  <span className={`text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full ${fulfillmentType === "pickup" ? "bg-emerald-100 text-emerald-800" : "bg-emerald-50 text-emerald-700"
+                    }`}>
                     FREE
                   </span>
                 </button>
@@ -484,7 +546,7 @@ export default function CartDrawer() {
                 <p className="font-body-sm text-slate-body max-w-[260px] mb-6 text-[13px]">
                   Explore our freshly cut chicken, tender mutton, freshwater fish, and farm eggs.
                 </p>
-                <button onClick={closeCart} className="btn btn-primary px-6 py-2.5 rounded-full text-white font-bold">
+                <button onClick={handleCloseCart} className="btn btn-primary px-6 py-2.5 rounded-full text-white font-bold">
                   Browse Fresh Cuts
                 </button>
               </div>
@@ -492,26 +554,59 @@ export default function CartDrawer() {
               <>
                 {/* ─── FULFILLMENT BANNER ─── */}
                 {fulfillmentType === "delivery" ? (
-                  /* Delivery Address Block (matches navbar) */
-                  <div className="bg-surface-container-low px-5 py-3 border-b border-gray-200/80 flex items-start gap-3 shrink-0">
-                    <span className="material-symbols-outlined text-primary text-[22px] mt-0.5 shrink-0">location_on</span>
-                    <div className="flex-1 text-left">
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-badge uppercase text-tertiary font-bold tracking-wider text-[10px]">
-                          Deliver to (90 Mins)
-                        </span>
-                        <span className="font-label-badge text-[11px] text-primary font-bold">
-                          Ranchi Hub
-                        </span>
+                  activeAddress ? (
+                    /* Delivery Address Block (with CHANGE button and active customer address) */
+                    <div className="bg-surface-container-low px-5 py-3 border-b border-gray-200/80 flex items-start gap-3 shrink-0">
+                      <span className="material-symbols-outlined text-primary text-[22px] mt-0.5 shrink-0">location_on</span>
+                      <div className="flex-1 text-left min-w-0">
+                        <div className="flex items-center justify-between">
+                          <span className="font-label-badge uppercase text-tertiary font-bold tracking-wider text-[10px]">
+                            Deliver to {activeAddress.tag} (90 Mins)
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => setView("address")}
+                            className="text-primary font-black text-[11.5px] uppercase tracking-wider hover:underline bg-transparent border-none cursor-pointer py-0.5 px-2 rounded-md hover:bg-primary/10 transition-colors"
+                          >
+                            CHANGE
+                          </button>
+                        </div>
+                        <p className="font-label-md text-on-surface font-semibold text-[13px] leading-tight mt-0.5 truncate">
+                          {activeAddress.line1}{activeAddress.line2 ? `, ${activeAddress.line2}` : ""}, {activeAddress.city}
+                        </p>
+                        <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5 truncate">
+                          {activeAddress.pincode ? `Pincode: ${activeAddress.pincode} • 5km Delivery Radius` : "5km Delivery Radius"}
+                        </p>
                       </div>
-                      <p className="font-label-md text-on-surface font-semibold text-[13px] leading-tight mt-0.5">
-                        Kacheri Chowk, Ranchi
-                      </p>
-                      <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5">
-                        Near Kishore Ganj Chowk, Harmu Road • 5km Delivery Radius
-                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    /* No Saved Address Banner */
+                    <div className="bg-primary/5 px-5 py-3 border-b border-primary/20 flex items-center justify-between gap-3 shrink-0">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                          <span className="material-symbols-outlined text-[20px]">add_location_alt</span>
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-label-badge uppercase text-primary font-bold tracking-wider text-[10px] block">
+                            Delivery Address Needed
+                          </span>
+                          <p className="font-label-md text-on-surface font-semibold text-[12px] leading-tight mt-0.5 truncate">
+                            Please add a delivery address to order
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowAddAddressForm(true);
+                          setView("address");
+                        }}
+                        className="bg-primary hover:bg-primary-dark text-white font-bold text-[11px] uppercase tracking-wider py-1.5 px-3 rounded-lg border-none cursor-pointer shadow-xs transition-colors shrink-0"
+                      >
+                        + ADD
+                      </button>
+                    </div>
+                  )
                 ) : (
                   /* Store Pickup Selected Banner */
                   <div className="bg-emerald-50/90 px-5 py-3 border-b border-emerald-200/70 flex items-start gap-3 shrink-0">
@@ -583,18 +678,16 @@ export default function CartDrawer() {
                             <div
                               key={store.storeId}
                               onClick={() => setSelectedStoreId(store.storeId)}
-                              className={`p-3 rounded-2xl border transition-all cursor-pointer text-left ${
-                                isSelected
+                              className={`p-3 rounded-2xl border transition-all cursor-pointer text-left ${isSelected
                                   ? "border-primary bg-crimson-soft shadow-xs ring-1 ring-primary/20"
                                   : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60"
-                              }`}
+                                }`}
                             >
                               <div className="flex items-start gap-2.5">
                                 {/* Radio Indicator */}
                                 <div
-                                  className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-colors ${
-                                    isSelected ? "border-primary bg-primary" : "border-gray-300 bg-white"
-                                  }`}
+                                  className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-colors ${isSelected ? "border-primary bg-primary" : "border-gray-300 bg-white"
+                                    }`}
                                 >
                                   {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
@@ -656,11 +749,10 @@ export default function CartDrawer() {
                         <button
                           type="button"
                           onClick={() => setSlot("express")}
-                          className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                            slot === "express"
+                          className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "express"
                               ? "border-primary bg-crimson-soft shadow-xs"
                               : "border-gray-200 bg-white hover:border-gray-300"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
                             <span className="material-symbols-outlined text-primary text-[16px]">bolt</span>
@@ -671,11 +763,10 @@ export default function CartDrawer() {
                         <button
                           type="button"
                           onClick={() => setSlot("evening")}
-                          className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                            slot === "evening"
+                          className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "evening"
                               ? "border-primary bg-crimson-soft shadow-xs"
                               : "border-gray-200 bg-white hover:border-gray-300"
-                          }`}
+                            }`}
                         >
                           <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
                             <span className="material-symbols-outlined text-primary text-[16px]">schedule</span>
@@ -730,7 +821,7 @@ export default function CartDrawer() {
                                 ₹{item.product.price * item.quantity}
                               </span>
                               {item.product.originalPrice > item.product.price && (
-                                <span className="font-body-sm text-slate-subtle line-through text-[11px]">
+                                <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11px]">
                                   ₹{item.product.originalPrice * item.quantity}
                                 </span>
                               )}
@@ -788,22 +879,20 @@ export default function CartDrawer() {
                         <button
                           type="button"
                           onClick={() => setTipTab("tip")}
-                          className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${
-                            tipTab === "tip"
+                          className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${tipTab === "tip"
                               ? "bg-white text-on-surface shadow-xs"
                               : "bg-transparent text-slate-body hover:text-on-surface"
-                          }`}
+                            }`}
                         >
                           Give a Tip
                         </button>
                         <button
                           type="button"
                           onClick={() => setTipTab("instructions")}
-                          className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${
-                            tipTab === "instructions"
+                          className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${tipTab === "instructions"
                               ? "bg-white text-on-surface shadow-xs"
                               : "bg-transparent text-slate-body hover:text-on-surface"
-                          }`}
+                            }`}
                         >
                           Delivery Instructions
                         </button>
@@ -837,13 +926,12 @@ export default function CartDrawer() {
                             <button
                               type="button"
                               onClick={() => handleSelectTip(10)}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${
-                                selectedTip === 10 && !showCustomInput
+                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 10 && !showCustomInput
                                   ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
                                   : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                              }`}
+                                }`}
                             >
-                              <span className="text-[13px]">☕</span>
+
                               <span className="text-[13px]">₹10</span>
                             </button>
 
@@ -851,13 +939,11 @@ export default function CartDrawer() {
                             <button
                               type="button"
                               onClick={() => handleSelectTip(35)}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${
-                                selectedTip === 35 && !showCustomInput
+                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 35 && !showCustomInput
                                   ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
                                   : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                              }`}
+                                }`}
                             >
-                              <span className="text-[13px]">🥟</span>
                               <span className="text-[13px]">₹35</span>
                             </button>
 
@@ -865,13 +951,11 @@ export default function CartDrawer() {
                             <button
                               type="button"
                               onClick={() => handleSelectTip(50)}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${
-                                selectedTip === 50 && !showCustomInput
+                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 50 && !showCustomInput
                                   ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
                                   : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                              }`}
+                                }`}
                             >
-                              <span className="text-[13px]">🍱</span>
                               <span className="text-[13px]">₹50</span>
                             </button>
 
@@ -881,13 +965,11 @@ export default function CartDrawer() {
                               onClick={() => {
                                 setShowCustomInput((prev) => !prev);
                               }}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${
-                                showCustomInput || (selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50)
+                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${showCustomInput || (selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50)
                                   ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
                                   : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                              }`}
+                                }`}
                             >
-                              <span className="text-[13px]">❤️</span>
                               <span className="text-[12px]">
                                 {selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50
                                   ? `₹${selectedTip}`
@@ -1063,7 +1145,7 @@ export default function CartDrawer() {
                           <span>Store Self-Pickup Fee</span>
                         </span>
                         <span className="flex items-center gap-1.5">
-                          <span className="line-through text-gray-400 text-xs font-normal">₹40</span>
+                          <span className="line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-gray-400 text-xs font-normal">₹40</span>
                           <span className="text-emerald-800 font-black">FREE (₹0)</span>
                         </span>
                       </div>
@@ -1139,8 +1221,8 @@ export default function CartDrawer() {
                   {isPickup
                     ? `Self Pickup: ${selectedStore?.name} — ${selectedStore?.address}`
                     : addresses.find((a) => a._id === selectedAddressId)
-                    ? `${addresses.find((a) => a._id === selectedAddressId)?.line1}, ${addresses.find((a) => a._id === selectedAddressId)?.city}`
-                    : "Select or add your delivery address below"}
+                      ? `${addresses.find((a) => a._id === selectedAddressId)?.line1}, ${addresses.find((a) => a._id === selectedAddressId)?.city}`
+                      : "Select or add your delivery address below"}
                 </p>
               </div>
             </div>
@@ -1240,11 +1322,10 @@ export default function CartDrawer() {
                     {addresses.map((addr) => (
                       <label
                         key={addr._id}
-                        className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
-                          selectedAddressId === addr._id
+                        className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${selectedAddressId === addr._id
                             ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                             : "border-gray-200 hover:border-gray-300 bg-white"
-                        }`}
+                          }`}
                       >
                         <input
                           type="radio"
@@ -1302,9 +1383,8 @@ export default function CartDrawer() {
                   {/* Method A: Cash on Delivery / Pay at Counter */}
                   <label
                     onClick={() => setSelectedPayment("cod")}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${
-                      selectedPayment === "cod" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
-                    }`}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${selectedPayment === "cod" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-primary">
@@ -1329,9 +1409,8 @@ export default function CartDrawer() {
                   {/* Method B: Razorpay Online Payment */}
                   <label
                     onClick={() => setSelectedPayment("razorpay")}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${
-                      selectedPayment === "razorpay" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
-                    }`}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${selectedPayment === "razorpay" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
@@ -1359,13 +1438,11 @@ export default function CartDrawer() {
                         setSelectedPayment("wallet");
                       }
                     }}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
-                      walletBalance >= finalPayable
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${walletBalance >= finalPayable
                         ? "cursor-pointer hover:border-gray-300"
                         : "opacity-50 cursor-not-allowed bg-gray-50 border-gray-100"
-                    } ${
-                      selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200"
-                    }`}
+                      } ${selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200"
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-[#7c3aed]/10 flex items-center justify-center text-[#7c3aed]">
@@ -1556,6 +1633,282 @@ export default function CartDrawer() {
               >
                 Order More Fresh Cuts
               </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── VIEW 3: IN-DRAWER ADDRESS SELECTION & MANAGEMENT VIEW ─────────────── */}
+        {view === "address" && (
+          <div className="flex-1 flex flex-col bg-[#f8f9fa] overflow-hidden">
+            {/* Address Header */}
+            <div className="bg-white px-5 py-3.5 border-b border-gray-200 flex items-center justify-between shrink-0 shadow-2xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setView("cart");
+                    setShowAddAddressForm(false);
+                  }}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center cursor-pointer border-none bg-transparent text-gray-700 transition-colors shrink-0"
+                  aria-label="Back to Cart"
+                >
+                  <span className="material-symbols-outlined text-[22px]">arrow_back</span>
+                </button>
+                <div className="min-w-0">
+                  <h2 className="font-headline-sm font-extrabold text-on-surface text-[15px] leading-tight">
+                    Delivery Address
+                  </h2>
+                  <p className="font-body-sm text-slate-body text-[11px] truncate">
+                    {addresses.length} saved {addresses.length === 1 ? "address" : "addresses"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCloseCart}
+                className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-600 flex items-center justify-center border-none cursor-pointer transition-colors shrink-0"
+                aria-label="Close"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Address Content List */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+              {/* Add New Address Button / Inline Form */}
+              {!showAddAddressForm ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isAuthenticated()) {
+                      closeCart();
+                      window.dispatchEvent(new CustomEvent("open-login"));
+                      return;
+                    }
+                    setShowAddAddressForm(true);
+                  }}
+                  className="w-full py-3 px-4 rounded-2xl border-2 border-dashed border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-2xs"
+                >
+                  <span className="material-symbols-outlined text-[18px]">add_location_alt</span>
+                  <span>+ Add New Delivery Address</span>
+                </button>
+              ) : (
+                <form
+                  onSubmit={handleAddNewAddress}
+                  className="bg-white p-4 rounded-2xl border border-primary/30 shadow-xs space-y-3 animate-fade-in"
+                >
+                  <div className="flex items-center justify-between pb-1 border-b border-gray-100">
+                    <span className="font-bold text-gray-900 text-xs uppercase tracking-wider flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-primary text-[18px]">add_location_alt</span>
+                      Add New Address
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAddressForm(false)}
+                      className="text-xs text-slate-500 hover:text-slate-800 bg-transparent border-none cursor-pointer font-semibold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+
+                  {/* Address Tag Selector */}
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-600 block mb-1">Save Address As</label>
+                    <div className="flex gap-2">
+                      {["Home", "Work", "Other"].map((tag) => (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => setNewAddress({ ...newAddress, tag })}
+                          className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                            newAddress.tag === tag
+                              ? "bg-primary text-white border-primary shadow-xs"
+                              : "bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300"
+                          }`}
+                        >
+                          {tag}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* House / Flat / Street */}
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-600 block mb-1">
+                      House / Flat / Block / Street *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Flat 302, Shivalik Heights, Harmu Road"
+                      value={newAddress.line1}
+                      onChange={(e) => setNewAddress({ ...newAddress, line1: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                    />
+                  </div>
+
+                  {/* Area / Landmark */}
+                  <div>
+                    <label className="text-[11px] font-bold text-gray-600 block mb-1">
+                      Landmark / Area (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Near Kishore Ganj Chowk"
+                      value={newAddress.line2}
+                      onChange={(e) => setNewAddress({ ...newAddress, line2: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                    />
+                  </div>
+
+                  {/* City & Pincode */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 block mb-1">City *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Ranchi"
+                        value={newAddress.city}
+                        onChange={(e) => setNewAddress({ ...newAddress, city: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 block mb-1">Pincode *</label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. 834001"
+                        maxLength={6}
+                        value={newAddress.pincode}
+                        onChange={(e) => setNewAddress({ ...newAddress, pincode: e.target.value.replace(/\D/g, "") })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowAddAddressForm(false)}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs rounded-xl cursor-pointer border-none transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isSavingAddress || !newAddress.line1.trim() || !newAddress.city.trim() || newAddress.pincode.length < 6}
+                      className="px-4 py-2 bg-primary hover:bg-primary-dark text-white font-bold text-xs rounded-xl cursor-pointer border-none shadow-xs transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      {isSavingAddress ? (
+                        <span>Saving…</span>
+                      ) : (
+                        <>
+                          <span>Save &amp; Select</span>
+                          <span className="material-symbols-outlined text-[16px]">check</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Saved Addresses Cards */}
+              <div className="space-y-2.5">
+                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider px-1">
+                  Saved Addresses ({addresses.length})
+                </div>
+
+                {addresses.length === 0 ? (
+                  <div className="text-center py-8 px-4 bg-white rounded-2xl border border-dashed border-gray-200">
+                    <span className="material-symbols-outlined text-slate-300 text-[36px] mb-1">home_pin</span>
+                    <p className="font-bold text-slate-700 text-xs">No saved addresses yet</p>
+                    <p className="text-[11px] text-slate-500 mt-1 max-w-[220px] mx-auto">
+                      Click &quot;+ Add New Delivery Address&quot; above to save your first address.
+                    </p>
+                  </div>
+                ) : (
+                  addresses.map((addr) => {
+                    const isSelected = selectedAddressId === addr._id;
+                    const tagLower = (addr.tag || "home").toLowerCase();
+                    const icon =
+                      tagLower.includes("work") || tagLower.includes("office")
+                        ? "business"
+                        : tagLower.includes("home")
+                        ? "home"
+                        : "location_on";
+
+                    return (
+                      <div
+                        key={addr._id}
+                        onClick={() => {
+                          setSelectedAddressId(addr._id);
+                          selectSavedAddress({
+                            _id: addr._id,
+                            tag: addr.tag,
+                            line1: addr.line1,
+                            line2: addr.line2,
+                            city: addr.city,
+                            pincode: addr.pincode,
+                            isDefault: addr.isDefault,
+                          });
+                          setView("cart");
+                          toast.success(`Delivering to ${addr.tag} (${addr.city})`, "Address Selected");
+                        }}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
+                          isSelected
+                            ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs"
+                            : "border-gray-200 bg-white hover:border-gray-300 hover:bg-slate-50/60"
+                        }`}
+                      >
+                        <div
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                            isSelected ? "bg-primary text-white" : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          <span className="material-symbols-outlined text-[20px]">{icon}</span>
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-gray-900 text-xs">{addr.tag}</span>
+                            {addr.isDefault && (
+                              <span className="text-[9.5px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-bold uppercase">
+                                Default
+                              </span>
+                            )}
+                            {isSelected && (
+                              <span className="text-[9.5px] bg-primary/15 text-primary px-1.5 py-0.2 rounded font-extrabold uppercase ml-auto">
+                                Active
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-700 font-medium mt-1 leading-snug">
+                            {addr.line1}
+                            {addr.line2 ? `, ${addr.line2}` : ""}
+                          </p>
+                          <p className="text-[11px] text-slate-500 mt-0.5">
+                            {addr.city} - {addr.pincode}
+                          </p>
+                        </div>
+
+                        <div className="pt-1 shrink-0">
+                          <div
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
+                              isSelected
+                                ? "border-primary bg-primary text-white"
+                                : "border-gray-300 bg-white"
+                            }`}
+                          >
+                            {isSelected && <span className="w-2 h-2 rounded-full bg-white"></span>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -11,6 +11,7 @@ export interface Product {
   isBestseller?: boolean;
   image: string;
   images?: string[];
+  videoURLs?: string[];
   netWeight: string;
   grossWeight?: string;
   price: number;
@@ -75,6 +76,8 @@ export async function fetchProducts(filters?: {
     if (filters?.sort) params.append("sort", filters.sort);
     if (filters?.limit) params.append("limit", filters.limit.toString());
 
+    params.append("_t", Date.now().toString());
+
     const { data } = await api.get<{ success: boolean; products: Product[] }>(
       `/products?${params.toString()}`
     );
@@ -91,7 +94,7 @@ export async function fetchProducts(filters?: {
 export async function fetchProductById(id: string): Promise<{ product: Product; related: Product[] } | null> {
   try {
     const { data } = await api.get<{ success: boolean; product: Product; related: Product[] }>(
-      `/products/${id}`
+      `/products/${id}?_t=${Date.now()}`
     );
     if (data.success && data.product) {
       return { product: data.product, related: data.related || [] };

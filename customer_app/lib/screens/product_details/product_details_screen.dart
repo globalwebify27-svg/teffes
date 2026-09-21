@@ -10,8 +10,28 @@ import '../../providers/cart_provider.dart';
 import '../../providers/wishlist_provider.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
+import '../../core/utils/video_utils.dart';
+import '../../widgets/common/product_video_player.dart';
 import '../../widgets/common/quantity_stepper.dart';
 import '../cart/cart_checkout_screen.dart';
+
+enum ProductMediaType { image, video }
+
+class ProductMediaItem {
+  final ProductMediaType type;
+  final String url;
+  final bool isYouTube;
+  final String? videoId;
+  final String? thumbnailUrl;
+
+  const ProductMediaItem({
+    required this.type,
+    required this.url,
+    this.isYouTube = false,
+    this.videoId,
+    this.thumbnailUrl,
+  });
+}
 
 class ProductDetailsScreen extends StatefulWidget {
   final ProductModel product;
@@ -45,6 +65,29 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     final cart = context.watch<CartProvider>();
     final quantity = cart.getQuantity(product.id);
     final discountText = CurrencyFormatter.formatDiscount(product.originalPrice, product.price);
+
+    final List<ProductMediaItem> mediaItems = [];
+    for (final img in images) {
+      if (img.trim().isNotEmpty) {
+        mediaItems.add(ProductMediaItem(
+          type: ProductMediaType.image,
+          url: img.trim(),
+        ));
+      }
+    }
+    for (final vid in product.videoURLs) {
+      if (vid.trim().isNotEmpty) {
+        final cleanVid = vid.trim();
+        final isYT = VideoUtils.isYouTubeUrl(cleanVid);
+        mediaItems.add(ProductMediaItem(
+          type: ProductMediaType.video,
+          url: cleanVid,
+          isYouTube: isYT,
+          videoId: isYT ? VideoUtils.getYouTubeVideoId(cleanVid) : null,
+          thumbnailUrl: isYT ? VideoUtils.getYouTubeThumbnailUrl(cleanVid) : null,
+        ));
+      }
+    }
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -103,7 +146,6 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     const SnackBar(
                       content: Text('Product link copied to clipboard!'),
                       behavior: SnackBarBehavior.floating,
-                      backgroundColor: AppColors.primaryMaroon,
                       duration: Duration(seconds: 2),
                     ),
                   );
@@ -150,31 +192,42 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Multi-Image Carousel
+                  // Multi-Media Carousel (Images & Videos)
                   Stack(
                     children: [
                       AspectRatio(
                         aspectRatio: 1.25,
-                        child: PageView.builder(
-                          controller: _pageController,
-                          itemCount: images.length,
-                          onPageChanged: (index) {
-                            setState(() {
-                              _selectedImageIndex = index;
-                            });
-                          },
-                          itemBuilder: (context, index) {
-                            return CachedNetworkImage(
-                              imageUrl: images[index],
-                              fit: BoxFit.cover,
-                              placeholder: (context, url) => Container(color: AppColors.surfaceSubtle),
-                              errorWidget: (context, url, error) => Container(
+                        child: mediaItems.isEmpty
+                            ? Container(
                                 color: AppColors.surfaceSubtle,
-                                child: const Icon(Icons.restaurant_rounded, size: 48, color: AppColors.textMuted),
+                                child: const Center(
+                                  child: Icon(Icons.restaurant_rounded, size: 48, color: AppColors.textMuted),
+                                ),
+                              )
+                            : PageView.builder(
+                                controller: _pageController,
+                                itemCount: mediaItems.length,
+                                onPageChanged: (index) {
+                                  setState(() {
+                                    _selectedImageIndex = index;
+                                  });
+                                },
+                                itemBuilder: (context, index) {
+                                  final media = mediaItems[index];
+                                  if (media.type == ProductMediaType.video) {
+                                    return ProductVideoPlayer(videoUrl: media.url);
+                                  }
+                                  return CachedNetworkImage(
+                                    imageUrl: media.url,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) => Container(color: AppColors.surfaceSubtle),
+                                    errorWidget: (context, url, error) => Container(
+                                      color: AppColors.surfaceSubtle,
+                                      child: const Icon(Icons.restaurant_rounded, size: 48, color: AppColors.textMuted),
+                                    ),
+                                  );
+                                },
                               ),
-                            );
-                          },
-                        ),
                       ),
                       // Temperature Tag
                       Positioned(
@@ -192,24 +245,31 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                           ),
                         ),
                       ),
-                      // Image Counter Indicator (if more than 1 image)
-                      if (images.length > 1)
+                      // Media Counter Indicator (if more than 1 item)
+                      if (mediaItems.length > 1)
                         Positioned(
                           bottom: 12,
                           right: 16,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                             decoration: BoxDecoration(
-                              color: Colors.black.withOpacity(0.75),
+                              color: const Color(0xBF000000),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(Icons.photo_library_outlined, color: Colors.white, size: 12),
+                                Icon(
+                                  (_selectedImageIndex < mediaItems.length &&
+                                          mediaItems[_selectedImageIndex].type == ProductMediaType.video)
+                                      ? Icons.videocam_outlined
+                                      : Icons.photo_library_outlined,
+                                  color: Colors.white,
+                                  size: 12,
+                                ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  '${_selectedImageIndex + 1}/${images.length}',
+                                  '${_selectedImageIndex + 1}/${mediaItems.length}',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 11,
@@ -223,17 +283,18 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                     ],
                   ),
 
-                  // Horizontal Thumbnails Strip (if more than 1 image)
-                  if (images.length > 1)
+                  // Horizontal Thumbnails Strip (if more than 1 item)
+                  if (mediaItems.length > 1)
                     Container(
                       height: 62,
                       margin: const EdgeInsets.only(top: 10, left: 16, right: 16),
                       child: ListView.separated(
                         scrollDirection: Axis.horizontal,
-                        itemCount: images.length,
+                        itemCount: mediaItems.length,
                         separatorBuilder: (_, __) => const SizedBox(width: 10),
                         itemBuilder: (context, idx) {
                           final isSelected = idx == _selectedImageIndex;
+                          final media = mediaItems[idx];
                           return GestureDetector(
                             onTap: () {
                               _pageController.animateToPage(
@@ -254,22 +315,65 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 ),
                                 boxShadow: isSelected
                                     ? [
-                                        BoxShadow(
-                                          color: AppColors.primaryMaroon.withOpacity(0.2),
+                                        const BoxShadow(
+                                          color: Color(0x33941717),
                                           blurRadius: 4,
-                                          offset: const Offset(0, 2),
+                                          offset: Offset(0, 2),
                                         ),
                                       ]
                                     : null,
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(6),
-                                child: CachedNetworkImage(
-                                  imageUrl: images[idx],
-                                  fit: BoxFit.cover,
-                                  placeholder: (_, __) => Container(color: AppColors.surfaceSubtle),
-                                  errorWidget: (_, __, ___) => const Icon(Icons.broken_image, size: 20, color: AppColors.textMuted),
-                                ),
+                                child: media.type == ProductMediaType.image
+                                    ? CachedNetworkImage(
+                                        imageUrl: media.url,
+                                        fit: BoxFit.cover,
+                                        placeholder: (_, __) => Container(color: AppColors.surfaceSubtle),
+                                        errorWidget: (_, __, ___) => const Icon(Icons.broken_image, size: 20, color: AppColors.textMuted),
+                                      )
+                                    : Stack(
+                                        fit: StackFit.expand,
+                                        children: [
+                                          if (media.thumbnailUrl != null)
+                                            CachedNetworkImage(
+                                              imageUrl: media.thumbnailUrl!,
+                                              fit: BoxFit.cover,
+                                              errorWidget: (_, __, ___) => Container(color: Colors.black87),
+                                            )
+                                          else
+                                            Container(color: Colors.black87),
+                                          Container(
+                                            color: Colors.black38,
+                                            child: const Center(
+                                              child: Icon(
+                                                Icons.play_circle_fill_rounded,
+                                                color: Colors.white,
+                                                size: 22,
+                                              ),
+                                            ),
+                                          ),
+                                          Positioned(
+                                            bottom: 2,
+                                            right: 2,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black87,
+                                                borderRadius: BorderRadius.circular(3),
+                                              ),
+                                              child: Text(
+                                                media.isYouTube ? 'YT' : 'VID',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 8,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                               ),
                             ),
                           );
@@ -391,7 +495,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               ),
                               const SizedBox(height: 8),
                               _buildCheckItem('Never frozen, cut strictly fresh on order'),
-                              _buildCheckItem('100% Halal certified butchering process'),
+                              _buildCheckItem('100% certified butchering process'),
                               _buildCheckItem('Veterinary inspected before dispatch'),
                             ],
                           ),
@@ -407,10 +511,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
           // Sticky Bottom Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.white,
-              border: Border(top: BorderSide(color: AppColors.borderHairline.withOpacity(0.9))),
-              boxShadow: const [
+              border: Border(top: BorderSide(color: Color(0xE6E2E8F0))),
+              boxShadow: [
                 BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.05), blurRadius: 10, offset: Offset(0, -3)),
               ],
             ),
@@ -443,6 +547,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 fontSize: 13,
                                 color: AppColors.textMuted,
                                 decoration: TextDecoration.lineThrough,
+                                decorationColor: AppColors.primaryMaroon,
+                                decorationThickness: 2.0,
                               ),
                             ),
                           ],

@@ -53,6 +53,17 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
   const { openCart, totalItemsCount } = useCart();
   const { wishlistCount } = useWishlist();
   const { currentLocation, openLocationModal } = useLocation();
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // Detect scroll to stick navbar and switch to maroon theme
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 35);
+    };
+    handleScroll();
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   // Login Modal State for Unauthenticated User Click on Home
   const [showLoginModal, setShowLoginModal] = useState(false);
@@ -178,27 +189,37 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
 
   return (
     <>
-      <header className="sticky top-0 inset-x-0 z-50 bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100 transition-all w-full">
+      <header
+        className={`sticky top-0 inset-x-0 z-50 transition-colors duration-300 w-full ${
+          isScrolled
+            ? "bg-[#91000a] text-white shadow-lg border-b border-[#730008]"
+            : "bg-white/95 backdrop-blur-md shadow-sm border-b border-gray-100"
+        }`}
+      >
         {/* Main Nav Bar */}
         <div className="h-20 w-full max-w-container-max mx-auto px-gutter-desktop flex items-center justify-between gap-space-md sm:gap-space-lg">
-          {/* Left Section: Mobile Hamburger + Original Brand Logo + Deliver To Badge */}
+          {/* Left Section: Mobile Hamburger + Brand Logo + Deliver To Badge */}
           <div className="flex items-center gap-space-sm sm:gap-space-md lg:gap-space-lg shrink-0">
             {/* Mobile Menu Toggle Button */}
             <button
               type="button"
-              className="lg:hidden p-2 text-on-surface hover:text-primary hover:bg-surface-container-low rounded-xl transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent"
+              className={`lg:hidden p-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent ${
+                isScrolled
+                  ? "text-white hover:bg-white/15"
+                  : "text-on-surface hover:text-primary hover:bg-surface-container-low"
+              }`}
               onClick={() => setMobileMenuOpen(true)}
               aria-label="Open Navigation Menu"
             >
               <span className="material-symbols-outlined text-[26px]">menu</span>
             </button>
 
-            {/* Original Teffe's Logo */}
+            {/* Teffe's Logo (Switches to White on Maroon Header when Scrolled) */}
             <Link href="/" className="flex items-center group text-decoration-none">
               <img
-                src="/teffes-logo-maroon.png"
+                src={isScrolled ? "/teffes-logo-white.png" : "/teffes-logo-maroon.png"}
                 alt="TeFFe's — Where health matters most"
-                className="h-10 sm:h-12 w-auto object-contain transition-transform group-hover:scale-105"
+                className="h-10 sm:h-12 w-auto object-contain transition-all group-hover:scale-105 duration-200"
               />
             </Link>
 
@@ -207,32 +228,60 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               type="button"
               onClick={openLocationModal}
               suppressHydrationWarning
-              className="hidden xl:flex items-center gap-2 px-3.5 py-2 bg-surface-container-low rounded-xl cursor-pointer hover:bg-surface-container transition-colors border border-gray-200/40 text-left"
+              className={`hidden xl:flex items-center gap-2 px-3.5 py-2 rounded-xl cursor-pointer transition-colors border text-left ${
+                isScrolled
+                  ? "bg-white/15 hover:bg-white/25 border-white/25 text-white"
+                  : "bg-surface-container-low hover:bg-surface-container border-gray-200/40 text-on-surface"
+              }`}
             >
-              <span className="material-symbols-outlined text-primary text-[22px]">location_on</span>
+              <span
+                className={`material-symbols-outlined text-[22px] ${
+                  isScrolled ? "text-amber-300" : "text-primary"
+                }`}
+              >
+                location_on
+              </span>
               <span className="flex flex-col text-left">
-                <span className="font-label-badge text-label-badge uppercase text-tertiary font-bold tracking-wider text-[10.5px]">
+                <span
+                  className={`font-label-badge text-label-badge uppercase font-bold tracking-wider text-[10.5px] ${
+                    isScrolled ? "text-amber-200" : "text-tertiary"
+                  }`}
+                >
                   {currentLocation.label || "Deliver to (90 Mins)"}
                 </span>
-                <span className="font-label-md text-label-md text-on-surface font-semibold max-w-[170px] truncate text-[13px]">
+                <span
+                  className={`font-label-md text-label-md font-semibold max-w-[170px] truncate text-[13px] ${
+                    isScrolled ? "text-white" : "text-on-surface"
+                  }`}
+                >
                   {currentLocation.shortAddress || "Select Location"}
                 </span>
               </span>
-              <span className="material-symbols-outlined text-on-surface-variant text-[18px]">expand_more</span>
+              <span
+                className={`material-symbols-outlined text-[18px] ${
+                  isScrolled ? "text-white/80" : "text-on-surface-variant"
+                }`}
+              >
+                expand_more
+              </span>
             </button>
           </div>
 
           {/* Center Search Input (Desktop & Tablet) */}
           <div className="hidden md:flex flex-1 max-w-xl mx-space-md">
-            <NavbarSearch />
+            <NavbarSearch isScrolled={isScrolled} />
           </div>
 
-          {/* Right Section: Nav Links + Wishlist + Notification-style Cart + Profile */}
+          {/* Right Section: Nav Links + Wishlist + Cart + Profile */}
           <div className="flex items-center gap-2 sm:gap-3 shrink-0">
             {/* Mobile Search Toggle Icon */}
             <button
               type="button"
-              className="md:hidden p-2 text-on-surface hover:text-primary hover:bg-surface-container-low rounded-full transition-colors border-none bg-transparent"
+              className={`md:hidden p-2 rounded-full transition-colors border-none bg-transparent ${
+                isScrolled
+                  ? "text-white hover:bg-white/15"
+                  : "text-on-surface hover:text-primary hover:bg-surface-container-low"
+              }`}
               onClick={() => setMobileSearchOpen((prev) => !prev)}
               aria-label="Search items"
             >
@@ -240,66 +289,95 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             </button>
 
             {/* Desktop Navigation Links */}
-            <nav className="hidden lg:flex items-center gap-space-md shrink-0 font-label-lg text-label-lg font-bold">
+            <nav className="hidden lg:flex items-center gap-1 xl:gap-2 shrink-0 font-label-lg text-label-lg font-bold">
               <Link
                 href="/"
-                className="text-on-surface-variant hover:text-primary transition-colors py-1 cursor-pointer text-decoration-none"
+                className={`transition-colors px-3 py-1 rounded-lg cursor-pointer text-decoration-none ${
+                  isScrolled
+                    ? "text-white/90 hover:text-white hover:bg-white/10"
+                    : "text-on-surface-variant hover:text-primary"
+                }`}
               >
                 Home
               </Link>
               <Link
                 href="/category"
-                className="text-on-surface-variant hover:text-primary transition-colors py-1 cursor-pointer text-decoration-none"
+                className={`transition-colors px-3 py-1 rounded-lg cursor-pointer text-decoration-none ${
+                  isScrolled
+                    ? "text-white/90 hover:text-white hover:bg-white/10"
+                    : "text-on-surface-variant hover:text-primary"
+                }`}
               >
                 Categories
               </Link>
               <Link
                 href="/offers"
-                className="text-on-surface-variant hover:text-primary transition-colors py-1 cursor-pointer text-decoration-none"
+                className={`transition-colors px-3 py-1 rounded-lg cursor-pointer text-decoration-none ${
+                  isScrolled
+                    ? "text-white/90 hover:text-white hover:bg-white/10"
+                    : "text-on-surface-variant hover:text-primary"
+                }`}
               >
                 Offers
               </Link>
               <Link
                 href="/about"
-                className="text-on-surface-variant hover:text-primary transition-colors py-1 cursor-pointer text-decoration-none"
+                className={`transition-colors px-3 py-1 rounded-lg cursor-pointer text-decoration-none ${
+                  isScrolled
+                    ? "text-white/90 hover:text-white hover:bg-white/10"
+                    : "text-on-surface-variant hover:text-primary"
+                }`}
               >
                 About Us
               </Link>
-              {/* <button
-                type="button"
-                onClick={handleUserClick}
-                className="text-on-surface-variant hover:text-primary transition-colors py-1 cursor-pointer bg-transparent border-none font-inherit p-0 font-bold"
-              >
-                {user ? "My Account" : "Sign In"}
-              </button> */}
             </nav>
 
-            {/* Wishlist Icon Button with Red Notification Badge */}
+            {/* Wishlist Icon Button with Notification Badge */}
             <Link
               href="/wishlist"
-              className="relative p-2.5 rounded-full text-on-surface hover:text-primary hover:bg-surface-container-low transition-colors flex items-center justify-center cursor-pointer text-decoration-none"
+              className={`relative p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer text-decoration-none ${
+                isScrolled
+                  ? "text-white hover:bg-white/15"
+                  : "text-on-surface hover:text-primary hover:bg-surface-container-low"
+              }`}
               aria-label={`Loved Cuts (${wishlistCount})`}
               title="View Wishlist"
             >
               <span className="material-symbols-outlined text-[26px]">favorite</span>
               {wishlistCount > 0 && (
-                <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-primary text-on-primary font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[10px] px-1 shadow-sm border border-white">
+                <span
+                  className={`absolute top-1 right-1 min-w-[18px] h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[10px] px-1 shadow-sm ${
+                    isScrolled
+                      ? "bg-white text-[#91000a] border border-[#91000a]/20"
+                      : "bg-primary text-on-primary border border-white"
+                  }`}
+                >
                   {wishlistCount}
                 </span>
               )}
             </Link>
 
-            {/* Cart Icon Button with Notification Badge (Steady, no blinking animation) */}
+            {/* Cart Icon Button with Notification Badge */}
             <button
               type="button"
               onClick={() => openCart()}
-              className="relative p-2.5 rounded-full text-on-surface hover:text-primary hover:bg-surface-container-low transition-colors flex items-center justify-center cursor-pointer border-none bg-transparent"
+              className={`relative p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer border-none bg-transparent ${
+                isScrolled
+                  ? "text-white hover:bg-white/15"
+                  : "text-on-surface hover:text-primary hover:bg-surface-container-low"
+              }`}
               aria-label={`Shopping Cart (${totalItemsCount} items)`}
               title="View Shopping Cart"
             >
               <span className="material-symbols-outlined text-[27px]">shopping_bag</span>
               {totalItemsCount > 0 && (
-                <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-primary text-on-primary font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[10px] px-1 shadow-md border-2 border-white">
+                <span
+                  className={`absolute top-1 right-1 min-w-[18px] h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[10px] px-1 shadow-md ${
+                    isScrolled
+                      ? "bg-white text-[#91000a] border border-white"
+                      : "bg-primary text-on-primary border-2 border-white"
+                  }`}
+                >
                   {totalItemsCount}
                 </span>
               )}
@@ -310,15 +388,29 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               <button
                 type="button"
                 onClick={handleUserClick}
-                className="w-9 h-9 rounded-full bg-surface-container-high border-2 border-primary/20 hover:border-primary flex items-center justify-center overflow-hidden transition-all cursor-pointer p-0"
+                className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden transition-all cursor-pointer p-0 shadow-sm ${
+                  isScrolled
+                    ? "bg-white border-2 border-white hover:scale-105"
+                    : "bg-surface-container-high border-2 border-primary/20 hover:border-primary"
+                }`}
                 title={user ? "My Account" : "Sign In"}
               >
                 {user ? (
-                  <span className="font-extrabold text-xs text-primary">
+                  <span
+                    className={`font-extrabold text-xs ${
+                      isScrolled ? "text-[#91000a]" : "text-primary"
+                    }`}
+                  >
                     {(user.name || user.phone || "U").slice(0, 2).toUpperCase()}
                   </span>
                 ) : (
-                  <span className="material-symbols-outlined text-on-surface-variant text-[20px]">person</span>
+                  <span
+                    className={`material-symbols-outlined text-[20px] ${
+                      isScrolled ? "text-[#91000a]" : "text-on-surface-variant"
+                    }`}
+                  >
+                    person
+                  </span>
                 )}
               </button>
             </div>
@@ -327,17 +419,30 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
 
         {/* Mobile Search Dropdown */}
         {mobileSearchOpen && (
-          <div className="md:hidden px-gutter-desktop pb-3 pt-1 border-t border-gray-100 bg-surface-card">
+          <div
+            className={`md:hidden px-gutter-desktop pb-3 pt-1 transition-colors ${
+              isScrolled
+                ? "bg-[#7d0008] border-t border-white/15"
+                : "border-t border-gray-100 bg-surface-card"
+            }`}
+          >
             <NavbarSearch
               isMobile
+              isScrolled={isScrolled}
               onCloseMobile={() => setMobileSearchOpen(false)}
             />
           </div>
         )}
 
-        {/* Subnav Category Pills Strip with Maroon Active Background (Home Page Only) */}
+        {/* Subnav Category Pills Strip with Responsive Background (Home Page Only) */}
         {pathname === "/" && (
-          <div className="bg-surface-card shadow-[0_1px_4px_rgba(0,0,0,0.03)] border-t border-gray-100 w-full">
+          <div
+            className={`w-full transition-colors duration-300 ${
+              isScrolled
+                ? "bg-[#7d0008] border-t border-white/15 shadow-inner"
+                : "bg-surface-card shadow-[0_1px_4px_rgba(0,0,0,0.03)] border-t border-gray-100"
+            }`}
+          >
             <div className="w-full max-w-container-max mx-auto px-gutter-desktop flex items-center justify-between gap-space-md overflow-x-auto py-2.5">
               <nav className="flex items-center gap-2 font-label-md text-label-md whitespace-nowrap">
                 {navCategories.map((cat) => {
@@ -345,11 +450,19 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                     <Link
                       key={cat.key}
                       href={cat.href}
-                      className="px-4 py-1.5 rounded-full transition-all flex items-center gap-2 text-decoration-none cursor-pointer text-[13px] text-on-surface-variant bg-surface-container-low hover:bg-primary hover:text-white hover:shadow-xs font-semibold group"
+                      className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-2 text-decoration-none cursor-pointer text-[13px] font-semibold group ${
+                        isScrolled
+                          ? "bg-white/15 text-white hover:bg-white hover:text-[#91000a] hover:shadow-xs"
+                          : "text-on-surface-variant bg-surface-container-low hover:bg-primary hover:text-white hover:shadow-xs"
+                      }`}
                     >
                       <FontAwesomeIcon
                         icon={getCategoryFontAwesomeIcon(cat.key)}
-                        className="text-[13px] text-primary group-hover:text-white transition-colors"
+                        className={`text-[13px] transition-colors ${
+                          isScrolled
+                            ? "text-amber-300 group-hover:text-[#91000a]"
+                            : "text-primary group-hover:text-white"
+                        }`}
                       />
                       <span>{cat.label}</span>
                     </Link>
@@ -357,7 +470,13 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 })}
               </nav>
 
-              <div className="ml-auto hidden xl:flex items-center gap-1.5 font-label-badge text-label-badge uppercase text-tag-amber bg-tag-amber-bg px-4 py-1.5 rounded-full shrink-0 font-bold border border-tag-amber/25 text-[11px] whitespace-nowrap shadow-xs">
+              <div
+                className={`ml-auto hidden xl:flex items-center gap-1.5 font-label-badge text-label-badge uppercase px-4 py-1.5 rounded-full shrink-0 font-bold text-[11px] whitespace-nowrap shadow-xs transition-colors ${
+                  isScrolled
+                    ? "text-amber-200 bg-white/15 border border-white/25"
+                    : "text-tag-amber bg-tag-amber-bg border border-tag-amber/25"
+                }`}
+              >
                 <span className="material-symbols-outlined text-[15px]">verified</span>
                 Express 90 Min Guarantee
               </div>

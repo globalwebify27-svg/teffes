@@ -347,7 +347,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           mainAxisSize: MainAxisSize.min,
                           children: const [
                             Text(
-                              '🇮🇳 +91',
+                              '+91',
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w800,

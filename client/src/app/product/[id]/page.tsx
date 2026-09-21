@@ -7,6 +7,11 @@ import { getProductById, getRelatedProducts, fetchProductById, Product } from "@
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
 import { toast } from "@/lib/toast";
+import { isYouTubeUrl, getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
+
+export type ProductMediaItem =
+  | { type: "image"; url: string }
+  | { type: "video"; url: string; isYouTube: boolean; embedUrl?: string; thumbnail?: string };
 
 interface ProductPageProps {
   params: Promise<{ id: string }>;
@@ -45,7 +50,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
   const { addToCart, getItemQuantity, openCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
   const [copiedShare, setCopiedShare] = useState(false);
   const [addedAnimation, setAddedAnimation] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
@@ -64,17 +69,49 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     return reviews.slice(start, start + reviewsPerPage);
   }, [reviews, reviewPage]);
 
-  // Only use real database images: if product has 1 image, show 1 image; if multiple, show all real images
-  const allImages = useMemo(() => {
+  // Unified media gallery supporting images + YouTube/direct video URLs
+  const allMedia = useMemo<ProductMediaItem[]>(() => {
     if (!product) return [];
+    const items: ProductMediaItem[] = [];
+
+    // 1. Collect all real database images
     if (product.images && product.images.length > 0) {
-      return product.images.filter((img) => typeof img === "string" && img.trim().length > 0);
+      product.images.forEach((img) => {
+        if (typeof img === "string" && img.trim().length > 0) {
+          items.push({ type: "image", url: img.trim() });
+        }
+      });
     }
-    if (product.image && product.image.trim().length > 0) {
-      return [product.image];
+    if (items.length === 0 && product.image && product.image.trim().length > 0) {
+      items.push({ type: "image", url: product.image.trim() });
     }
-    return [];
+
+    // 2. Collect all video URLs
+    if (product.videoURLs && product.videoURLs.length > 0) {
+      product.videoURLs.forEach((vUrl) => {
+        if (typeof vUrl === "string" && vUrl.trim().length > 0) {
+          const clean = vUrl.trim();
+          const isYT = isYouTubeUrl(clean);
+          items.push({
+            type: "video",
+            url: clean,
+            isYouTube: isYT,
+            embedUrl: isYT ? (getYouTubeEmbedUrl(clean) || undefined) : undefined,
+            thumbnail: isYT ? (getYouTubeThumbnailUrl(clean) || undefined) : undefined,
+          });
+        }
+      });
+    }
+
+    return items;
   }, [product]);
+
+  const allImages = useMemo(() => {
+    return allMedia.filter((m) => m.type === "image").map((m) => m.url);
+  }, [allMedia]);
+
+  const activeMedia = allMedia[selectedMediaIndex] || allMedia[0];
+  const activeImage = activeMedia?.type === "image" ? activeMedia.url : (allImages[0] || product?.image || "");
   
   useEffect(() => {
     import("@/lib/api").then(({ default: api }) => {
@@ -154,8 +191,6 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
     : 0;
 
-  const activeImage = allImages[selectedImageIndex] || allImages[0] || product.image;
-
   const handleAddToCart = () => {
     addToCart(product);
     setAddedAnimation(true);
@@ -210,63 +245,113 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
         {/* ─── Main Product Card: Side-By-Side (Matches Image Exactly) ────── */}
         <div className="bg-white rounded-3xl p-5 sm:p-8 md:p-10 border border-gray-200/80 shadow-sm mb-12">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 lg:gap-12 items-start">
-            {/* ─── Left Column (Gallery: Vertical Thumbnails + Main Image) ─── */}
+            {/* ─── Left Column (Gallery: Vertical Thumbnails + Main Media Viewport) ─── */}
             <div className="lg:col-span-6 xl:col-span-7 flex flex-col-reverse sm:flex-row gap-4 items-start">
               {/* Vertical Thumbnails (Desktop & Tablet) */}
-              {allImages.length > 1 && (
+              {allMedia.length > 1 && (
                 <div className="flex sm:flex-col gap-2.5 overflow-x-auto sm:overflow-visible shrink-0 w-full sm:w-auto py-1 sm:py-0">
-                  {allImages.map((imgUrl, idx) => {
-                    const isSelected = idx === selectedImageIndex;
+                  {allMedia.map((media, idx) => {
+                    const isSelected = idx === selectedMediaIndex;
                     return (
                       <button
-                        key={`thumb-${idx}`}
+                        key={`media-thumb-${idx}`}
                         type="button"
-                        onClick={() => setSelectedImageIndex(idx)}
-                        onMouseEnter={() => setSelectedImageIndex(idx)}
-                        className={`w-16 h-16 sm:w-18 sm:h-18 rounded-2xl overflow-hidden border-2 cursor-pointer transition-all p-0.5 bg-white shrink-0 ${
+                        onClick={() => setSelectedMediaIndex(idx)}
+                        onMouseEnter={() => setSelectedMediaIndex(idx)}
+                        className={`relative w-16 h-16 sm:w-18 sm:h-18 rounded-2xl overflow-hidden border-2 cursor-pointer transition-all p-0.5 bg-white shrink-0 ${
                           isSelected
                             ? "border-primary shadow-sm ring-2 ring-primary/20 scale-105"
                             : "border-gray-200 hover:border-gray-300 opacity-80 hover:opacity-100"
                         }`}
-                        aria-label={`Select photo ${idx + 1}`}
+                        aria-label={`Select media ${idx + 1}`}
                       >
-                        <img
-                          src={imgUrl}
-                          alt={`${product.name} thumbnail ${idx + 1}`}
-                          className="w-full h-full object-cover rounded-xl"
-                        />
+                        {media.type === "image" ? (
+                          <img
+                            src={media.url}
+                            alt={`${product.name} thumbnail ${idx + 1}`}
+                            className="w-full h-full object-cover rounded-xl"
+                          />
+                        ) : (
+                          <div className="relative w-full h-full rounded-xl overflow-hidden bg-stone-900 flex items-center justify-center">
+                            {media.thumbnail ? (
+                              <img
+                                src={media.thumbnail}
+                                alt="Video thumbnail"
+                                className="w-full h-full object-cover opacity-80"
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-stone-800 to-stone-950" />
+                            )}
+                            <div className="absolute inset-0 bg-black/35 flex items-center justify-center">
+                              <span className="material-symbols-outlined text-white text-[20px] drop-shadow-md">
+                                play_circle
+                              </span>
+                            </div>
+                            <span className="absolute bottom-1 right-1 text-[8.5px] font-extrabold text-white bg-black/75 px-1 py-0.5 rounded leading-none">
+                              {media.isYouTube ? "YT" : "VID"}
+                            </span>
+                          </div>
+                        )}
                       </button>
                     );
                   })}
                 </div>
               )}
 
-              {/* Main Image Frame with Interactive Cursor-Tracking Zoom */}
+              {/* Main Media Viewport with Image Zoom, YouTube Embed, or Direct Video Player */}
               <div
-                className="relative flex-1 w-full aspect-square max-h-[540px] rounded-3xl overflow-hidden bg-gray-100 border border-gray-200/80 shadow-xs cursor-crosshair group select-none"
-                onMouseEnter={() => setIsHovered(true)}
-                onMouseLeave={() => setIsHovered(false)}
-                onMouseMove={handleMouseMove}
+                className="relative flex-1 w-full aspect-square max-h-[540px] rounded-3xl overflow-hidden bg-gray-100 border border-gray-200/80 shadow-xs group select-none"
               >
-                <img
-                  src={activeImage}
-                  alt={product.name}
-                  className="w-full h-full object-cover select-none transition-transform duration-150 ease-out"
-                  style={{
-                    transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
-                    transform: isHovered ? "scale(2.2)" : "scale(1)",
-                  }}
-                />
+                {activeMedia?.type === "image" ? (
+                  <div
+                    className="w-full h-full cursor-crosshair overflow-hidden relative"
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                    onMouseMove={handleMouseMove}
+                  >
+                    <img
+                      src={activeMedia.url}
+                      alt={product.name}
+                      className="w-full h-full object-cover select-none transition-transform duration-150 ease-out"
+                      style={{
+                        transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
+                        transform: isHovered ? "scale(2.2)" : "scale(1)",
+                      }}
+                    />
 
-                {/* Hover to Zoom Hint Pill */}
-                <div
-                  className={`absolute bottom-3 left-3 bg-black/60 backdrop-blur-xs text-white text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-opacity duration-200 pointer-events-none ${
-                    isHovered ? "opacity-0" : "opacity-90"
-                  }`}
-                >
-                  <span className="material-symbols-outlined text-[14px]">zoom_in</span>
-                  <span>Hover to zoom</span>
-                </div>
+                    {/* Hover to Zoom Hint Pill */}
+                    <div
+                      className={`absolute bottom-3 left-3 bg-black/60 backdrop-blur-xs text-white text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-opacity duration-200 pointer-events-none ${
+                        isHovered ? "opacity-0" : "opacity-90"
+                      }`}
+                    >
+                      <span className="material-symbols-outlined text-[14px]">zoom_in</span>
+                      <span>Hover to zoom</span>
+                    </div>
+                  </div>
+                ) : activeMedia?.isYouTube && activeMedia.embedUrl ? (
+                  <div className="w-full h-full bg-black relative">
+                    <iframe
+                      src={activeMedia.embedUrl}
+                      title={`${product.name} Video`}
+                      className="w-full h-full rounded-3xl border-0"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                      allowFullScreen
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full h-full bg-black relative flex items-center justify-center">
+                    <video
+                      key={activeMedia?.url}
+                      controls
+                      playsInline
+                      className="w-full h-full object-contain rounded-3xl"
+                      src={activeMedia?.url}
+                    >
+                      Your browser does not support HTML5 video playback.
+                    </video>
+                  </div>
+                )}
 
                 {/* Top Left Badge */}
                 {product.badge && (
@@ -328,7 +413,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                   ₹{product.price}
                 </span>
                 {product.originalPrice > product.price && (
-                  <span className="font-body-md text-slate-subtle line-through text-base sm:text-lg">
+                  <span className="font-body-md text-slate-subtle line-through text-base sm:text-lg decoration-primary [text-decoration-color:#800020] decoration-[1.5px]">
                     ₹{product.originalPrice}
                   </span>
                 )}
@@ -661,9 +746,6 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                         alt={item.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
-                      <span className="absolute top-2 left-2 bg-white/90 text-tertiary text-[10px] font-bold px-2 py-0.5 rounded-full">
-                        Fresh
-                      </span>
                     </div>
                     <h4 className="font-headline-sm font-bold text-sm text-gray-900 line-clamp-1 group-hover:text-primary transition-colors">
                       {item.name}

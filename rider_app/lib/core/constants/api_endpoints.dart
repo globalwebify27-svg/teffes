@@ -17,15 +17,17 @@ class ApiEndpoints {
     }
 
     if (kIsWeb) {
-      return 'http://localhost:5000/api';
+      return 'https://teffes.onrender.com/api';
     }
 
     try {
       if (Platform.isAndroid) {
-        return 'http://10.0.2.2:5000/api';
+        return 'https://teffes.onrender.com/api';
       }
-    } catch (_) {}
-    return 'http://localhost:5000/api';
+    } catch (_) {
+      // ignore
+    }
+    return 'https://teffes.onrender.com/api';
   }
 
   // Auth

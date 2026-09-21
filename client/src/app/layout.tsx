@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s | Teffes Ranchi",
   },
   description:
-    "Order 100% fresh, hygienic, antibiotic-free Chicken, Tender Mutton, River Fish & Eggs in Ranchi. Cut fresh after your order with 0% cold storage. Delivered in 90 mins.",
+    "Order 100% fresh, hygienic, antibiotic-free Chicken, Tender Mutton, River Fish & Marinated Cuts in Ranchi. Cut fresh after your order with 0% cold storage. Delivered in 90 mins.",
   keywords: [
     "fresh meat in Ranchi",
     "fresh chicken delivery Ranchi",
@@ -50,7 +50,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />

@@ -17,6 +17,7 @@ import {
 } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { isYouTubeUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
 
 // ─── Icon helpers ──────────────────────────────────────────────────────────────
 const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
@@ -919,6 +920,490 @@ function StoreAdminsTab() {
   );
 }
 
+function ProductMediaManager({
+  images,
+  onImagesChange,
+  videoURLs,
+  onVideoURLsChange,
+  pendingImageUrl = "",
+  onPendingImageUrlChange,
+  pendingVideoUrl = "",
+  onPendingVideoUrlChange,
+}: {
+  images: string[];
+  onImagesChange: (imgs: string[]) => void;
+  videoURLs: string[];
+  onVideoURLsChange: (vids: string[]) => void;
+  pendingImageUrl?: string;
+  onPendingImageUrlChange?: (val: string) => void;
+  pendingVideoUrl?: string;
+  onPendingVideoUrlChange?: (val: string) => void;
+}) {
+  const [localImageUrl, setLocalImageUrl] = useState("");
+  const [localVideoUrl, setLocalVideoUrl] = useState("");
+  const [imageInputError, setImageInputError] = useState("");
+  const [videoInputError, setVideoInputError] = useState("");
+
+  const currentImageUrl = onPendingImageUrlChange ? pendingImageUrl : localImageUrl;
+  const setImageUrl = (val: string) => {
+    if (onPendingImageUrlChange) onPendingImageUrlChange(val);
+    else setLocalImageUrl(val);
+  };
+
+  const currentVideoUrl = onPendingVideoUrlChange ? pendingVideoUrl : localVideoUrl;
+  const setVideoUrl = (val: string) => {
+    if (onPendingVideoUrlChange) onPendingVideoUrlChange(val);
+    else setLocalVideoUrl(val);
+  };
+
+  const handleAddImage = () => {
+    const trimmed = currentImageUrl.trim();
+    if (!trimmed) {
+      setImageInputError("Please paste an image URL first");
+      return;
+    }
+    setImageInputError("");
+    onImagesChange([...images, trimmed]);
+    setImageUrl("");
+  };
+
+  const handleRemoveImage = (indexToRemove: number) => {
+    onImagesChange(images.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  const handleSetAsCover = (indexToCover: number) => {
+    if (indexToCover <= 0 || indexToCover >= images.length) return;
+    const target = images[indexToCover];
+    const remaining = images.filter((_, idx) => idx !== indexToCover);
+    onImagesChange([target, ...remaining]);
+  };
+
+  const handleAddVideo = () => {
+    const trimmed = currentVideoUrl.trim();
+    console.log('[ProductMediaManager] handleAddVideo called, URL:', trimmed);
+    if (!trimmed) {
+      setVideoInputError("Please paste a YouTube or direct video URL first");
+      return;
+    }
+    setVideoInputError("");
+    const newList = [...videoURLs, trimmed];
+    console.log('[ProductMediaManager] calling onVideoURLsChange with:', newList);
+    onVideoURLsChange(newList);
+    setVideoUrl("");
+  };
+
+  const handleRemoveVideo = (indexToRemove: number) => {
+    onVideoURLsChange(videoURLs.filter((_, idx) => idx !== indexToRemove));
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+      {/* ─── Product Images Section ─── */}
+      <div style={{ background: "#fdfbf9", border: "1.5px solid #ece7df", borderRadius: "12px", padding: "14px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+          <div>
+            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#2d241e", display: "flex", alignItems: "center", gap: "6px" }}>
+              <span>Product Photos</span>
+              <span style={{ fontSize: "0.72rem", background: "#fef2f2", color: "#941717", padding: "2px 8px", borderRadius: "12px", border: "1px solid #fecaca", fontWeight: 700 }}>
+                {images.length} {images.length === 1 ? "Photo" : "Photos"}
+              </span>
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "#786f66", marginTop: "2px" }}>
+              Cover photo is marked with ★ Cover. First photo is always the storefront cover.
+            </div>
+          </div>
+        </div>
+
+        {/* Thumbnail Grid - Visual preview cards with Cover badge and remove action */}
+        {images.length > 0 ? (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", marginBottom: "12px" }}>
+            {images.map((imgUrl, idx) => {
+              const isCover = idx === 0;
+              return (
+                <div
+                  key={`media-img-${idx}`}
+                  style={{
+                    position: "relative",
+                    width: "82px",
+                    height: "82px",
+                    borderRadius: "10px",
+                    border: isCover ? "2px solid #941717" : "1.5px solid #e2dcd4",
+                    overflow: "hidden",
+                    background: "#1c1815",
+                    boxShadow: "0 2px 6px rgba(0,0,0,0.08)",
+                    flexShrink: 0,
+                  }}
+                >
+                  <img
+                    src={imgUrl}
+                    alt={isCover ? "Cover" : `Gallery photo ${idx + 1}`}
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                    onError={(e) => {
+                      (e.target as HTMLElement).style.opacity = "0.3";
+                    }}
+                  />
+
+                  {/* Cover Badge */}
+                  {isCover && (
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: "4px",
+                        left: "4px",
+                        background: "#941717",
+                        color: "#fff",
+                        fontSize: "9px",
+                        fontWeight: 800,
+                        padding: "1px 5px",
+                        borderRadius: "4px",
+                        letterSpacing: "0.03em",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                      }}
+                    >
+                      ★ Cover
+                    </div>
+                  )}
+
+                  {/* Delete Button */}
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(idx)}
+                    title="Remove this photo"
+                    style={{
+                      position: "absolute",
+                      top: "4px",
+                      right: "4px",
+                      width: "20px",
+                      height: "20px",
+                      borderRadius: "50%",
+                      background: "rgba(220, 38, 38, 0.9)",
+                      color: "#fff",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "11px",
+                      fontWeight: 800,
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                      transition: "transform 150ms ease",
+                    }}
+                    onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
+                    onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
+                  >
+                    ✕
+                  </button>
+
+                  {/* Make Cover Button for non-cover photos */}
+                  {!isCover && (
+                    <button
+                      type="button"
+                      onClick={() => handleSetAsCover(idx)}
+                      title="Set as Cover Photo"
+                      style={{
+                        position: "absolute",
+                        bottom: "0",
+                        left: "0",
+                        right: "0",
+                        background: "rgba(0, 0, 0, 0.68)",
+                        color: "#fff",
+                        border: "none",
+                        fontSize: "8.5px",
+                        fontWeight: 700,
+                        padding: "2px 0",
+                        cursor: "pointer",
+                        textAlign: "center",
+                        backdropFilter: "blur(2px)",
+                      }}
+                    >
+                      Make Cover
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: "14px",
+              background: "#fff",
+              border: "1px dashed #d1cbbf",
+              borderRadius: "8px",
+              textAlign: "center",
+              color: "#8c8275",
+              fontSize: "0.8rem",
+              marginBottom: "10px",
+            }}
+          >
+            No photos added yet. Paste an image URL below to add the cover photo.
+          </div>
+        )}
+
+        {/* Clean Add Photo Input Row */}
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            type="text"
+            placeholder="Paste image URL (e.g. https://...)"
+            value={currentImageUrl}
+            onChange={(e) => {
+              setImageUrl(e.target.value);
+              if (imageInputError) setImageInputError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleAddImage();
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: imageInputError ? "1.5px solid #dc2626" : "1px solid #d1cbbf",
+              fontSize: "0.84rem",
+              background: "#fff",
+              boxSizing: "border-box",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleAddImage}
+            style={{
+              background: "#941717",
+              color: "#fff",
+              border: "none",
+              padding: "8px 14px",
+              borderRadius: "8px",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            + Add Photo
+          </button>
+        </div>
+        {imageInputError && (
+          <div style={{ color: "#dc2626", fontSize: "0.74rem", marginTop: "4px", fontWeight: 600 }}>
+            {imageInputError}
+          </div>
+        )}
+      </div>
+
+      {/* ─── Product Videos Section ─── */}
+      <div style={{ background: "#fcfdfe", border: "1.5px solid #e0e7ee", borderRadius: "12px", padding: "14px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" }}>
+          <div>
+            <div style={{ fontSize: "0.85rem", fontWeight: 800, color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
+              <span>Product Videos</span>
+              <span style={{ fontSize: "0.72rem", background: "#f0fdf4", color: "#166534", padding: "2px 8px", borderRadius: "12px", border: "1px solid #bbf7d0", fontWeight: 700 }}>
+                {videoURLs.length} {videoURLs.length === 1 ? "Video" : "Videos"}
+              </span>
+            </div>
+            <div style={{ fontSize: "0.72rem", color: "#64748b", marginTop: "2px" }}>
+              Supports YouTube links or direct MP4/WebM URLs. Videos will appear after all photos in gallery.
+            </div>
+          </div>
+        </div>
+
+        {/* Clean Videos List */}
+        {videoURLs.length > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginBottom: "10px" }}>
+            {videoURLs.map((vUrl, vIdx) => {
+              const isYT = isYouTubeUrl(vUrl);
+              const ytThumb = isYT ? getYouTubeThumbnailUrl(vUrl) : null;
+              return (
+                <div
+                  key={`media-vid-${vIdx}`}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    padding: "8px 12px",
+                    background: "#ffffff",
+                    border: "1px solid #e2e8f0",
+                    borderRadius: "8px",
+                    gap: "10px",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: 1 }}>
+                    {isYT ? (
+                      <span
+                        style={{
+                          background: "#fef2f2",
+                          color: "#dc2626",
+                          border: "1px solid #fecaca",
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          whiteSpace: "nowrap",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        ▶ YouTube
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          background: "#eff6ff",
+                          color: "#1d4ed8",
+                          border: "1px solid #bfdbfe",
+                          padding: "3px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          whiteSpace: "nowrap",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}
+                      >
+                        🎬 Direct Video
+                      </span>
+                    )}
+
+                    {ytThumb ? (
+                      <img
+                        src={ytThumb}
+                        alt="Video thumbnail"
+                        style={{ width: "42px", height: "26px", objectFit: "cover", borderRadius: "4px", border: "1px solid #e2e8f0", flexShrink: 0 }}
+                      />
+                    ) : (
+                      <span className="material-symbols-outlined" style={{ fontSize: "18px", color: "#64748b" }}>
+                        videocam
+                      </span>
+                    )}
+
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <a
+                        href={vUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        style={{
+                          fontSize: "0.78rem",
+                          color: "#2563eb",
+                          textDecoration: "none",
+                          display: "block",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                        title={vUrl}
+                      >
+                        {vUrl} ↗
+                      </a>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveVideo(vIdx)}
+                    title="Remove video"
+                    style={{
+                      width: "26px",
+                      height: "26px",
+                      borderRadius: "6px",
+                      background: "#fee2e2",
+                      color: "#dc2626",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      flexShrink: 0,
+                    }}
+                  >
+                    ✕
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div
+            style={{
+              padding: "14px",
+              background: "#fff",
+              border: "1px dashed #cbd5e1",
+              borderRadius: "8px",
+              textAlign: "center",
+              color: "#94a3b8",
+              fontSize: "0.78rem",
+              marginBottom: "10px",
+            }}
+          >
+            No videos attached yet. Paste a YouTube link or direct video URL below.
+          </div>
+        )}
+
+        {/* Clean Add Video Input Row */}
+        <div style={{ display: "flex", gap: "8px" }}>
+          <input
+            type="text"
+            data-testid="video-url-input"
+            placeholder="Paste YouTube or direct MP4/WebM URL..."
+            value={currentVideoUrl}
+            onChange={(e) => {
+              setVideoUrl(e.target.value);
+              if (videoInputError) setVideoInputError("");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleAddVideo();
+              }
+            }}
+            style={{
+              flex: 1,
+              padding: "8px 12px",
+              borderRadius: "8px",
+              border: videoInputError ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
+              fontSize: "0.84rem",
+              background: "#fff",
+              boxSizing: "border-box",
+            }}
+          />
+          <button
+            type="button"
+            onClick={handleAddVideo}
+            style={{
+              background: "#1e293b",
+              color: "#fff",
+              border: "none",
+              padding: "8px 14px",
+              borderRadius: "8px",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              cursor: "pointer",
+              whiteSpace: "nowrap",
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+            }}
+          >
+            + Add Video
+          </button>
+        </div>
+        {videoInputError && (
+          <div style={{ color: "#dc2626", fontSize: "0.74rem", marginTop: "4px", fontWeight: 600 }}>
+            {videoInputError}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ProductsTab() {
   const [products, setProducts] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
@@ -937,6 +1422,10 @@ function ProductsTab() {
     description: "",
     badge: "",
     image: "",
+    images: [] as string[],
+    videoURLs: [] as string[],
+    pendingImageUrl: "",
+    pendingVideoUrl: "",
     inStock: true,
   });
 
@@ -954,25 +1443,33 @@ function ProductsTab() {
     description: "",
     badge: "",
     image: "",
+    images: [] as string[],
+    videoURLs: [] as string[],
+    pendingImageUrl: "",
+    pendingVideoUrl: "",
     inStock: true,
   });
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
 
-  const fetchProds = () => {
-    setLoading(true);
-    api.get<{ success: boolean; products: any[] }>("/products?limit=100&all=true")
-      .then(res => {
-        if (res.data.success) {
-          setProducts(res.data.products || []);
-        }
-      })
-      .catch(err => console.warn("Failed to fetch products:", err))
-      .finally(() => setLoading(false));
+  const fetchProds = async (showLoadingSpinner = true) => {
+    if (showLoadingSpinner) setLoading(true);
+    try {
+      const res = await api.get<{ success: boolean; products: any[] }>(
+        `/products?limit=100&all=true&_t=${Date.now()}`
+      );
+      if (res.data?.success && Array.isArray(res.data.products)) {
+        setProducts(res.data.products);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch products:", err);
+    } finally {
+      if (showLoadingSpinner) setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchProds();
+    fetchProds(true);
     api.get<{ success: boolean; categories: any[] }>("/categories")
       .then(res => {
         if (res.data.success && res.data.categories) {
@@ -990,7 +1487,8 @@ function ProductsTab() {
     setTogglingId(id);
     try {
       await api.put(`/products/${id}`, { inStock: !current });
-      fetchProds();
+      setProducts(prev => prev.map(item => ((item.id || item._id) === id ? { ...item, inStock: !current } : item)));
+      fetchProds(false);
     } catch (err) {
       alert("Failed to toggle status");
     } finally {
@@ -998,7 +1496,16 @@ function ProductsTab() {
     }
   };
 
-  const handleStartEdit = (p: any) => {
+  const populateEditForm = (p: any) => {
+    const rawImages: string[] = Array.isArray(p.images) && p.images.length > 0 
+      ? p.images.map((s: any) => String(s).trim()).filter(Boolean)
+      : (p.image ? [p.image.trim()] : []);
+    const primaryImg = rawImages[0] || p.image || "";
+    const additionalImgs = rawImages.slice(1);
+    const rawVideos: string[] = Array.isArray(p.videoURLs) 
+      ? p.videoURLs.map((s: any) => String(s).trim()).filter(Boolean) 
+      : (typeof p.videoURLs === "string" && p.videoURLs ? [p.videoURLs.trim()] : []);
+
     setEditingProduct(p);
     setEditProductForm({
       name: p.name || "",
@@ -1011,31 +1518,60 @@ function ProductsTab() {
       serves: p.serves || "",
       description: p.description || "",
       badge: p.badge || "",
-      image: p.image || "",
+      image: primaryImg,
+      images: additionalImgs,
+      videoURLs: rawVideos,
+      pendingImageUrl: "",
+      pendingVideoUrl: "",
       inStock: Boolean(p.inStock),
     });
+  };
+
+  const handleStartEdit = (p: any) => {
+    // Open the edit modal immediately with the current row data
+    populateEditForm(p);
   };
 
   const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingProduct) return;
     if (!editProductForm.name.trim()) {
-      alert("Please enter a product name");
+      toast.error("Please enter a product name", "Validation Error");
       return;
     }
     if (!editProductForm.price || isNaN(Number(editProductForm.price))) {
-      alert("Please enter a valid price");
+      toast.error("Please enter a valid price", "Validation Error");
       return;
     }
-    if (!editProductForm.image.trim()) {
-      alert("Please enter a product image URL");
+
+    // Auto-commit any pending image URL typed in the input box
+    const pendingImg = editProductForm.pendingImageUrl?.trim();
+    const rawImgs = [editProductForm.image, ...editProductForm.images, ...(pendingImg ? [pendingImg] : [])];
+    const uniqueImages = Array.from(new Set(rawImgs.map(s => s.trim()).filter(Boolean)));
+
+    if (uniqueImages.length === 0) {
+      toast.error("Please add at least one product photo", "Validation Error");
       return;
     }
+
+    // Auto-commit any pending video URL typed in the input box
+    const pendingVid = editProductForm.pendingVideoUrl?.trim();
+    // Also read directly from DOM input as a last-resort fallback
+    const domVidInput = (typeof document !== 'undefined' ? document.querySelector('[data-testid="video-url-input"]') as HTMLInputElement | null : null);
+    const domVidVal = domVidInput?.value?.trim() || '';
+    const rawVids = [...editProductForm.videoURLs, ...(pendingVid ? [pendingVid] : []), ...(domVidVal && domVidVal !== pendingVid ? [domVidVal] : [])];
+    const cleanVideos = Array.from(new Set(rawVids.map(s => s.trim()).filter(Boolean)));
+    console.log('[handleSaveEdit] editProductForm.videoURLs:', editProductForm.videoURLs);
+    console.log('[handleSaveEdit] pendingVideoUrl:', pendingVid);
+    console.log('[handleSaveEdit] DOM input value:', domVidVal);
+    console.log('[handleSaveEdit] cleanVideos to be saved:', cleanVideos);
 
     setSubmittingEdit(true);
     try {
       const selectedCatObj = categories.find(c => c.slug === editProductForm.category);
-      await api.put(`/products/${editingProduct.id || editingProduct._id}`, {
+      const targetId = editingProduct.id || editingProduct._id;
+
+      const res = await api.put(`/products/${targetId}`, {
         name: editProductForm.name.trim(),
         category: editProductForm.category,
         categoryLabel: selectedCatObj ? selectedCatObj.name : editProductForm.category,
@@ -1047,14 +1583,38 @@ function ProductsTab() {
         serves: editProductForm.serves.trim(),
         description: editProductForm.description.trim(),
         badge: editProductForm.badge.trim(),
-        image: editProductForm.image.trim(),
+        image: uniqueImages[0],
+        images: uniqueImages,
+        videoURLs: cleanVideos,
         inStock: editProductForm.inStock,
       });
 
-      fetchProds();
+      if (res.data?.success) {
+        toast.success(`Product "${editProductForm.name}" updated successfully!`, "Product Saved");
+        const updated = res.data.product || {
+          ...editingProduct,
+          name: editProductForm.name.trim(),
+          price: Number(editProductForm.price),
+          image: uniqueImages[0],
+          images: uniqueImages,
+          videoURLs: cleanVideos,
+          inStock: editProductForm.inStock,
+        };
+        // Update product in table state immediately
+        setProducts(prev => prev.map(item => {
+          const itemId = item.id || item._id;
+          const uId = updated.id || updated._id;
+          return (itemId && uId && itemId === uId) || (item.id && updated.id && item.id === updated.id) || (item._id && updated._id && item._id === updated._id)
+            ? { ...item, ...updated }
+            : item;
+        }));
+      }
       setEditingProduct(null);
+      // Background re-fetch with cache-buster, without unmounting the table
+      await fetchProds(false);
     } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to update product");
+      console.error("Failed to update product:", err);
+      toast.error(err.response?.data?.message || err.message || "Failed to update product", "Update Failed");
     } finally {
       setSubmittingEdit(false);
     }
@@ -1063,22 +1623,42 @@ function ProductsTab() {
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newProduct.name.trim()) {
-      alert("Please enter a product name");
+      toast.error("Please enter a product name", "Validation Error");
       return;
     }
     if (!newProduct.price || isNaN(Number(newProduct.price))) {
-      alert("Please enter a valid price");
+      toast.error("Please enter a valid price", "Validation Error");
       return;
     }
-    if (!newProduct.image.trim()) {
-      alert("Please enter a product image URL");
+
+    // Auto-commit any pending image URL typed in the input box
+    const pendingImg = newProduct.pendingImageUrl?.trim();
+    const rawImgs = [newProduct.image, ...newProduct.images, ...(pendingImg ? [pendingImg] : [])];
+    const uniqueImages = Array.from(new Set(rawImgs.map(s => s.trim()).filter(Boolean)));
+
+    if (uniqueImages.length === 0) {
+      toast.error("Please add at least one product photo", "Validation Error");
       return;
     }
+
+    // Auto-commit any pending video URL typed in the input box
+    const pendingVid = newProduct.pendingVideoUrl?.trim();
+    // Also read directly from DOM input as a last-resort fallback
+    const domVidInput = (typeof document !== 'undefined' ? document.querySelector('[data-testid="video-url-input"]') as HTMLInputElement | null : null);
+    const domVidVal = domVidInput?.value?.trim() || '';
+    const rawVids = [...newProduct.videoURLs, ...(pendingVid ? [pendingVid] : []), ...(domVidVal && domVidVal !== pendingVid ? [domVidVal] : [])];
+    const cleanVideos = Array.from(new Set(rawVids.map(s => s.trim()).filter(Boolean)));
+    console.log('[handleAddProduct] newProduct.videoURLs:', newProduct.videoURLs);
+    console.log('[handleAddProduct] pendingVideoUrl:', pendingVid);
+    console.log('[handleAddProduct] DOM input value:', domVidVal);
+    console.log('[handleAddProduct] cleanVideos to be saved:', cleanVideos);
+
 
     setSubmitting(true);
     try {
       const selectedCatObj = categories.find(c => c.slug === newProduct.category);
-      await api.post("/products", {
+
+      const res = await api.post("/products", {
         name: newProduct.name.trim(),
         category: newProduct.category,
         categoryLabel: selectedCatObj ? selectedCatObj.name : newProduct.category,
@@ -1090,11 +1670,17 @@ function ProductsTab() {
         serves: newProduct.serves.trim(),
         description: newProduct.description.trim(),
         badge: newProduct.badge.trim(),
-        image: newProduct.image.trim(),
+        image: uniqueImages[0],
+        images: uniqueImages,
+        videoURLs: cleanVideos,
         inStock: newProduct.inStock,
       });
 
-      fetchProds();
+      if (res.data?.success) {
+        toast.success(`Product "${newProduct.name}" created successfully!`, "Product Created");
+      }
+
+      await fetchProds(false);
       setShowAddModal(false);
       setNewProduct({
         name: "",
@@ -1108,16 +1694,22 @@ function ProductsTab() {
         description: "",
         badge: "",
         image: "",
+        images: [],
+        videoURLs: [],
+        pendingImageUrl: "",
+        pendingVideoUrl: "",
         inStock: true,
       });
     } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to add product");
+      console.error("Failed to add product:", err);
+      toast.error(err.response?.data?.message || err.message || "Failed to add product", "Add Product Failed");
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleDeleteProduct = async (p: any) => {
+    const pId = p.id || p._id;
     toast.confirm({
       title: "Delete Product?",
       message: `Are you sure you want to delete product "${p.name}"? This action cannot be undone.`,
@@ -1125,9 +1717,10 @@ function ProductsTab() {
       type: "danger",
       onConfirm: async () => {
         try {
-          await api.delete(`/products/${p.id || p._id}`);
+          await api.delete(`/products/${pId}`);
           toast.success(`Product "${p.name}" deleted successfully`, "Product Deleted");
-          fetchProds();
+          setProducts(prev => prev.filter(item => (item.id || item._id) !== pId));
+          fetchProds(false);
         } catch (err: any) {
           toast.error(err.response?.data?.message || "Failed to delete product", "Delete Error");
         }
@@ -1279,7 +1872,7 @@ function ProductsTab() {
               </button>
             </div>
 
-            <form onSubmit={handleAddProduct} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <form onSubmit={handleAddProduct} noValidate style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Name *</label>
                 <input
@@ -1376,22 +1969,34 @@ function ProductsTab() {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Image URL *</label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://images.unsplash.com/..."
-                  value={newProduct.image}
-                  onChange={e => setNewProduct({ ...newProduct, image: e.target.value })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
-                />
-                {newProduct.image.trim() && (
-                  <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
-                    <img src={newProduct.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
-                  </div>
-                )}
-              </div>
+              {/* Product Media: Photos and Videos */}
+              <ProductMediaManager
+                images={[newProduct.image, ...newProduct.images].filter(Boolean)}
+                onImagesChange={(imgs) => {
+                  setNewProduct(prev => ({
+                    ...prev,
+                    image: imgs[0] || "",
+                    images: imgs.slice(1),
+                    pendingImageUrl: "",
+                  }));
+                }}
+                videoURLs={newProduct.videoURLs}
+                onVideoURLsChange={(vids) => {
+                  setNewProduct(prev => ({
+                    ...prev,
+                    videoURLs: vids,
+                    pendingVideoUrl: "",
+                  }));
+                }}
+                pendingImageUrl={newProduct.pendingImageUrl}
+                onPendingImageUrlChange={(val) => {
+                  setNewProduct(prev => ({ ...prev, pendingImageUrl: val }));
+                }}
+                pendingVideoUrl={newProduct.pendingVideoUrl}
+                onPendingVideoUrlChange={(val) => {
+                  setNewProduct(prev => ({ ...prev, pendingVideoUrl: val }));
+                }}
+              />
 
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Description</label>
@@ -1445,7 +2050,7 @@ function ProductsTab() {
               </button>
             </div>
 
-            <form onSubmit={handleSaveEdit} style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <form onSubmit={handleSaveEdit} noValidate style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Name *</label>
                 <input
@@ -1541,22 +2146,34 @@ function ProductsTab() {
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Product Image URL *</label>
-                <input
-                  type="url"
-                  required
-                  placeholder="https://images.unsplash.com/..."
-                  value={editProductForm.image}
-                  onChange={e => setEditProductForm({ ...editProductForm, image: e.target.value })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
-                />
-                {editProductForm.image.trim() && (
-                  <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
-                    <img src={editProductForm.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
-                  </div>
-                )}
-              </div>
+              {/* Product Media: Photos and Videos */}
+              <ProductMediaManager
+                images={[editProductForm.image, ...editProductForm.images].filter(Boolean)}
+                onImagesChange={(imgs) => {
+                  setEditProductForm(prev => ({
+                    ...prev,
+                    image: imgs[0] || "",
+                    images: imgs.slice(1),
+                    pendingImageUrl: "",
+                  }));
+                }}
+                videoURLs={editProductForm.videoURLs}
+                onVideoURLsChange={(vids) => {
+                  setEditProductForm(prev => ({
+                    ...prev,
+                    videoURLs: vids,
+                    pendingVideoUrl: "",
+                  }));
+                }}
+                pendingImageUrl={editProductForm.pendingImageUrl}
+                onPendingImageUrlChange={(val) => {
+                  setEditProductForm(prev => ({ ...prev, pendingImageUrl: val }));
+                }}
+                pendingVideoUrl={editProductForm.pendingVideoUrl}
+                onPendingVideoUrlChange={(val) => {
+                  setEditProductForm(prev => ({ ...prev, pendingVideoUrl: val }));
+                }}
+              />
 
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Description</label>

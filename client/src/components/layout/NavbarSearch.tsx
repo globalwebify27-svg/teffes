@@ -9,12 +9,14 @@ import api from "@/lib/api";
 interface NavbarSearchProps {
   placeholder?: string;
   isMobile?: boolean;
+  isScrolled?: boolean;
   onCloseMobile?: () => void;
 }
 
 export default function NavbarSearch({
   placeholder = "Search for fresh Chicken, Mutton, Fish, Cuts, Eggs...",
   isMobile = false,
+  isScrolled = false,
   onCloseMobile,
 }: NavbarSearchProps) {
   const router = useRouter();
@@ -153,7 +155,11 @@ export default function NavbarSearch({
     <div ref={containerRef} className="relative w-full">
       {/* Search Input Box */}
       <div className="relative w-full flex items-center">
-        <span className="material-symbols-outlined absolute left-3.5 text-on-surface-variant text-[20px] pointer-events-none text-slate-400">
+        <span
+          className={`material-symbols-outlined absolute left-3.5 text-[20px] pointer-events-none ${
+            isScrolled && !isMobile ? "text-slate-500" : "text-slate-400"
+          }`}
+        >
           search
         </span>
         <input
@@ -165,8 +171,12 @@ export default function NavbarSearch({
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`w-full pl-10 pr-10 py-2.5 bg-surface-container-low font-body-sm text-body-sm text-on-surface placeholder:text-slate-400 focus:outline-none focus:bg-white focus:ring-2 focus:ring-primary/20 focus:shadow-md transition-all border border-gray-200/70 ${
-            isMobile ? "rounded-full bg-white shadow-xs" : "rounded-full"
+          className={`w-full pl-10 pr-10 py-2.5 font-body-sm text-body-sm placeholder:text-slate-400 focus:outline-none transition-all ${
+            isMobile
+              ? "rounded-full bg-white shadow-xs text-on-surface border border-gray-200 focus:ring-2 focus:ring-primary/20"
+              : isScrolled
+              ? "rounded-full bg-white text-gray-900 border border-white shadow-sm focus:ring-2 focus:ring-amber-300 focus:shadow-md"
+              : "rounded-full bg-surface-container-low text-on-surface border border-gray-200/70 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:shadow-md"
           }`}
           autoComplete="off"
         />

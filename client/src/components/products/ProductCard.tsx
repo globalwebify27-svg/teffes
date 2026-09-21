@@ -123,18 +123,6 @@ export default function ProductCard({ product }: { product: Product }) {
             zIndex: 2,
           }}
         >
-          {product.badge && (
-            <span
-              className={`badge ${product.badge === "Bestseller"
-                  ? "badge-red"
-                  : product.badge === "Daily Catch" || product.badge === "100% Free Range"
-                    ? "badge-green"
-                    : "badge-amber"
-                }`}
-            >
-              ★ {product.badge}
-            </span>
-          )}
         </div>
 
         {/* Top Right Like / Heart Icon */}
@@ -174,24 +162,6 @@ export default function ProductCard({ product }: { product: Product }) {
           <FontAwesomeIcon icon={isLiked ? faHeartSolid : faHeartRegular} />
         </button>
 
-        {/* Cut On Order Guarantee Chip */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: "8px",
-            left: "10px",
-            background: "rgba(17, 28, 54, 0.85)",
-            backdropFilter: "blur(4px)",
-            color: "#ffffff",
-            fontSize: "0.7rem",
-            fontWeight: 600,
-            padding: "2px 8px",
-            borderRadius: "4px",
-            letterSpacing: "0.02em",
-          }}
-        >
-          {product.category === "eggs" ? `🥚 0% Cold Storage` : `🔪 Cut After Order`}
-        </div>
 
         {/* Discount Tag */}
         {discount > 0 && (
@@ -315,6 +285,7 @@ export default function ProductCard({ product }: { product: Product }) {
                   fontSize: "0.825rem",
                   color: "var(--gray-400)",
                   textDecoration: "line-through",
+                  textDecorationColor: "var(--brand-primary)",
                 }}
               >
                 ₹{product.originalPrice}
@@ -347,7 +318,7 @@ export default function ProductCard({ product }: { product: Product }) {
           ) : (
             <button
               type="button"
-              className="btn btn-outline-red btn-sm"
+              className="btn btn-outline-red btn-sm btn-hover-fill"
               onClick={handleAddToCart}
               id={`add-btn-${product.id}`}
               style={{ fontWeight: 700 }}

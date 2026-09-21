@@ -66,12 +66,12 @@ class ProductsProvider with ChangeNotifier {
         subcategories: ['All', 'Freshwater Fish', 'Sea Prawns', 'Fillet Cuts'],
       ),
       CategoryModel(
-        key: 'eggs',
-        label: 'Farm Eggs',
-        image: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=600&q=80',
-        subtitle: 'Farm fresh brown & classic eggs',
+        key: 'marinated',
+        label: 'Marinated',
+        image: 'https://images.unsplash.com/photo-1555939594-58d7cb561ad1?auto=format&fit=crop&w=600&q=80',
+        subtitle: 'Ready to cook marinated cuts',
         itemCount: 6,
-        subcategories: ['All', 'Classic Brown', 'Country Free-Range'],
+        subcategories: ['All', 'Chicken', 'Fish'],
       ),
     ];
   }
@@ -166,13 +166,7 @@ class ProductsProvider with ChangeNotifier {
               final defMatch = defaultMap[serverCat.key] ??
                   (serverCat.key == 'fish' ? defaultMap['fish-seafood'] : null);
 
-              final img = serverCat.image.isNotEmpty &&
-                      !serverCat.image.contains('undefined') &&
-                      !serverCat.image.contains('photo-1544025162-d76694265947') &&
-                      !serverCat.image.contains('photo-1603048588665-791ca8aea617')
-                  ? serverCat.image
-                  : (defMatch?.image ??
-                      'https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=600&q=80');
+              final img = serverCat.image;
 
               return CategoryModel(
                 key: serverCat.key,
@@ -352,8 +346,8 @@ class ProductsProvider with ChangeNotifier {
     return meatAndSeafood.take(6).toList();
   }
 
-  List<ProductModel> get farmFreshEggs {
-    return _products.where((p) => p.inStock && p.category.toLowerCase() == 'eggs').toList();
+  List<ProductModel> get marinatedCuts {
+    return _products.where((p) => p.inStock && p.category.toLowerCase() == 'marinated').toList();
   }
 
   ProductModel? findProductById(String id) {

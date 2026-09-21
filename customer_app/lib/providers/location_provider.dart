@@ -18,26 +18,14 @@ class LocationProvider with ChangeNotifier {
   bool get isGpsDetected => _isGpsDetected;
   bool get hasPromptedPermission => _hasPromptedPermission;
 
+  bool get hasSelectedAddress => _selectedAddress != null;
+
   String get activeLabel => _selectedAddress?.tag ?? (_isGpsDetected ? 'Current Location' : 'Ranchi');
   String get activeAddressString =>
-      _selectedAddress?.fullAddress ?? 'Main Road, Near Albert Ekka Chowk, Ranchi 834001';
+      _selectedAddress?.fullAddress ?? 'Tap to set delivery address';
 
   LocationProvider() {
-    _initDefaultAddress();
     fetchAddresses();
-  }
-
-  void _initDefaultAddress() {
-    _selectedAddress = AddressModel(
-      id: 'gps-initial',
-      tag: 'Current Location',
-      line1: 'Main Road, Near Albert Ekka Chowk',
-      line2: 'Lower Bazar',
-      city: 'Ranchi',
-      pincode: '834001',
-      isDefault: true,
-    );
-    _isGpsDetected = true;
   }
 
   /// Zepto-style location detection: prompts or activates live device GPS
@@ -79,7 +67,13 @@ class LocationProvider with ChangeNotifier {
             orElse: () => _savedAddresses.first,
           );
           _selectedAddress = def;
+        } else {
+          _selectedAddress = null;
+          _isGpsDetected = false;
         }
+      } else {
+        _savedAddresses = [];
+        _selectedAddress = null;
       }
     } catch (_) {
       // Gracefully ignore 401 when user is not yet logged in

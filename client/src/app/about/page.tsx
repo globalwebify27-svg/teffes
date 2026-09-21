@@ -4,7 +4,7 @@ import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: "About Us - Teffes Ranchi Butcher Shop",
-  description: "Learn about Teffes, Ranchi's trusted butchery for over a decade. Fresh, hygienic chicken, mutton, fish, and eggs delivered in 90 minutes.",
+  description: "Learn about Teffes, Ranchi's trusted shop for over a decade. Fresh, hygienic chicken, mutton, fish, and eggs delivered in 90 minutes.",
 };
 
 export default function AboutPage() {
@@ -145,7 +145,7 @@ export default function AboutPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-6">
             <div>
               <span className="font-label-badge text-tertiary uppercase font-bold text-xs tracking-wider">
-                Visit Our Physical Butchery Hub
+                Visit Our Physical Teffe's Hub
               </span>
               <h2 className="font-headline-md font-extrabold text-gray-900 text-xl sm:text-2xl mt-1">
                 Kishore Ganj Chowk, Ranchi

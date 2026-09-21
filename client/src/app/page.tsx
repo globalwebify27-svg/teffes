@@ -36,8 +36,8 @@ export default function HomePage() {
     return liveProducts.filter((p) => p.category === "fish").slice(0, 3);
   }, [liveProducts]);
 
-  const eggProducts = useMemo(() => {
-    return liveProducts.filter((p) => p.category === "eggs");
+  const marinatedProducts = useMemo(() => {
+    return liveProducts.filter((p) => p.category === "marinated");
   }, [liveProducts]);
 
   const displayCategories = useMemo(() => {
@@ -148,8 +148,8 @@ export default function HomePage() {
                       router.push("/category?type=mutton");
                     } else if (banner.link.includes("fish")) {
                       router.push("/category?type=fish");
-                    } else if (banner.link.includes("eggs")) {
-                      router.push("/category?type=eggs");
+                    } else if (banner.link.includes("marinated")) {
+                      router.push("/category?type=marinated");
                     } else if (banner.link.startsWith("#")) {
                       router.push("/category?type=all");
                     } else {
@@ -322,12 +322,12 @@ export default function HomePage() {
         </section>
       )}
 
-      {/* ─── 3. Category Exploration Rail (4 Categories: Chicken, Mutton, Fish, Eggs) ─ */}
+      {/* ─── 3. Category Exploration Rail (4 Categories: Chicken, Mutton, Fish, Marinated) ─ */}
       <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-2xl" id="categories">
         <div className="flex items-end justify-between mb-4">
           <div>
             <span className="font-label-badge text-label-badge uppercase tracking-wider text-primary font-bold">
-              Butchery Counters
+              Counters
             </span>
             <h2 className="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
               Explore by Category
@@ -422,11 +422,6 @@ export default function HomePage() {
                       }}
                     />
 
-                    {/* Top Left: Fresh Tag */}
-                    <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tertiary font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> Never Frozen
-                    </span>
-
                     {/* Top Right: Wishlist Heart Icon Button */}
                     <button
                       type="button"
@@ -446,13 +441,6 @@ export default function HomePage() {
                         favorite
                       </span>
                     </button>
-
-                    {/* Bottom Left: Discount Badge */}
-                    {discount && (
-                      <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                        {discount}
-                      </span>
-                    )}
                   </div>
 
                   <div className="p-3.5 sm:p-4">
@@ -473,7 +461,7 @@ export default function HomePage() {
                       ₹{item.price}
                     </span>
                     {origPrice > item.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
+                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
                         ₹{origPrice}
                       </span>
                     )}
@@ -486,9 +474,9 @@ export default function HomePage() {
                       e.stopPropagation();
                       handleAdd(item);
                     }}
-                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
-                      ? "bg-primary text-on-primary shadow-sm"
-                      : "bg-surface-container-low text-primary hover:bg-primary hover:text-on-primary"
+                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
+                      ? "bg-primary text-on-primary shadow-sm border border-transparent"
+                      : "btn-hover-fill"
                       }`}
                   >
                     <span className="material-symbols-outlined text-[18px]">
@@ -582,11 +570,6 @@ export default function HomePage() {
                       }}
                     />
 
-                    {/* Top Left: Tag */}
-                    <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tertiary font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> {item.badge || "Fresh Cut"}
-                    </span>
-
                     {/* Top Right: Wishlist Heart */}
                     <button
                       type="button"
@@ -606,13 +589,6 @@ export default function HomePage() {
                         favorite
                       </span>
                     </button>
-
-                    {/* Bottom Left: Discount Badge */}
-                    {discount && (
-                      <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                        {discount}
-                      </span>
-                    )}
                   </div>
 
                   <div className="p-4">
@@ -633,7 +609,7 @@ export default function HomePage() {
                       ₹{item.price}
                     </span>
                     {origPrice > item.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
+                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
                         ₹{origPrice}
                       </span>
                     )}
@@ -646,9 +622,9 @@ export default function HomePage() {
                       e.stopPropagation();
                       handleAdd(item);
                     }}
-                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
-                      ? "bg-primary text-on-primary shadow-sm"
-                      : "bg-surface-container-low text-primary hover:bg-primary hover:text-on-primary"
+                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
+                      ? "bg-primary text-on-primary shadow-sm border border-transparent"
+                      : "btn-hover-fill"
                       }`}
                   >
                     <span className="material-symbols-outlined text-[18px]">
@@ -736,10 +712,6 @@ export default function HomePage() {
                       />
 
                       {/* Top Left: Tag */}
-                      <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tertiary font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> {product.badge || "Prime Cut"}
-                      </span>
-
                       {/* Top Right: Wishlist Heart */}
                       <button
                         type="button"
@@ -759,13 +731,6 @@ export default function HomePage() {
                           favorite
                         </span>
                       </button>
-
-                      {/* Bottom Left: Discount Badge */}
-                      {discountText && (
-                        <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                          {discountText}
-                        </span>
-                      )}
                     </div>
 
                     <div className="p-4">
@@ -788,7 +753,7 @@ export default function HomePage() {
                         ₹{product.price}
                       </span>
                       {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[13px]">
+                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[13px]">
                           ₹{product.originalPrice}
                         </span>
                       )}
@@ -801,9 +766,9 @@ export default function HomePage() {
                         e.stopPropagation();
                         handleAdd(product);
                       }}
-                      className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
-                        ? "bg-primary text-on-primary shadow-sm"
-                        : "bg-surface-container-low text-primary hover:bg-primary hover:text-on-primary"
+                      className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
+                        ? "bg-primary text-on-primary shadow-sm border border-transparent"
+                        : "btn-hover-fill"
                         }`}
                     >
                       <span className="material-symbols-outlined text-[18px]">
@@ -865,11 +830,6 @@ export default function HomePage() {
                       }}
                     />
 
-                    {/* Top Left: Tag */}
-                    <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tertiary font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                      <span className="w-1.5 h-1.5 rounded-full bg-tertiary"></span> {product.badge || "Fresh Catch"}
-                    </span>
-
                     {/* Top Right: Wishlist Heart */}
                     <button
                       type="button"
@@ -889,13 +849,6 @@ export default function HomePage() {
                         favorite
                       </span>
                     </button>
-
-                    {/* Bottom Left: Discount Badge */}
-                    {discountText && (
-                      <span className="absolute bottom-2.5 left-2.5 bg-tertiary-fixed text-on-tertiary-fixed-variant font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                        {discountText}
-                      </span>
-                    )}
                   </div>
 
                   <div className="p-4">
@@ -918,7 +871,7 @@ export default function HomePage() {
                       ₹{product.price}
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[13px]">
+                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[13px]">
                         ₹{product.originalPrice}
                       </span>
                     )}
@@ -931,9 +884,9 @@ export default function HomePage() {
                       e.stopPropagation();
                       handleAdd(product);
                     }}
-                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
-                      ? "bg-primary text-on-primary shadow-sm"
-                      : "bg-surface-container-low text-primary hover:bg-primary hover:text-on-primary"
+                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
+                      ? "bg-primary text-on-primary shadow-sm border border-transparent"
+                      : "btn-hover-fill"
                       }`}
                   >
                     <span className="material-symbols-outlined text-[18px]">
@@ -982,29 +935,29 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ─── 9. Farm Fresh & Desi Eggs Section ─────────────────────────────────── */}
-      <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-3xl" id="eggs-section">
+      {/* ─── 9. Marinated Cuts Section ─────────────────────────────────── */}
+      <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-3xl" id="marinated-section">
         <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-space-lg">
           <div>
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-tag-amber text-[22px]">egg</span>
+              <span className="material-symbols-outlined text-tag-amber text-[22px]">restaurant</span>
               <span className="font-label-badge text-label-badge uppercase tracking-wider text-tag-amber font-bold">
-                Farm Harvest Daily
+                Ready to Cook
               </span>
             </div>
             <h2 className="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
-              Farm Fresh &amp; Desi Eggs
+              Marinated Cuts
             </h2>
           </div>
           <div className="flex items-center gap-2 text-slate-body font-body-sm text-body-sm">
             <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
-            <span>Antibiotic-free, deep yellow yolks</span>
+            <span>Chef crafted flavors, zero prep</span>
           </div>
         </div>
 
-        {eggProducts.length > 0 ? (
+        {marinatedProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {eggProducts.map((product) => {
+            {marinatedProducts.map((product) => {
               const qty = getItemQuantity(product.id);
               const isJustAdded = addedItem === product.id;
               const wishlisted = isInWishlist(product.id);
@@ -1029,11 +982,6 @@ export default function HomePage() {
                         }}
                       />
 
-                      {/* Top Left: Tag */}
-                      <span className="absolute top-2.5 left-2.5 bg-surface-card/95 text-tag-amber font-label-badge text-label-badge px-2.5 py-1 rounded-full flex items-center gap-1 font-bold shadow-xs whitespace-nowrap text-[10.5px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-tag-amber"></span> {product.badge || "Farm Fresh"}
-                      </span>
-
                       {/* Top Right: Wishlist Heart */}
                       <button
                         type="button"
@@ -1053,25 +1001,18 @@ export default function HomePage() {
                           favorite
                         </span>
                       </button>
-
-                      {/* Bottom Left: Discount */}
-                      {discountText && (
-                        <span className="absolute bottom-2.5 left-2.5 bg-tag-amber-bg text-tag-amber font-label-badge text-label-badge px-2.5 py-0.5 rounded-full font-black shadow-xs whitespace-nowrap text-[10.5px]">
-                          {discountText}
-                        </span>
-                      )}
                     </div>
 
                     <div className="p-4">
                       <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                        <span>{product.netWeight || "Daily Harvest"}</span>
-                        <span className="text-tag-amber font-label-badge font-bold">{product.pieces || "Antibiotic-free"}</span>
+                        <span>{product.netWeight || "Daily Prep"}</span>
+                        <span className="text-tag-amber font-label-badge font-bold">{product.pieces || "Chef Crafted"}</span>
                       </div>
                       <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
                         {product.name}
                       </h3>
                       <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
-                        {product.description || "Farm fresh eggs safely packaged."}
+                        {product.description || "Perfectly marinated and ready to cook."}
                       </p>
                     </div>
                   </div>
@@ -1082,7 +1023,7 @@ export default function HomePage() {
                         ₹{product.price}
                       </span>
                       {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="font-body-sm text-body-sm text-slate-subtle line-through text-[12px]">
+                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
                           ₹{product.originalPrice}
                         </span>
                       )}
@@ -1095,9 +1036,9 @@ export default function HomePage() {
                         e.stopPropagation();
                         handleAdd(product);
                       }}
-                      className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer border border-transparent shadow-xs ${qty > 0 || isJustAdded
-                        ? "bg-primary text-on-primary shadow-sm"
-                        : "bg-surface-container-low text-primary hover:bg-primary hover:text-on-primary"
+                      className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
+                        ? "bg-primary text-on-primary shadow-sm border border-transparent"
+                        : "btn-hover-fill"
                         }`}
                     >
                       <span className="material-symbols-outlined text-[18px]">
@@ -1110,28 +1051,27 @@ export default function HomePage() {
               );
             })}
 
-            {/* Egg Harvest Promise Showcase */}
+            {/* Marinated Promise Showcase */}
             <div className="bg-surface-container-low rounded-2xl p-5 flex flex-col justify-between border border-gray-200/50">
               <div>
-                <span className="material-symbols-outlined text-tag-amber text-[36px]">nest_multi_room</span>
+                <span className="material-symbols-outlined text-tag-amber text-[36px]">restaurant_menu</span>
                 <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-2 text-[1.2rem]">
-                  Pure Farm Harvest
+                  Chef Crafted Marinades
                 </h3>
                 <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
-                  Carefully collected each dawn from biosecure poultry sheds. Shockproof cartons prevent cracking in
-                  transit, ensuring every egg reaches you in pristine condition.
+                  Expertly marinated cuts using authentic spices and fresh herbs. Save time on prep while enjoying restaurant-quality flavors at home.
                 </p>
               </div>
 
               <div className="pt-4">
                 <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
-                  <span className="w-2 h-2 rounded-full bg-tag-amber"></span> 100% Hormone &amp; Antibiotic Free
+                  <span className="w-2 h-2 rounded-full bg-tag-amber"></span> Zero Prep, 100% Taste
                 </div>
                 <Link
                   className="w-full py-2.5 rounded-full bg-tag-amber text-white font-label-md text-label-md text-center block hover:opacity-90 transition-opacity shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
-                  href="/category?type=eggs"
+                  href="/category?type=marinated"
                 >
-                  Explore Egg Packs
+                  Explore Marinated Cuts
                 </Link>
               </div>
             </div>
@@ -1140,7 +1080,7 @@ export default function HomePage() {
           <div className="bg-surface-card rounded-3xl p-6 sm:p-8 border border-amber-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
             <div className="flex items-center gap-5">
               <div className="w-16 h-16 rounded-2xl bg-amber-50 border border-amber-200 text-amber-600 flex items-center justify-center shrink-0">
-                <span className="material-symbols-outlined text-[36px]">egg</span>
+                <span className="material-symbols-outlined text-[36px]">restaurant</span>
               </div>
               <div>
                 <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 font-label-badge font-bold text-[11px] mb-2 border border-amber-200/60">
@@ -1148,10 +1088,10 @@ export default function HomePage() {
                   Coming Soon to Teffe&apos;s
                 </div>
                 <h3 className="font-headline-md font-bold text-gray-900 text-[18px] sm:text-[20px]">
-                  Farm Fresh &amp; Desi Eggs Sourcing in Progress
+                  Marinated Cuts Coming Soon
                 </h3>
                 <p className="font-body-sm text-slate-body text-[13px] mt-1 max-w-xl leading-relaxed">
-                  We are partnering with certified local biosecure farms to bring you 100% antibiotic-free classic and desi eggs with rich yellow yolks. New batches will be live soon!
+                  We are working on bringing you a wide variety of expertly marinated chicken and fish cuts. Perfect for quick and delicious meals with zero prep time!
                 </p>
               </div>
             </div>
@@ -1176,7 +1116,7 @@ export default function HomePage() {
               Why Ranchi Trusts Teffe&apos;s
             </h2>
             <p className="font-body-md text-body-md text-slate-body mt-2">
-              We combine the authentic craftsmanship of traditional butchery with certified food-safety protocols.
+              We combine the authentic craftsmanship of traditional shop with certified food-safety protocols.
             </p>
           </div>
 
@@ -1251,7 +1191,7 @@ export default function HomePage() {
               Where Health Matters Most
             </h2>
             <p className="font-body-lg text-body-lg text-slate-body leading-relaxed">
-              Teffes brings you fresh, hygienic, and high-quality chicken, fish, mutton, and farm-harvested eggs — now available online.
+              Teffes brings you fresh, hygienic, and high-quality chicken, fish, mutton, and marinated cuts — now available online.
               With thousands of satisfied customers and over a decade of trust across Ranchi, we&apos;re committed to
               delivering clean, healthy meat right to your doorstep.
             </p>
