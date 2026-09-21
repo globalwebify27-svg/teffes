@@ -122,10 +122,17 @@ const orderSchema = new mongoose.Schema(
     couponCode: {
       type: String,
       default: null,
+      index: true,
     },
     discountAmount: {
       type: Number,
       default: 0,
+    },
+    coupon: {
+      code: { type: String, default: null },
+      discountType: { type: String, default: null },
+      discountValue: { type: Number, default: 0 },
+      discountAmount: { type: Number, default: 0 },
     },
     returnStatus: {
       type: String,

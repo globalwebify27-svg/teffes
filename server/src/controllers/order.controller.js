@@ -1,7 +1,9 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
+const Coupon = require('../models/Coupon');
 const mongoose = require('mongoose');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
+const { validateCouponEligibility } = require('../utils/couponCalculator');
 
 const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -12,6 +14,7 @@ const generateOrderId = () => {
  * Create a new order
  */
 const createOrder = async (req, res, next) => {
+  let couponDocToRollback = null;
   try {
     const {
       items,
@@ -37,6 +40,12 @@ const createOrder = async (req, res, next) => {
     const user = await User.findById(req.user._id);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
 
+    // Calculate authoritative items subtotal directly from items
+    const itemsSubtotal = items.reduce(
+      (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
+      0
+    );
+
     // Determine whether order is Store Pickup or Home Delivery
     const isPickup =
       pickupMode === true ||
@@ -45,7 +54,67 @@ const createOrder = async (req, res, next) => {
       shippingAddress?.toLowerCase().includes('store pickup');
 
     const resolvedFulfillmentType = isPickup ? 'pickup' : 'delivery';
-    const finalAmount = amount !== undefined ? amount : (totalAmount || 0);
+
+    // ─── Authoritative Coupon Revalidation at Place Order ───
+    let verifiedDiscount = 0;
+    let verifiedCouponSnapshot = null;
+    const incomingCouponCode = (req.body.couponCode || req.body.coupon?.code || '').trim().toUpperCase();
+
+    if (incomingCouponCode) {
+      const couponDoc = await Coupon.findOne({ code: incomingCouponCode });
+      if (!couponDoc) {
+        return res.status(400).json({
+          success: false,
+          message: 'Coupon is no longer valid. Please try another coupon.',
+        });
+      }
+
+      // Revalidate all coupon rules against actual items subtotal and user order history
+      const eligibility = await validateCouponEligibility(couponDoc, itemsSubtotal, user);
+      if (!eligibility.isValid) {
+        return res.status(400).json({
+          success: false,
+          message: eligibility.error || 'Coupon is no longer valid. Please try another coupon.',
+        });
+      }
+
+      // Concurrency guard: Atomically increment usageCount only if usageLimit not exceeded
+      const usageLimit = Number(couponDoc.usageLimit);
+      const updateFilter = { _id: couponDoc._id };
+      if (usageLimit && usageLimit > 0) {
+        updateFilter.$or = [
+          { usageCount: { $lt: usageLimit } },
+          { used: { $lt: usageLimit } },
+        ];
+      }
+
+      const incrementedCoupon = await Coupon.findOneAndUpdate(
+        updateFilter,
+        { $inc: { usageCount: 1, used: 1 } },
+        { new: true }
+      );
+
+      if (!incrementedCoupon) {
+        return res.status(400).json({
+          success: false,
+          message: 'Coupon usage limit has been reached.',
+        });
+      }
+
+      couponDocToRollback = incrementedCoupon._id;
+      verifiedDiscount = eligibility.discount;
+      verifiedCouponSnapshot = {
+        code: couponDoc.code,
+        discountType: couponDoc.discountType,
+        discountValue: couponDoc.discountValue,
+        discountAmount: verifiedDiscount,
+      };
+    }
+
+    const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
+    const tipAmount = Number(req.body.tip) || 0;
+    const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + tipAmount - verifiedDiscount);
+    const finalAmount = amount !== undefined ? amount : (totalAmount !== undefined ? totalAmount : computedFinalAmount);
 
     let orderAddress = isPickup
       ? '🏪 Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi (Takeaway Counter)'
@@ -56,6 +125,9 @@ const createOrder = async (req, res, next) => {
       if (addr) {
         orderAddress = `${addr.line1}, ${addr.line2 ? addr.line2 + ', ' : ''}${addr.city} - ${addr.pincode}`;
       } else if (!shippingAddress) {
+        if (couponDocToRollback) {
+          await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
+        }
         return res.status(400).json({ success: false, message: 'Invalid address selected' });
       }
     }
@@ -93,8 +165,9 @@ const createOrder = async (req, res, next) => {
       paymentStatus: paymentStatus || (isOnline ? 'Paid' : 'Pending'),
       razorpayOrderId: razorpayOrderId || '',
       razorpayPaymentId: razorpayPaymentId || '',
-      couponCode: req.body.couponCode || null,
-      discountAmount: req.body.discountAmount || 0,
+      couponCode: verifiedCouponSnapshot ? verifiedCouponSnapshot.code : null,
+      discountAmount: verifiedDiscount,
+      coupon: verifiedCouponSnapshot,
       status: 'Pending',
     });
 
@@ -130,6 +203,9 @@ const createOrder = async (req, res, next) => {
       order: newOrder,
     });
   } catch (error) {
+    if (couponDocToRollback) {
+      await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
+    }
     next(error);
   }
 };

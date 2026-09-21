@@ -511,26 +511,170 @@ const getCoupons = async (req, res, next) => {
  */
 const createCoupon = async (req, res, next) => {
   try {
-    const coupon = await Coupon.create(req.body);
+    const {
+      code,
+      discountType = 'percentage',
+      discountValue,
+      minOrderAmount,
+      minOrder,
+      maxDiscountAmount,
+      validFrom,
+      validTill,
+      firstOrderOnly,
+      usageLimit,
+      description,
+      discount,
+      isSuperOffer,
+      isActive,
+    } = req.body;
+
+    if (!code || typeof code !== 'string' || !code.trim()) {
+      return res.status(400).json({ success: false, message: 'Promo code is required.' });
+    }
+
+    const cleanCode = code.trim().toUpperCase();
+    const val = Number(discountValue);
+    if (isNaN(val) || val <= 0) {
+      return res.status(400).json({ success: false, message: 'Discount value must be greater than 0.' });
+    }
+
+    if (discountType === 'percentage' && (val < 1 || val > 100)) {
+      return res.status(400).json({ success: false, message: 'Percentage discount must be between 1 and 100.' });
+    }
+
+    const minAmount = Number(minOrderAmount !== undefined ? minOrderAmount : minOrder || 0);
+    if (minAmount < 0) {
+      return res.status(400).json({ success: false, message: 'Minimum order amount cannot be negative.' });
+    }
+
+    const maxDiscount = maxDiscountAmount !== undefined && maxDiscountAmount !== '' && maxDiscountAmount !== null
+      ? Number(maxDiscountAmount)
+      : null;
+    if (maxDiscount !== null && maxDiscount < 0) {
+      return res.status(400).json({ success: false, message: 'Maximum discount cannot be negative.' });
+    }
+
+    const fromDate = validFrom ? new Date(validFrom) : new Date();
+    if (isNaN(fromDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid Valid From date.' });
+    }
+
+    if (!validTill) {
+      return res.status(400).json({ success: false, message: 'Valid Till date is required.' });
+    }
+    const tillDate = new Date(validTill);
+    if (isNaN(tillDate.getTime())) {
+      return res.status(400).json({ success: false, message: 'Invalid Valid Till date.' });
+    }
+    tillDate.setHours(23, 59, 59, 999);
+
+    if (tillDate < fromDate) {
+      return res.status(400).json({ success: false, message: 'Valid Till date cannot be before Valid From date.' });
+    }
+
+    const limit = usageLimit !== undefined && usageLimit !== '' && usageLimit !== null
+      ? Number(usageLimit)
+      : null;
+    if (limit !== null && limit < 0) {
+      return res.status(400).json({ success: false, message: 'Usage limit cannot be negative.' });
+    }
+
+    const defaultDesc = discountType === 'percentage'
+      ? `${val}% instant discount on orders above ₹${minAmount}`
+      : discountType === 'free_delivery'
+        ? `Free express delivery on orders above ₹${minAmount}`
+        : `₹${val} flat off on orders above ₹${minAmount}`;
+
+    const desc = (description || discount || defaultDesc).trim();
+
+    const couponData = {
+      code: cleanCode,
+      discountType,
+      discountValue: val,
+      minOrderAmount: minAmount,
+      minOrder: minAmount,
+      maxDiscountAmount: maxDiscount,
+      validFrom: fromDate,
+      validTill: tillDate,
+      firstOrderOnly: Boolean(firstOrderOnly),
+      usageLimit: limit,
+      description: desc,
+      discount: desc,
+      isSuperOffer: Boolean(isSuperOffer),
+      isActive: isActive !== undefined ? Boolean(isActive) : true,
+      status: (isActive !== undefined && !isActive) ? 'Paused' : 'Active',
+    };
+
+    if (couponData.isSuperOffer) {
+      await Coupon.updateMany({}, { $set: { isSuperOffer: false } });
+    }
+
+    const coupon = await Coupon.create(couponData);
     res.status(201).json({ success: true, coupon });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Promo code already exists. Please enter a unique code.' });
+    }
     next(error);
   }
 };
 
 /**
  * PUT /api/super-admin/coupons/:id
- * Update coupon (status, validTill, discount, minOrder)
+ * Update coupon
  */
 const updateCoupon = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const coupon = await Coupon.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
+    const updates = { ...req.body };
+
+    if (updates.code) {
+      updates.code = updates.code.trim().toUpperCase();
+    }
+    if (updates.discountValue !== undefined) {
+      const val = Number(updates.discountValue);
+      if (isNaN(val) || val <= 0) {
+        return res.status(400).json({ success: false, message: 'Discount value must be greater than 0.' });
+      }
+      if (updates.discountType === 'percentage' && (val < 1 || val > 100)) {
+        return res.status(400).json({ success: false, message: 'Percentage discount must be between 1 and 100.' });
+      }
+      updates.discountValue = val;
+    }
+    if (updates.minOrderAmount !== undefined) {
+      updates.minOrderAmount = Number(updates.minOrderAmount) || 0;
+      updates.minOrder = updates.minOrderAmount;
+    }
+    if (updates.maxDiscountAmount !== undefined) {
+      updates.maxDiscountAmount = updates.maxDiscountAmount !== '' && updates.maxDiscountAmount !== null
+        ? Number(updates.maxDiscountAmount)
+        : null;
+    }
+    if (updates.validTill) {
+      const tillDate = new Date(updates.validTill);
+      tillDate.setHours(23, 59, 59, 999);
+      updates.validTill = tillDate;
+    }
+    if (updates.validFrom) {
+      updates.validFrom = new Date(updates.validFrom);
+    }
+    if (updates.isActive !== undefined) {
+      updates.isActive = Boolean(updates.isActive);
+      updates.status = updates.isActive ? 'Active' : 'Paused';
+    }
+    if (updates.isSuperOffer === true) {
+      await Coupon.updateMany({ _id: { $ne: id } }, { $set: { isSuperOffer: false } });
+    }
+
+    const coupon = await Coupon.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
     if (!coupon) {
       return res.status(404).json({ success: false, message: 'Coupon not found' });
     }
     res.status(200).json({ success: true, coupon });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Promo code already exists. Please enter a unique code.' });
+    }
     next(error);
   }
 };
