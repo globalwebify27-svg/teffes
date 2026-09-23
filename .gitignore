@@ -52,3 +52,10 @@ server/scratch/
 server/src/scripts/update_files.js
 **/emulator_*.png
 downloaded_ui.html
+
+# Firebase & Secret Keys
+server/config/
+**/firebase-adminsdk*.json
+**/*firebase-adminsdk*.json
+**/google-services.json
+**/GoogleService-Info.plist

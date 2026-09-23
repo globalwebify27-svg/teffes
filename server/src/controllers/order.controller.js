@@ -2,6 +2,7 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Coupon = require('../models/Coupon');
 const mongoose = require('mongoose');
+const notificationService = require('../services/notificationService');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
 const { validateCouponEligibility } = require('../utils/couponCalculator');
 
@@ -196,6 +197,18 @@ const createOrder = async (req, res, next) => {
     // Clear user cart upon successful order creation
     user.cart = [];
     await user.save();
+
+    // Dispatch FCM push notification to customer
+    notificationService.sendToUser(user._id, {
+      title: 'Order Placed Successfully! 🥩',
+      body: `Your order #${newOrder.orderId} for ₹${newOrder.amount} has been received and sent to the butchery.`,
+      data: {
+        notificationType: 'ORDER_STATUS',
+        orderId: newOrder.orderId,
+        status: 'Pending',
+        clickAction: `/dashboard?orderId=${newOrder.orderId}`,
+      },
+    }).catch((err) => console.warn('[FCM] Order notification failed:', err.message));
 
     res.status(201).json({
       success: true,

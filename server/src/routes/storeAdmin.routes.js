@@ -14,12 +14,18 @@ const {
   updateReturnStatus,
   getRiders,
   assignRiderToOrder,
+  getStoreStatus,
+  updateStoreStatus,
 } = require('../controllers/storeAdmin.controller');
 
 const router = Router();
 
 // Protect all store-admin endpoints: allowed for storeadmin, superadmin, admin
 router.use(protect, authorize('storeadmin', 'superadmin', 'admin'));
+
+// Store Live Status & Timings
+router.get('/store-status', getStoreStatus);
+router.patch('/store-status', updateStoreStatus);
 
 // 1. Dashboard
 router.get('/dashboard', getDashboardOverview);

@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Store = require('../models/Store');
+const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate } = require('../socket');
 const { calculateRoadDistanceKm, calculateTransitMinutes, getEtaDetails } = require('../utils/etaCalculator');
 
@@ -256,6 +257,20 @@ const confirmPickup = async (req, res, next) => {
     await order.save();
     emitOrderStatusUpdate(order.orderId, order);
 
+    // Push notification to customer on order pickup
+    if (order.customer && order.customer.userId) {
+      notificationService.sendToUser(order.customer.userId, {
+        title: 'Order Picked Up! 🛵',
+        body: `Rider ${order.rider?.name || ''} has picked up your fresh order #${order.orderId} and is on the way.`,
+        data: {
+          notificationType: 'ORDER_STATUS',
+          orderId: order.orderId,
+          status: 'Out for Delivery',
+          clickAction: `/dashboard?orderId=${order.orderId}`,
+        },
+      }).catch((err) => console.warn('[FCM] Confirm pickup push error:', err.message));
+    }
+
     const orderObj = order.toObject ? order.toObject() : order;
     orderObj.etaDetails = getEtaDetails(order);
 
@@ -354,6 +369,20 @@ const completeDelivery = async (req, res, next) => {
     }
 
     emitOrderStatusUpdate(order.orderId, order);
+
+    // Push notification to customer on order delivery
+    if (order.customer && order.customer.userId) {
+      notificationService.sendToUser(order.customer.userId, {
+        title: 'Order Delivered! 🎉',
+        body: `Your order #${order.orderId} has been delivered successfully. Thank you for ordering from Teffe's!`,
+        data: {
+          notificationType: 'ORDER_STATUS',
+          orderId: order.orderId,
+          status: 'Delivered',
+          clickAction: `/dashboard?orderId=${order.orderId}`,
+        },
+      }).catch((err) => console.warn('[FCM] Delivered push error:', err.message));
+    }
 
     res.status(200).json({
       success: true,

@@ -3,6 +3,7 @@ const User = require('../models/User');
 const OTP = require('../models/OTP');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { generateOTP, sendOTP, getOTPExpiry } = require('../utils/otp');
+const { getAuthInstance } = require('../config/firebase');
 
 // ─── Cookie Options ───────────────────────────────────────────────────────────
 const REFRESH_COOKIE_OPTIONS = {
@@ -134,6 +135,110 @@ const verifyOTPHandler = async (req, res, next) => {
         id: user._id,
         phone: user.phone,
         name: user.name || 'Valued Customer',
+        role: user.role,
+        isNewUser,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/auth/firebase-login
+ * Body: { idToken, name, email }
+ */
+const firebaseLoginHandler = async (req, res, next) => {
+  try {
+    const { idToken, name, email } = req.body;
+
+    if (!idToken) {
+      return res.status(400).json({ success: false, message: 'Firebase ID token is required' });
+    }
+
+    const auth = getAuthInstance();
+    if (!auth) {
+      return res.status(500).json({ success: false, message: 'Firebase Auth is not initialized on server' });
+    }
+
+    // Verify token using Firebase Admin SDK
+    let decodedToken;
+    try {
+      decodedToken = await auth.verifyIdToken(idToken);
+    } catch (tokenError) {
+      console.error('[Firebase Auth] verifyIdToken failed:', tokenError.message);
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid or expired Firebase token. Please re-authenticate.',
+      });
+    }
+
+    const firebaseUid = decodedToken.uid;
+    const rawPhone = decodedToken.phone_number || req.body.phone;
+
+    if (!rawPhone) {
+      return res.status(400).json({
+        success: false,
+        message: 'No verified phone number found in Firebase token',
+      });
+    }
+
+    // Normalize phone numbers for lookup
+    // E.g. "+919876543210" -> clean10 = "9876543210", e164 = "+919876543210"
+    let clean10 = rawPhone.replace(/\D/g, '');
+    if (clean10.length > 10 && clean10.startsWith('91')) {
+      clean10 = clean10.substring(2);
+    }
+    const e164 = '+91' + clean10;
+
+    // Search existing user by e164, 10-digit clean, or firebaseUid
+    let user = await User.findOne({
+      $or: [
+        { phone: e164 },
+        { phone: clean10 },
+        { firebaseUid },
+      ],
+    });
+
+    const isNewUser = !user;
+
+    if (!user) {
+      user = await User.create({
+        phone: clean10,
+        firebaseUid,
+        role: 'customer',
+        isVerified: true,
+        name: name || decodedToken.name || 'Valued Customer',
+        email: email || decodedToken.email || undefined,
+      });
+      console.log(`[Firebase Auth] New customer registered: ${user.phone} (${user._id})`);
+    } else {
+      user.isVerified = true;
+      if (!user.firebaseUid) {
+        user.firebaseUid = firebaseUid;
+      }
+      if (name && (!user.name || user.name === 'Valued Customer')) {
+        user.name = name;
+      }
+      if (email && !user.email) {
+        user.email = email;
+      }
+      await user.save({ validateBeforeSave: false });
+      console.log(`[Firebase Auth] Existing customer logged in: ${user.phone} (${user._id})`);
+    }
+
+    const accessToken = await issueTokens(user, res);
+
+    res.status(200).json({
+      success: true,
+      message: isNewUser ? 'Account created successfully' : 'Login successful',
+      accessToken,
+      token: accessToken,
+      user: {
+        id: user._id,
+        phone: user.phone,
+        name: user.name || 'Valued Customer',
+        email: user.email || '',
         role: user.role,
         isNewUser,
       },
@@ -320,6 +425,7 @@ const updateMeHandler = async (req, res, next) => {
 module.exports = {
   sendOTPHandler,
   verifyOTPHandler,
+  firebaseLoginHandler,
   adminLoginHandler,
   refreshTokenHandler,
   logoutHandler,

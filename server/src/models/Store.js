@@ -54,6 +54,14 @@ const storeSchema = new mongoose.Schema(
       type: String,
       default: '08:00 AM - 08:00 PM',
     },
+    isOpen: {
+      type: Boolean,
+      default: true,
+    },
+    emergencyNotice: {
+      type: String,
+      default: '',
+    },
     location: {
       type: {
         type: String,

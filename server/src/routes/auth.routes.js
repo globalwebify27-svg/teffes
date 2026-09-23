@@ -6,6 +6,7 @@ const { protect } = require('../middlewares/auth');
 const {
   sendOTPHandler,
   verifyOTPHandler,
+  firebaseLoginHandler,
   adminLoginHandler,
   refreshTokenHandler,
   logoutHandler,
@@ -57,11 +58,19 @@ const adminLoginSchema = z.object({
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
+const firebaseLoginSchema = z.object({
+  idToken: z.string().min(1, 'Firebase ID token is required'),
+  name: z.string().optional(),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+});
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 // Customer OTP flow
 router.post('/send-otp', otpLimiter, validate(sendOTPSchema), sendOTPHandler);
 router.post('/verify-otp', otpLimiter, validate(verifyOTPSchema), verifyOTPHandler);
+router.post('/firebase-login', loginLimiter, validate(firebaseLoginSchema), firebaseLoginHandler);
 
 // Admin / Rider login
 router.post('/admin-login', loginLimiter, validate(adminLoginSchema), adminLoginHandler);

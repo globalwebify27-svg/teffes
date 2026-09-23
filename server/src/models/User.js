@@ -20,6 +20,11 @@ const userSchema = new mongoose.Schema(
       trim: true,
       match: [/^\+?[1-9]\d{7,14}$/, 'Please provide a valid phone number'],
     },
+    firebaseUid: {
+      type: String,
+      default: null,
+      index: true,
+    },
 
     // ─── Auth ─────────────────────────────────────────────────────────────────
     password: {

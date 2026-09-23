@@ -4,6 +4,8 @@ const Inventory = require('../models/Inventory');
 const DeliverySlot = require('../models/DeliverySlot');
 const ReturnRequest = require('../models/ReturnRequest');
 const User = require('../models/User');
+const Store = require('../models/Store');
+const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate } = require('../socket');
 
 /**
@@ -166,6 +168,39 @@ const updateOrderStatus = async (req, res, next) => {
     }
 
     emitOrderStatusUpdate(order.orderId, order);
+
+    // Send push notification to customer on status update
+    if (order.customer && order.customer.userId) {
+      const titles = {
+        Cutting: 'Meat Cutting Started ✂️',
+        Ready: order.fulfillmentType === 'pickup' ? 'Order Ready for Pickup! 🏪' : 'Order Packed & Ready! 📦',
+        'Out for Delivery': 'Out for Delivery! 🛵',
+        Delivered: 'Order Delivered! ✅',
+        Cancelled: 'Order Cancelled',
+      };
+      const bodies = {
+        Cutting: `Butcher is preparing your fresh cuts for order #${order.orderId}.`,
+        Ready: order.fulfillmentType === 'pickup'
+          ? `Your order #${order.orderId} is packed and ready for takeaway at Kishore Ganj counter.`
+          : `Order #${order.orderId} is packed and awaiting rider dispatch.`,
+        'Out for Delivery': `Your order #${order.orderId} is on the way to your address!`,
+        Delivered: `Your order #${order.orderId} has been delivered. Thank you for choosing Teffe's!`,
+        Cancelled: `Your order #${order.orderId} has been cancelled.`,
+      };
+
+      if (titles[status]) {
+        notificationService.sendToUser(order.customer.userId, {
+          title: titles[status],
+          body: bodies[status],
+          data: {
+            notificationType: 'ORDER_STATUS',
+            orderId: order.orderId,
+            status: order.status,
+            clickAction: `/dashboard?orderId=${order.orderId}`,
+          },
+        }).catch((err) => console.warn('[FCM] Status notification error:', err.message));
+      }
+    }
 
     res.status(200).json({ success: true, order });
   } catch (error) {
@@ -396,6 +431,31 @@ const assignRiderToOrder = async (req, res, next) => {
     
     emitOrderStatusUpdate(order.orderId, order);
 
+    // Push notification to rider for new assignment
+    notificationService.sendToRider(rider._id, {
+      title: 'New Delivery Assignment! 🛵',
+      body: `Order #${order.orderId} assigned to you. Deliver to ${order.customer?.name || 'Customer'}.`,
+      data: {
+        notificationType: 'DELIVERY_ASSIGNMENT',
+        orderId: order.orderId,
+        clickAction: `/rider/orders/${order.orderId}`,
+      },
+    }).catch((err) => console.warn('[FCM] Rider assignment push error:', err.message));
+
+    // Push notification to customer that rider is assigned
+    if (order.customer && order.customer.userId) {
+      notificationService.sendToUser(order.customer.userId, {
+        title: 'Rider Assigned! 🛵',
+        body: `${rider.name} has been assigned to deliver your order #${order.orderId}.`,
+        data: {
+          notificationType: 'ORDER_STATUS',
+          orderId: order.orderId,
+          status: 'Out for Delivery',
+          clickAction: `/dashboard?orderId=${order.orderId}`,
+        },
+      }).catch((err) => console.warn('[FCM] Customer rider push error:', err.message));
+    }
+
     res.status(200).json({ success: true, order, rider });
   } catch (error) {
     next(error);
@@ -438,6 +498,59 @@ const delayPrepTime = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/store-admin/store-status
+ * Retrieve operational hours and live online/paused status
+ */
+const getStoreStatus = async (req, res, next) => {
+  try {
+    const storeId = req.user?.storeId || req.query.storeId || 'S001';
+    let store = await Store.findOne({ storeId });
+    if (!store) {
+      store = await Store.create({
+        storeId,
+        name: 'Kishore Ganj Butchery',
+        city: 'Ranchi',
+        address: 'Harmu Road, Kishore Ganj, Ranchi, Jharkhand 834001',
+        isOpen: true,
+        status: 'Active',
+        timings: '08:00 AM - 08:00 PM',
+        pickupEnabled: true,
+        deliveryEnabled: true,
+      });
+    }
+    res.status(200).json({ success: true, store });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/store-admin/store-status
+ * Toggle store online/paused status, timings, or emergency notice
+ */
+const updateStoreStatus = async (req, res, next) => {
+  try {
+    const storeId = req.user?.storeId || req.query.storeId || 'S001';
+    const { isOpen, emergencyNotice, timings, pickupEnabled, deliveryEnabled } = req.body;
+    const updateData = {};
+    if (typeof isOpen === 'boolean') updateData.isOpen = isOpen;
+    if (emergencyNotice !== undefined) updateData.emergencyNotice = emergencyNotice;
+    if (timings !== undefined) updateData.timings = timings;
+    if (typeof pickupEnabled === 'boolean') updateData.pickupEnabled = pickupEnabled;
+    if (typeof deliveryEnabled === 'boolean') updateData.deliveryEnabled = deliveryEnabled;
+
+    const store = await Store.findOneAndUpdate(
+      { storeId },
+      { $set: updateData },
+      { new: true, upsert: true }
+    );
+    res.status(200).json({ success: true, store });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboardOverview,
   getOrders,
@@ -452,4 +565,6 @@ module.exports = {
   updateReturnStatus,
   getRiders,
   assignRiderToOrder,
+  getStoreStatus,
+  updateStoreStatus,
 };
