@@ -20,7 +20,23 @@ const initFirebase = () => {
       return firebaseApp;
     }
 
-    // 1. Check for explicit path in environment variable
+    // 1. Check for raw JSON string in environment variable (Render / Cloud deployment)
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+      try {
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+        firebaseApp = initializeApp({
+          credential: cert(serviceAccount),
+        });
+        messagingInstance = getMessaging(firebaseApp);
+        authInstance = getAuth(firebaseApp);
+        console.log(`[Firebase Admin] Initialized from FIREBASE_SERVICE_ACCOUNT_JSON (Project: ${serviceAccount.project_id})`);
+        return firebaseApp;
+      } catch (parseErr) {
+        console.error('[Firebase Admin] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON:', parseErr.message);
+      }
+    }
+
+    // 2. Check for explicit path in environment variable
     let serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT_PATH;
 
     if (serviceAccountPath && !path.isAbsolute(serviceAccountPath)) {
