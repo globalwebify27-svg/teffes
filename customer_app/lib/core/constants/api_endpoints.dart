@@ -25,7 +25,6 @@ class ApiEndpoints {
 
     try {
       if (Platform.isAndroid) {
-        // 10.0.2.2 is the standard alias to your host loopback interface in Android emulator
         return 'https://teffes.onrender.com/api';
       }
     } catch (_) {
@@ -37,6 +36,7 @@ class ApiEndpoints {
   // Auth
   static const String sendOtp = '/auth/send-otp';
   static const String verifyOtp = '/auth/verify-otp';
+  static const String firebaseLogin = '/auth/firebase-login';
   static const String getMe = '/auth/me';
   static const String updateMe = '/auth/me';
 
@@ -52,6 +52,15 @@ class ApiEndpoints {
   static const String cart = '/user/cart';
   static const String wishlist = '/user/wishlist';
   static const String toggleWishlist = '/user/wishlist/toggle';
+
+  static String get socketUrl {
+    final base = baseUrl;
+    return base.endsWith('/api') ? base.substring(0, base.length - 4) : base;
+  }
+
+  // Location & Google Geocoding
+  static const String reverseGeocode = '/location/reverse-geocode';
+  static const String placesAutocomplete = '/location/places-autocomplete';
 
   // Addresses
   static const String addresses = '/user/addresses';

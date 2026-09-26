@@ -96,7 +96,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
             type: "video",
             url: clean,
             isYouTube: isYT,
-            embedUrl: isYT ? (getYouTubeEmbedUrl(clean) || undefined) : undefined,
+            embedUrl: isYT ? (getYouTubeEmbedUrl(clean, true) || undefined) : undefined,
             thumbnail: isYT ? (getYouTubeThumbnailUrl(clean) || undefined) : undefined,
           });
         }
@@ -344,6 +344,8 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                     <video
                       key={activeMedia?.url}
                       controls
+                      autoPlay
+                      muted
                       playsInline
                       className="w-full h-full object-contain rounded-3xl"
                       src={activeMedia?.url}

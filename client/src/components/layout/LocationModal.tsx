@@ -9,6 +9,7 @@ import { toast } from "@/lib/toast";
 export default function LocationModal() {
   const {
     currentLocation,
+    isLocationSet,
     savedAddresses,
     isDetecting,
     isLocationModalOpen,
@@ -52,6 +53,7 @@ export default function LocationModal() {
         label: newAddr.tag,
         shortAddress: `${newAddr.line1.slice(0, 24)}, ${newAddr.city}`,
         fullAddress: `${newAddr.line1}, ${newAddr.line2 ? newAddr.line2 + ", " : ""}${newAddr.city} ${newAddr.pincode}`,
+        isSet: true,
       };
       setCurrentLocation(guestLoc);
       localStorage.setItem("teffes_current_location", JSON.stringify(guestLoc));
@@ -151,20 +153,22 @@ export default function LocationModal() {
           </button>
 
           {/* Current Active Location Display */}
-          <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200/80 flex items-start gap-3">
-            <span className="material-symbols-outlined text-tertiary text-[20px] mt-0.5">check_circle</span>
-            <div className="flex-1">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-900">{currentLocation.label}</span>
-                <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
-                  Active
-                </span>
+          {isLocationSet && (
+            <div className="p-3.5 rounded-2xl bg-gray-50 border border-gray-200/80 flex items-start gap-3">
+              <span className="material-symbols-outlined text-tertiary text-[20px] mt-0.5">check_circle</span>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-gray-900">{currentLocation.label}</span>
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded">
+                    Active
+                  </span>
+                </div>
+                <p className="text-xs text-slate-body mt-0.5 leading-snug">
+                  {currentLocation.fullAddress || currentLocation.shortAddress}
+                </p>
               </div>
-              <p className="text-xs text-slate-body mt-0.5 leading-snug">
-                {currentLocation.fullAddress || currentLocation.shortAddress}
-              </p>
             </div>
-          </div>
+          )}
 
           {/* Saved Addresses (Logged in) */}
           {savedAddresses.length > 0 && (

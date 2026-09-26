@@ -110,9 +110,38 @@ const getStores = async (req, res, next) => {
  */
 const createStore = async (req, res, next) => {
   try {
-    const store = await Store.create(req.body);
+    let { storeId, ...rest } = req.body;
+
+    // Check if storeId is missing, empty, or already taken
+    const existing = storeId && typeof storeId === 'string' && storeId.trim() !== ''
+      ? await Store.findOne({ storeId: storeId.trim() })
+      : null;
+
+    if (!storeId || typeof storeId !== 'string' || storeId.trim() === '' || existing) {
+      // Find the highest existing numeric S-ID in the database
+      const allStores = await Store.find({}, 'storeId').lean();
+      let maxNum = 0;
+      for (const s of allStores) {
+        if (s.storeId) {
+          const match = String(s.storeId).match(/^S(\d+)$/i);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (!isNaN(num) && num > maxNum) maxNum = num;
+          }
+        }
+      }
+      const nextNum = maxNum + 1;
+      storeId = `S${String(nextNum).padStart(3, '0')}`;
+    } else {
+      storeId = storeId.trim();
+    }
+
+    const store = await Store.create({ storeId, ...rest });
     res.status(201).json({ success: true, store });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ success: false, message: 'Store ID already exists. Please try again.' });
+    }
     next(error);
   }
 };

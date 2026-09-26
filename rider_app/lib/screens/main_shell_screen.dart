@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/rider_auth_provider.dart';
 import '../../providers/rider_orders_provider.dart';
+import '../../providers/rider_location_provider.dart';
 import '../../widgets/common/rider_bottom_nav_bar.dart';
 import 'dashboard/rider_dashboard_screen.dart';
 import 'dashboard/new_order_alert_sheet.dart';
@@ -40,18 +41,27 @@ class _MainShellScreenState extends State<MainShellScreen> {
       if (!mounted) return;
       final auth = context.read<RiderAuthProvider>();
       final orders = context.read<RiderOrdersProvider>();
+      final loc = context.read<RiderLocationProvider>();
 
-      if (auth.isDutyOnline && orders.activeOrder == null) {
-        await orders.fetchDashboard();
-        if (!mounted) return;
+      if (auth.isDutyOnline) {
+        if (orders.activeOrder == null) {
+          loc.stopTelemetryBroadcast();
+          await orders.fetchDashboard();
+          if (!mounted) return;
 
-        if (orders.availableOrders.isNotEmpty) {
-          final first = orders.availableOrders.first;
-          if (_lastAlertOrderId != first.id) {
-            _lastAlertOrderId = first.id;
-            NewOrderAlertSheet.show(context, first);
+          if (orders.availableOrders.isNotEmpty) {
+            final first = orders.availableOrders.first;
+            if (_lastAlertOrderId != first.id) {
+              _lastAlertOrderId = first.id;
+              NewOrderAlertSheet.show(context, first);
+            }
           }
+        } else {
+          // If active order is in delivery, ensure live location is broadcasting
+          loc.startTelemetryBroadcast(orders.activeOrder!.orderId);
         }
+      } else {
+        loc.stopTelemetryBroadcast();
       }
     });
   }

@@ -23,10 +23,12 @@ export interface CurrentLocation {
   lat?: number;
   lng?: number;
   addressId?: string;
+  isSet?: boolean;
 }
 
 interface LocationContextType {
   currentLocation: CurrentLocation;
+  isLocationSet: boolean;
   savedAddresses: UserAddress[];
   isDetecting: boolean;
   isLocationModalOpen: boolean;
@@ -39,11 +41,10 @@ interface LocationContextType {
 }
 
 const DEFAULT_LOCATION: CurrentLocation = {
-  label: "Deliver to (90 Mins)",
-  shortAddress: "Kacheri Chowk, Ranchi",
-  fullAddress: "Kacheri Chowk, Near Kishore Ganj, Harmu Road, Ranchi 834001",
-  lat: 23.3644,
-  lng: 85.3243,
+  label: "Select Location",
+  shortAddress: "Choose delivery address",
+  fullAddress: "",
+  isSet: false,
 };
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
@@ -54,12 +55,37 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [isDetecting, setIsDetecting] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
+  // Determine if a real location has been chosen or detected by the user
+  const isLocationSet = Boolean(
+    currentLocation?.isSet ||
+    currentLocation?.addressId ||
+    (currentLocation?.fullAddress &&
+      !currentLocation.fullAddress.includes("Kacheri Chowk, Near Kishore Ganj") &&
+      currentLocation.shortAddress !== "Choose delivery address" &&
+      currentLocation.shortAddress !== "Select Location")
+  );
+
   // Load persisted location from localStorage on client mount
   useEffect(() => {
     try {
       const saved = localStorage.getItem("teffes_current_location");
       if (saved) {
-        setCurrentLocation(JSON.parse(saved));
+        const parsed = JSON.parse(saved);
+        // Clear old default fallback if it was never explicitly set by user
+        if (
+          parsed.fullAddress?.includes("Kacheri Chowk, Near Kishore Ganj") &&
+          !parsed.isSet &&
+          !parsed.addressId
+        ) {
+          localStorage.removeItem("teffes_current_location");
+          setCurrentLocation(DEFAULT_LOCATION);
+        } else if (
+          parsed.shortAddress &&
+          parsed.shortAddress !== "Choose delivery address" &&
+          parsed.shortAddress !== "Select Location"
+        ) {
+          setCurrentLocation({ ...parsed, isSet: true });
+        }
       }
     } catch (e) {
       console.warn("Could not read location from localStorage", e);
@@ -74,15 +100,16 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       if (res.data.success && Array.isArray(res.data.addresses)) {
         setSavedAddresses(res.data.addresses);
 
-        // If user has saved addresses and current location isn't linked to one, pick default
+        // If user has saved addresses and current location isn't set, pick default
         const defaultAddr = res.data.addresses.find((a: UserAddress) => a.isDefault) || res.data.addresses[0];
         const savedLocal = localStorage.getItem("teffes_current_location");
-        if (defaultAddr && !savedLocal) {
+        if (defaultAddr && (!savedLocal || savedLocal.includes("Kacheri Chowk, Near Kishore Ganj"))) {
           const newLoc: CurrentLocation = {
             label: defaultAddr.tag || "Home",
             shortAddress: `${defaultAddr.line1.slice(0, 24)}, ${defaultAddr.city}`,
             fullAddress: `${defaultAddr.line1}, ${defaultAddr.line2 ? defaultAddr.line2 + ", " : ""}${defaultAddr.city} ${defaultAddr.pincode}`,
             addressId: defaultAddr._id || defaultAddr.id,
+            isSet: true,
           };
           setCurrentLocation(newLoc);
           localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
@@ -112,17 +139,29 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           const lng = position.coords.longitude;
 
           try {
-            // Reverse geocode via free OpenStreetMap Nominatim or Google
-            const res = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`
-            );
-            const data = await res.json();
+            // Google Maps Reverse Geocode via backend proxy
+            const res = await api.get<{
+              success: boolean;
+              formattedAddress?: string;
+              address?: {
+                street?: string;
+                suburb?: string;
+                city?: string;
+                state?: string;
+                pincode?: string;
+              };
+            }>(`/location/reverse-geocode?lat=${lat}&lng=${lng}`);
 
-            const addr = data.address || {};
-            const suburb = addr.suburb || addr.neighbourhood || addr.road || addr.village || "Ranchi Local Area";
-            const city = addr.city || addr.town || addr.county || "Ranchi";
-            const short = `${suburb}, ${city}`;
-            const full = data.display_name || `${short} (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+            let short = "Ranchi Local Area";
+            let full = `Ranchi (${lat.toFixed(4)}, ${lng.toFixed(4)})`;
+
+            if (res.data?.success && res.data.formattedAddress) {
+              full = res.data.formattedAddress;
+              const addr = res.data.address || {};
+              const locality = addr.suburb || addr.street || "Ranchi";
+              const city = addr.city || "Ranchi";
+              short = `${locality}, ${city}`;
+            }
 
             const newLoc: CurrentLocation = {
               label: "Current Location",
@@ -130,6 +169,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
               fullAddress: full,
               lat,
               lng,
+              isSet: true,
             };
 
             setCurrentLocation(newLoc);
@@ -146,6 +186,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
               fullAddress: `Ranchi Zone (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
               lat,
               lng,
+              isSet: true,
             };
             setCurrentLocation(fallbackLoc);
             localStorage.setItem("teffes_current_location", JSON.stringify(fallbackLoc));
@@ -175,6 +216,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       shortAddress: `${addr.line1.slice(0, 24)}, ${addr.city}`,
       fullAddress: `${addr.line1}, ${addr.line2 ? addr.line2 + ", " : ""}${addr.city} ${addr.pincode}`,
       addressId: addr._id || addr.id,
+      isSet: true,
     };
     setCurrentLocation(newLoc);
     localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
@@ -188,6 +230,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     <LocationContext.Provider
       value={{
         currentLocation,
+        isLocationSet,
         savedAddresses,
         isDetecting,
         isLocationModalOpen,

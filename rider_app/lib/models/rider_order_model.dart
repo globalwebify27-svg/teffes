@@ -30,11 +30,15 @@ class RiderOrderCustomerModel {
   final String name;
   final String phone;
   final String address;
+  final double? lat;
+  final double? lng;
 
   RiderOrderCustomerModel({
     required this.name,
     required this.phone,
     required this.address,
+    this.lat,
+    this.lng,
   });
 
   factory RiderOrderCustomerModel.fromJson(Map<String, dynamic> json) {
@@ -42,6 +46,8 @@ class RiderOrderCustomerModel {
       name: json['name'] ?? 'Customer',
       phone: json['phone'] ?? '',
       address: json['address'] ?? 'Ranchi',
+      lat: (json['lat'] as num?)?.toDouble(),
+      lng: (json['lng'] as num?)?.toDouble(),
     );
   }
 }
@@ -70,6 +76,8 @@ class RiderOrderModel {
   String get customerName => customer.name;
   String get customerPhone => customer.phone;
   String get customerAddress => customer.address;
+  double? get customerLat => customer.lat;
+  double? get customerLng => customer.lng;
   double get totalAmount => amount;
 
   bool get isCOD =>

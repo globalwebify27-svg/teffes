@@ -63,6 +63,21 @@ export const verifyOTP = async (phone: string, otp: string) => {
   return data;
 };
 
+export const firebaseLogin = async (idToken: string, name?: string, email?: string) => {
+  const { data } = await api.post<{
+    success: boolean;
+    accessToken: string;
+    token?: string;
+    user: User & { isNewUser: boolean };
+  }>("/auth/firebase-login", { idToken, name, email });
+
+  if (data.success) {
+    saveAuth(data.accessToken || data.token!, data.user);
+  }
+
+  return data;
+};
+
 export const adminLogin = async (email: string, password: string) => {
   const { data } = await api.post<{
     success: boolean;

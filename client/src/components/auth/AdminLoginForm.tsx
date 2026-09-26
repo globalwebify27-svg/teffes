@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { adminLogin, demoAdminLogin } from "@/lib/auth";
+import { adminLogin } from "@/lib/auth";
 import { AxiosError } from "axios";
 
 export default function AdminLoginForm() {
@@ -22,7 +22,6 @@ export default function AdminLoginForm() {
     setError("");
     setLoading(true);
 
-    // 1. Authenticate with real backend API first
     try {
       const result = await adminLogin(form.email, form.password);
       const role = result.user?.role;
@@ -37,26 +36,10 @@ export default function AdminLoginForm() {
       }
       return;
     } catch (err) {
-      // 2. Fallback to demo credentials if network issue
-      const demoResult = demoAdminLogin(form.email, form.password);
-      if (demoResult.success && demoResult.user) {
-        const role = demoResult.user.role;
-        if (role === "superadmin") {
-          router.push("/super-admin");
-        } else if (role === "storeadmin") {
-          router.push("/store-admin");
-        } else if (role === "rider") {
-          setError("Rider accounts access deliveries via the Teffes Rider Mobile App.");
-        } else {
-          router.push("/dashboard");
-        }
-        return;
-      }
-
       const msg =
         err instanceof AxiosError
           ? err.response?.data?.message || "Invalid email or password"
-          : "Something went wrong";
+          : "Something went wrong. Please check your credentials and try again.";
       setError(msg);
     } finally {
       setLoading(false);

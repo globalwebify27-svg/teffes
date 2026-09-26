@@ -11,6 +11,16 @@ export interface CartItem {
   selectedWeight: string;
 }
 
+export interface AppliedCouponInfo {
+  code: string;
+  discountType: string;
+  discountValue: number;
+  maxDiscountAmount?: number | null;
+  minOrderAmount?: number;
+  discountAmount: number;
+  description?: string;
+}
+
 interface CartContextType {
   items: CartItem[];
   isOpen: boolean;
@@ -27,6 +37,14 @@ interface CartContextType {
   freeRiceThreshold: number;
   freeDeliveryThreshold: number;
   totalItemsCount: number;
+  // Coupon state
+  appliedCoupon: AppliedCouponInfo | null;
+  couponDiscount: number;
+  couponCode: string;
+  couponError: string;
+  isApplyingCoupon: boolean;
+  applyCoupon: (code: string) => Promise<{ success: boolean; message: string; discount?: number }>;
+  removeCoupon: () => void;
 }
 
 const CartContext = createContext<CartContextType | undefined>(undefined);
@@ -42,6 +60,12 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const router = useRouter();
+
+  // Coupon state
+  const [appliedCoupon, setAppliedCoupon] = useState<AppliedCouponInfo | null>(null);
+  const [couponDiscount, setCouponDiscount] = useState<number>(0);
+  const [couponError, setCouponError] = useState<string>("");
+  const [isApplyingCoupon, setIsApplyingCoupon] = useState<boolean>(false);
 
   // Load from localStorage & MongoDB Atlas if logged in
   useEffect(() => {
@@ -193,6 +217,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     if (isAuthenticated()) {
       api.delete("/user/cart").catch(() => {});
     }
+    removeCoupon();
   };
 
   const subtotal = items.reduce(
@@ -201,8 +226,111 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   );
 
   const deliveryFee = subtotal === 0 || subtotal >= FREE_DELIVERY_THRESHOLD ? 0 : STANDARD_DELIVERY_FEE;
-  const total = subtotal + deliveryFee;
+  const total = Math.max(0, subtotal + deliveryFee - couponDiscount);
   const totalItemsCount = items.reduce((sum, item) => sum + item.quantity, 0);
+
+  // Apply Coupon method
+  const applyCoupon = async (code: string): Promise<{ success: boolean; message: string; discount?: number }> => {
+    const cleanCode = code.trim().toUpperCase();
+    if (!cleanCode) {
+      const msg = "Please enter a coupon code.";
+      setCouponError(msg);
+      return { success: false, message: msg };
+    }
+
+    // Business rule: Only one coupon can be applied per order.
+    if (appliedCoupon && appliedCoupon.code !== cleanCode) {
+      const msg = "Only one coupon can be applied per order. Please remove the existing coupon first.";
+      setCouponError(msg);
+      return { success: false, message: msg };
+    }
+
+    if (subtotal <= 0) {
+      const msg = "Your cart is empty. Please add items to apply a coupon.";
+      setCouponError(msg);
+      return { success: false, message: msg };
+    }
+
+    setIsApplyingCoupon(true);
+    setCouponError("");
+
+    try {
+      const res = await api.post("/coupons/apply", {
+        code: cleanCode,
+        cartTotal: subtotal,
+      });
+
+      if (res.data.success) {
+        const c = res.data.coupon || {};
+        const discountVal = Number(res.data.discount) || 0;
+        const couponInfo: AppliedCouponInfo = {
+          code: c.code || cleanCode,
+          discountType: c.discountType || res.data.discountType || "percentage",
+          discountValue: c.discountValue !== undefined ? c.discountValue : res.data.discountValue || 0,
+          maxDiscountAmount: c.maxDiscountAmount !== undefined ? c.maxDiscountAmount : res.data.maxDiscountAmount,
+          minOrderAmount: c.minOrderAmount !== undefined ? c.minOrderAmount : res.data.minOrderAmount || 0,
+          discountAmount: discountVal,
+          description: c.description || res.data.message || "",
+        };
+
+        setAppliedCoupon(couponInfo);
+        setCouponDiscount(discountVal);
+        setCouponError("");
+        return { success: true, message: res.data.message || "Coupon applied successfully!", discount: discountVal };
+      } else {
+        const msg = res.data.message || "Failed to apply coupon.";
+        setCouponError(msg);
+        return { success: false, message: msg };
+      }
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Failed to apply coupon.";
+      setCouponError(msg);
+      return { success: false, message: msg };
+    } finally {
+      setIsApplyingCoupon(false);
+    }
+  };
+
+  const removeCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponDiscount(0);
+    setCouponError("");
+  };
+
+  // Revalidate coupon when subtotal changes
+  useEffect(() => {
+    if (!appliedCoupon) return;
+
+    if (subtotal === 0) {
+      removeCoupon();
+      return;
+    }
+
+    const minRequired = appliedCoupon.minOrderAmount || 0;
+    if (subtotal < minRequired) {
+      const msg = `Coupon "${appliedCoupon.code}" removed: Minimum order amount of ₹${minRequired} not met.`;
+      removeCoupon();
+      setCouponError(msg);
+      return;
+    }
+
+    // Re-verify and recalculate authoritative discount on backend
+    api.post("/coupons/apply", { code: appliedCoupon.code, cartTotal: subtotal })
+      .then((res) => {
+        if (res.data.success) {
+          setCouponDiscount(res.data.discount || 0);
+          setAppliedCoupon((prev) => prev ? { ...prev, discountAmount: res.data.discount || 0 } : null);
+        } else {
+          removeCoupon();
+          setCouponError(res.data.message || "Coupon is no longer valid.");
+        }
+      })
+      .catch((err) => {
+        const errorMsg = err.response?.data?.message || "Coupon is no longer valid for this cart.";
+        removeCoupon();
+        setCouponError(errorMsg);
+      });
+  }, [subtotal]);
 
   return (
     <CartContext.Provider
@@ -222,6 +350,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         freeRiceThreshold: FREE_RICE_THRESHOLD,
         freeDeliveryThreshold: FREE_DELIVERY_THRESHOLD,
         totalItemsCount,
+        appliedCoupon,
+        couponDiscount,
+        couponCode: appliedCoupon ? appliedCoupon.code : "",
+        couponError,
+        isApplyingCoupon,
+        applyCoupon,
+        removeCoupon,
       }}
     >
       {children}

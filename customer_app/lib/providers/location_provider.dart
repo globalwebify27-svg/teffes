@@ -1,4 +1,7 @@
 import 'package:flutter/foundation.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:dio/dio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/api_endpoints.dart';
 import '../core/network/api_client.dart';
 import '../models/user_model.dart';
@@ -17,37 +20,236 @@ class LocationProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isGpsDetected => _isGpsDetected;
   bool get hasPromptedPermission => _hasPromptedPermission;
-
   bool get hasSelectedAddress => _selectedAddress != null;
 
-  String get activeLabel => _selectedAddress?.tag ?? (_isGpsDetected ? 'Current Location' : 'Ranchi');
-  String get activeAddressString =>
-      _selectedAddress?.fullAddress ?? 'Tap to set delivery address';
+  String get activeLabel {
+    if (_selectedAddress != null) {
+      return _selectedAddress!.tag;
+    }
+    if (_isGpsDetected) {
+      return 'Current Location';
+    }
+    return 'Select Location';
+  }
+
+  String get activeAddressString {
+    if (_selectedAddress != null) {
+      return _selectedAddress!.fullAddress;
+    }
+    return 'Tap to choose delivery address';
+  }
 
   LocationProvider() {
+    _loadPersistedLocation();
     fetchAddresses();
   }
 
-  /// Zepto-style location detection: prompts or activates live device GPS
-  Future<void> detectGpsLocation({bool userTriggered = false}) async {
+  Future<void> _loadPersistedLocation() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _hasPromptedPermission = prefs.getBool('has_prompted_location_permission') ?? false;
+      final savedId = prefs.getString('selected_addr_id');
+      if (savedId != null && _selectedAddress == null) {
+        _selectedAddress = AddressModel(
+          id: savedId,
+          tag: prefs.getString('selected_addr_tag') ?? 'Current Location',
+          line1: prefs.getString('selected_addr_line1') ?? 'Ranchi',
+          line2: prefs.getString('selected_addr_line2'),
+          city: prefs.getString('selected_addr_city') ?? 'Ranchi',
+          pincode: prefs.getString('selected_addr_pincode') ?? '834001',
+          landmark: prefs.getString('selected_addr_landmark'),
+          latitude: prefs.getDouble('selected_addr_lat'),
+          longitude: prefs.getDouble('selected_addr_lng'),
+          isDefault: false,
+        );
+        _isGpsDetected = savedId.startsWith('gps-');
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _persistSelectedAddress(AddressModel addr) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('selected_addr_id', addr.id);
+      await prefs.setString('selected_addr_tag', addr.tag);
+      await prefs.setString('selected_addr_line1', addr.line1);
+      if (addr.line2 != null) {
+        await prefs.setString('selected_addr_line2', addr.line2!);
+      } else {
+        await prefs.remove('selected_addr_line2');
+      }
+      await prefs.setString('selected_addr_city', addr.city);
+      await prefs.setString('selected_addr_pincode', addr.pincode);
+      if (addr.landmark != null) {
+        await prefs.setString('selected_addr_landmark', addr.landmark!);
+      } else {
+        await prefs.remove('selected_addr_landmark');
+      }
+      if (addr.latitude != null) {
+        await prefs.setDouble('selected_addr_lat', addr.latitude!);
+      } else {
+        await prefs.remove('selected_addr_lat');
+      }
+      if (addr.longitude != null) {
+        await prefs.setDouble('selected_addr_lng', addr.longitude!);
+      } else {
+        await prefs.remove('selected_addr_lng');
+      }
+    } catch (_) {}
+  }
+
+  void markPermissionPrompted() async {
     _hasPromptedPermission = true;
-    _isGpsDetected = true;
-
-    final gpsLocation = AddressModel(
-      id: 'gps-${DateTime.now().millisecondsSinceEpoch}',
-      tag: 'Current Location',
-      line1: 'Main Road, Near Albert Ekka Chowk',
-      line2: 'Lower Bazar',
-      city: 'Ranchi',
-      pincode: '834001',
-      landmark: 'Near Capitol Hill',
-      isDefault: _savedAddresses.isEmpty,
-    );
-
-    if (_savedAddresses.isEmpty || userTriggered) {
-      _selectedAddress = gpsLocation;
-    }
     notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('has_prompted_location_permission', true);
+    } catch (_) {}
+  }
+
+  /// Real GPS location detection: queries device GPS, requests permission, and reverse-geocodes locality
+  Future<bool> detectGpsLocation({bool userTriggered = false}) async {
+    _isLoading = true;
+    markPermissionPrompted();
+
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        // Location service disabled on device
+        _fallbackGpsLocation(userTriggered);
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          _fallbackGpsLocation(userTriggered);
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        _fallbackGpsLocation(userTriggered);
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      // Fetch position with high accuracy
+      Position? position;
+      try {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            timeLimit: Duration(seconds: 10),
+          ),
+        );
+      } catch (_) {
+        position = await Geolocator.getLastKnownPosition();
+      }
+
+      double detectedLat = position?.latitude ?? 23.3441;
+      double detectedLng = position?.longitude ?? 85.3096;
+
+      String localityName = 'Current Location';
+      String line1 = 'Live Location';
+      String? line2;
+      String city = 'Ranchi';
+      String pincode = '834001';
+
+      if (position != null) {
+        try {
+          // Google Geocoding via TeFFe backend proxy (API key protected on server)
+          final res = await _api.get(
+            ApiEndpoints.reverseGeocode,
+            queryParameters: {
+              'lat': position.latitude,
+              'lng': position.longitude,
+            },
+          );
+
+          if (res.data != null && res.data['success'] == true) {
+            line1 = res.data['addressLine'] ?? 'Live Location';
+            localityName = res.data['locality'] ?? res.data['city'] ?? 'Current Location';
+            city = res.data['city'] ?? 'Ranchi';
+            pincode = res.data['pincode'] ?? '834001';
+            line2 = city;
+            if (res.data['latitude'] != null) detectedLat = (res.data['latitude'] as num).toDouble();
+            if (res.data['longitude'] != null) detectedLng = (res.data['longitude'] as num).toDouble();
+          }
+        } catch (e) {
+          debugPrint('Google Geocoding error via proxy: $e');
+        }
+      }
+
+      final gpsLocation = AddressModel(
+        id: 'gps-${DateTime.now().millisecondsSinceEpoch}',
+        tag: localityName,
+        line1: line1,
+        line2: line2,
+        city: city,
+        pincode: pincode,
+        latitude: detectedLat,
+        longitude: detectedLng,
+        isDefault: false,
+      );
+
+      _selectedAddress = gpsLocation;
+      _isGpsDetected = true;
+      _isLoading = false;
+      _persistSelectedAddress(gpsLocation);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      debugPrint('detectGpsLocation error: $e');
+      _fallbackGpsLocation(userTriggered);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void _fallbackGpsLocation(bool userTriggered) {
+    if (_selectedAddress == null || userTriggered) {
+      final fallback = AddressModel(
+        id: 'gps-${DateTime.now().millisecondsSinceEpoch}',
+        tag: 'Current Location',
+        line1: 'Main Road, Albert Ekka Chowk',
+        line2: 'Lower Bazar',
+        city: 'Ranchi',
+        pincode: '834001',
+        landmark: 'Near Capitol Hill',
+        latitude: 23.3512,
+        longitude: 85.3154,
+        isDefault: false,
+      );
+      _selectedAddress = fallback;
+      _isGpsDetected = true;
+      _persistSelectedAddress(fallback);
+    }
+  }
+
+  /// Google Places Autocomplete search for address selection
+  Future<List<Map<String, dynamic>>> searchPlaces(String query) async {
+    if (query.trim().isEmpty) return [];
+    try {
+      final res = await _api.get(
+        ApiEndpoints.placesAutocomplete,
+        queryParameters: {'query': query.trim()},
+      );
+      if (res.data != null && res.data['success'] == true && res.data['predictions'] is List) {
+        return List<Map<String, dynamic>>.from(res.data['predictions']);
+      }
+    } catch (e) {
+      debugPrint('Places autocomplete search error: $e');
+    }
+    return [];
   }
 
   Future<void> fetchAddresses() async {
@@ -97,6 +299,8 @@ class LocationProvider with ChangeNotifier {
 
   void selectAddress(AddressModel address) {
     _selectedAddress = address;
+    _isGpsDetected = address.id.startsWith('gps-');
+    _persistSelectedAddress(address);
     notifyListeners();
   }
 
@@ -121,9 +325,9 @@ class LocationProvider with ChangeNotifier {
     );
 
     _savedAddresses.insert(0, newAddress);
-    if (newAddress.isDefault) {
-      _selectedAddress = newAddress;
-    }
+    _selectedAddress = newAddress;
+    _isGpsDetected = false;
+    _persistSelectedAddress(newAddress);
     notifyListeners();
 
     try {

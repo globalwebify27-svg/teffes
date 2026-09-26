@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/api_endpoints.dart';
 import '../core/network/api_client.dart';
+import '../core/services/rider_fcm_service.dart';
 import '../models/rider_user_model.dart';
 
 class RiderAuthProvider with ChangeNotifier {
@@ -37,6 +38,7 @@ class RiderAuthProvider with ChangeNotifier {
         final res = await _api.get(ApiEndpoints.riderDashboard);
         if (res.data['success'] == true && res.data['rider'] != null) {
           _rider = RiderUserModel.fromJson(res.data['rider']);
+          await RiderFcmService.instance.syncUserSession();
         }
       } catch (e) {
         debugPrint('Auto-auth check failed: $e');
@@ -71,6 +73,8 @@ class RiderAuthProvider with ChangeNotifier {
         } else if (res.data['user'] != null) {
           _rider = RiderUserModel.fromJson(res.data['user']);
         }
+
+        await RiderFcmService.instance.syncUserSession();
 
         _isLoading = false;
         notifyListeners();
@@ -112,6 +116,7 @@ class RiderAuthProvider with ChangeNotifier {
   }
 
   Future<void> logout() async {
+    await RiderFcmService.instance.unregisterOnLogout();
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('rider_token');
     _rider = null;

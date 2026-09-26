@@ -8,6 +8,10 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faPowerOff } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { getSocket } from "@/lib/socket";
+import { orderAlarm } from "@/lib/orderAlarm";
+import ThermalKOTModal from "@/components/store-admin/ThermalKOTModal";
+import StoreStatusModal from "@/components/store-admin/StoreStatusModal";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
@@ -173,6 +177,7 @@ function LiveOrdersTab() {
   const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [loading, setLoading] = useState(true);
+  const [printModalOrder, setPrintModalOrder] = useState<any>(null);
 
   const fetchOrders = () => {
     setLoading(true);
@@ -189,6 +194,19 @@ function LiveOrdersTab() {
 
   useEffect(() => {
     fetchOrders();
+  }, [filter]);
+
+  useEffect(() => {
+    const socket = getSocket();
+    const handleRefresh = () => {
+      fetchOrders();
+    };
+    socket.on("orders:refreshed", handleRefresh);
+    socket.on("order:created", handleRefresh);
+    return () => {
+      socket.off("orders:refreshed", handleRefresh);
+      socket.off("order:created", handleRefresh);
+    };
   }, [filter]);
 
   const advanceStatus = async (orderId: string, currentStatus: string, isPickup: boolean = false) => {
@@ -434,6 +452,26 @@ function LiveOrdersTab() {
                         {nextLabel}
                       </button>
                     )}
+                    <button
+                      onClick={() => setPrintModalOrder(o)}
+                      title="Print Thermal Kitchen Order Ticket (KOT)"
+                      style={{
+                        background: "#fff",
+                        border: "1.5px solid #d1d5db",
+                        borderRadius: "8px",
+                        padding: "7px 12px",
+                        color: "#374151",
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">print</span>
+                      <span>Print KOT</span>
+                    </button>
                     <button style={{
                       background: "none",
                       border: "1px solid #ede8e0",
@@ -451,6 +489,13 @@ function LiveOrdersTab() {
             );
           })}
         </div>
+      )}
+
+      {printModalOrder && (
+        <ThermalKOTModal
+          order={printModalOrder}
+          onClose={() => setPrintModalOrder(null)}
+        />
       )}
     </div>
   );
@@ -1280,6 +1325,8 @@ export default function StoreAdminPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [storeData, setStoreData] = useState<any>(null);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
 
   // Auto-collapse sidebar on tablet/mobile
   useEffect(() => {
@@ -1291,6 +1338,16 @@ export default function StoreAdminPage() {
     checkWidth();
     window.addEventListener("resize", checkWidth);
     return () => window.removeEventListener("resize", checkWidth);
+  }, []);
+
+  useEffect(() => {
+    api.get<{ success: boolean; store: any }>("/store-admin/store-status")
+      .then(res => {
+        if (res.data.success && res.data.store) {
+          setStoreData(res.data.store);
+        }
+      })
+      .catch(err => console.warn("Failed to load store status:", err));
   }, []);
 
   useEffect(() => {
@@ -1308,6 +1365,90 @@ export default function StoreAdminPage() {
   };
 
   if (!user) return null;
+
+  const [incomingOrders, setIncomingOrders] = useState<any[]>([]);
+  const [isMuted, setIsMuted] = useState(false);
+  const acknowledgedIdsRef = React.useRef<Set<string>>(new Set());
+
+  // Real-time alarm listener for new incoming orders
+  useEffect(() => {
+    const socket = getSocket();
+
+    const onOrderCreated = (data: any) => {
+      const order = data.order || data;
+      const orderId = order.orderId;
+      if (!orderId || acknowledgedIdsRef.current.has(orderId)) return;
+
+      setIncomingOrders((prev) => {
+        if (prev.some((o) => o.orderId === orderId)) return prev;
+        return [order, ...prev];
+      });
+
+      if (!isMuted) {
+        orderAlarm.startAlarm();
+      }
+      toast.info(`🔔 New Order #${orderId} received! Total: ₹${order.amount || order.totalAmount || 0}`, "New Order Alert");
+    };
+
+    socket.on("order:created", onOrderCreated);
+
+    // Initial check and 12-second polling redundancy for Pending orders
+    const checkPendingOrders = () => {
+      api.get<{ success: boolean; orders: any[] }>("/store-admin/orders?status=Pending")
+        .then((res) => {
+          if (res.data.success && Array.isArray(res.data.orders)) {
+            const unacked = res.data.orders.filter((o) => !acknowledgedIdsRef.current.has(o.orderId));
+            if (unacked.length > 0) {
+              setIncomingOrders(unacked);
+              if (!isMuted && !orderAlarm.getIsRinging()) {
+                orderAlarm.startAlarm();
+              }
+            } else {
+              setIncomingOrders([]);
+              orderAlarm.stopAlarm();
+            }
+          }
+        })
+        .catch(() => {});
+    };
+
+    checkPendingOrders();
+    const pollInterval = setInterval(checkPendingOrders, 12000);
+
+    return () => {
+      socket.off("order:created", onOrderCreated);
+      clearInterval(pollInterval);
+      orderAlarm.stopAlarm();
+    };
+  }, [isMuted]);
+
+  const handleTestAlarmSound = () => {
+    orderAlarm.playChime();
+    toast.success("🔊 Chime played! Speakers and audio alerts are fully functional.", "Audio Test Successful");
+  };
+
+  const toggleMute = () => {
+    if (isMuted) {
+      setIsMuted(false);
+      if (incomingOrders.length > 0) {
+        orderAlarm.startAlarm();
+      }
+      toast.info("Audio alarm unmuted");
+    } else {
+      setIsMuted(true);
+      orderAlarm.stopAlarm();
+      toast.info("Audio alarm muted for this session");
+    }
+  };
+
+  const acknowledgeAllIncoming = () => {
+    incomingOrders.forEach((o) => {
+      if (o.orderId) acknowledgedIdsRef.current.add(o.orderId);
+    });
+    setIncomingOrders([]);
+    orderAlarm.stopAlarm();
+    toast.success("All incoming orders acknowledged", "Alarm Silenced");
+  };
 
   const tabComponents: Record<string, React.ReactNode> = {
     dashboard:  <DashboardTab setActiveTab={setActiveTab} />,
@@ -1457,6 +1598,162 @@ export default function StoreAdminPage() {
 
       {/* ─── Main Content ────────────────────────────────────────────── */}
       <main style={{ flex: 1, padding: isMobile ? "16px" : "32px", overflowY: "auto", minWidth: 0 }}>
+        {/* CSS Keyframes for Alarm Bell Shake & Glowing Pulse */}
+        <style dangerouslySetInnerHTML={{ __html: `
+          @keyframes bellRing {
+            0%, 100% { transform: rotate(0deg); }
+            15% { transform: rotate(18deg) scale(1.1); }
+            30% { transform: rotate(-18deg) scale(1.1); }
+            45% { transform: rotate(14deg); }
+            60% { transform: rotate(-14deg); }
+            75% { transform: rotate(8deg); }
+          }
+          @keyframes pulseGlow {
+            0%, 100% { box-shadow: 0 4px 20px rgba(153, 27, 27, 0.4); border-color: #ef4444; }
+            50% { box-shadow: 0 4px 30px rgba(239, 68, 68, 0.8); border-color: #fca5a5; }
+          }
+          .animate-bell-ring {
+            display: inline-block;
+            animation: bellRing 1.2s infinite ease-in-out;
+            transform-origin: top center;
+          }
+          .animate-pulse-glow {
+            animation: pulseGlow 1.8s infinite ease-in-out;
+          }
+        `}} />
+
+        {/* ─── Active Incoming Order Alarm Banner ────────────────────────────── */}
+        {incomingOrders.length > 0 && (
+          <div
+            className="animate-pulse-glow"
+            style={{
+              background: "linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%)",
+              color: "#fff",
+              borderRadius: "14px",
+              padding: "16px 20px",
+              marginBottom: "24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "16px",
+              border: "2px solid #ef4444",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <span className="material-symbols-outlined text-[28px] animate-bell-ring" style={{ color: "#fef08a" }}>
+                  notifications_active
+                </span>
+              </div>
+              <div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>NEW ORDER RECEIVED!</span>
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      background: "#fef08a",
+                      color: "#854d0e",
+                      padding: "2px 8px",
+                      borderRadius: "99px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {incomingOrders.length} PENDING
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.85rem", opacity: 0.95, marginTop: "3px" }}>
+                  Order #{incomingOrders[0]?.orderId} · ₹{incomingOrders[0]?.amount} · {incomingOrders[0]?.items?.length || 1} item(s) · {incomingOrders[0]?.customer?.name || "Customer"} ({incomingOrders[0]?.fulfillmentType === "pickup" ? "Store Pickup" : "Delivery"})
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={toggleMute}
+                style={{
+                  background: isMuted ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  borderRadius: "10px",
+                  padding: "8px 14px",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "background 150ms ease",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {isMuted ? "volume_off" : "volume_up"}
+                </span>
+                <span>{isMuted ? "Unmute Alarm" : "Mute Sound"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("orders");
+                  orderAlarm.stopAlarm();
+                }}
+                style={{
+                  background: "#fff",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "8px 16px",
+                  color: "#991b1b",
+                  fontWeight: 800,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">local_shipping</span>
+                <span>View in Live Orders</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={acknowledgeAllIncoming}
+                style={{
+                  background: "#10b981",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "8px 16px",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">done_all</span>
+                <span>Acknowledge ✓</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top bar */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
           <div>
@@ -1469,10 +1766,64 @@ export default function StoreAdminPage() {
             </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#059669", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
-              <span className="material-symbols-outlined text-[16px]">bolt</span>
-              <span>Store Open</span>
-            </div>
+            <button
+              type="button"
+              onClick={handleTestAlarmSound}
+              title="Test audio alert chime and confirm speaker volume"
+              style={{
+                background: "#fff",
+                border: "1px solid #ede8e0",
+                borderRadius: "10px",
+                padding: "8px 14px",
+                fontSize: "0.8rem",
+                color: "#73695b",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                cursor: "pointer",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                transition: "all 150ms ease",
+              }}
+            >
+              <span className="material-symbols-outlined text-[16px]" style={{ color: "#941717" }}>
+                volume_up
+              </span>
+              <span>Test Alarm</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsStatusModalOpen(true)}
+              title="Click to toggle Store Online/Paused or update timings & notices"
+              style={{
+                background: storeData?.isOpen === false ? "#fef2f2" : "#ecfdf5",
+                border: `1.5px solid ${storeData?.isOpen === false ? "#fecaca" : "#a7f3d0"}`,
+                borderRadius: "10px",
+                padding: "8px 14px",
+                fontSize: "0.8rem",
+                color: storeData?.isOpen === false ? "#dc2626" : "#059669",
+                fontWeight: 700,
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                cursor: "pointer",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                transition: "all 150ms ease",
+              }}
+            >
+              <span
+                style={{
+                  width: "9px",
+                  height: "9px",
+                  borderRadius: "99px",
+                  background: storeData?.isOpen === false ? "#ef4444" : "#10b981",
+                  display: "inline-block",
+                }}
+              />
+              <span>{storeData?.isOpen === false ? "Store Paused" : "Store Open"}</span>
+              <span className="material-symbols-outlined text-[16px]">tune</span>
+            </button>
             <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#73695b", display: "flex", alignItems: "center", gap: "6px" }}>
               <span className="material-symbols-outlined text-[16px]">calendar_today</span>
               <span>{new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
@@ -1482,6 +1833,13 @@ export default function StoreAdminPage() {
 
         {/* Tab Content */}
         {tabComponents[activeTab]}
+
+        {/* Operational Control Modal */}
+        <StoreStatusModal
+          isOpenModal={isStatusModalOpen}
+          onClose={() => setIsStatusModalOpen(false)}
+          onStatusChange={(updatedStore) => setStoreData(updatedStore)}
+        />
       </main>
     </div>
   );

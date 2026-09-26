@@ -13,6 +13,7 @@ import '../../widgets/common/quantity_stepper.dart';
 import '../orders/order_tracking_screen.dart';
 
 import '../checkout/payment_proceed_screen.dart';
+import '../auth/login_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
 import '../../models/store_model.dart';
@@ -35,6 +36,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   int _selectedTip = 0;
   bool _showCustomTipInput = false;
   String _deliveryInstruction = '';
+  bool _isCouponsExpanded = false;
 
   List<StoreModel> _stores = [];
   String _selectedStoreId = 'S001';
@@ -44,6 +46,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     super.initState();
     _initDefaultStores();
     _fetchStores();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<CartProvider>().fetchAvailableCoupons();
+      }
+    });
   }
 
   void _initDefaultStores() {
@@ -286,6 +293,84 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 ],
               ),
               const SizedBox(height: 10),
+              // 1. "Use Current Location" (GPS) Option
+              InkWell(
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final ok = await location.detectGpsLocation(userTriggered: true);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Row(
+                          children: [
+                            const Icon(Icons.my_location_rounded, color: Colors.white, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                ok
+                                    ? 'Location detected: ${location.activeAddressString}'
+                                    : 'Using location: ${location.activeAddressString}',
+                              ),
+                            ),
+                          ],
+                        ),
+                        backgroundColor: AppColors.primaryMaroon,
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: const BoxDecoration(
+                          color: AppColors.primaryMaroon,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.my_location_rounded, color: Colors.white, size: 16),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Use Current Location (GPS)',
+                              style: TextStyle(
+                                color: AppColors.primaryMaroon,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13.5,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              location.isGpsDetected
+                                  ? 'Live GPS • ${location.activeAddressString}'
+                                  : 'Detect live location via device GPS',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.primaryMaroon),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 2. "+ Add New Delivery Address" Option
               InkWell(
                 onTap: () {
                   Navigator.pop(ctx);
@@ -295,9 +380,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryMaroon.withOpacity(0.06),
+                    color: AppColors.primaryMaroon.withValues(alpha: 0.06),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.25)),
+                    border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.25)),
                   ),
                   child: const Row(
                     children: [
@@ -405,6 +490,29 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   }
 
   Future<void> _handlePlaceOrder(CartProvider cart, LocationProvider location, AuthProvider auth) async {
+    // 0. Enforce user authentication: must be logged in to proceed with checkout or payment
+    if (!auth.isAuthenticated) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, color: Colors.white, size: 20),
+              SizedBox(width: 8),
+              Expanded(child: Text('Please log in to proceed with your order')),
+            ],
+          ),
+          backgroundColor: AppColors.primaryMaroon,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      await Navigator.of(context).push<bool>(
+        SmoothPageRoute(page: const LoginScreen()),
+      );
+      return;
+    }
+
     final isPickup = _fulfillmentType == 'pickup';
 
     if (!isPickup && location.selectedAddress == null) {
@@ -499,6 +607,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         'subtotal': cart.subtotal,
         'deliveryFee': effectiveDeliveryFee,
         'discount': cart.couponDiscount,
+        'couponCode': cart.appliedCoupon,
+        'discountAmount': cart.couponDiscount,
         'amount': effectiveGrandTotal,
         'totalAmount': effectiveGrandTotal,
         'fulfillmentType': _fulfillmentType,
@@ -1460,53 +1570,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     const SizedBox(height: AppDimensions.spaceMd),
                   ],
 
-                  // 4. Coupon Input Box
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: AppDimensions.roundedLg,
-                      border: Border.all(color: AppColors.borderHairline),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.local_offer_outlined, color: AppColors.primaryMaroon, size: 18),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: TextField(
-                            controller: _couponController,
-                            textCapitalization: TextCapitalization.characters,
-                            decoration: InputDecoration(
-                              hintText: cart.appliedCoupon != null ? 'COUPON: ${cart.appliedCoupon}' : 'Enter Butchery Promo Code',
-                              hintStyle: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: cart.appliedCoupon != null ? FontWeight.bold : FontWeight.normal,
-                                color: cart.appliedCoupon != null ? AppColors.hygieneDark : AppColors.textMuted,
-                              ),
-                              border: InputBorder.none,
-                              enabledBorder: InputBorder.none,
-                              focusedBorder: InputBorder.none,
-                              isDense: true,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: () {
-                            if (cart.appliedCoupon != null) {
-                              cart.removeCoupon();
-                            } else {
-                              cart.applyCoupon(_couponController.text);
-                            }
-                          },
-                          child: Text(
-                            cart.appliedCoupon != null ? 'REMOVE' : 'APPLY',
-                            style: const TextStyle(fontWeight: FontWeight.w800, color: AppColors.primaryMaroon),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                  // 4. Collapsible Offers & Coupon Section
+                  _buildCouponSection(cart),
                   const SizedBox(height: AppDimensions.spaceMd),
 
                   // 5. Payment Method Selector
@@ -1575,7 +1640,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           isHighlight: effectiveDeliveryFee == 0,
                         ),
                         if (cart.couponDiscount > 0)
-                          _buildBillRow('Coupon Discount', '- ${CurrencyFormatter.format(cart.couponDiscount)}', isHighlight: true),
+                          _buildBillRow(
+                            'Coupon Discount (${cart.appliedCoupon ?? ''})',
+                            '- ${CurrencyFormatter.format(cart.couponDiscount)}',
+                            isHighlight: true,
+                          ),
                         if (!isPickup && _selectedTip > 0)
                           _buildBillRow('Tip for Rider', CurrencyFormatter.format(_selectedTip.toDouble())),
                         const Divider(height: 18, color: AppColors.borderHairline),
@@ -1618,7 +1687,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       child: _isPlacingOrder
                           ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                           : Text(
-                              _selectedPaymentMethod == 'razorpay' ? 'Proceed to Pay →' : (isPickup ? 'Confirm Pickup →' : 'Place Order →'),
+                              !auth.isAuthenticated
+                                  ? 'Login to proceed'
+                                  : (_selectedPaymentMethod == 'razorpay'
+                                      ? 'Proceed to Pay →'
+                                      : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
                               style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
                             ),
                     ),
@@ -1714,6 +1787,530 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       : AppColors.textPrimary,
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCouponSection(CartProvider cart) {
+    final hasAppliedCoupon = cart.appliedCoupon != null;
+    final availableCoupons = cart.availableCoupons;
+    final appliedModel = cart.appliedCouponModel;
+    final description = appliedModel?.description.isNotEmpty == true
+        ? appliedModel!.description
+        : (appliedModel != null && appliedModel.discountType == 'percentage'
+            ? '${appliedModel.discountValue.toInt()}% OFF'
+            : 'Coupon discount applied to order');
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppDimensions.roundedLg,
+        border: Border.all(
+          color: hasAppliedCoupon ? const Color(0xFF86EFAC) : AppColors.borderHairline,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Collapsible Header Button
+          InkWell(
+            onTap: () {
+              setState(() {
+                _isCouponsExpanded = !_isCouponsExpanded;
+              });
+            },
+            borderRadius: AppDimensions.roundedLg,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: hasAppliedCoupon
+                          ? const Color(0xFFDCFCE7)
+                          : AppColors.primaryLight.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      hasAppliedCoupon ? Icons.check_circle_rounded : Icons.local_offer_outlined,
+                      color: hasAppliedCoupon ? const Color(0xFF15803D) : AppColors.primaryMaroon,
+                      size: 20,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: hasAppliedCoupon
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    '${cart.appliedCoupon} Applied',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 13.5,
+                                      color: Color(0xFF14532D),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFDCFCE7),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      'SAVING ₹${cart.couponDiscount.toInt()}',
+                                      style: const TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w900,
+                                        color: Color(0xFF166534),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                description,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Apply Coupon / Promo Code',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13.5,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                availableCoupons.isNotEmpty
+                                    ? '${availableCoupons.length} offers available to save more'
+                                    : 'Tap to enter promo code',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                  if (hasAppliedCoupon && !_isCouponsExpanded)
+                    TextButton(
+                      onPressed: () {
+                        cart.removeCoupon();
+                        _couponController.clear();
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        backgroundColor: Colors.red.shade50,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          side: BorderSide(color: Colors.red.shade200),
+                        ),
+                      ),
+                      child: Text(
+                        'Remove',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.red.shade700,
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 4),
+                  AnimatedRotation(
+                    turns: _isCouponsExpanded ? 0.25 : 0.0,
+                    duration: const Duration(milliseconds: 200),
+                    child: Icon(
+                      Icons.chevron_right_rounded,
+                      size: 20,
+                      color: _isCouponsExpanded ? AppColors.primaryMaroon : AppColors.textMuted,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Collapsible Content
+          if (_isCouponsExpanded) ...[
+            const Divider(height: 1, color: AppColors.borderHairline),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (hasAppliedCoupon)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFFF0FDF4), Color(0xFFE6F9EE)],
+                        ),
+                        borderRadius: AppDimensions.roundedMd,
+                        border: Border.all(color: const Color(0xFFA7F3D0)),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      cart.appliedCoupon ?? '',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 14,
+                                        color: Color(0xFF064E3B),
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFBBF7D0),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: const Text(
+                                        'APPLIED',
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w900,
+                                          color: Color(0xFF065F46),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  description,
+                                  style: const TextStyle(
+                                    fontSize: 11.5,
+                                    color: Color(0xFF047857),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '-₹${cart.couponDiscount.toInt()}',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w900,
+                                  color: Color(0xFF047857),
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              InkWell(
+                                onTap: () {
+                                  cart.removeCoupon();
+                                  _couponController.clear();
+                                },
+                                child: Text(
+                                  'Remove',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.red.shade700,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    // Input row
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 42,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceSubtle,
+                              borderRadius: AppDimensions.roundedMd,
+                              border: Border.all(color: AppColors.borderHairline),
+                            ),
+                            child: TextField(
+                              controller: _couponController,
+                              textCapitalization: TextCapitalization.characters,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                              decoration: const InputDecoration(
+                                hintText: 'Enter Promo Code (e.g. MEAT25)',
+                                hintStyle: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.normal,
+                                  color: AppColors.textMuted,
+                                ),
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding: EdgeInsets.symmetric(vertical: 11),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(
+                          height: 42,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primaryMaroon,
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: AppDimensions.roundedMd,
+                              ),
+                              elevation: 0,
+                            ),
+                            onPressed: () async {
+                              final code = _couponController.text.trim();
+                              if (code.isEmpty) return;
+                              final success = await cart.applyCoupon(code);
+                              if (success) {
+                                _couponController.clear();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Coupon $code applied successfully!'),
+                                      backgroundColor: Colors.green.shade700,
+                                      duration: const Duration(seconds: 2),
+                                    ),
+                                  );
+                                }
+                              } else if (cart.couponError != null && context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(cart.couponError!),
+                                    backgroundColor: Colors.red.shade700,
+                                    duration: const Duration(seconds: 3),
+                                  ),
+                                );
+                              }
+                            },
+                            child: const Text(
+                              'APPLY',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (cart.couponError != null) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(Icons.error_outline_rounded, size: 14, color: Colors.red.shade700),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              cart.couponError!,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.red.shade700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+
+                    // Available Offers List
+                    if (availableCoupons.isNotEmpty) ...[
+                      const SizedBox(height: 14),
+                      const Divider(height: 1, color: AppColors.borderHairline),
+                      const SizedBox(height: 10),
+                      const Text(
+                        'AVAILABLE OFFERS',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      ListView.separated(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        itemCount: availableCoupons.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final c = availableCoupons[index];
+                          final isPercent = c.discountType == 'percentage';
+                          final desc = c.description.isNotEmpty
+                              ? c.description
+                              : (isPercent ? '${c.discountValue.toInt()}% OFF' : '₹${c.discountValue.toInt()} OFF');
+                          final minOrder = c.minOrderAmount.toInt();
+
+                          return Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF8FAFC),
+                              borderRadius: AppDimensions.roundedMd,
+                              border: Border.all(color: const Color(0xFFE2E8F0)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            c.code,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w900,
+                                              fontSize: 13,
+                                              color: AppColors.textPrimary,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                          if (c.isSuperOffer) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFFEF3C7),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: const Text(
+                                                'SUPER OFFER',
+                                                style: TextStyle(
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: Color(0xFF92400E),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                          if (c.firstOrderOnly) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFE0E7FF),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: const Text(
+                                                '1ST ORDER',
+                                                style: TextStyle(
+                                                  fontSize: 8.5,
+                                                  fontWeight: FontWeight.w900,
+                                                  color: Color(0xFF3730A3),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        '$desc · Min order ₹$minOrder',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                OutlinedButton(
+                                  style: OutlinedButton.styleFrom(
+                                    backgroundColor: Colors.white,
+                                    foregroundColor: const Color(0xFF047857),
+                                    side: const BorderSide(color: Color(0xFF6EE7B7)),
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                    minimumSize: Size.zero,
+                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    final success = await cart.applyCoupon(c.code);
+                                    if (success && context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Coupon ${c.code} claimed!'),
+                                          backgroundColor: Colors.green.shade700,
+                                          duration: const Duration(seconds: 2),
+                                        ),
+                                      );
+                                    } else if (cart.couponError != null && context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text(cart.couponError!),
+                                          backgroundColor: Colors.red.shade700,
+                                          duration: const Duration(seconds: 3),
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: const Text(
+                                    'Claim',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

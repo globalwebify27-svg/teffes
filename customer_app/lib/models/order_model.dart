@@ -41,6 +41,10 @@ class OrderModel {
   final String? returnStatus;
   final String? returnReason;
   final String? deliveryAddress;
+  final double? deliveryLat;
+  final double? deliveryLng;
+  final double? storeLat;
+  final double? storeLng;
   final String? paymentMethod;
   final String? paymentStatus;
   final String? storeName;
@@ -73,6 +77,10 @@ class OrderModel {
     this.returnStatus,
     this.returnReason,
     this.deliveryAddress,
+    this.deliveryLat,
+    this.deliveryLng,
+    this.storeLat,
+    this.storeLng,
     this.paymentMethod,
     this.paymentStatus,
     this.storeName = 'Kishore Ganj Hub',
@@ -91,6 +99,26 @@ class OrderModel {
         (json['deliverySlot']?.toString().toLowerCase().contains('pickup') ?? false) ||
         (json['deliveryAddress']?.toString().toLowerCase().contains('pickup') ?? false);
 
+    double? dLat;
+    double? dLng;
+    if (json['deliveryAddress'] is Map) {
+      dLat = (json['deliveryAddress']['latitude'] ?? json['deliveryAddress']['lat'])?.toDouble();
+      dLng = (json['deliveryAddress']['longitude'] ?? json['deliveryAddress']['lng'])?.toDouble();
+    } else if (json['customer'] is Map) {
+      dLat = (json['customer']['lat'] ?? json['customer']['latitude'])?.toDouble();
+      dLng = (json['customer']['lng'] ?? json['customer']['longitude'])?.toDouble();
+    }
+
+    double? sLat;
+    double? sLng;
+    if (json['store'] is Map) {
+      sLat = (json['store']['latitude'] ?? json['store']['lat'])?.toDouble();
+      sLng = (json['store']['longitude'] ?? json['store']['lng'])?.toDouble();
+    } else if (json['storeLocation'] is Map) {
+      sLat = (json['storeLocation']['lat'] ?? json['storeLocation']['latitude'])?.toDouble();
+      sLng = (json['storeLocation']['lng'] ?? json['storeLocation']['longitude'])?.toDouble();
+    }
+
     return OrderModel(
       id: json['_id'] ?? json['id'] ?? '',
       orderId: json['orderId'] ?? json['id'] ?? '',
@@ -102,6 +130,10 @@ class OrderModel {
       returnStatus: json['returnStatus'],
       returnReason: json['returnReason'],
       deliveryAddress: json['customer']?['address'] ?? json['deliveryAddress']?['line1'] ?? json['shippingAddress'] ?? 'Ranchi',
+      deliveryLat: dLat,
+      deliveryLng: dLng,
+      storeLat: sLat,
+      storeLng: sLng,
       paymentMethod: json['paymentMethod'] ?? (isPickup ? 'Pay at Store Counter' : 'COD'),
       paymentStatus: json['paymentStatus'] ?? 'Pending',
       storeName: json['storeName'] ?? 'Kishore Ganj Hub',

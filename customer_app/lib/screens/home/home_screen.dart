@@ -6,6 +6,7 @@ import '../../core/constants/app_dimensions.dart';
 import '../../core/utils/page_transitions.dart';
 import '../../models/product_model.dart';
 import '../../providers/products_provider.dart';
+import '../../providers/location_provider.dart';
 import '../../widgets/common/category_card.dart';
 import '../../widgets/common/location_header.dart';
 import '../../widgets/common/product_card.dart';
@@ -28,6 +29,25 @@ class _HomeScreenState extends State<HomeScreen> {
   final FocusNode _searchFocusNode = FocusNode();
   Timer? _debounce;
   String _activeQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkLocationPrompt();
+    });
+  }
+
+  Future<void> _checkLocationPrompt() async {
+    if (!mounted) return;
+    // Wait slightly to let SharedPreferences load saved address if available
+    await Future.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    final locationProvider = Provider.of<LocationProvider>(context, listen: false);
+    if (!locationProvider.hasPromptedPermission && !locationProvider.hasSelectedAddress) {
+      showInitialLocationPrompt(context, locationProvider);
+    }
+  }
 
   @override
   void dispose() {

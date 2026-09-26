@@ -3,13 +3,14 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getStoredUser, clearAuth, isAuthenticated, saveAuth } from "@/lib/auth";
+import { getStoredUser, clearAuth, isAuthenticated } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
 import NavbarSearch from "./NavbarSearch";
 import { useLocation } from "@/context/LocationContext";
 import LocationModal from "./LocationModal";
+import OTPForm from "@/components/auth/OTPForm";
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
@@ -52,7 +53,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
   ]);
   const { openCart, totalItemsCount } = useCart();
   const { wishlistCount } = useWishlist();
-  const { currentLocation, openLocationModal } = useLocation();
+  const { currentLocation, openLocationModal, isLocationSet } = useLocation();
   const [isScrolled, setIsScrolled] = useState(false);
 
   // Detect scroll to stick navbar and switch to maroon theme
@@ -67,9 +68,6 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
 
   // Login Modal State for Unauthenticated User Click on Home
   const [showLoginModal, setShowLoginModal] = useState(false);
-  const [modalPhone, setModalPhone] = useState("");
-  const [modalLoading, setModalLoading] = useState(false);
-  const [modalError, setModalError] = useState("");
 
   useEffect(() => {
     setUser(getStoredUser());
@@ -157,36 +155,6 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
     }
   };
 
-  const handleModalLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanPhone = modalPhone.replace(/\D/g, "");
-    if (cleanPhone.length < 10) {
-      setModalError("Please enter a valid 10-digit mobile number.");
-      return;
-    }
-
-    setModalError("");
-    setModalLoading(true);
-
-    // Generate random OTP alert as requested
-    const randomOtp = Math.floor(100000 + Math.random() * 900000);
-    toast.info(`Your Teffe's Login OTP is: ${randomOtp}`, "Verification OTP", 10000);
-
-    const newUser: User = {
-      id: "cust-" + cleanPhone,
-      phone: `+91 ${cleanPhone}`,
-      name: "Valued Customer",
-      role: "customer",
-      isVerified: true,
-    };
-
-    saveAuth("teffes-jwt-token-" + Date.now(), newUser);
-    setUser(newUser);
-    setModalLoading(false);
-    setShowLoginModal(false);
-    setModalPhone("");
-  };
-
   return (
     <>
       <header
@@ -247,14 +215,14 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                     isScrolled ? "text-amber-200" : "text-tertiary"
                   }`}
                 >
-                  {currentLocation.label || "Deliver to (90 Mins)"}
+                  {isLocationSet ? (currentLocation.label || "Deliver to (90 Mins)") : "Select Location"}
                 </span>
                 <span
                   className={`font-label-md text-label-md font-semibold max-w-[170px] truncate text-[13px] ${
                     isScrolled ? "text-white" : "text-on-surface"
                   }`}
                 >
-                  {currentLocation.shortAddress || "Select Location"}
+                  {isLocationSet ? (currentLocation.shortAddress || "Deliver to (90 Mins)") : "Choose delivery address"}
                 </span>
               </span>
               <span
@@ -657,10 +625,10 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                   <span className="material-symbols-outlined text-primary text-[22px]">location_on</span>
                   <span className="flex flex-col text-left">
                     <span className="text-[10.5px] font-bold uppercase text-tertiary tracking-wider block">
-                      Deliver to (90 Mins)
+                      {isLocationSet ? (currentLocation.label || "Deliver to (90 Mins)") : "Select Location"}
                     </span>
                     <span className="text-xs font-bold text-gray-900 truncate block max-w-[200px]">
-                      {currentLocation.shortAddress || "Select Location"}
+                      {isLocationSet ? (currentLocation.shortAddress || "Deliver to (90 Mins)") : "Choose delivery address"}
                     </span>
                   </span>
                 </span>
@@ -698,7 +666,6 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
           onClick={(e) => {
             if (e.target === e.currentTarget) {
               setShowLoginModal(false);
-              setModalError("");
             }
           }}
           role="dialog"
@@ -708,10 +675,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Close / Cut Modal Button */}
             <button
               type="button"
-              onClick={() => {
-                setShowLoginModal(false);
-                setModalError("");
-              }}
+              onClick={() => setShowLoginModal(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center border-none cursor-pointer transition-colors"
               aria-label="Close login modal"
             >
@@ -733,60 +697,15 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               </p>
             </div>
 
-            {/* Form */}
-            <form onSubmit={handleModalLogin} noValidate>
-              <div className="mb-4">
-                <label htmlFor="modal-phone-input" className="form-label text-xs font-bold text-gray-700 block mb-1.5">
-                  Mobile Number
-                </label>
-                <div className="relative flex items-center">
-                  <input
-                    id="modal-phone-input"
-                    type="tel"
-                    className="form-input w-full rounded-xl border border-gray-300 py-3 text-sm font-semibold text-gray-900 focus:border-primary focus:outline-none"
-                    style={{ paddingLeft: "68px" }}
-                    placeholder="98765 43210"
-                    value={modalPhone}
-                    onChange={(e) => {
-                      setModalError("");
-                      setModalPhone(e.target.value.replace(/\D/g, "").slice(0, 10));
-                    }}
-                    required
-                    autoFocus
-                    autoComplete="tel"
-                  />
-                </div>
-                <span className="text-[11px] text-slate-400 mt-1 block">
-                  Enter any 10-digit mobile number to sign in
-                </span>
-              </div>
-
-              {modalError && (
-                <div className="alert alert-error mb-4 text-xs p-2.5 rounded-xl flex items-center gap-1.5 bg-red-50 text-red-700 border border-red-200">
-                  <span className="material-symbols-outlined text-[16px]">error</span>
-                  <span>{modalError}</span>
-                </div>
-              )}
-
-              <button
-                type="submit"
-                disabled={modalLoading || modalPhone.length < 10}
-                className="w-full py-3.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-extrabold text-sm shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {modalLoading ? (
-                  <span>Signing in…</span>
-                ) : (
-                  <>
-                    <span>Login with OTP</span>
-                    <span className="material-symbols-outlined text-[18px]">arrow_forward</span>
-                  </>
-                )}
-              </button>
-
-              <p className="mt-4 text-center text-[11px] text-slate-400 leading-relaxed">
-                By continuing, you agree to Teffe&apos;s Terms of Service &amp; Privacy Policy.
-              </p>
-            </form>
+            {/* Real Firebase Phone Auth OTP Form */}
+            <OTPForm
+              onSuccess={(loggedInUser) => {
+                setUser(loggedInUser);
+                setShowLoginModal(false);
+              }}
+              redirectOnSuccess={false}
+              containerId="header-modal-recaptcha"
+            />
           </div>
         </div>
       )}

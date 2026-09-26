@@ -1,6 +1,7 @@
 import React from "react";
 import Link from "next/link";
 import type { Metadata } from "next";
+import RegisteredShopsSection from "@/components/home/RegisteredShopsSection";
 
 export const metadata: Metadata = {
   title: "About Us - Teffes Ranchi Butcher Shop",
@@ -72,12 +73,6 @@ export default function AboutPage() {
                   alt="Teffes Master Butchery"
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-6">
-                  <div className="text-white">
-                    <span className="font-bold text-sm block">Kishore Ganj Chowk, Harmu Road</span>
-                    <span className="text-xs text-white/80">Ranchi, Jharkhand 834001</span>
-                  </div>
-                </div>
               </div>
             </div>
           </div>
@@ -140,42 +135,13 @@ export default function AboutPage() {
           </div>
         </div>
 
-        {/* ─── Store Location & Visiting Counter ─────────────────────────────── */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xs mb-12">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div>
-              <span className="font-label-badge text-tertiary uppercase font-bold text-xs tracking-wider">
-                Visit Our Physical Teffe's Hub
-              </span>
-              <h2 className="font-headline-md font-extrabold text-gray-900 text-xl sm:text-2xl mt-1">
-                Kishore Ganj Chowk, Ranchi
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-body mt-1 max-w-lg leading-relaxed">
-                Experience our open-counter butcher shop where you can select live poultry, custom cuts, and freshwater catches in person.
-              </p>
-              <div className="mt-3 text-xs text-slate-600 font-medium space-y-1">
-                <div>📍 Harmu Road, Near Kishore Ganj Chowk, Ranchi 834001</div>
-                <div>⏰ Counter Open Daily: 7:00 AM – 9:00 PM</div>
-                <div>📞 Customer Hotline: +91 94311 00000</div>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3 shrink-0">
-              <Link
-                href="/category"
-                className="px-6 py-3 rounded-full bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-sm shadow-md transition-all text-center text-decoration-none"
-              >
-                Browse Fresh Cuts
-              </Link>
-              <Link
-                href="/"
-                className="px-6 py-3 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-800 font-headline-sm font-bold text-sm transition-all text-center text-decoration-none"
-              >
-                Back to Storefront
-              </Link>
-            </div>
-          </div>
-        </div>
+        {/* ─── Store Locations & Visiting Counters Scroll Window ─────────────── */}
+        <RegisteredShopsSection
+          title="Visit Our Physical Teffe's Hubs"
+          subtitle="Experience our open-counter shops where you can select live poultry, custom cuts, and freshwater catches in person."
+          badgeText="Visit Our Physical Hubs"
+          className="!px-0 !my-0 mb-12"
+        />
       </div>
     </div>
   );

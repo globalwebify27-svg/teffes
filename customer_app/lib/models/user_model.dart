@@ -6,6 +6,8 @@ class AddressModel {
   final String city;
   final String pincode;
   final String? landmark;
+  final double? latitude;
+  final double? longitude;
   final bool isDefault;
 
   AddressModel({
@@ -16,6 +18,8 @@ class AddressModel {
     this.city = 'Ranchi',
     this.pincode = '834001',
     this.landmark,
+    this.latitude,
+    this.longitude,
     this.isDefault = false,
   });
 
@@ -38,6 +42,8 @@ class AddressModel {
       city: json['city'] ?? 'Ranchi',
       pincode: json['pincode'] ?? '834001',
       landmark: json['landmark'],
+      latitude: (json['latitude'] as num?)?.toDouble() ?? (json['lat'] as num?)?.toDouble(),
+      longitude: (json['longitude'] as num?)?.toDouble() ?? (json['lng'] as num?)?.toDouble(),
       isDefault: json['isDefault'] ?? false,
     );
   }
@@ -50,6 +56,8 @@ class AddressModel {
       'city': city,
       'pincode': pincode,
       'landmark': landmark,
+      'latitude': latitude,
+      'longitude': longitude,
       'isDefault': isDefault,
     };
   }

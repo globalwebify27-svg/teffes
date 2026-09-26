@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../core/network/api_client.dart';
+import '../../core/services/razorpay_service.dart';
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/page_transitions.dart';
 import '../../models/order_model.dart';
@@ -42,6 +44,8 @@ class PaymentProceedScreen extends StatefulWidget {
 
 class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
   final ApiClient _api = ApiClient();
+  late RazorpayService _razorpayService;
+  String? _pendingRazorpayOrderId;
   bool _isProcessing = false;
   String _selectedUpi = 'gpay';
   String _activeTab = 'upi'; // 'upi', 'card', 'netbanking'
@@ -51,7 +55,18 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
   final TextEditingController _cardCvvController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _razorpayService = RazorpayService(
+      onSuccess: _onRazorpaySuccess,
+      onError: _onRazorpayError,
+      onExternalWallet: _onRazorpayWallet,
+    );
+  }
+
+  @override
   void dispose() {
+    _razorpayService.dispose();
     _upiIdController.dispose();
     _cardNumberController.dispose();
     _cardExpiryController.dispose();
@@ -59,41 +74,100 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
     super.dispose();
   }
 
+  void _onRazorpaySuccess(PaymentSuccessResponse response) async {
+    debugPrint('[Razorpay Screen] Success paymentId: ${response.paymentId}');
+    await _finalizeOrderAndNavigate(
+      paymentId: response.paymentId ?? 'pay_${DateTime.now().millisecondsSinceEpoch}',
+      razorpayOrderId: response.orderId ?? _pendingRazorpayOrderId ?? '',
+      signature: response.signature,
+    );
+  }
+
+  void _onRazorpayError(PaymentFailureResponse response) {
+    if (mounted) {
+      setState(() => _isProcessing = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment cancelled or failed: ${response.message ?? "Try again"}'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _onRazorpayWallet(ExternalWalletResponse response) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Redirecting to external wallet: ${response.walletName}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _processRazorpayPayment() async {
     setState(() => _isProcessing = true);
     final auth = context.read<AuthProvider>();
-    final cart = context.read<CartProvider>();
-    final location = context.read<LocationProvider>();
 
     try {
-      // 1. Create Razorpay order on backend
+      // 1. Request backend to create Razorpay Order
       String razorpayOrderId = 'order_rzp_${DateTime.now().millisecondsSinceEpoch}';
+      String? razorpayKeyId;
       try {
         final res = await _api.post(ApiEndpoints.createRazorpayOrder, data: {
           'amount': widget.payableAmount,
         });
         if (res.data['success'] == true && res.data['order'] != null) {
           razorpayOrderId = res.data['order']['id'] ?? razorpayOrderId;
+          razorpayKeyId = res.data['keyId'];
         }
       } catch (e) {
         debugPrint('Razorpay create-order fallback: $e');
       }
 
-      // 2. Simulated payment processing delay
-      await Future.delayed(const Duration(milliseconds: 1400));
+      _pendingRazorpayOrderId = razorpayOrderId;
 
-      final paymentId = 'pay_${DateTime.now().millisecondsSinceEpoch.toString().substring(3)}';
+      // 2. Open Razorpay Native Checkout
+      _razorpayService.openCheckout(
+        amount: widget.payableAmount,
+        orderId: razorpayOrderId,
+        keyId: razorpayKeyId,
+        contact: auth.user?.phone,
+        email: auth.user?.email,
+      );
+    } catch (e) {
+      debugPrint('Error starting Razorpay checkout: $e');
+      if (mounted) {
+        setState(() => _isProcessing = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error launching payment gateway: $e')),
+        );
+      }
+    }
+  }
 
-      // 3. Verify Razorpay payment signature
+  Future<void> _finalizeOrderAndNavigate({
+    required String paymentId,
+    required String razorpayOrderId,
+    String? signature,
+  }) async {
+    final auth = context.read<AuthProvider>();
+    final cart = context.read<CartProvider>();
+    final location = context.read<LocationProvider>();
+
+    try {
+      // Verify payment signature on backend if available
       try {
         await _api.post(ApiEndpoints.verifyRazorpayPayment, data: {
           'razorpay_order_id': razorpayOrderId,
           'razorpay_payment_id': paymentId,
-          'razorpay_signature': 'simulated_sig_${DateTime.now().millisecondsSinceEpoch}',
+          if (signature != null) 'razorpay_signature': signature,
         });
       } catch (_) {}
 
-      // 4. Create actual order in backend database
+      // Create actual order in backend database
       final newOrderId = 'TEF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
       final orderPayload = {
         'orderId': newOrderId,
@@ -108,6 +182,8 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         'subtotal': cart.subtotal,
         'deliveryFee': widget.isPickup ? 0.0 : cart.deliveryFee,
         'discount': cart.couponDiscount,
+        'couponCode': cart.appliedCoupon,
+        'discountAmount': cart.couponDiscount,
         'amount': widget.payableAmount,
         'totalAmount': widget.payableAmount,
         'fulfillmentType': widget.isPickup ? 'pickup' : widget.fulfillmentType,
@@ -139,7 +215,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         }
       } catch (_) {}
 
-      // 5. Fallback local order if offline / server call fails
+      // Fallback local order if offline
       final createdOrder = OrderModel(
         id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
         orderId: newOrderId,
@@ -162,32 +238,13 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         prepTimeMinutes: 25,
         remainingTransitMinutes: widget.isPickup ? 0 : 12,
         etaStage: 'PREPARING',
-        rider: widget.isPickup
-            ? null
-            : OrderRiderModel(
-                name: 'Md. Imran Ansari',
-                phone: '+91 94311 88204',
-                vehicle: 'Honda Activa (JH-01-BK-4920)',
-                rating: '4.9 ★ (840+ deliveries)',
-                eta: '12 mins',
-                lat: 23.3512,
-                lng: 85.3154,
-              ),
       );
-
       auth.addOrder(createdOrder);
       cart.clearCart();
-
       if (mounted) {
         Navigator.of(context).pushAndRemoveUntil(
-          SmoothPageRoute(page: OrderTrackingScreen(orderId: newOrderId)),
+          SmoothPageRoute(page: OrderTrackingScreen(orderId: createdOrder.orderId)),
           (route) => route.isFirst,
-        );
-      }
-    } catch (err) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Payment initiation failed: $err')),
         );
       }
     } finally {

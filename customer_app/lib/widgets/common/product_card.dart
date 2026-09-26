@@ -153,31 +153,39 @@ class ProductCard extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.baseline,
-                        textBaseline: TextBaseline.alphabetic,
-                        children: [
-                          Text(
-                            CurrencyFormatter.format(product.price),
-                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                          ),
-                          if (product.originalPrice > product.price) ...[
-                            const SizedBox(width: 4),
+                      Flexible(
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
                             Text(
-                              CurrencyFormatter.format(product.originalPrice),
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                    decoration: TextDecoration.lineThrough,
-                                    decorationColor: AppColors.primaryMaroon,
-                                    decorationThickness: 2.0,
-                                    fontSize: 10.5,
+                              CurrencyFormatter.format(product.price),
+                              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                    fontSize: 14.5,
+                                    fontWeight: FontWeight.w800,
                                   ),
                             ),
+                            if (product.originalPrice > product.price) ...[
+                              const SizedBox(width: 3),
+                              Flexible(
+                                child: Text(
+                                  CurrencyFormatter.format(product.originalPrice),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        decoration: TextDecoration.lineThrough,
+                                        decorationColor: AppColors.primaryMaroon,
+                                        decorationThickness: 1.8,
+                                        fontSize: 10,
+                                      ),
+                                ),
+                              ),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
+                      const SizedBox(width: 4),
                       QuantityStepper(
                         quantity: quantity,
                         isCompact: true,
@@ -396,45 +404,48 @@ class ProductCard extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.baseline,
-                                textBaseline: TextBaseline.alphabetic,
-                                children: [
-                                  Text(
-                                    CurrencyFormatter.format(product.price),
-                                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w800,
-                                        ),
-                                  ),
-                                  if (product.originalPrice > product.price) ...[
-                                    const SizedBox(width: 6),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                                  textBaseline: TextBaseline.alphabetic,
+                                  children: [
                                     Text(
-                                      CurrencyFormatter.format(product.originalPrice),
-                                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                            decoration: TextDecoration.lineThrough,
-                                            decorationColor: AppColors.primaryMaroon,
-                                            decorationThickness: 2.0,
-                                            fontSize: 11,
+                                      CurrencyFormatter.format(product.price),
+                                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w800,
                                           ),
                                     ),
+                                    if (product.originalPrice > product.price) ...[
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        CurrencyFormatter.format(product.originalPrice),
+                                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                              decoration: TextDecoration.lineThrough,
+                                              decorationColor: AppColors.primaryMaroon,
+                                              decorationThickness: 2.0,
+                                              fontSize: 11,
+                                            ),
+                                      ),
+                                    ],
                                   ],
-                                ],
-                              ),
-                              if (discountText.isNotEmpty)
-                                Text(
-                                  discountText,
-                                  style: const TextStyle(
-                                    color: AppColors.discountGreen,
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
                                 ),
-                            ],
+                                if (discountText.isNotEmpty)
+                                  Text(
+                                    discountText,
+                                    style: const TextStyle(
+                                      color: AppColors.discountGreen,
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           QuantityStepper(
                             quantity: quantity,
                             inStock: product.inStock,

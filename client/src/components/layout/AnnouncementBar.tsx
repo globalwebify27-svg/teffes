@@ -13,30 +13,8 @@ interface OfferItem {
   isSuperOffer?: boolean;
 }
 
-// Initial fallback with all 3 coupons in database so they are instantly available without waiting for network
-const DEFAULT_OFFERS: OfferItem[] = [
-  {
-    code: "FIRST50",
-    discount: "₹50 flat off on first order above ₹299",
-    minOrder: 299,
-    isSuperOffer: true,
-  },
-  {
-    code: "FRESH10",
-    discount: "10% instant discount on orders above ₹499",
-    minOrder: 499,
-    isSuperOffer: false,
-  },
-  {
-    code: "TEFFESFREE",
-    discount: "100% Free express delivery on orders above ₹399",
-    minOrder: 399,
-    isSuperOffer: false,
-  },
-];
-
 export default function AnnouncementBar() {
-  const [offers, setOffers] = useState<OfferItem[]>(DEFAULT_OFFERS);
+  const [offers, setOffers] = useState<OfferItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
 

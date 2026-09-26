@@ -1,4 +1,4 @@
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'package:youtube_player_iframe/youtube_player_iframe.dart';
 
 class VideoUtils {
   /// Checks whether a given URL points to a YouTube video.
@@ -13,7 +13,7 @@ class VideoUtils {
   /// Extracts the 11-character YouTube video ID.
   static String? getYouTubeVideoId(String? url) {
     if (url == null || url.trim().isEmpty) return null;
-    final converted = YoutubePlayer.convertUrlToId(url.trim());
+    final converted = YoutubePlayerController.convertUrlToId(url.trim());
     if (converted != null && converted.isNotEmpty) return converted;
 
     final regExp = RegExp(

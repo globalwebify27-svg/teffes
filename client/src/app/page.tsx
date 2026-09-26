@@ -9,6 +9,7 @@ import { PRODUCTS, Product, fetchProducts, fetchCategories, Category } from "@/l
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faStar } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
+import RegisteredShopsSection from "@/components/home/RegisteredShopsSection";
 
 export default function HomePage() {
   const router = useRouter();
@@ -84,27 +85,6 @@ export default function HomePage() {
     }, 4500);
     return () => clearInterval(timer);
   }, [heroBanners.length, isBannerHovered]);
-
-  // Live product finder
-  const findProduct = (id: string, fallback: Partial<Product>): Product => {
-    const found = liveProducts.find((p) => p.id === id);
-    if (found) return found;
-    return {
-      id,
-      name: fallback.name || "Teffes Fresh Cut",
-      category: "chicken",
-      categoryLabel: "Fresh Meat",
-      description: fallback.description || "Hygienic fresh meat cut after order.",
-      image: fallback.image || "/teffes-logo-maroon.png",
-      netWeight: fallback.netWeight || "1000g",
-      price: fallback.price || 280,
-      originalPrice: fallback.originalPrice || 300,
-      rating: 4.9,
-      ratingCount: 150,
-      inStock: true,
-      ...fallback,
-    } as Product;
-  };
 
   const handleAdd = (product: Product, weight?: string) => {
     addToCart(product, weight || product.netWeight);
@@ -1180,73 +1160,9 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ─── 11. About Teffe's Story Block ────────────────────────────────────── */}
-      <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-3xl mb-space-xl" id="about-us">
-        <div className="relative overflow-hidden rounded-3xl bg-surface-card p-6 sm:p-8 md:p-12 shadow-sm flex flex-col lg:flex-row items-center gap-8 lg:gap-12 border border-gray-100 w-full">
-          <div className="w-full lg:w-1/2 space-y-4">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-crimson-soft text-primary font-label-badge text-label-badge uppercase font-bold tracking-wider border border-primary/20 text-[11px] whitespace-nowrap">
-              <span className="w-2 h-2 rounded-full bg-primary"></span> Decade of Culinary Trust
-            </div>
-            <h2 className="font-headline-xl text-headline-lg md:text-headline-xl text-on-surface font-extrabold tracking-tight">
-              Where Health Matters Most
-            </h2>
-            <p className="font-body-lg text-body-lg text-slate-body leading-relaxed">
-              Teffes brings you fresh, hygienic, and high-quality chicken, fish, mutton, and marinated cuts — now available online.
-              With thousands of satisfied customers and over a decade of trust across Ranchi, we&apos;re committed to
-              delivering clean, healthy meat right to your doorstep.
-            </p>
-            <p className="font-body-md text-body-md text-primary font-bold">
-              Fresh. Clean. Trusted — that&apos;s the Teffes promise.
-            </p>
+      {/* ─── 11. Registered Physical Butcher Shops & Hubs Scroll Window ───────── */}
+      <RegisteredShopsSection />
 
-            <div className="grid grid-cols-3 gap-3 pt-2 text-on-surface">
-              <div className="p-3 rounded-xl bg-surface-container-low text-center border border-gray-200/50">
-                <span className="font-headline-lg text-headline-lg text-primary font-black block text-[1.4rem]">10+</span>
-                <span className="font-body-sm text-label-badge text-slate-body uppercase font-semibold text-[10px]">
-                  Years in Ranchi
-                </span>
-              </div>
-              <div className="p-3 rounded-xl bg-surface-container-low text-center border border-gray-200/50">
-                <span className="font-headline-lg text-headline-lg text-tertiary font-black block text-[1.4rem]">50k+</span>
-                <span className="font-body-sm text-label-badge text-slate-body uppercase font-semibold text-[10px]">
-                  Orders Delivered
-                </span>
-              </div>
-              <div className="p-3 rounded-xl bg-surface-container-low text-center border border-gray-200/50">
-                <div className="flex items-center justify-center gap-0.5">
-                  <span className="font-headline-lg text-headline-lg text-tag-amber font-black text-[1.4rem]">4.9</span>
-                  <span className="material-symbols-outlined text-[18px] text-tag-amber">star</span>
-                </div>
-                <span className="font-body-sm text-label-badge text-slate-body uppercase font-semibold text-[10px]">
-                  Hygiene Rating
-                </span>
-              </div>
-            </div>
-          </div>
-
-          <div className="w-full lg:w-1/2 relative">
-            <div className="relative aspect-video sm:aspect-[4/3] rounded-2xl overflow-hidden shadow-md bg-surface-container">
-              <img
-                alt="Teffe Fresh Meat Butchery Standards"
-                className="w-full h-full object-cover"
-                src="https://healthycrater.com/wp-content/uploads/2024/07/chicken-vs-mutton-nutritional-values-600x338.jpg"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent"></div>
-              <div className="absolute bottom-4 left-4 right-4 bg-surface-card/95 backdrop-blur-md p-4 rounded-xl text-on-surface shadow-md border border-gray-100">
-                <div className="flex items-center gap-2">
-                  <span className="material-symbols-outlined text-white text-[22px]">location_on</span>
-                  <span className="font-headline-sm text-label-md font-bold text-[13.5px] text-white">
-                    Kacheri Chowk Central Dispatch Hub
-                  </span>
-                </div>
-                <p className="font-body-sm text-body-sm mt-0.5 text-[12px] text-white">
-                  Near Kishore Ganj &amp; Harmu Road, Ranchi, Jharkhand 834001
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
       {/* ─── 12. Sticky Bottom Quick Cart Bar ──────────────────────────────────── */}
       {totalItemsCount > 0 && (

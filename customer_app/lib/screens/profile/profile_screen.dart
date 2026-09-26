@@ -725,6 +725,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _confirmLogout(BuildContext context, AuthProvider auth) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedLg),
+        title: const Row(
+          children: [
+            Icon(Icons.logout_rounded, color: AppColors.primaryMaroon, size: 22),
+            SizedBox(width: 8),
+            Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17)),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to sign out from your Teffe\'s account?',
+          style: TextStyle(fontSize: 13.5, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryMaroon,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () {
+              Navigator.pop(ctx);
+              auth.logout();
+            },
+            child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -735,88 +773,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         title: const Text('My Account & Orders'),
         centerTitle: false,
+        actions: [
+          if (auth.isAuthenticated)
+            Padding(
+              padding: const EdgeInsets.only(right: 12.0),
+              child: TextButton.icon(
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.primaryMaroon,
+                  backgroundColor: AppColors.primaryLight.withValues(alpha: 0.6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                icon: const Icon(Icons.logout_rounded, size: 16, color: AppColors.primaryMaroon),
+                label: const Text(
+                  'Logout',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 12.5,
+                    color: AppColors.primaryMaroon,
+                  ),
+                ),
+                onPressed: () => _confirmLogout(context, auth),
+              ),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppDimensions.spaceMd),
+        padding: const EdgeInsets.fromLTRB(
+          AppDimensions.spaceMd,
+          AppDimensions.spaceMd,
+          AppDimensions.spaceMd,
+          100, // Clearance for sticky bottom cart pill
+        ),
         physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. User Header Card with Edit Profile Button
-            Container(
-              padding: const EdgeInsets.all(AppDimensions.spaceMd),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: AppDimensions.roundedLg,
-                border: Border.all(color: AppColors.borderHairline),
-                boxShadow: AppDimensions.cardShadow,
-              ),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: AppColors.primaryLight,
-                    child: Text(
-                      auth.isAuthenticated ? (auth.user?.name.isNotEmpty == true ? auth.user!.name[0].toUpperCase() : 'T') : '?',
-                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.primaryMaroon),
+            // 1. User Header Card (When Logged In) OR Single Patron Privileges Card (When Logged Out)
+            if (auth.isAuthenticated) ...[
+              Container(
+                padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppDimensions.roundedLg,
+                  border: Border.all(color: AppColors.borderHairline),
+                  boxShadow: AppDimensions.cardShadow,
+                ),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 28,
+                      backgroundColor: AppColors.primaryLight,
+                      child: Text(
+                        auth.user?.name.isNotEmpty == true ? auth.user!.name[0].toUpperCase() : 'T',
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: AppColors.primaryMaroon),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: auth.isAuthenticated
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              Row(
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      auth.user?.name.isNotEmpty == true ? auth.user!.name : 'Teffe\'s Patron',
-                                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  GestureDetector(
-                                    onTap: () => _showEditProfileDialog(context, auth),
-                                    child: const Icon(Icons.edit_outlined, size: 16, color: AppColors.primaryMaroon),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                auth.user?.phone ?? '+91 98765 43210',
-                                style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-                              ),
-                              if (auth.user?.email != null)
-                                Text(
-                                  auth.user!.email!,
-                                  style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                              Flexible(
+                                child: Text(
+                                  auth.user?.name.isNotEmpty == true ? auth.user!.name : 'Teffe\'s Patron',
+                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                            ],
-                          )
-                        : Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text('Welcome to Teffe\'s', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
-                              const SizedBox(height: 2),
-                              const Text('Log in with your phone number for orders', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
-                              const SizedBox(height: 6),
+                              ),
+                              const SizedBox(width: 6),
                               GestureDetector(
-                                onTap: () {
-                                  Navigator.of(context).push(
-                                    SmoothPageRoute(page: const LoginScreen()),
-                                  );
-                                },
-                                child: const Text(
-                                  'Login / Register with OTP →',
-                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: AppColors.primaryMaroon),
-                                ),
+                                onTap: () => _showEditProfileDialog(context, auth),
+                                child: const Icon(Icons.edit_outlined, size: 16, color: AppColors.primaryMaroon),
                               ),
                             ],
                           ),
-                  ),
-                  if (auth.isAuthenticated)
+                          const SizedBox(height: 2),
+                          Text(
+                            auth.user?.phone ?? '+91 98765 43210',
+                            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                          if (auth.user?.email != null)
+                            Text(
+                              auth.user!.email!,
+                              style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                            ),
+                        ],
+                      ),
+                    ),
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -825,13 +873,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onPressed: () => _showEditProfileDialog(context, auth),
                       child: const Text('Edit', style: TextStyle(color: AppColors.primaryMaroon, fontWeight: FontWeight.bold, fontSize: 11.5)),
                     ),
-                ],
+                  ],
+                ),
               ),
-            ),
-            const SizedBox(height: AppDimensions.spaceMd),
-
-            // When Not Logged In: Show Member Privileges & Login CTA Card
-            if (!auth.isAuthenticated) ...[
+              const SizedBox(height: AppDimensions.spaceMd),
+            ] else ...[
+              // When Not Logged In: Show ONLY ONE clean, unified Member Privileges & Login CTA Card
               Container(
                 padding: const EdgeInsets.all(AppDimensions.spaceMd),
                 decoration: BoxDecoration(
@@ -846,12 +893,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Row(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(8),
+                          padding: const EdgeInsets.all(10),
                           decoration: const BoxDecoration(
                             color: AppColors.primaryLight,
                             shape: BoxShape.circle,
                           ),
-                          child: const Icon(Icons.stars_rounded, color: AppColors.primaryMaroon, size: 22),
+                          child: const Icon(Icons.stars_rounded, color: AppColors.primaryMaroon, size: 24),
                         ),
                         const SizedBox(width: 12),
                         const Expanded(
@@ -859,13 +906,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                "Unlock Teffe's Patron Privileges",
-                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                                "Welcome to Teffe's",
+                                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                               ),
                               SizedBox(height: 2),
                               Text(
-                                "Login to access Teffe's Cash Wallet, saved delivery addresses & orders",
-                                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                "Sign in to unlock exclusive member privileges & express ordering",
+                                style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                               ),
                             ],
                           ),
@@ -874,37 +921,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 14),
                     const Divider(height: 1, color: AppColors.borderHairline),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 14),
                     _buildGuestBenefitRow(
                       icon: Icons.account_balance_wallet_outlined,
                       title: "Teffe's Cash Wallet",
                       subtitle: "Instant 1-click payment & cashback rewards",
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _buildGuestBenefitRow(
                       icon: Icons.location_on_outlined,
                       title: "Saved Delivery Addresses",
                       subtitle: "Save home, kitchen & office locations for 90-min delivery",
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
                     _buildGuestBenefitRow(
                       icon: Icons.receipt_long_outlined,
                       title: "Live Butchery Order Tracking",
-                      subtitle: "Track butchery cutting progress & GPS delivery in real-time",
+                      subtitle: "Track cutting progress & GPS delivery in real-time",
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 18),
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.primaryMaroon,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          padding: const EdgeInsets.symmetric(vertical: 13),
                           shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                          elevation: 1,
                         ),
-                        icon: const Icon(Icons.login_rounded, color: Colors.white, size: 16),
+                        icon: const Icon(Icons.login_rounded, color: Colors.white, size: 18),
                         label: const Text(
                           'Login / Register with OTP',
-                          style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13),
+                          style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 13.5),
                         ),
                         onPressed: () {
                           Navigator.of(context).push(
@@ -1417,7 +1465,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: TextButton.icon(
                   icon: const Icon(Icons.logout_rounded, color: Colors.red),
                   label: const Text('Log Out', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-                  onPressed: () => auth.logout(),
+                  onPressed: () => _confirmLogout(context, auth),
                 ),
               ),
           ],

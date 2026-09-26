@@ -57,6 +57,12 @@ export default function CartDrawer() {
     freeRiceThreshold,
     freeDeliveryThreshold,
     totalItemsCount,
+    appliedCoupon,
+    couponDiscount,
+    couponError,
+    isApplyingCoupon,
+    applyCoupon,
+    removeCoupon,
   } = useCart();
 
   // Top fulfillment mode: "delivery" (auto-selected by default) or "pickup"
@@ -128,29 +134,31 @@ export default function CartDrawer() {
     storePhone?: string;
   } | null>(null);
 
-  const [couponCode, setCouponCode] = useState<string>("");
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountValue: number } | null>(null);
-  const [couponError, setCouponError] = useState<string>("");
-  const [isApplyingCoupon, setIsApplyingCoupon] = useState(false);
+  const [inputCouponCode, setInputCouponCode] = useState<string>("");
+  const [availableCoupons, setAvailableCoupons] = useState<any[]>([]);
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+  const [isCouponsExpanded, setIsCouponsExpanded] = useState<boolean>(false);
 
-  const handleApplyCoupon = async () => {
-    if (!couponCode) return;
-    setCouponError("");
-    setIsApplyingCoupon(true);
-    try {
-      const res = await api.post("/coupons/validate", { code: couponCode, cartTotal: subtotal });
-      if (res.data.success) {
-        setAppliedCoupon({
-          code: res.data.coupon.code,
-          discountValue: res.data.coupon.discountValue || 50,
-        });
-      } else {
-        setCouponError(res.data.message || "Invalid coupon");
-      }
-    } catch (err: any) {
-      setCouponError(err.response?.data?.message || "Failed to apply coupon");
-    } finally {
-      setIsApplyingCoupon(false);
+  useEffect(() => {
+    if (isOpen) {
+      setLoadingCoupons(true);
+      api.get<{ success: boolean; coupons: any[] }>("/coupons/active")
+        .then((res) => {
+          if (res.data?.success && Array.isArray(res.data.coupons)) {
+            setAvailableCoupons(res.data.coupons);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingCoupons(false));
+    }
+  }, [isOpen]);
+
+  const handleApplyCoupon = async (codeToApply?: string) => {
+    const targetCode = (codeToApply || inputCouponCode).trim().toUpperCase();
+    if (!targetCode) return;
+    const res = await applyCoupon(targetCode);
+    if (res.success) {
+      setInputCouponCode("");
     }
   };
 
@@ -159,14 +167,12 @@ export default function CartDrawer() {
   const isPickup = fulfillmentType === "pickup";
   const effectiveDeliveryFee = isPickup ? 0 : deliveryFee;
   const effectiveTip = isPickup ? 0 : selectedTip;
-  const discountAmount = appliedCoupon ? appliedCoupon.discountValue : 0;
+  const discountAmount = couponDiscount;
   const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + effectiveTip - discountAmount);
 
   const selectedStore =
     stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
 
-  const riceProgress = Math.min(100, Math.round((subtotal / freeRiceThreshold) * 100));
-  const amountForFreeRice = Math.max(0, freeRiceThreshold - subtotal);
   const amountForFreeDelivery = Math.max(0, freeDeliveryThreshold - subtotal);
 
   // Tip handler
@@ -190,7 +196,13 @@ export default function CartDrawer() {
     }
   };
 
-  const { currentLocation, selectSavedAddress, refreshSavedAddresses } = useLocation();
+  const {
+    currentLocation,
+    selectSavedAddress,
+    refreshSavedAddresses,
+    isLocationSet,
+    openLocationModal,
+  } = useLocation();
 
   // Fetch user addresses from backend
   const fetchAddresses = async () => {
@@ -282,6 +294,14 @@ export default function CartDrawer() {
 
     if (fulfillmentType === "delivery") {
       await fetchAddresses();
+
+      // Enforce location selection: cannot proceed if no location or address has been chosen
+      if (!isLocationSet && !selectedAddressId && addresses.length === 0) {
+        toast.warning("Please select or detect your delivery location before proceeding to checkout.", "Location Required");
+        openLocationModal();
+        return;
+      }
+
       if (addresses.length === 0 && !selectedAddressId) {
         toast.warning("Please add a delivery address to proceed.", "Address Required");
         setShowAddAddressForm(true);
@@ -305,8 +325,9 @@ export default function CartDrawer() {
   // Final Order Confirmation (Cash on Delivery / Pay at Counter)
   const handleConfirmOrder = async () => {
     if (isPlacingOrder) return;
-    if (fulfillmentType === "delivery" && !selectedAddressId && addresses.length > 0) {
+    if (fulfillmentType === "delivery" && !selectedAddressId && (!activeAddress || !activeAddress._id)) {
       toast.warning("Please select a delivery address to proceed.", "Address Required");
+      openLocationModal();
       return;
     }
 
@@ -349,8 +370,9 @@ export default function CartDrawer() {
   // Razorpay Online Payment
   const handleRazorpayPayment = async () => {
     if (isPlacingOrder) return;
-    if (fulfillmentType === "delivery" && !selectedAddressId && addresses.length > 0) {
+    if (fulfillmentType === "delivery" && !selectedAddressId && (!activeAddress || !activeAddress._id)) {
       toast.warning("Please select a delivery address to proceed.", "Address Required");
+      openLocationModal();
       return;
     }
 
@@ -630,31 +652,6 @@ export default function CartDrawer() {
                   </div>
                 )}
 
-                {/* Free Gift / Delivery Milestone Progress Bar */}
-                <div className="bg-amber-50/70 border-b border-amber-200/50 px-5 py-3 shrink-0">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-label-md font-bold text-amber-900 flex items-center gap-1.5 text-[12px]">
-                      {riceProgress >= 100 ? (
-                        <>
-                          <span className="material-symbols-outlined text-amber-600 text-[18px]">celebration</span>
-                          <span>300g Premium Basmati Rice unlocked for FREE!</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined text-amber-600 text-[18px]">rice_bowl</span>
-                          <span>Add ₹{amountForFreeRice} more for FREE 300g Basmati Rice</span>
-                        </>
-                      )}
-                    </span>
-                    <span className="font-label-badge font-bold text-amber-800 text-[11px]">{riceProgress}%</span>
-                  </div>
-                  <div className="w-full h-1.5 bg-amber-200/60 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all duration-300 rounded-full"
-                      style={{ width: `${riceProgress}%` }}
-                    />
-                  </div>
-                </div>
 
                 {/* Scrollable Body: Stores List OR Delivery Speed + Items + Instructions */}
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
@@ -855,21 +852,6 @@ export default function CartDrawer() {
                     ))}
                   </div>
 
-                  {/* Free Gift if qualified */}
-                  {subtotal >= freeRiceThreshold && (
-                    <div className="p-3 bg-tertiary/10 border border-tertiary/20 rounded-xl flex items-center gap-3">
-                      <div className="w-8 h-8 rounded-full bg-tertiary/20 flex items-center justify-center text-tertiary shrink-0">
-                        <span className="material-symbols-outlined text-[18px]">rice_bowl</span>
-                      </div>
-                      <div className="flex-1">
-                        <div className="font-label-md font-bold text-tertiary text-[12.5px]">
-                          FREE: Premium Basmati Rice (300g)
-                        </div>
-                        <div className="font-body-sm text-slate-body text-[11px]">Special order gift for orders ₹499+</div>
-                      </div>
-                      <span className="font-label-badge font-extrabold text-tertiary text-[11px]">FREE</span>
-                    </div>
-                  )}
 
                   {/* ─── TIP DELIVERY PARTNER (Only in Delivery Flow) ─── */}
                   {fulfillmentType === "delivery" ? (
@@ -1063,43 +1045,199 @@ export default function CartDrawer() {
                       </div>
                     </div>
                   )}
-                </div>
 
-                {/* ─── COUPON CODE SECTION ────────────────────────────────────────── */}
-                <div className="bg-white border-t border-gray-200 px-5 py-3 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      placeholder="Enter Coupon Code"
-                      value={couponCode}
-                      onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
-                      disabled={!!appliedCoupon}
-                      className="flex-1 p-2.5 rounded-xl border border-gray-300 text-[13px] font-bold text-gray-800 uppercase focus:outline-none focus:border-primary disabled:bg-gray-100 disabled:text-gray-500"
-                    />
-                    {appliedCoupon ? (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setAppliedCoupon(null);
-                          setCouponCode("");
-                        }}
-                        className="bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded-xl px-4 py-2.5 font-bold text-[13px] transition-colors cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={handleApplyCoupon}
-                        disabled={!couponCode || isApplyingCoupon}
-                        className="bg-primary hover:bg-primary-dark text-white border border-primary rounded-xl px-4 py-2.5 font-bold text-[13px] transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        {isApplyingCoupon ? "..." : "Apply"}
-                      </button>
+                  {/* ─── COLLAPSIBLE COUPON / PROMO SECTION (Below instructions, inside scrollable area) ─── */}
+                  <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden transition-all">
+                    {/* Collapsible Header Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsCouponsExpanded((prev) => !prev)}
+                      className="w-full p-3.5 flex items-center justify-between gap-3 text-left bg-transparent border-none cursor-pointer hover:bg-gray-50/70 transition-colors"
+                      aria-expanded={isCouponsExpanded}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                          appliedCoupon 
+                            ? "bg-emerald-100 text-emerald-700" 
+                            : "bg-primary/10 text-primary"
+                        }`}>
+                          <span className="material-symbols-outlined text-[18px]">
+                            {appliedCoupon ? "check_circle" : "sell"}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          {appliedCoupon ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-extrabold text-[12.5px] text-emerald-900 font-headline-sm">
+                                  {appliedCoupon.code} Applied
+                                </span>
+                                <span className="text-[10px] bg-emerald-100 text-emerald-800 font-black px-1.5 py-0.2 rounded">
+                                  SAVING ₹{appliedCoupon.discountAmount}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 font-medium truncate mt-0.5">
+                                {appliedCoupon.description || "Coupon discount applied to order"}
+                              </p>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="font-headline-sm font-extrabold text-on-surface text-[13px] block">
+                                Apply Coupon / Promo Code
+                              </span>
+                              <p className="font-body-sm text-slate-body text-[11px] mt-0.5">
+                                {availableCoupons.length > 0 
+                                  ? `${availableCoupons.length} offers available to save more` 
+                                  : "Tap to enter promo code"}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        {appliedCoupon && !isCouponsExpanded && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeCoupon();
+                            }}
+                            className="text-[11px] font-bold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2 py-1 rounded-md transition-colors cursor-pointer"
+                          >
+                            Remove
+                          </button>
+                        )}
+                        <span className={`material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 ${
+                          isCouponsExpanded ? "rotate-90 text-primary" : ""
+                        }`}>
+                          chevron_right
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* Collapsible Content Body */}
+                    {isCouponsExpanded && (
+                      <div className="px-3.5 pb-3.5 pt-1 border-t border-gray-100 space-y-3">
+                        {appliedCoupon ? (
+                          /* Full Applied Coupon Card inside expanded view */
+                          <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 rounded-xl p-3 flex items-center justify-between gap-3 shadow-2xs">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-emerald-900 text-[13px] tracking-wide font-headline-sm">
+                                  {appliedCoupon.code}
+                                </span>
+                                <span className="text-[10px] bg-emerald-200 text-emerald-900 font-extrabold px-1.5 py-0.5 rounded">
+                                  APPLIED
+                                </span>
+                              </div>
+                              <div className="text-[11px] text-emerald-800 font-medium mt-0.5 truncate">
+                                {appliedCoupon.description || `Discount: -₹${appliedCoupon.discountAmount}`}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-emerald-700 font-black text-[13px]">
+                                -₹{appliedCoupon.discountAmount}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={removeCoupon}
+                                className="text-[11px] font-bold text-red-600 hover:text-red-700 bg-white hover:bg-red-50 border border-red-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"
+                              >
+                                Remove
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Coupon Input Field */
+                          <div className="space-y-2">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                placeholder="Enter Promo Code (e.g. MEAT25)"
+                                value={inputCouponCode}
+                                onChange={(e) => setInputCouponCode(e.target.value.toUpperCase())}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    handleApplyCoupon();
+                                  }
+                                }}
+                                className="flex-1 p-2.5 rounded-xl border border-gray-300 text-[12.5px] font-bold text-gray-800 uppercase focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => handleApplyCoupon()}
+                                disabled={!inputCouponCode.trim() || isApplyingCoupon}
+                                className="bg-primary hover:bg-primary-dark text-white border border-primary rounded-xl px-4 py-2.5 font-bold text-[12.5px] transition-colors cursor-pointer disabled:opacity-50"
+                              >
+                                {isApplyingCoupon ? "Checking…" : "Apply"}
+                              </button>
+                            </div>
+
+                            {couponError && (
+                              <div className="text-red-500 text-[11px] font-bold flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[14px]">error</span>
+                                <span>{couponError}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Available Coupons list */}
+                        {!appliedCoupon && availableCoupons.length > 0 && (
+                          <div className="pt-2 border-t border-dashed border-gray-200">
+                            <div className="text-[10.5px] font-extrabold text-slate-500 uppercase tracking-wider mb-2">
+                              Available Offers
+                            </div>
+                            <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
+                              {availableCoupons.map((c) => {
+                                const isPercent = c.discountType === "percentage";
+                                const desc = c.description || c.discount || `${c.discountValue}${isPercent ? "% OFF" : "₹ OFF"}`;
+                                const minOrder = c.minOrderAmount !== undefined ? c.minOrderAmount : (c.minOrder || 0);
+
+                                return (
+                                  <div
+                                    key={c.code || c.id}
+                                    className="flex items-center justify-between bg-slate-50 border border-slate-200/80 rounded-xl p-2.5 gap-2 hover:bg-slate-100/60 transition-colors"
+                                  >
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-extrabold text-[12px] text-gray-800 tracking-wide font-headline-sm">
+                                          {c.code}
+                                        </span>
+                                        {c.isSuperOffer && (
+                                          <span className="text-[9.5px] bg-amber-100 text-amber-900 font-black px-1.5 py-0.2 rounded">
+                                            SUPER OFFER
+                                          </span>
+                                        )}
+                                        {c.firstOrderOnly && (
+                                          <span className="text-[9.5px] bg-indigo-100 text-indigo-900 font-black px-1.5 py-0.2 rounded">
+                                            1ST ORDER
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-gray-500 mt-0.5 truncate">
+                                        {desc} · Min order ₹{minOrder}
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleApplyCoupon(c.code)}
+                                      disabled={isApplyingCoupon}
+                                      className="bg-white hover:bg-emerald-50 text-emerald-700 hover:text-emerald-800 border border-emerald-300 font-extrabold text-[11px] px-3 py-1.5 rounded-lg transition-colors shrink-0 cursor-pointer"
+                                    >
+                                      Claim
+                                    </button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
-                  {couponError && <p className="text-red-500 text-[11px] mt-1.5 font-bold">{couponError}</p>}
-                  {appliedCoupon && <p className="text-emerald-600 text-[11px] mt-1.5 font-bold">Coupon {appliedCoupon.code} applied! (-₹{appliedCoupon.discountValue})</p>}
                 </div>
 
                 {/* ─── BILL SUMMARY & CTA ────────────────────────────────────────── */}
@@ -1156,10 +1294,13 @@ export default function CartDrawer() {
                       <strong className="text-tertiary">FREE</strong>
                     </div>
 
-                    {appliedCoupon && (
-                      <div className="flex justify-between text-emerald-600 font-bold">
-                        <span>Coupon Discount ({appliedCoupon.code})</span>
-                        <span>-₹{appliedCoupon.discountValue}</span>
+                    {discountAmount > 0 && (
+                      <div className="flex justify-between text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded-md">
+                        <span className="flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[15px]">local_offer</span>
+                          <span>Coupon Discount {appliedCoupon ? `(${appliedCoupon.code})` : ""}</span>
+                        </span>
+                        <span>-₹{discountAmount}</span>
                       </div>
                     )}
 

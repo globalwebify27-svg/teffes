@@ -10,6 +10,7 @@ import '../../providers/location_provider.dart';
 import '../../providers/products_provider.dart';
 import '../../widgets/common/category_icon_pill.dart';
 import '../../widgets/common/cold_chain_promise_card.dart';
+import '../../widgets/common/location_header.dart';
 import '../../widgets/common/product_card.dart';
 import '../../widgets/common/brand_watermark_footer.dart';
 import '../cart/cart_checkout_screen.dart';
@@ -235,13 +236,52 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 1),
-                Text(
-                  location.activeAddressString,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 11),
-                ),
+                const SizedBox(height: 2),
+                if (location.hasSelectedAddress || location.isGpsDetected)
+                  GestureDetector(
+                    onTap: () {
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        backgroundColor: Colors.transparent,
+                        builder: (_) => const LocationPickerModal(),
+                      );
+                    },
+                    behavior: HitTestBehavior.opaque,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Text(
+                            'Delivering to ${location.activeLabel}',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                          ),
+                        ),
+                        const SizedBox(width: 2),
+                        const Icon(
+                          Icons.keyboard_arrow_down_rounded,
+                          size: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ],
+                    ),
+                  )
+                else
+                  Text(
+                    '100% Fresh Daily Cuts • Premium Quality',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                  ),
               ],
             ),
           ),

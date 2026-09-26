@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/services/rider_fcm_service.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/rider_auth_provider.dart';
 import 'providers/rider_location_provider.dart';
@@ -10,6 +11,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/location_permission_screen.dart';
 import 'screens/main_shell_screen.dart';
 import 'screens/onboarding/rider_onboarding_screen.dart';
+
+final GlobalKey<NavigatorState> riderNavigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +32,9 @@ void main() async {
 
   await authProvider.init();
   await locationProvider.init();
+
+  // Initialize Rider FCM push alerts
+  await RiderFcmService.instance.initialize(riderNavigatorKey);
 
   final prefs = await SharedPreferences.getInstance();
   final bool hasSeenOnboarding = prefs.getBool('has_seen_rider_onboarding') ?? false;
@@ -53,6 +59,7 @@ class TeffesRiderApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: riderNavigatorKey,
       title: "TeFFe's Rider Partner",
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,

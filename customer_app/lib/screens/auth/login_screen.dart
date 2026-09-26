@@ -17,19 +17,24 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _phoneController = TextEditingController();
 
-  // 4 Separate Controllers and FocusNodes for the 4 Square OTP Boxes
+  // 6 Separate Controllers and FocusNodes for the 6-Digit Firebase SMS Code
   final TextEditingController _box1 = TextEditingController();
   final TextEditingController _box2 = TextEditingController();
   final TextEditingController _box3 = TextEditingController();
   final TextEditingController _box4 = TextEditingController();
+  final TextEditingController _box5 = TextEditingController();
+  final TextEditingController _box6 = TextEditingController();
 
   final FocusNode _fn1 = FocusNode();
   final FocusNode _fn2 = FocusNode();
   final FocusNode _fn3 = FocusNode();
   final FocusNode _fn4 = FocusNode();
+  final FocusNode _fn5 = FocusNode();
+  final FocusNode _fn6 = FocusNode();
 
   bool _isOtpSent = false;
-  final String _demoOtp = '1234';
+  String? _verificationId;
+  final String _testOtp = '123456';
   int _resendTimerSeconds = 30;
   Timer? _countdownTimer;
 
@@ -41,10 +46,14 @@ class _LoginScreenState extends State<LoginScreen> {
     _box2.dispose();
     _box3.dispose();
     _box4.dispose();
+    _box5.dispose();
+    _box6.dispose();
     _fn1.dispose();
     _fn2.dispose();
     _fn3.dispose();
     _fn4.dispose();
+    _fn5.dispose();
+    _fn6.dispose();
     super.dispose();
   }
 
@@ -63,17 +72,30 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _fillOtp(String code) {
     final clean = code.replaceAll(RegExp(r'\D'), '');
-    if (clean.length >= 4) {
+    if (clean.length >= 6) {
       _box1.text = clean[0];
       _box2.text = clean[1];
       _box3.text = clean[2];
       _box4.text = clean[3];
-      _fn4.requestFocus();
+      _box5.text = clean[4];
+      _box6.text = clean[5];
+      _fn6.requestFocus();
       setState(() {});
     }
   }
 
-  String get _currentOtp => '${_box1.text}${_box2.text}${_box3.text}${_box4.text}'.trim();
+  void _clearOtpBoxes() {
+    _box1.clear();
+    _box2.clear();
+    _box3.clear();
+    _box4.clear();
+    _box5.clear();
+    _box6.clear();
+    setState(() {});
+  }
+
+  String get _currentOtp =>
+      '${_box1.text}${_box2.text}${_box3.text}${_box4.text}${_box5.text}${_box6.text}'.trim();
 
   Future<void> _handleSendOtp() async {
     final cleanPhone = _phoneController.text.replaceAll(RegExp(r'\D'), '');
@@ -88,37 +110,60 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final auth = context.read<AuthProvider>();
-    await auth.sendOtp(cleanPhone);
 
-    if (!mounted) return;
-
-    setState(() {
-      _isOtpSent = true;
-    });
-    _fillOtp(_demoOtp);
-    _startResendTimer();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: const [
-            Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Expanded(child: Text('Your Teffe\'s Login OTP is: 1234')),
-          ],
-        ),
-        backgroundColor: AppColors.primaryMaroon,
-        duration: const Duration(seconds: 6),
-      ),
+    await auth.sendFirebaseOtp(
+      phone: cleanPhone,
+      onCodeSent: (verificationId, resendToken) {
+        if (!mounted) return;
+        setState(() {
+          _verificationId = verificationId;
+          _isOtpSent = true;
+        });
+        _clearOtpBoxes();
+        _startResendTimer();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 20),
+                SizedBox(width: 8),
+                Expanded(child: Text('6-digit verification code sent via SMS')),
+              ],
+            ),
+            backgroundColor: AppColors.hygieneDark,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      },
+      onFailed: (errorMessage) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      },
+      onAutoCompleted: (credential) async {
+        if (!mounted) return;
+        final success = await auth.verifyFirebaseOtp(
+          verificationId: _verificationId ?? '',
+          smsCode: credential.smsCode ?? '',
+          phone: cleanPhone,
+        );
+        if (success && mounted) {
+          _onLoginSuccess();
+        }
+      },
     );
   }
 
   Future<void> _handleVerifyOtp() async {
     final cleanOtp = _currentOtp;
-    if (cleanOtp.length < 4) {
+    if (cleanOtp.length < 6) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please enter the complete 4-digit OTP'),
+          content: Text('Please enter the complete 6-digit OTP code'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -126,27 +171,65 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final auth = context.read<AuthProvider>();
-    final location = context.read<LocationProvider>();
-
-    // Verify OTP via backend API
     final cleanPhone = _phoneController.text.replaceAll(RegExp(r'\D'), '');
-    final success = await auth.verifyOtp(cleanPhone, cleanOtp);
+
+    bool success = false;
+    if (_verificationId != null && _verificationId!.isNotEmpty) {
+      success = await auth.verifyFirebaseOtp(
+        verificationId: _verificationId!,
+        smsCode: cleanOtp,
+        phone: cleanPhone,
+      );
+    } else {
+      success = await auth.verifyOtp(cleanPhone, cleanOtp);
+    }
 
     if (!success) {
       if (!mounted) return;
+      String friendlyError = auth.error ?? 'Provided OTP is wrong. Please enter the correct code.';
+      if (friendlyError.contains('invalid-verification-code') ||
+          friendlyError.contains('SMS/TOTP is invalid') ||
+          friendlyError.contains('Firebase') ||
+          friendlyError.contains('Failed to create customer session')) {
+        friendlyError = 'Provided OTP is wrong. Please enter the correct code.';
+      } else if (friendlyError.contains('session-expired')) {
+        friendlyError = 'Verification code has expired. Please request a new code.';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(auth.error ?? 'Invalid OTP code. Please try again.'),
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  friendlyError,
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
+              ),
+            ],
+          ),
           backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+          duration: const Duration(seconds: 4),
         ),
       );
       return;
     }
 
+    if (!mounted) return;
+    _onLoginSuccess();
+  }
+
+  Future<void> _onLoginSuccess() async {
+    final auth = context.read<AuthProvider>();
+    final location = context.read<LocationProvider>();
+
     if (auth.user != null && auth.user!.addresses.isNotEmpty) {
       location.setSavedAddresses(auth.user!.addresses);
     } else {
-      // Zepto-style auto location detection for new users
       await location.detectGpsLocation(userTriggered: true);
     }
 
@@ -155,7 +238,7 @@ class _LoginScreenState extends State<LoginScreen> {
     final userName = (auth.user?.name.isNotEmpty == true) ? auth.user!.name : 'Customer';
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Welcome back, $userName! Logged in successfully.'),
+        content: Text('Welcome, $userName! Signed in successfully.'),
         backgroundColor: AppColors.hygieneDark,
       ),
     );
@@ -173,11 +256,11 @@ class _LoginScreenState extends State<LoginScreen> {
     final hasFocus = focusNode.hasFocus;
 
     return Container(
-      width: 58,
-      height: 60,
+      width: 44,
+      height: 52,
       decoration: BoxDecoration(
         color: hasFocus ? Colors.white : AppColors.surfaceInput,
-        borderRadius: AppDimensions.roundedLg,
+        borderRadius: AppDimensions.roundedMd,
         border: Border.all(
           color: hasFocus
               ? AppColors.primaryMaroon
@@ -187,7 +270,7 @@ class _LoginScreenState extends State<LoginScreen> {
         boxShadow: hasFocus
             ? [
                 BoxShadow(
-                  color: AppColors.primaryMaroon.withOpacity(0.15),
+                  color: AppColors.primaryMaroon.withValues(alpha: 0.15),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -195,7 +278,7 @@ class _LoginScreenState extends State<LoginScreen> {
             : null,
       ),
       child: RawKeyboardListener(
-        focusNode: FocusNode(), // auxiliary node for raw keys
+        focusNode: FocusNode(),
         onKey: (event) {
           if (event is RawKeyDownEvent &&
               event.logicalKey == LogicalKeyboardKey.backspace &&
@@ -211,7 +294,7 @@ class _LoginScreenState extends State<LoginScreen> {
           textAlign: TextAlign.center,
           maxLength: 1,
           style: const TextStyle(
-            fontSize: 24,
+            fontSize: 20,
             fontWeight: FontWeight.w900,
             color: AppColors.textPrimary,
           ),
@@ -231,7 +314,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 nextFocus.requestFocus();
               } else {
                 focusNode.unfocus();
-                if (_currentOtp.length == 4) {
+                if (_currentOtp.length == 6) {
                   _handleVerifyOtp();
                 }
               }
@@ -283,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: BoxDecoration(
                     color: AppColors.primaryLight,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.2), width: 1.5),
+                    border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.2), width: 1.5),
                   ),
                   child: const Center(
                     child: Icon(
@@ -298,27 +381,28 @@ class _LoginScreenState extends State<LoginScreen> {
 
               Text(
                 'Customer Login / Sign Up',
-                textAlign: TextAlign.center,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w900,
                       color: AppColors.textPrimary,
                     ),
+                textAlign: TextAlign.center,
               ),
               const SizedBox(height: 6),
               Text(
-                'Enter your mobile number to get an instant OTP for fresh delivery in Ranchi',
+                _isOtpSent
+                    ? 'Enter the 6-digit code sent via SMS to verify your account.'
+                    : 'Enter your 10-digit mobile number to receive a secure login code.',
+                style: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 13,
+                  height: 1.4,
+                ),
                 textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontSize: 13,
-                      color: AppColors.textSecondary,
-                      height: 1.4,
-                    ),
               ),
               const SizedBox(height: 32),
 
               if (!_isOtpSent) ...[
-                // Phone Number Input Step
+                // Phone Input Field with Country Code Badge
                 const Text(
                   'Mobile Number',
                   style: TextStyle(
@@ -337,15 +421,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   child: Row(
                     children: [
-                      // +91 Country Badge
+                      // +91 Flag / Prefix Badge
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
                         decoration: const BoxDecoration(
-                          border: Border(right: BorderSide(color: AppColors.borderHairline)),
+                          border: Border(
+                            right: BorderSide(color: AppColors.borderHairline),
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: const [
+                            Text('🇮🇳', style: TextStyle(fontSize: 18)),
+                            SizedBox(width: 6),
                             Text(
                               '+91',
                               style: TextStyle(
@@ -357,26 +445,27 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                       ),
-                      // Input
+
+                      // Phone Number Input
                       Expanded(
                         child: TextField(
                           controller: _phoneController,
                           keyboardType: TextInputType.phone,
-                          autofocus: true,
                           maxLength: 10,
+                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                           style: const TextStyle(
-                            fontSize: 16,
+                            fontSize: 15,
                             fontWeight: FontWeight.w700,
                             letterSpacing: 1.2,
                           ),
                           decoration: const InputDecoration(
-                            counterText: '',
                             hintText: '98765 43210',
                             hintStyle: TextStyle(
-                              fontSize: 14,
                               color: AppColors.textMuted,
                               letterSpacing: 0,
+                              fontWeight: FontWeight.normal,
                             ),
+                            counterText: '',
                             border: InputBorder.none,
                             enabledBorder: InputBorder.none,
                             focusedBorder: InputBorder.none,
@@ -390,7 +479,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 6),
                 const Text(
-                  'Enter any 10-digit mobile number to sign in',
+                  'Enter your 10-digit mobile number to sign in',
                   style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 24),
@@ -460,12 +549,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 24),
 
                 const Text(
-                  'Enter 4-Digit OTP',
+                  'Enter 6-Digit OTP',
                   style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 12),
 
-                // 4 Separate Square Input Boxes
+                // 6 Separate Square Input Boxes
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                   children: [
@@ -489,13 +578,25 @@ class _LoginScreenState extends State<LoginScreen> {
                     _buildOtpSquare(
                       controller: _box4,
                       focusNode: _fn4,
+                      nextFocus: _fn5,
                       prevFocus: _fn3,
+                    ),
+                    _buildOtpSquare(
+                      controller: _box5,
+                      focusNode: _fn5,
+                      nextFocus: _fn6,
+                      prevFocus: _fn4,
+                    ),
+                    _buildOtpSquare(
+                      controller: _box6,
+                      focusNode: _fn6,
+                      prevFocus: _fn5,
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
 
-                // Demo OTP Pill & Resend Action
+                // Test OTP Pill & Resend Action
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -517,13 +618,13 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     GestureDetector(
-                      onTap: () => _fillOtp(_demoOtp),
+                      onTap: () => _fillOtp(_testOtp),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
                           color: AppColors.primaryLight,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.3)),
+                          border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.3)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -531,11 +632,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             Icon(Icons.touch_app_rounded, size: 14, color: AppColors.primaryMaroon),
                             SizedBox(width: 4),
                             Text(
-                              'Demo OTP: 1234',
+                              'Test Code: 123456',
                               style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
                                 color: AppColors.primaryMaroon,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
                           ],
@@ -546,10 +647,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 24),
 
+                // Verify Button
                 ElevatedButton(
-                  onPressed: (_currentOtp.length < 4 || isLoading)
-                      ? null
-                      : _handleVerifyOtp,
+                  onPressed: (_currentOtp.length < 6 || isLoading) ? null : _handleVerifyOtp,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: AppColors.primaryMaroon,
                     foregroundColor: Colors.white,
@@ -565,60 +665,122 @@ class _LoginScreenState extends State<LoginScreen> {
                           width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                         )
-                      : const Text(
-                          'Verify & Proceed',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Text(
+                              'Verify & Proceed',
+                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+                            ),
+                            SizedBox(width: 8),
+                            Icon(Icons.check_circle_outline_rounded, size: 18),
+                          ],
                         ),
                 ),
               ],
 
-              const SizedBox(height: 32),
+              const SizedBox(height: 36),
 
-              // Ranchi Delivery Guarantee Note matching website
+              // Trust Badges Grid
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceSubtle,
-                  borderRadius: AppDimensions.roundedMd,
+                  borderRadius: AppDimensions.roundedLg,
                   border: Border.all(color: AppColors.borderHairline),
                 ),
                 child: Column(
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: const [
-                        Icon(Icons.bolt_rounded, size: 18, color: AppColors.deliveryAmber),
-                        SizedBox(width: 6),
-                        Text(
-                          '90-Min Fresh Delivery in Ranchi',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textPrimary,
-                          ),
-                        ),
-                      ],
+                    _buildTrustRow(
+                      icon: Icons.verified_user_rounded,
+                      iconColor: AppColors.hygieneDark,
+                      title: '100% Antibiotic & Chemical Free',
+                      subtitle: 'Direct farm sourced, hygienically handled.',
                     ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'No password needed — 100% secure OTP verification.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    const Divider(height: 20, color: AppColors.borderHairline),
+                    _buildTrustRow(
+                      icon: Icons.kitchen_rounded,
+                      iconColor: AppColors.hygieneDark,
+                      title: 'Zero Cold Storage Guarantee',
+                      subtitle: 'Cut strictly after your order is confirmed.',
+                    ),
+                    const Divider(height: 20, color: AppColors.borderHairline),
+                    _buildTrustRow(
+                      icon: Icons.electric_moped_rounded,
+                      iconColor: AppColors.deliveryAmber,
+                      title: '90-Min Doorstep Express Delivery',
+                      subtitle: 'Temperature monitored delivery across Ranchi.',
                     ),
                   ],
                 ),
               ),
-              const SizedBox(height: 16),
 
-              const Text(
-                'By continuing, you agree to Teffe\'s Terms of Service & Privacy Policy.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: AppColors.textMuted, height: 1.4),
+              const SizedBox(height: 24),
+
+              // Terms Footer Note
+              const Center(
+                child: Text(
+                  'By proceeding, you agree to Teffe\'s Terms of Service & Privacy Policy',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textMuted,
+                    height: 1.4,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
               ),
+              const SizedBox(height: 16),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTrustRow({
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: iconColor.withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Icon(icon, color: iconColor, size: 20),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                subtitle,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

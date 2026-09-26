@@ -13,6 +13,7 @@ import CartDrawer from "@/components/cart/CartDrawer";
 import AdminLayoutWrapper from "@/components/layout/AdminLayoutWrapper";
 import { LocationProvider } from "@/context/LocationContext";
 import { ToastContainer } from "@/lib/toast";
+import NotificationPrompt from "@/components/common/NotificationPrompt";
 
 export const metadata: Metadata = {
   title: {
@@ -75,6 +76,7 @@ export default function RootLayout({
                 {children}
               </AdminLayoutWrapper>
               <CartDrawer />
+              <NotificationPrompt />
               <ToastContainer />
             </WishlistProvider>
           </CartProvider>

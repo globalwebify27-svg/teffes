@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../models/rider_order_model.dart';
@@ -11,6 +12,62 @@ class DeliveryNavigationScreen extends StatelessWidget {
   final RiderOrder order;
 
   const DeliveryNavigationScreen({super.key, required this.order});
+
+  Future<void> _callCustomer(BuildContext context) async {
+    final cleanPhone = order.customerPhone.replaceAll(RegExp(r'\D'), '');
+    if (cleanPhone.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Customer phone number not available')),
+      );
+      return;
+    }
+    final uri = Uri.parse('tel:$cleanPhone');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not open phone dialer: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openGoogleMapsNavigation(BuildContext context) async {
+    final lat = order.customerLat;
+    final lng = order.customerLng;
+    final address = Uri.encodeComponent(order.customerAddress);
+
+    Uri uri;
+    if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+      uri = Uri.parse('google.navigation:q=$lat,$lng&mode=d');
+    } else {
+      uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$address');
+    }
+
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        final webUri = Uri.parse(
+          (lat != null && lng != null && lat != 0.0)
+              ? 'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng'
+              : 'https://www.google.com/maps/dir/?api=1&destination=$address',
+        );
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not launch Google Maps: $e')),
+        );
+      }
+    }
+  }
 
   void _showCallCustomerDialog(BuildContext context) {
     showDialog(
@@ -51,12 +108,7 @@ class DeliveryNavigationScreen extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: () {
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Simulating call to ${order.customerPhone}...'),
-                  backgroundColor: AppColors.dutyOnline,
-                ),
-              );
+              _callCustomer(context);
             },
             icon: const Icon(Icons.call, size: 18),
             label: const Text('Dial Now'),
@@ -73,6 +125,10 @@ class DeliveryNavigationScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locationProvider = context.watch<RiderLocationProvider>();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<RiderLocationProvider>().startTelemetryBroadcast(order.orderId);
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -320,6 +376,24 @@ class DeliveryNavigationScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 42,
+                    child: OutlinedButton.icon(
+                      onPressed: () => _openGoogleMapsNavigation(context),
+                      style: OutlinedButton.styleFrom(
+                        side: const BorderSide(color: AppColors.dutyOnline, width: 1.5),
+                        foregroundColor: AppColors.dutyOnline,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.navigation_rounded, size: 18),
+                      label: const Text(
+                        'Start Turn-by-Turn GPS Navigation',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   Container(

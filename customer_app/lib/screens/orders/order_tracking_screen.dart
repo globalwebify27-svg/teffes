@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
@@ -24,6 +27,21 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
+  // Real-time Socket.IO & Google Maps State
+  IO.Socket? _socket;
+  GoogleMapController? _mapController;
+  double? _riderLat;
+  double? _riderLng;
+  int? _liveEtaMinutes;
+  double? _liveRoadDistanceKm;
+  bool _socketConnected = false;
+
+  // Default coordinate constants (Ranchi)
+  static const double _defaultStoreLat = 23.3685;
+  static const double _defaultStoreLng = 85.3240;
+  static const double _defaultCustLat = 23.3441;
+  static const double _defaultCustLng = 85.3096;
+
   @override
   void initState() {
     super.initState();
@@ -36,10 +54,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     );
 
     _fetchLiveOrderDetails();
+    _initSocket();
   }
 
   @override
   void dispose() {
+    _socket?.disconnect();
+    _socket?.dispose();
+    _mapController?.dispose();
     _pulseController.dispose();
     super.dispose();
   }
@@ -62,13 +84,183 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
   }
 
-  void _openGoogleMapsDirections() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Opening Google Maps Live GPS Route: Kishore Ganj Hub → Customer Kitchen...'),
-        duration: Duration(seconds: 2),
+  Set<Marker> _buildMapMarkers(OrderModel order) {
+    final markers = <Marker>{};
+
+    final storeLat = order.storeLat ?? _defaultStoreLat;
+    final storeLng = order.storeLng ?? _defaultStoreLng;
+    final custLat = order.deliveryLat ?? _defaultCustLat;
+    final custLng = order.deliveryLng ?? _defaultCustLng;
+    final riderLat = _riderLat ?? order.rider?.lat ?? (storeLat + (custLat - storeLat) * 0.45);
+    final riderLng = _riderLng ?? order.rider?.lng ?? (storeLng + (custLng - storeLng) * 0.45);
+
+    // 1. Store Marker
+    markers.add(
+      Marker(
+        markerId: const MarkerId('store_hub'),
+        position: LatLng(storeLat, storeLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
+        infoWindow: InfoWindow(
+          title: order.storeName ?? 'Kishore Ganj Hub',
+          snippet: 'Fulfillment & Butchery Hub',
+        ),
       ),
     );
+
+    // 2. Customer Destination Marker
+    markers.add(
+      Marker(
+        markerId: const MarkerId('customer_dest'),
+        position: LatLng(custLat, custLng),
+        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
+        infoWindow: InfoWindow(
+          title: 'Your Delivery Location',
+          snippet: order.deliveryAddress ?? 'Customer Address',
+        ),
+      ),
+    );
+
+    // 3. Rider Marker (shown when in transit or assigned)
+    if (order.status == 'Out for Delivery' || order.rider != null) {
+      markers.add(
+        Marker(
+          markerId: const MarkerId('rider_live'),
+          position: LatLng(riderLat, riderLng),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
+          infoWindow: InfoWindow(
+            title: '${order.rider?.name ?? "Delivery Rider"} (Live GPS)',
+            snippet: _liveEtaMinutes != null
+                ? 'Arriving in ~$_liveEtaMinutes min'
+                : 'En route to your doorstep',
+          ),
+        ),
+      );
+    }
+
+    return markers;
+  }
+
+  Set<Polyline> _buildMapPolylines(OrderModel order) {
+    final polylines = <Polyline>{};
+
+    final storeLat = order.storeLat ?? _defaultStoreLat;
+    final storeLng = order.storeLng ?? _defaultStoreLng;
+    final custLat = order.deliveryLat ?? _defaultCustLat;
+    final custLng = order.deliveryLng ?? _defaultCustLng;
+    final riderLat = _riderLat ?? order.rider?.lat;
+    final riderLng = _riderLng ?? order.rider?.lng;
+
+    final points = <LatLng>[
+      LatLng(storeLat, storeLng),
+      if (riderLat != null && riderLng != null) LatLng(riderLat, riderLng),
+      LatLng(custLat, custLng),
+    ];
+
+    polylines.add(
+      Polyline(
+        polylineId: const PolylineId('order_delivery_route'),
+        points: points,
+        color: AppColors.primaryMaroon,
+        width: 4,
+        jointType: JointType.round,
+        startCap: Cap.roundCap,
+        endCap: Cap.roundCap,
+      ),
+    );
+
+    return polylines;
+  }
+
+  void _initSocket() {
+    try {
+      final socketUri = ApiEndpoints.socketUrl;
+      debugPrint('[Customer Tracking] Connecting to Socket.IO at $socketUri for order ${widget.orderId}');
+      _socket = IO.io(
+        socketUri,
+        IO.OptionBuilder()
+            .setTransports(['websocket', 'polling'])
+            .disableAutoConnect()
+            .enableReconnection()
+            .setReconnectionAttempts(10)
+            .setReconnectionDelay(2000)
+            .build(),
+      );
+
+      _socket?.connect();
+
+      _socket?.onConnect((_) {
+        debugPrint('[Customer Tracking] Connected to real-time telemetry socket');
+        if (mounted) setState(() => _socketConnected = true);
+        _socket?.emit('join:order', widget.orderId);
+        _socket?.emit('join', 'order:${widget.orderId}');
+      });
+
+      _socket?.onDisconnect((_) {
+        debugPrint('[Customer Tracking] Disconnected from telemetry socket');
+        if (mounted) setState(() => _socketConnected = false);
+      });
+
+      _socket?.on('rider:location:update', (data) {
+        _handleRiderLocationPayload(data);
+      });
+
+      _socket?.on('rider:location_changed', (data) {
+        _handleRiderLocationPayload(data);
+      });
+
+      _socket?.on('order:status_updated', (_) {
+        _fetchLiveOrderDetails();
+      });
+    } catch (e) {
+      debugPrint('[Customer Tracking] Socket initialization error: $e');
+    }
+  }
+
+  void _handleRiderLocationPayload(dynamic data) {
+    if (data == null || !mounted) return;
+    try {
+      final map = data is Map ? data : Map<String, dynamic>.from(data);
+      final lat = (map['latitude'] ?? map['lat'] as num?)?.toDouble();
+      final lng = (map['longitude'] ?? map['lng'] as num?)?.toDouble();
+      final eta = (map['etaMinutes'] as num?)?.toInt();
+      final dist = (map['roadDistanceKm'] as num?)?.toDouble();
+
+      setState(() {
+        if (lat != null && lng != null) {
+          _riderLat = lat;
+          _riderLng = lng;
+        }
+        if (eta != null) _liveEtaMinutes = eta;
+        if (dist != null) _liveRoadDistanceKm = dist;
+      });
+
+      if (_mapController != null && lat != null && lng != null) {
+        _mapController?.animateCamera(
+          CameraUpdate.newLatLng(LatLng(lat, lng)),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Customer Tracking] Payload error: $e');
+    }
+  }
+
+  Future<void> _openGoogleMapsDirections({double? destLat, double? destLng}) async {
+    final lat = destLat ?? _defaultCustLat;
+    final lng = destLng ?? _defaultCustLng;
+    final uri = Uri.parse('https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=two-wheeler');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Opening Google Maps Route to: $lat, $lng')),
+        );
+      }
+    }
   }
 
   Map<String, String> _getEtaDisplayInfo(OrderModel order) {
@@ -418,9 +610,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                 const SizedBox(height: AppDimensions.spaceMd),
               ],
 
-              // 2. Google Maps Live Route Radar matching website GoogleLiveMap.tsx
+              // 2. Interactive Google Maps Live Tracking Card
               Container(
-                height: 220,
+                height: 250,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
                   borderRadius: AppDimensions.roundedLg,
@@ -431,204 +623,88 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                   borderRadius: AppDimensions.roundedLg,
                   child: Stack(
                     children: [
-                      // City Map Grid
-                      Positioned.fill(
-                        child: CustomPaint(painter: _MapGridPainter()),
-                      ),
-
-                      // Radar waves (active while in transit)
-                      if (status != 'Delivered')
-                        Center(
-                          child: AnimatedBuilder(
-                            animation: _pulseAnimation,
-                            builder: (context, child) {
-                              return Transform.scale(
-                                scale: _pulseAnimation.value,
-                                child: Container(
-                                  width: 140,
-                                  height: 140,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: Colors.amber.withOpacity(0.35), width: 2),
-                                  ),
-                                ),
-                              );
-                            },
+                      // Google Maps Platform View
+                      GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: LatLng(
+                            _riderLat ?? order.deliveryLat ?? _defaultStoreLat,
+                            _riderLng ?? order.deliveryLng ?? _defaultStoreLng,
                           ),
+                          zoom: 13.5,
                         ),
-
-                      // Connecting Route Polyline
-                      Positioned.fill(
-                        child: CustomPaint(painter: _RoutePolylinePainter()),
+                        markers: _buildMapMarkers(order),
+                        polylines: _buildMapPolylines(order),
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled: false,
+                        mapToolbarEnabled: false,
+                        compassEnabled: true,
+                        onMapCreated: (controller) {
+                          _mapController = controller;
+                        },
                       ),
 
-                      // Store Marker (Origin)
-                      Positioned(
-                        left: 18,
-                        bottom: 24,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(
-                                color: AppColors.primaryMaroon,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                              ),
-                              child: const Icon(Icons.storefront_rounded, color: Colors.white, size: 16),
-                            ),
-                            const SizedBox(height: 3),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(4),
-                                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
-                              ),
-                              child: Text(order.storeName ?? 'Kishore Ganj Hub', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Center Marker: Store Counter (Pickup) vs Moving Rider (Delivery)
-                      Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: status == 'Delivered'
-                                    ? AppColors.hygieneEmerald
-                                    : (order.isPickup && status == 'Ready')
-                                        ? AppColors.hygieneEmerald
-                                        : Colors.amber.shade600,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2.5),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: (status == 'Delivered' || (order.isPickup && status == 'Ready')
-                                            ? Colors.green
-                                            : Colors.amber)
-                                        .withOpacity(0.5),
-                                    blurRadius: 10,
-                                    spreadRadius: 3,
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                status == 'Delivered'
-                                    ? Icons.check_circle_rounded
-                                    : order.isPickup
-                                        ? Icons.storefront_rounded
-                                        : Icons.two_wheeler_rounded,
-                                color: Colors.white,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: status == 'Delivered'
-                                    ? AppColors.hygieneLight
-                                    : (order.isPickup && status == 'Ready')
-                                        ? AppColors.hygieneLight
-                                        : Colors.amber.shade100,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: status == 'Delivered'
-                                      ? AppColors.hygieneDark.withOpacity(0.3)
-                                      : (order.isPickup && status == 'Ready')
-                                          ? AppColors.hygieneDark.withOpacity(0.3)
-                                          : Colors.amber.shade300,
-                                ),
-                              ),
-                              child: Text(
-                                status == 'Delivered'
-                                    ? (order.isPickup ? 'Picked Up from Counter' : 'Order Delivered')
-                                    : order.isPickup
-                                        ? (status == 'Ready' ? 'Ready at Takeaway Counter' : 'Preparing at Store Counter')
-                                        : '${order.rider?.name ?? "Rider"} is here',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  fontSize: 10,
-                                  color: status == 'Delivered' || (order.isPickup && status == 'Ready')
-                                      ? AppColors.hygieneDark
-                                      : const Color(0xFF78350F),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Destination Marker (Customer Kitchen)
-                      Positioned(
-                        right: 18,
-                        top: 24,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(7),
-                              decoration: BoxDecoration(
-                                color: AppColors.hygieneEmerald,
-                                shape: BoxShape.circle,
-                                border: Border.all(color: Colors.white, width: 2),
-                                boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
-                              ),
-                              child: const Icon(Icons.home_rounded, color: Colors.white, size: 16),
-                            ),
-                            const SizedBox(height: 3),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(4),
-                                boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 2)],
-                              ),
-                              child: const Text('Your Kitchen', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold)),
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      // Top Left GPS / Temp Badge
+                      // Top Left Telemetry Status & Socket.IO Indicator
                       Positioned(
                         top: 10,
                         left: 10,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.92),
-                            borderRadius: BorderRadius.circular(6),
+                            color: Colors.white.withOpacity(0.95),
+                            borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: AppColors.borderHairline),
+                            boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
                           ),
                           child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
                                 width: 8,
                                 height: 8,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.hygieneEmerald,
+                                decoration: BoxDecoration(
+                                  color: _socketConnected ? AppColors.hygieneEmerald : Colors.amber.shade700,
                                   shape: BoxShape.circle,
                                 ),
                               ),
                               const SizedBox(width: 6),
                               Text(
-                                'Live GPS · ${order.status} (${order.isPickup ? "Store Takeaway Counter" : "Insulated Fresh-Box"})',
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 9.5, color: AppColors.textPrimary),
+                                status == 'Out for Delivery'
+                                    ? 'Live GPS · ${_liveEtaMinutes ?? order.remainingTransitMinutes ?? 12} min'
+                                    : 'Live Order · $status',
+                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 10, color: AppColors.textPrimary),
                               ),
                             ],
                           ),
                         ),
                       ),
 
-                      // Bottom Right Google Maps Button
+                      // Bottom Left Live Road Distance Pill (Google Routes API)
+                      if (_liveRoadDistanceKm != null && status == 'Out for Delivery')
+                        Positioned(
+                          bottom: 10,
+                          left: 10,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryMaroon.withOpacity(0.92),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4)],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.two_wheeler_rounded, color: Colors.white, size: 13),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${_liveRoadDistanceKm!.toStringAsFixed(1)} km away',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+
+                      // Bottom Right External Navigation Action
                       Positioned(
                         bottom: 10,
                         right: 10,
@@ -637,12 +713,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             backgroundColor: Colors.white,
                             foregroundColor: AppColors.primaryMaroon,
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            elevation: 2,
+                            elevation: 3,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           ),
                           icon: const Icon(Icons.directions_rounded, size: 14, color: AppColors.primaryMaroon),
-                          label: const Text('Google Maps Route', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10.5)),
-                          onPressed: _openGoogleMapsDirections,
+                          label: const Text('Google Maps', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 10.5)),
+                          onPressed: () => _openGoogleMapsDirections(
+                            destLat: order.deliveryLat ?? _defaultCustLat,
+                            destLng: order.deliveryLng ?? _defaultCustLng,
+                          ),
                         ),
                       ),
                     ],
@@ -1017,54 +1096,4 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       ],
     );
   }
-}
-
-class _MapGridPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = const Color(0xFFCBD5E1).withOpacity(0.5)
-      ..strokeWidth = 1;
-
-    for (double x = 0; x < size.width; x += 28) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), paint);
-    }
-    for (double y = 0; y < size.height; y += 28) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
-}
-
-class _RoutePolylinePainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(size.width * 0.15, size.height * 0.8)
-      ..quadraticBezierTo(
-        size.width * 0.35,
-        size.height * 0.6,
-        size.width * 0.5,
-        size.height * 0.5,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.65,
-        size.height * 0.4,
-        size.width * 0.85,
-        size.height * 0.22,
-      );
-
-    final linePaint = Paint()
-      ..color = AppColors.primaryMaroon
-      ..strokeWidth = 3.5
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    canvas.drawPath(path, linePaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

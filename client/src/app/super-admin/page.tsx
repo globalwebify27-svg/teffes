@@ -225,6 +225,7 @@ function StoresTab() {
     phone: "",
     address: "",
     city: "Ranchi",
+    image: "",
     timings: "08:00 AM - 08:00 PM",
     status: "Active",
     pickupEnabled: true,
@@ -244,13 +245,21 @@ function StoresTab() {
     }
     setSubmitting(true);
     try {
-      const storeId = `S00${stores.length + 1}`;
+      let maxNum = 0;
+      stores.forEach((s) => {
+        const match = (s.storeId || "").match(/^S(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+      const storeId = `S${String(maxNum + 1).padStart(3, "0")}`;
       await api.post("/super-admin/stores", { storeId, ...newStore });
       fetchStores();
       setShowAddStoreModal(false);
       setNewStore(initialStoreForm);
-    } catch (err) {
-      alert("Failed to create store");
+    } catch (err: any) {
+      alert(err.response?.data?.message || "Failed to create store");
     } finally {
       setSubmitting(false);
     }
@@ -269,6 +278,7 @@ function StoresTab() {
         phone: editingStore.phone,
         address: editingStore.address,
         city: editingStore.city,
+        image: editingStore.image || "",
         timings: editingStore.timings,
         status: editingStore.status,
         pickupEnabled: editingStore.pickupEnabled,
@@ -311,7 +321,7 @@ function StoresTab() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
-                {["Store ID", "Name", "City", "Store Admin", "Today's Orders", "Phone", "Status", "Actions"].map(h => (
+                {["Store ID", "Photo", "Name", "City", "Store Admin", "Today's Orders", "Phone", "Status", "Actions"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "#423b32", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -320,6 +330,19 @@ function StoresTab() {
               {stores.map((s, i) => (
                 <tr key={s.storeId || s.id} style={{ borderBottom: i < stores.length - 1 ? "1px solid #ede8e0" : "none" }}>
                   <td style={{ padding: "14px 16px", color: "#73695b", fontWeight: 600 }}>{s.storeId || s.id}</td>
+                  <td style={{ padding: "14px 16px" }}>
+                    {s.image ? (
+                      <img
+                        src={s.image}
+                        alt={s.name}
+                        style={{ width: "38px", height: "38px", borderRadius: "8px", objectFit: "cover", border: "1px solid #e2e8f0" }}
+                      />
+                    ) : (
+                      <div style={{ width: "38px", height: "38px", borderRadius: "8px", background: "#f1f5f9", display: "flex", alignItems: "center", justifyContent: "center", color: "#94a3b8" }}>
+                        <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>store</span>
+                      </div>
+                    )}
+                  </td>
                   <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{s.name}</td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{s.city}</td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{s.admin || "—"}</td>
@@ -336,6 +359,7 @@ function StoresTab() {
                             phone: s.phone || "",
                             address: s.address || "",
                             city: s.city || "Ranchi",
+                            image: s.image || "",
                             timings: s.timings || "08:00 AM - 08:00 PM",
                             status: s.status || "Active",
                             pickupEnabled: s.pickupEnabled !== false,
@@ -440,6 +464,22 @@ function StoresTab() {
                     <option value="Inactive">Inactive</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Store Photo / Image URL</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/... or direct image link"
+                  value={newStore.image || ""}
+                  onChange={e => setNewStore({ ...newStore, image: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+                {newStore.image && newStore.image.trim() !== "" && (
+                  <div style={{ marginTop: "8px", width: "100%", height: "100px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
+                    <img src={newStore.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                )}
               </div>
 
               <div style={{ display: "flex", gap: "20px", marginTop: "4px" }}>
@@ -553,6 +593,22 @@ function StoresTab() {
                     <option value="Inactive">Inactive</option>
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Store Photo / Image URL</label>
+                <input
+                  type="url"
+                  placeholder="https://images.unsplash.com/... or direct image link"
+                  value={editingStore.image || ""}
+                  onChange={e => setEditingStore({ ...editingStore, image: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+                {editingStore.image && editingStore.image.trim() !== "" && (
+                  <div style={{ marginTop: "8px", width: "100%", height: "100px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
+                    <img src={editingStore.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  </div>
+                )}
               </div>
 
               <div style={{ display: "flex", gap: "20px", marginTop: "4px" }}>
@@ -2254,12 +2310,13 @@ function CategoriesTab() {
     setSubmitting(true);
     try {
       const slug = newCat.name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const maxOrder = categories.reduce((max, c) => Math.max(max, Number(c.order) || 0), 0);
       await api.post("/super-admin/categories", {
         name: newCat.name.trim(),
         slug,
         tagline: newCat.tagline,
         image: newCat.image,
-        order: Number(newCat.order) || (categories.length + 1),
+        order: Number(newCat.order) || (maxOrder + 1),
         isActive: newCat.isActive,
       });
       fetchCategories();
@@ -2270,7 +2327,7 @@ function CategoriesTab() {
         tagline: "",
         icon: "",
         image: "",
-        order: categories.length + 2,
+        order: maxOrder + 2,
         isActive: true,
       });
     } catch (err: any) {
@@ -2339,7 +2396,7 @@ function CategoriesTab() {
               tagline: "",
               icon: "",
               image: "",
-              order: categories.length + 1,
+              order: categories.reduce((max, c) => Math.max(max, Number(c.order) || 0), 0) + 1,
               isActive: true,
             });
             setShowAddModal(true);
@@ -3519,18 +3576,28 @@ function CustomersTab() {
 function CouponsTab() {
   const [coupons, setCoupons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showAddCouponModal, setShowAddCouponModal] = useState(false);
-  const [newCoupon, setNewCoupon] = useState({
-    code: "",
-    discount: "",
-    discountType: "percentage",
-    discountValue: 20,
-    minOrder: 399,
-    validTill: "2026-12-31",
-    isSuperOffer: false,
-  });
+  const [showModal, setShowModal] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [validationError, setValidationError] = useState<string>("");
+
+  const defaultCouponForm = {
+    code: "",
+    discountType: "percentage",
+    discountValue: 20,
+    minOrderAmount: 399,
+    maxDiscountAmount: 100 as number | string,
+    validFrom: new Date().toISOString().slice(0, 10),
+    validTill: "2026-12-31",
+    firstOrderOnly: false,
+    usageLimit: "" as number | string,
+    description: "",
+    isSuperOffer: false,
+    isActive: true,
+  };
+
+  const [formData, setFormData] = useState(defaultCouponForm);
 
   const fetchCoupons = () => {
     setLoading(true);
@@ -3548,14 +3615,128 @@ function CouponsTab() {
     fetchCoupons();
   }, []);
 
+  const openCreateModal = () => {
+    setEditingCoupon(null);
+    setValidationError("");
+    setFormData(defaultCouponForm);
+    setShowModal(true);
+  };
+
+  const openEditModal = (coupon: any) => {
+    setEditingCoupon(coupon);
+    setValidationError("");
+    const fromStr = coupon.validFrom ? new Date(coupon.validFrom).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+    const tillStr = coupon.validTill ? new Date(coupon.validTill).toISOString().slice(0, 10) : "2026-12-31";
+    setFormData({
+      code: coupon.code || "",
+      discountType: coupon.discountType || "percentage",
+      discountValue: coupon.discountValue !== undefined ? coupon.discountValue : 20,
+      minOrderAmount: coupon.minOrderAmount !== undefined ? coupon.minOrderAmount : (coupon.minOrder || 0),
+      maxDiscountAmount: coupon.maxDiscountAmount !== undefined && coupon.maxDiscountAmount !== null ? coupon.maxDiscountAmount : "",
+      validFrom: fromStr,
+      validTill: tillStr,
+      firstOrderOnly: Boolean(coupon.firstOrderOnly),
+      usageLimit: coupon.usageLimit !== undefined && coupon.usageLimit !== null ? coupon.usageLimit : "",
+      description: coupon.description || coupon.discount || "",
+      isSuperOffer: Boolean(coupon.isSuperOffer),
+      isActive: coupon.isActive !== false && coupon.status !== "Paused",
+    });
+    setShowModal(true);
+  };
+
+  const handleSaveCoupon = async () => {
+    setValidationError("");
+    const cleanCode = formData.code.trim().toUpperCase();
+    if (!cleanCode) {
+      setValidationError("Promo Code is required.");
+      return;
+    }
+    const val = Number(formData.discountValue);
+    if (isNaN(val) || val <= 0) {
+      setValidationError("Discount value must be greater than 0.");
+      return;
+    }
+    if (formData.discountType === "percentage" && (val < 1 || val > 100)) {
+      setValidationError("Percentage discount must be between 1 and 100.");
+      return;
+    }
+    const minOrder = Number(formData.minOrderAmount) || 0;
+    if (minOrder < 0) {
+      setValidationError("Minimum order amount cannot be negative.");
+      return;
+    }
+    const maxDiscount = formData.maxDiscountAmount !== "" && formData.maxDiscountAmount !== null
+      ? Number(formData.maxDiscountAmount)
+      : null;
+    if (maxDiscount !== null && maxDiscount < 0) {
+      setValidationError("Maximum discount cannot be negative.");
+      return;
+    }
+    if (!formData.validTill) {
+      setValidationError("Valid Till date is required.");
+      return;
+    }
+    if (new Date(formData.validTill) < new Date(formData.validFrom)) {
+      setValidationError("Valid Till cannot be before Valid From.");
+      return;
+    }
+    const limit = formData.usageLimit !== "" && formData.usageLimit !== null
+      ? Number(formData.usageLimit)
+      : null;
+    if (limit !== null && limit < 0) {
+      setValidationError("Usage limit cannot be negative.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        code: cleanCode,
+        discountType: formData.discountType,
+        discountValue: val,
+        minOrderAmount: minOrder,
+        minOrder: minOrder,
+        maxDiscountAmount: maxDiscount,
+        validFrom: formData.validFrom,
+        validTill: formData.validTill,
+        firstOrderOnly: Boolean(formData.firstOrderOnly),
+        usageLimit: limit,
+        description: formData.description.trim(),
+        discount: formData.description.trim(),
+        isSuperOffer: Boolean(formData.isSuperOffer),
+        isActive: Boolean(formData.isActive),
+        status: formData.isActive ? "Active" : "Paused",
+      };
+
+      if (editingCoupon) {
+        const id = editingCoupon._id || editingCoupon.id;
+        await api.put(`/super-admin/coupons/${id}`, payload);
+        toast.success(`Coupon "${cleanCode}" updated successfully!`, "Coupon Updated");
+      } else {
+        await api.post("/super-admin/coupons", payload);
+        toast.success(`Coupon "${cleanCode}" created successfully!`, "Coupon Created");
+      }
+
+      fetchCoupons();
+      setShowModal(false);
+    } catch (err: any) {
+      const msg = err.response?.data?.message || err.message || "Failed to save coupon";
+      setValidationError(msg);
+      toast.error(msg, "Coupon Error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleSetSuperOffer = async (coupon: any) => {
     const couponId = coupon._id || coupon.id;
     setActionLoading(couponId);
     try {
       await api.put(`/super-admin/coupons/${couponId}/super-offer`);
+      toast.success(`Coupon "${coupon.code}" set as platform Super Offer!`, "Super Offer Active");
       fetchCoupons();
     } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to set Super Offer");
+      toast.error(err.response?.data?.message || "Failed to set Super Offer", "Update Error");
     } finally {
       setActionLoading(null);
     }
@@ -3563,15 +3744,18 @@ function CouponsTab() {
 
   const handleToggleStatus = async (coupon: any) => {
     const couponId = coupon._id || coupon.id;
-    const nextStatus = coupon.status === "Active" ? "Expired" : "Active";
+    const currentlyActive = coupon.isActive !== false && coupon.status === "Active";
+    const nextActive = !currentlyActive;
     setActionLoading(couponId);
     try {
       await api.put(`/super-admin/coupons/${couponId}`, {
-        status: nextStatus,
+        isActive: nextActive,
+        status: nextActive ? "Active" : "Paused",
       });
+      toast.success(`Coupon "${coupon.code}" is now ${nextActive ? "Active" : "Disabled"}.`);
       fetchCoupons();
-    } catch (err) {
-      alert("Failed to update coupon status");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update status");
     } finally {
       setActionLoading(null);
     }
@@ -3581,7 +3765,7 @@ function CouponsTab() {
     const couponId = coupon._id || coupon.id;
     toast.confirm({
       title: "Delete Coupon?",
-      message: `Are you sure you want to permanently delete coupon "${coupon.code}"?\n\nThis will immediately remove it from the website Offers page and Customer App.`,
+      message: `Are you sure you want to permanently delete coupon "${coupon.code}"?\n\nThis will immediately remove it from the customer app and website.`,
       confirmText: "Delete Coupon",
       type: "danger",
       onConfirm: async () => {
@@ -3599,53 +3783,12 @@ function CouponsTab() {
     });
   };
 
-  const handleAddCoupon = async () => {
-    if (!newCoupon.code.trim()) {
-      alert("Please enter a promo code");
-      return;
-    }
-    setSubmitting(true);
-    try {
-      const defaultDesc = newCoupon.discountType === 'percentage'
-        ? `${newCoupon.discountValue}% instant discount on orders above ₹${newCoupon.minOrder}`
-        : newCoupon.discountType === 'free_delivery'
-          ? `100% Free express delivery on orders above ₹${newCoupon.minOrder}`
-          : `₹${newCoupon.discountValue} flat off on orders above ₹${newCoupon.minOrder}`;
-
-      await api.post("/super-admin/coupons", {
-        code: newCoupon.code.toUpperCase().trim(),
-        discount: newCoupon.discount.trim() || defaultDesc,
-        discountType: newCoupon.discountType,
-        discountValue: Number(newCoupon.discountValue) || 0,
-        minOrder: Number(newCoupon.minOrder) || 0,
-        validTill: newCoupon.validTill || "2026-12-31",
-        isSuperOffer: Boolean(newCoupon.isSuperOffer),
-        status: "Active",
-      });
-      fetchCoupons();
-      setShowAddCouponModal(false);
-      setNewCoupon({
-        code: "",
-        discount: "",
-        discountType: "percentage",
-        discountValue: 20,
-        minOrder: 399,
-        validTill: "2026-12-31",
-        isSuperOffer: false,
-      });
-    } catch (err: any) {
-      alert(err.response?.data?.message || "Failed to add coupon");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <SectionTitle title="Coupons & Offers" sub="Manage promotional discount codes visible on website & customer app" />
-        <button onClick={() => setShowAddCouponModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>
-          + Create Coupon
+        <SectionTitle title="Coupons & Promo Codes" sub="Full lifecycle promo engine for discounts, first-order deals & Super Offers" />
+        <button onClick={openCreateModal} className="btn btn-primary" style={{ fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "6px" }}>
+          <FontAwesomeIcon icon={faTicket} /> Create New Coupon
         </button>
       </div>
 
@@ -3655,19 +3798,17 @@ function CouponsTab() {
         borderRadius: "12px",
         padding: "12px 16px",
         marginBottom: "24px",
-        fontSize: "0.8rem",
+        fontSize: "0.82rem",
         color: "#92400e",
         display: "flex",
         alignItems: "center",
         gap: "10px"
       }}>
-        <span style={{ fontSize: "1.1rem", color: "#f59e0b" }}>
+        <span style={{ fontSize: "1.2rem", color: "#f59e0b" }}>
           <FontAwesomeIcon icon={faStar} />
         </span>
         <div>
-          <strong>Super Offer System:</strong> Whichever offer is marked with <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> is featured platform-wide across:
-          (1) <strong>Announcement Bar</strong> (above navbar), (2) <strong>Home Page</strong> celebration ribbon, and (3) <strong>Offers Page</strong> banner.
-          If no offer is manually selected, the <strong>first latest active offer</strong> is automatically designated as the Super Offer.
+          <strong>Super Offer Engine:</strong> Designating a coupon as Super Offer highlights it across the <strong>Top Announcement Bar</strong>, <strong>Home Celebration Ribbon</strong>, and <strong>Offers Page</strong>. Coupons require explicit customer Claim/Apply and are revalidated on backend during order placement.
         </div>
       </div>
 
@@ -3675,32 +3816,34 @@ function CouponsTab() {
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading coupons…</div>
       ) : coupons.length === 0 ? (
         <div style={{ padding: "48px", textAlign: "center", background: "#fff", borderRadius: "16px", border: "1px dashed #d1cbbf" }}>
-          <div style={{ fontSize: "2rem", marginBottom: "8px", color: "#941717" }}>
+          <div style={{ fontSize: "2.5rem", marginBottom: "8px", color: "#941717" }}>
             <FontAwesomeIcon icon={faTicket} />
           </div>
           <div style={{ fontWeight: 700, color: "#171410", marginBottom: "4px" }}>No Coupons Created Yet</div>
-          <p style={{ color: "#73695b", fontSize: "0.85rem", marginBottom: "16px" }}>Create your first promotional code to display on the customer app and website offers page.</p>
-          <button onClick={() => setShowAddCouponModal(true)} className="btn btn-primary" style={{ fontSize: "0.85rem" }}>
+          <p style={{ color: "#73695b", fontSize: "0.85rem", marginBottom: "16px" }}>Create promo codes with min order limits, percentage caps, and first-order validation.</p>
+          <button onClick={openCreateModal} className="btn btn-primary" style={{ fontSize: "0.85rem" }}>
             + Create Coupon
           </button>
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "18px" }}>
-          {coupons.map((c, idx) => {
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: "18px" }}>
+          {coupons.map((c) => {
             const couponId = c._id || c.id;
             const isBusy = actionLoading === couponId;
-            const isActive = c.status === "Active";
-            // Check if this is super offer or automatic fallback
-            const hasAnyExplicitSuper = coupons.some(x => x.isSuperOffer && x.status === "Active");
-            const isEffectiveSuper = c.isSuperOffer || (!hasAnyExplicitSuper && isActive && idx === 0);
+            const isActive = c.isActive !== false && c.status === "Active";
+            const usageCount = c.usageCount !== undefined ? c.usageCount : (c.used || 0);
+            const usageLimit = c.usageLimit !== undefined && c.usageLimit !== null && c.usageLimit > 0 ? c.usageLimit : "Unlimited";
+            const isPercentage = c.discountType === "percentage";
+            const validTillDisplay = c.validTill ? new Date(c.validTill).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Open";
+            const validFromDisplay = c.validFrom ? new Date(c.validFrom).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" }) : "Immediate";
 
             return (
               <div key={couponId || c.code} style={{
                 background: "#fff",
-                border: isEffectiveSuper ? "2px solid #f59e0b" : "1px solid #ede8e0",
+                border: c.isSuperOffer ? "2px solid #f59e0b" : "1px solid #ede8e0",
                 borderRadius: "16px",
                 padding: "20px",
-                boxShadow: isEffectiveSuper ? "0 4px 14px rgba(245, 158, 11, 0.15)" : "0 2px 8px rgba(0,0,0,0.02)",
+                boxShadow: c.isSuperOffer ? "0 4px 14px rgba(245, 158, 11, 0.15)" : "0 2px 8px rgba(0,0,0,0.02)",
                 display: "flex",
                 flexDirection: "column",
                 justifyContent: "space-between",
@@ -3711,7 +3854,7 @@ function CouponsTab() {
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", gap: "8px" }}>
                     <div>
                       <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", marginBottom: "4px" }}>
-                        <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "#941717", fontFamily: "Outfit, sans-serif", letterSpacing: "1px" }}>
+                        <span style={{ fontSize: "1.25rem", fontWeight: 900, color: "#941717", fontFamily: "Outfit, sans-serif", letterSpacing: "1px" }}>
                           {c.code}
                         </span>
                         <span style={{
@@ -3720,13 +3863,25 @@ function CouponsTab() {
                           textTransform: "uppercase",
                           padding: "2px 7px",
                           borderRadius: "6px",
-                          background: "#f1ede6",
-                          color: "#574e42"
+                          background: isPercentage ? "#eef2ff" : "#f0fdf4",
+                          color: isPercentage ? "#4338ca" : "#15803d"
                         }}>
-                          {c.discountType === "percentage" ? "Percentage" : c.discountType === "free_delivery" ? "Free Delivery" : "Flat Cash"}
+                          {isPercentage ? `${c.discountValue}% OFF` : c.discountType === "free_delivery" ? "Free Delivery" : `₹${c.discountValue} OFF`}
                         </span>
+                        {c.firstOrderOnly && (
+                          <span style={{
+                            fontSize: "0.68rem",
+                            fontWeight: 800,
+                            padding: "2px 7px",
+                            borderRadius: "6px",
+                            background: "#fef3c7",
+                            color: "#92400e"
+                          }}>
+                            1st Order
+                          </span>
+                        )}
                       </div>
-                      {isEffectiveSuper && (
+                      {c.isSuperOffer && (
                         <div style={{
                           background: "#fef3c7",
                           color: "#92400e",
@@ -3740,28 +3895,27 @@ function CouponsTab() {
                           gap: "5px",
                           marginTop: "2px"
                         }}>
-                          <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Active Super Offer {c.isSuperOffer ? "(Admin Selected)" : "(Latest Fallback)"}
+                          <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Super Offer
                         </div>
                       )}
                     </div>
-                    <Badge label={c.status} color={isActive ? "#059669" : "#dc2626"} />
+                    <Badge label={isActive ? "Active" : "Disabled"} color={isActive ? "#059669" : "#dc2626"} />
                   </div>
 
-                  <div style={{ color: "#171410", fontSize: "0.9rem", fontWeight: 600, marginBottom: "8px", lineHeight: "1.35" }}>
-                    {c.discount}
+                  <div style={{ color: "#171410", fontSize: "0.88rem", fontWeight: 600, marginBottom: "10px", lineHeight: "1.35" }}>
+                    {c.description || c.discount || `${c.discountValue}${isPercentage ? "%" : "₹"} discount on orders above ₹${c.minOrderAmount || c.minOrder || 0}`}
                   </div>
 
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: "10px", fontSize: "0.76rem", color: "#73695b", background: "#faf8f5", padding: "8px 12px", borderRadius: "8px" }}>
-                    <span>Min Order: <strong>₹{c.minOrder || 0}</strong></span>
-                    <span>•</span>
-                    <span>Used: <strong>{c.used || 0} times</strong></span>
-                    <span>•</span>
-                    <span>Valid Till: <strong>{c.validTill || "Open"}</strong></span>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px", fontSize: "0.75rem", color: "#574e42", background: "#faf8f5", padding: "10px 12px", borderRadius: "10px" }}>
+                    <div>Min Order: <strong>₹{c.minOrderAmount !== undefined ? c.minOrderAmount : (c.minOrder || 0)}</strong></div>
+                    <div>Max Cap: <strong>{c.maxDiscountAmount ? `₹${c.maxDiscountAmount}` : "No Limit"}</strong></div>
+                    <div>Valid Till: <strong>{validTillDisplay}</strong></div>
+                    <div>Usage: <strong>{usageCount} / {usageLimit}</strong></div>
                   </div>
                 </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: "10px", paddingTop: "12px", borderTop: "1px solid #f1ede6" }}>
-                  {isActive && !c.isSuperOffer && (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", paddingTop: "12px", borderTop: "1px solid #f1ede6" }}>
+                  {!c.isSuperOffer && isActive && (
                     <button
                       onClick={() => handleSetSuperOffer(c)}
                       disabled={isBusy}
@@ -3770,7 +3924,7 @@ function CouponsTab() {
                         color: "#b45309",
                         border: "1px solid #fcd34d",
                         borderRadius: "8px",
-                        padding: "7px 12px",
+                        padding: "6px 12px",
                         fontSize: "0.75rem",
                         fontWeight: 700,
                         cursor: isBusy ? "not-allowed" : "pointer",
@@ -3780,12 +3934,12 @@ function CouponsTab() {
                         gap: "6px"
                       }}
                     >
-                      <FontAwesomeIcon icon={faStar} style={{ fontSize: "13px" }} />
+                      <FontAwesomeIcon icon={faStar} style={{ fontSize: "12px" }} />
                       <span>Set as Super Offer</span>
                     </button>
                   )}
 
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
                     <button
                       onClick={() => handleToggleStatus(c)}
                       disabled={isBusy}
@@ -3800,14 +3954,33 @@ function CouponsTab() {
                         cursor: isBusy ? "not-allowed" : "pointer"
                       }}
                     >
-                      {isBusy ? "Updating…" : isActive ? "Mark Expired" : "Mark Active"}
+                      {isBusy ? "Updating…" : isActive ? "Disable" : "Enable"}
                     </button>
 
-                    <AdminDeleteButton
-                      onClick={() => handleDeleteCoupon(c)}
-                      disabled={isBusy}
-                      title="Delete Coupon"
-                    />
+                    <div style={{ display: "flex", gap: "6px" }}>
+                      <button
+                        onClick={() => openEditModal(c)}
+                        disabled={isBusy}
+                        style={{
+                          background: "#f8fafc",
+                          color: "#334155",
+                          border: "1px solid #cbd5e1",
+                          borderRadius: "8px",
+                          padding: "6px 12px",
+                          fontSize: "0.75rem",
+                          fontWeight: 700,
+                          cursor: isBusy ? "not-allowed" : "pointer"
+                        }}
+                      >
+                        Edit
+                      </button>
+
+                      <AdminDeleteButton
+                        onClick={() => handleDeleteCoupon(c)}
+                        disabled={isBusy}
+                        title="Delete Coupon"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3816,110 +3989,177 @@ function CouponsTab() {
         </div>
       )}
 
-      {/* ─── ADD COUPON MODAL ─── */}
-      {showAddCouponModal && (
+      {/* ─── CREATE / EDIT COUPON MODAL ─── */}
+      {showModal && (
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
           background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
         }}>
-          <div style={{ background: "#fff", padding: "28px", borderRadius: "18px", width: "100%", maxWidth: "460px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+          <div style={{ background: "#fff", padding: "26px", borderRadius: "18px", width: "100%", maxWidth: "520px", maxHeight: "92vh", overflowY: "auto", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px" }}>
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
-                <FontAwesomeIcon icon={faTicket} style={{ color: "#941717" }} /> Create New Coupon
+                <FontAwesomeIcon icon={faTicket} style={{ color: "#941717" }} /> {editingCoupon ? "Edit Coupon" : "Create New Coupon"}
               </h3>
-              <button onClick={() => setShowAddCouponModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
+            {validationError && (
+              <div style={{ background: "#fef2f2", border: "1px solid #fecaca", color: "#dc2626", padding: "10px 14px", borderRadius: "8px", fontSize: "0.82rem", fontWeight: 700, marginBottom: "14px" }}>
+                {validationError}
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "20px" }}>
+              {/* Promo Code */}
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Promo Code *</label>
                 <input
                   type="text"
                   placeholder="e.g. MEAT25"
-                  value={newCoupon.code}
-                  onChange={e => setNewCoupon({ ...newCoupon, code: e.target.value.toUpperCase() })}
+                  value={formData.code}
+                  onChange={e => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.95rem", fontWeight: 800, letterSpacing: "1px", boxSizing: "border-box" }}
                 />
               </div>
 
+              {/* Discount Type & Value */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Discount Type</label>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Discount Type *</label>
                   <select
-                    value={newCoupon.discountType}
-                    onChange={e => setNewCoupon({ ...newCoupon, discountType: e.target.value })}
+                    value={formData.discountType}
+                    onChange={e => setFormData({ ...formData, discountType: e.target.value })}
                     style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box", background: "#fff" }}
                   >
                     <option value="percentage">Percentage (%)</option>
-                    <option value="fixed">Flat Amount (₹)</option>
+                    <option value="fixed">Fixed Amount (₹)</option>
                     <option value="free_delivery">Free Delivery</option>
                   </select>
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
-                    {newCoupon.discountType === "percentage" ? "Percentage (%)" : "Discount (₹)"}
+                    {formData.discountType === "percentage" ? "Percentage (%) *" : "Discount Value (₹) *"}
                   </label>
                   <input
                     type="number"
-                    placeholder="20"
-                    value={newCoupon.discountValue}
-                    onChange={e => setNewCoupon({ ...newCoupon, discountValue: Number(e.target.value) })}
+                    placeholder={formData.discountType === "percentage" ? "20" : "100"}
+                    value={formData.discountValue}
+                    onChange={e => setFormData({ ...formData, discountValue: Number(e.target.value) })}
                     style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                   />
                 </div>
               </div>
 
+              {/* Min Order & Max Discount */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Min Order (₹)</label>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Minimum Order (₹)</label>
                   <input
                     type="number"
                     placeholder="399"
-                    value={newCoupon.minOrder}
-                    onChange={e => setNewCoupon({ ...newCoupon, minOrder: Number(e.target.value) })}
+                    value={formData.minOrderAmount}
+                    onChange={e => setFormData({ ...formData, minOrderAmount: Number(e.target.value) })}
                     style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Valid Till</label>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                    Max Discount Cap (₹)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder={formData.discountType === "percentage" ? "e.g. 100" : "Optional"}
+                    value={formData.maxDiscountAmount}
+                    onChange={e => setFormData({ ...formData, maxDiscountAmount: e.target.value === "" ? "" : Number(e.target.value) })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              {/* Validity Dates */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Valid From *</label>
                   <input
                     type="date"
-                    value={newCoupon.validTill}
-                    onChange={e => setNewCoupon({ ...newCoupon, validTill: e.target.value })}
+                    value={formData.validFrom}
+                    onChange={e => setFormData({ ...formData, validFrom: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Valid Till *</label>
+                  <input
+                    type="date"
+                    value={formData.validTill}
+                    onChange={e => setFormData({ ...formData, validTill: e.target.value })}
                     style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
                   />
                 </div>
               </div>
 
-              <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Display Description (Optional)</label>
-                <input
-                  type="text"
-                  placeholder="e.g. 20% instant discount on orders above ₹399"
-                  value={newCoupon.discount}
-                  onChange={e => setNewCoupon({ ...newCoupon, discount: e.target.value })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
-                />
+              {/* Usage Limit & Display Description */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Usage Limit</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 1000 (blank = ∞)"
+                    value={formData.usageLimit}
+                    onChange={e => setFormData({ ...formData, usageLimit: e.target.value === "" ? "" : Number(e.target.value) })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Display Description</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 20% instant discount on orders above ₹399"
+                    value={formData.description}
+                    onChange={e => setFormData({ ...formData, description: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#fffbeb", padding: "10px 12px", borderRadius: "8px", border: "1px solid #fef3c7" }}>
-                <input
-                  type="checkbox"
-                  id="makeSuperOffer"
-                  checked={Boolean(newCoupon.isSuperOffer)}
-                  onChange={e => setNewCoupon({ ...newCoupon, isSuperOffer: e.target.checked })}
-                  style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
-                />
-                <label htmlFor="makeSuperOffer" style={{ fontSize: "0.8rem", fontWeight: 700, color: "#92400e", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Set as Super Offer (Feature on Top Bar, Home Banner &amp; Offers Page)
+              {/* Toggles: First order only, Super Offer, Active/Enabled */}
+              <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, color: "#423b32" }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.firstOrderOnly}
+                    onChange={e => setFormData({ ...formData, firstOrderOnly: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <span>Only for first order (verified against user's actual order history)</span>
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, color: "#92400e", background: "#fffbeb", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fef3c7" }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.isSuperOffer}
+                    onChange={e => setFormData({ ...formData, isSuperOffer: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <span><FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Set as Super Offer (Feature on Top Bar, Home Banner &amp; Offers Page)</span>
+                </label>
+
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, color: "#15803d" }}>
+                  <input
+                    type="checkbox"
+                    checked={formData.isActive}
+                    onChange={e => setFormData({ ...formData, isActive: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "#15803d", cursor: "pointer" }}
+                  />
+                  <span>Coupon Active / Enabled</span>
                 </label>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-              <button className="btn" onClick={() => setShowAddCouponModal(false)} disabled={submitting} style={{ padding: "8px 16px", borderRadius: "8px" }}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleAddCoupon} disabled={submitting} style={{ padding: "8px 20px", borderRadius: "8px" }}>
-                {submitting ? "Creating…" : "Create Coupon"}
+              <button className="btn" onClick={() => setShowModal(false)} disabled={submitting} style={{ padding: "8px 16px", borderRadius: "8px" }}>Cancel</button>
+              <button className="btn btn-primary" onClick={handleSaveCoupon} disabled={submitting} style={{ padding: "8px 20px", borderRadius: "8px" }}>
+                {submitting ? "Saving…" : editingCoupon ? "Save Changes" : "Create Coupon"}
               </button>
             </div>
           </div>
@@ -4018,7 +4258,7 @@ function BannersTab() {
           title: "",
           image: "",
           link: "",
-          order: banners.length + 2,
+          order: banners.reduce((max, b) => Math.max(max, Number(b.order) || 0), 0) + 2,
           isActive: true,
         });
         fetchBanners();
@@ -4077,7 +4317,7 @@ function BannersTab() {
               title: "",
               image: "",
               link: "",
-              order: banners.length + 1,
+              order: banners.reduce((max, b) => Math.max(max, Number(b.order) || 0), 0) + 1,
               isActive: true,
             });
             setShowAddModal(true);

@@ -215,7 +215,10 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                                 itemBuilder: (context, index) {
                                   final media = mediaItems[index];
                                   if (media.type == ProductMediaType.video) {
-                                    return ProductVideoPlayer(videoUrl: media.url);
+                                    return ProductVideoPlayer(
+                                      videoUrl: media.url,
+                                      isActive: _selectedImageIndex == index,
+                                    );
                                   }
                                   return CachedNetworkImage(
                                     imageUrl: media.url,

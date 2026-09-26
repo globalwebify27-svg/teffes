@@ -52,21 +52,25 @@ class QuantityStepper extends StatelessWidget {
   }
 
   Widget _buildAddButton(BuildContext context) {
+    final double height = isCompact ? 28 : 34;
+    final double minWidth = isCompact ? 60 : 76;
+
     return InkWell(
       key: const ValueKey('add_btn'),
       onTap: onAdd,
       borderRadius: AppDimensions.roundedMd,
       child: Container(
+        height: height,
+        constraints: BoxConstraints(minWidth: minWidth),
         padding: EdgeInsets.symmetric(
-          horizontal: isCompact ? 12 : 16,
-          vertical: isCompact ? 6 : 7,
+          horizontal: isCompact ? 8 : 14,
         ),
         decoration: BoxDecoration(
           color: AppColors.primaryMaroon,
           borderRadius: AppDimensions.roundedMd,
           boxShadow: [
             BoxShadow(
-              color: AppColors.primaryMaroon.withOpacity(0.2),
+              color: AppColors.primaryMaroon.withValues(alpha: 0.2),
               blurRadius: 4,
               offset: const Offset(0, 2),
             ),
@@ -74,14 +78,16 @@ class QuantityStepper extends StatelessWidget {
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.add_rounded, size: 14, color: Colors.white),
-            const SizedBox(width: 3),
+            Icon(Icons.add_rounded, size: isCompact ? 13 : 14, color: Colors.white),
+            const SizedBox(width: 2),
             Text(
               'ADD',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
+                    fontSize: isCompact ? 11 : 12,
                     letterSpacing: 0.4,
                   ),
             ),
@@ -92,14 +98,19 @@ class QuantityStepper extends StatelessWidget {
   }
 
   Widget _buildStepper(BuildContext context) {
+    final double height = isCompact ? 28 : 34;
+    final double btnWidth = isCompact ? 20 : 26;
+    final double countWidth = isCompact ? 20 : 24;
+
     return Container(
       key: const ValueKey('stepper_btn'),
+      height: height,
       decoration: BoxDecoration(
         color: AppColors.primaryMaroon,
         borderRadius: AppDimensions.roundedMd,
         boxShadow: [
           BoxShadow(
-            color: AppColors.primaryMaroon.withOpacity(0.25),
+            color: AppColors.primaryMaroon.withValues(alpha: 0.25),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),
@@ -107,26 +118,33 @@ class QuantityStepper extends StatelessWidget {
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // Decrement button
           InkWell(
             onTap: onDecrement,
             borderRadius: const BorderRadius.horizontal(left: Radius.circular(AppDimensions.radiusMd)),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              child: Icon(Icons.remove_rounded, size: 15, color: Colors.white),
+            child: SizedBox(
+              width: btnWidth,
+              height: height,
+              child: Icon(
+                Icons.remove_rounded,
+                size: isCompact ? 13 : 16,
+                color: Colors.white,
+              ),
             ),
           ),
 
-          // Count
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4),
+          // Count (fixed width so 2 digits like 16 won't widen the pill)
+          SizedBox(
+            width: countWidth,
             child: Text(
               '$quantity',
-              style: const TextStyle(
+              textAlign: TextAlign.center,
+              style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w800,
-                fontSize: 13,
+                fontSize: isCompact ? (quantity >= 100 ? 10 : 11.5) : 13,
               ),
             ),
           ),
@@ -135,9 +153,14 @@ class QuantityStepper extends StatelessWidget {
           InkWell(
             onTap: onIncrement,
             borderRadius: const BorderRadius.horizontal(right: Radius.circular(AppDimensions.radiusMd)),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-              child: Icon(Icons.add_rounded, size: 15, color: Colors.white),
+            child: SizedBox(
+              width: btnWidth,
+              height: height,
+              child: Icon(
+                Icons.add_rounded,
+                size: isCompact ? 13 : 16,
+                color: Colors.white,
+              ),
             ),
           ),
         ],

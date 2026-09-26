@@ -37,10 +37,10 @@ export function getYouTubeVideoId(url: string | undefined | null): string | null
 /**
  * Generates an embedded YouTube URL with modest branding and privacy-enhanced domain.
  */
-export function getYouTubeEmbedUrl(url: string | undefined | null, autoPlay = false): string | null {
+export function getYouTubeEmbedUrl(url: string | undefined | null, autoPlay = true): string | null {
   const id = getYouTubeVideoId(url);
   if (!id) return null;
-  const autoPlayParam = autoPlay ? "&autoplay=1" : "";
+  const autoPlayParam = autoPlay ? "&autoplay=1&mute=1&playsinline=1" : "";
   return `https://www.youtube-nocookie.com/embed/${id}?rel=0&modestbranding=1&enablejsapi=1${autoPlayParam}`;
 }
 
