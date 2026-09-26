@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>TeFFe's Rider needs your location to update customers on delivery progress and calculate accurate arrival times.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>TeFFe's Rider tracks delivery routes in the background while orders are actively out for delivery.</string>
 </dict>
 </plist>
