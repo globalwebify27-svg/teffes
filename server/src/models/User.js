@@ -78,6 +78,8 @@ const userSchema = new mongoose.Schema(
         city: { type: String, default: 'Ranchi' },
         pincode: String,
         landmark: String,
+        latitude: { type: Number, default: null },
+        longitude: { type: Number, default: null },
         isDefault: { type: Boolean, default: false },
       },
     ],

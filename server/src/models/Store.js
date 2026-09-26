@@ -21,6 +21,10 @@ const storeSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    image: {
+      type: String,
+      default: '',
+    },
     admin: {
       type: String,
       default: '—',

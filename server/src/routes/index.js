@@ -29,6 +29,7 @@ router.use('/store-admin', storeAdminRoutes);
 router.use('/super-admin', superAdminRoutes);
 router.use('/rider', require('./rider.routes'));
 router.use('/notifications', require('./notification.routes'));
+router.use('/location', require('./location.routes'));
 
 // Public stores listing for customer store pickup & selection
 router.get('/stores', async (req, res, next) => {

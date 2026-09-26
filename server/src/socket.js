@@ -16,10 +16,25 @@ const initSocket = (httpServer) => {
   io.on('connection', (socket) => {
     console.log(`[Socket.IO] Client connected: ${socket.id}`);
 
+    // Universal room join (accepts either 'order:123' or any room identifier)
+    socket.on('join', (room) => {
+      if (room) {
+        socket.join(room);
+        console.log(`[Socket.IO] Socket ${socket.id} joined room ${room}`);
+      }
+    });
+
+    socket.on('leave', (room) => {
+      if (room) {
+        socket.leave(room);
+        console.log(`[Socket.IO] Socket ${socket.id} left room ${room}`);
+      }
+    });
+
     // Join order room for real-time tracking
     socket.on('join:order', (orderId) => {
       if (orderId) {
-        const room = `order:${orderId}`;
+        const room = orderId.startsWith('order:') ? orderId : `order:${orderId}`;
         socket.join(room);
         console.log(`[Socket.IO] Socket ${socket.id} joined room ${room}`);
       }
@@ -28,7 +43,7 @@ const initSocket = (httpServer) => {
     // Leave order room
     socket.on('leave:order', (orderId) => {
       if (orderId) {
-        const room = `order:${orderId}`;
+        const room = orderId.startsWith('order:') ? orderId : `order:${orderId}`;
         socket.leave(room);
         console.log(`[Socket.IO] Socket ${socket.id} left room ${room}`);
       }
@@ -52,36 +67,49 @@ const initSocket = (httpServer) => {
       }
     });
 
-    // Rider updates their live GPS location
-    socket.on('rider:update_location', async (data) => {
+    // Rider updates their live GPS location via Socket
+    const handleRiderLocationUpdate = async (data) => {
       try {
-        const { orderId, lat, lng, eta } = data || {};
-        if (!orderId || lat === undefined || lng === undefined) return;
+        const { orderId, lat, lng, latitude, longitude, eta, riderId } = data || {};
+        const finalLat = lat !== undefined ? lat : latitude;
+        const finalLng = lng !== undefined ? lng : longitude;
 
-        // Broadcast immediately to anyone tracking this order
-        const room = `order:${orderId}`;
-        io.to(room).emit('rider:location_changed', {
+        if (!orderId || finalLat === undefined || finalLng === undefined) return;
+
+        const locationPayload = {
           orderId,
-          lat: Number(lat),
-          lng: Number(lng),
+          riderId: riderId || '',
+          latitude: Number(finalLat),
+          longitude: Number(finalLng),
+          lat: Number(finalLat),
+          lng: Number(finalLng),
           eta: eta || '12 mins',
+          timestamp: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-        });
+        };
+
+        // Broadcast immediately to anyone tracking this order in Google Maps
+        const room = `order:${orderId}`;
+        io.to(room).emit('rider:location:update', locationPayload);
+        io.to(room).emit('rider:location_changed', locationPayload);
 
         // Persist rider coordinates in Order document
         await Order.findOneAndUpdate(
           { orderId },
           {
             $set: {
-              'rider.lat': Number(lat),
-              'rider.lng': Number(lng),
+              'rider.lat': Number(finalLat),
+              'rider.lng': Number(finalLng),
             },
           }
         ).catch((err) => console.warn('[Socket.IO] DB location update warn:', err.message));
       } catch (err) {
-        console.error('[Socket.IO] rider:update_location error:', err);
+        console.error('[Socket.IO] rider location update error:', err);
       }
-    });
+    };
+
+    socket.on('rider:update_location', handleRiderLocationUpdate);
+    socket.on('rider:location:update', handleRiderLocationUpdate);
 
     socket.on('disconnect', () => {
       console.log(`[Socket.IO] Client disconnected: ${socket.id}`);
@@ -125,9 +153,27 @@ const emitWalletUpdate = (userId, balance, transaction) => {
   });
 };
 
+const emitOrderCreated = (order) => {
+  if (!io) return;
+  io.emit('order:created', {
+    orderId: order.orderId,
+    amount: order.amount,
+    customerName: order.customer?.name || 'Customer',
+    storeId: order.storeId,
+    status: order.status,
+    fulfillmentType: order.fulfillmentType,
+    itemsCount: order.items?.length || 0,
+    createdAt: order.createdAt || new Date().toISOString(),
+    order,
+  });
+  // Also broadcast to general feed for Store Admin & Dashboard live refresh
+  io.emit('orders:refreshed', { orderId: order.orderId, status: order.status });
+};
+
 module.exports = {
   initSocket,
   getIO,
   emitOrderStatusUpdate,
+  emitOrderCreated,
   emitWalletUpdate,
 };

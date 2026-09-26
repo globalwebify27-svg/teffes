@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Coupon = require('../models/Coupon');
 const mongoose = require('mongoose');
 const notificationService = require('../services/notificationService');
+const { emitOrderCreated } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
 const { validateCouponEligibility } = require('../utils/couponCalculator');
 
@@ -193,6 +194,9 @@ const createOrder = async (req, res, next) => {
     }
 
     await newOrder.save();
+
+    // Broadcast new order immediately to store admin and socket clients
+    emitOrderCreated(newOrder);
 
     // Clear user cart upon successful order creation
     user.cart = [];

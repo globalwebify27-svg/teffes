@@ -3,6 +3,7 @@ const User = require('../models/User');
 const Store = require('../models/Store');
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate } = require('../socket');
+const { getRoadDistanceAndDuration } = require('../services/googleMapsService');
 const { calculateRoadDistanceKm, calculateTransitMinutes, getEtaDetails } = require('../utils/etaCalculator');
 
 /**
@@ -297,23 +298,62 @@ const updateLocation = async (req, res, next) => {
       });
 
       if (order) {
+        // Validate that this rider is authorized for this delivery
+        if (order.rider?.riderId && req.user && req.user._id) {
+          const isAssignedRider = order.rider.riderId.toString() === req.user._id.toString();
+          const isAdmin = req.user.role === 'admin' || req.user.role === 'superadmin' || req.user.role === 'storeadmin';
+          if (!isAssignedRider && !isAdmin) {
+            return res.status(403).json({
+              success: false,
+              message: 'Unauthorized: You are not assigned to deliver this order',
+            });
+          }
+        }
+
         order.rider.lat = Number(lat);
         order.rider.lng = Number(lng);
+
+        let routeInfo = null;
 
         if (order.status === 'Out for Delivery') {
           const custLat = order.customer?.lat || 23.3512;
           const custLng = order.customer?.lng || 85.3154;
 
-          const roadDistanceKm = calculateRoadDistanceKm(Number(lat), Number(lng), custLat, custLng);
-          const remainingMins = calculateTransitMinutes(roadDistanceKm);
+          // Road distance & transit time calculated via Google Routes API (throttled & cached)
+          routeInfo = await getRoadDistanceAndDuration(
+            { lat: Number(lat), lng: Number(lng) },
+            { lat: custLat, lng: custLng },
+            { orderId: order.orderId }
+          );
 
-          order.remainingTransitMinutes = remainingMins;
-          order.etaStage = roadDistanceKm <= 0.8 || remainingMins <= 5 ? 'NEAR_DOORSTEP' : 'IN_TRANSIT';
+          order.remainingTransitMinutes = routeInfo.durationMinutes;
+          order.etaStage = routeInfo.distanceKm <= 0.8 || routeInfo.durationMinutes <= 5 ? 'NEAR_DOORSTEP' : 'IN_TRANSIT';
 
           await order.save();
           emitOrderStatusUpdate(order.orderId, order);
         } else {
           await order.save();
+        }
+
+        // Broadcast live coordinates in real-time to customer order tracking screen via socket
+        const { getIO } = require('../socket');
+        const io = getIO();
+        if (io) {
+          const room = `order:${order.orderId}`;
+          const locationPayload = {
+            orderId: order.orderId,
+            riderId: req.user?._id || order.rider?.riderId,
+            latitude: Number(lat),
+            longitude: Number(lng),
+            lat: Number(lat),
+            lng: Number(lng),
+            eta: `${order.remainingTransitMinutes || 12} mins`,
+            polyline: routeInfo?.polyline || '',
+            timestamp: new Date().toISOString(),
+          };
+
+          io.to(room).emit('rider:location:update', locationPayload);
+          io.to(room).emit('rider:location_changed', locationPayload);
         }
       }
     }
