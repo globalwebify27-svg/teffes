@@ -13,6 +13,7 @@ const {
   getMeHandler,
   updateMeHandler,
   deleteMeHandler,
+  changePasswordHandler,
 } = require('../controllers/auth.controller');
 
 const router = Router();
@@ -83,5 +84,6 @@ router.post('/logout', protect, logoutHandler);
 router.get('/me', protect, getMeHandler);
 router.put('/me', protect, updateMeHandler);
 router.delete('/me', protect, deleteMeHandler);
+router.post('/change-password', protect, changePasswordHandler);
 
 module.exports = router;

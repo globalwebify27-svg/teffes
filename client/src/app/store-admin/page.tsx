@@ -12,6 +12,7 @@ import { getSocket } from "@/lib/socket";
 import { orderAlarm } from "@/lib/orderAlarm";
 import ThermalKOTModal from "@/components/store-admin/ThermalKOTModal";
 import StoreStatusModal from "@/components/store-admin/StoreStatusModal";
+import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
@@ -439,17 +440,30 @@ function LiveOrdersTab() {
                       <button
                         onClick={() => advanceStatus(o.orderId || o.id, o.status, isPickup)}
                         style={{
-                          background: isPickup ? "#d97706" : "#941717",
-                          border: "none",
+                          background: "rgba(148, 23, 23, 0.08)",
+                          border: "1.5px solid rgba(148, 23, 23, 0.25)",
                           borderRadius: "8px",
-                          padding: "7px 14px",
-                          color: "#fff",
+                          padding: "7px 15px",
+                          color: "#941717",
                           fontSize: "0.8rem",
                           fontWeight: 700,
                           cursor: "pointer",
+                          transition: "all 150ms ease",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = "rgba(148, 23, 23, 0.16)";
+                          e.currentTarget.style.borderColor = "rgba(148, 23, 23, 0.4)";
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = "rgba(148, 23, 23, 0.08)";
+                          e.currentTarget.style.borderColor = "rgba(148, 23, 23, 0.25)";
                         }}
                       >
-                        {nextLabel}
+                        <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                        <span>{nextLabel}</span>
                       </button>
                     )}
                     <button
@@ -1327,6 +1341,10 @@ export default function StoreAdminPage() {
   const [isMobile, setIsMobile] = useState(false);
   const [storeData, setStoreData] = useState<any>(null);
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
+  const [incomingOrders, setIncomingOrders] = useState<any[]>([]);
+  const [isMuted, setIsMuted] = useState(false);
+  const acknowledgedIdsRef = React.useRef<Set<string>>(new Set());
 
   // Auto-collapse sidebar on tablet/mobile
   useEffect(() => {
@@ -1359,19 +1377,9 @@ export default function StoreAdminPage() {
     setUser(stored);
   }, [router]);
 
-  const handleLogout = () => {
-    clearAuth();
-    router.push("/admin-login");
-  };
-
-  if (!user) return null;
-
-  const [incomingOrders, setIncomingOrders] = useState<any[]>([]);
-  const [isMuted, setIsMuted] = useState(false);
-  const acknowledgedIdsRef = React.useRef<Set<string>>(new Set());
-
   // Real-time alarm listener for new incoming orders
   useEffect(() => {
+    if (!user) return;
     const socket = getSocket();
 
     const onOrderCreated = (data: any) => {
@@ -1420,7 +1428,12 @@ export default function StoreAdminPage() {
       clearInterval(pollInterval);
       orderAlarm.stopAlarm();
     };
-  }, [isMuted]);
+  }, [isMuted, user]);
+
+  const handleLogout = () => {
+    clearAuth();
+    router.push("/admin-login");
+  };
 
   const handleTestAlarmSound = () => {
     orderAlarm.playChime();
@@ -1449,6 +1462,10 @@ export default function StoreAdminPage() {
     orderAlarm.stopAlarm();
     toast.success("All incoming orders acknowledged", "Alarm Silenced");
   };
+
+  if (!user) return null;
+
+
 
   const tabComponents: Record<string, React.ReactNode> = {
     dashboard:  <DashboardTab setActiveTab={setActiveTab} />,
@@ -1536,6 +1553,32 @@ export default function StoreAdminPage() {
 
         {/* Collapse Toggle + User Info / Sign Out */}
         <div style={{ padding: "12px 8px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          {/* Change Password button */}
+          <button
+            onClick={() => setShowChangePassword(true)}
+            title="Change Password"
+            style={{
+              width: "100%",
+              background: "rgba(255,255,255,0.09)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: "8px",
+              padding: "9px",
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: sidebarCollapsed ? "1rem" : "0.78rem",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "7px",
+              marginBottom: "8px",
+              transition: "background 150ms ease",
+            }}
+          >
+            <span className="material-symbols-outlined text-[17px]">lock_reset</span>
+            {!sidebarCollapsed && <span>Change Password</span>}
+          </button>
+
           {/* Always-visible sign-out icon */}
           <button
             onClick={handleLogout}
@@ -1839,6 +1882,14 @@ export default function StoreAdminPage() {
           isOpenModal={isStatusModalOpen}
           onClose={() => setIsStatusModalOpen(false)}
           onStatusChange={(updatedStore) => setStoreData(updatedStore)}
+        />
+
+        {/* Change Password Modal */}
+        <ChangePasswordModal
+          isOpen={showChangePassword}
+          onClose={() => setShowChangePassword(false)}
+          userEmail={user?.email}
+          userName={user?.name}
         />
       </main>
     </div>

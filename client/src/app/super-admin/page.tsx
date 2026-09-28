@@ -18,6 +18,7 @@ import {
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { isYouTubeUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
+import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 
 // ─── Icon helpers ──────────────────────────────────────────────────────────────
 const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
@@ -4648,6 +4649,7 @@ export default function SuperAdminPage() {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showChangePassword, setShowChangePassword] = useState(false);
 
   // Auto-collapse sidebar earlier (below 1200px) so wide catalog and admin tables have maximum breathing room
   useEffect(() => {
@@ -4773,6 +4775,32 @@ export default function SuperAdminPage() {
 
         {/* Collapse Toggle + User Info / Sign Out */}
         <div style={{ padding: "12px 8px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          {/* Change Password button */}
+          <button
+            onClick={() => setShowChangePassword(true)}
+            title="Change Password"
+            style={{
+              width: "100%",
+              background: "rgba(255,255,255,0.09)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: "8px",
+              padding: "9px",
+              color: "#fff",
+              cursor: "pointer",
+              fontSize: sidebarCollapsed ? "1rem" : "0.78rem",
+              fontWeight: 700,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "7px",
+              marginBottom: "8px",
+              transition: "background 150ms ease",
+            }}
+          >
+            <span className="material-symbols-outlined text-[17px]">lock_reset</span>
+            {!sidebarCollapsed && <span>Change Password</span>}
+          </button>
+
           {/* Always-visible sign-out icon */}
           <button
             onClick={handleLogout}
@@ -4860,6 +4888,14 @@ export default function SuperAdminPage() {
         {/* Tab Content */}
         {tabComponents[activeTab]}
       </main>
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showChangePassword}
+        onClose={() => setShowChangePassword(false)}
+        userEmail={user?.email}
+        userName={user?.name}
+      />
     </div>
   );
 }

@@ -422,6 +422,60 @@ const updateMeHandler = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/auth/change-password
+ * @desc    Change password for authenticated user (superadmin, storeadmin, rider, customer)
+ * @access  Private
+ */
+const changePasswordHandler = async (req, res, next) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Current password and new password are required',
+      });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 6 characters long',
+      });
+    }
+
+    // Retrieve user with password hash
+    const user = await User.findById(req.user._id).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Verify existing password
+    if (user.password) {
+      const isMatch = await bcrypt.compare(currentPassword, user.password);
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: 'Incorrect current password',
+        });
+      }
+    }
+
+    // Hash new password and save
+    const salt = await bcrypt.genSalt(10);
+    user.password = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password changed successfully',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   sendOTPHandler,
   verifyOTPHandler,
@@ -432,4 +486,5 @@ module.exports = {
   getMeHandler,
   updateMeHandler,
   deleteMeHandler,
+  changePasswordHandler,
 };

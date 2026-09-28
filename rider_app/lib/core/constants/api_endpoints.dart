@@ -33,6 +33,7 @@ class ApiEndpoints {
   // Auth
   static const String riderLogin = '/auth/admin-login';
   static const String getMe = '/auth/me';
+  static const String changePassword = '/auth/change-password';
 
   // Rider Fleet APIs
   static const String riderDashboard = '/rider/dashboard';
