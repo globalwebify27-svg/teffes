@@ -462,9 +462,8 @@ const changePasswordHandler = async (req, res, next) => {
       }
     }
 
-    // Hash new password and save
-    const salt = await bcrypt.genSalt(10);
-    user.password = await bcrypt.hash(newPassword, salt);
+    // Assign new password directly; the User schema's pre('save') hook will hash it properly
+    user.password = newPassword;
     await user.save();
 
     res.status(200).json({

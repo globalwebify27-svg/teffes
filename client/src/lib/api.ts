@@ -44,6 +44,21 @@ const processQueue = (error: AxiosError | null, token: string | null) => {
   failedQueue = [];
 };
 
+// Helper to determine the appropriate login path based on active route
+const getRedirectLoginPath = (): string => {
+  if (typeof window === "undefined") return "/login";
+  const pathname = window.location.pathname.toLowerCase();
+  if (
+    pathname.startsWith("/store-admin") ||
+    pathname.startsWith("/super-admin") ||
+    pathname.startsWith("/admin") ||
+    pathname.includes("admin")
+  ) {
+    return "/admin-login";
+  }
+  return "/login";
+};
+
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
@@ -85,15 +100,32 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch (refreshError) {
         processQueue(refreshError as AxiosError, null);
-        // Clear auth and redirect to login
+        // Clear auth and redirect to the correct login portal
         localStorage.removeItem("accessToken");
         localStorage.removeItem("user");
         if (typeof window !== "undefined") {
-          window.location.href = "/login";
+          window.location.href = getRedirectLoginPath();
         }
         return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
+      }
+    }
+
+    // Catch unhandled 401s after retry or invalid token on protected calls
+    if (error.response?.status === 401) {
+      const isAuthAttempt =
+        originalRequest.url?.includes("/auth/login") ||
+        originalRequest.url?.includes("/auth/admin-login") ||
+        originalRequest.url?.includes("/auth/verify-otp") ||
+        originalRequest.url?.includes("/auth/firebase-login");
+
+      if (!isAuthAttempt && originalRequest._retry) {
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("user");
+        if (typeof window !== "undefined") {
+          window.location.href = getRedirectLoginPath();
+        }
       }
     }
 
