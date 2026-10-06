@@ -42,6 +42,7 @@ class ApiEndpoints {
 
   // Products & Stores
   static const String stores = '/stores';
+  static const String availableStores = '/stores/available';
   static const String activeStore = '/stores/active';
   static const String categories = '/categories';
   static const String products = '/products';

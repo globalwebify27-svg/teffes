@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants/api_endpoints.dart';
 import '../core/network/api_client.dart';
@@ -21,6 +20,8 @@ class LocationProvider with ChangeNotifier {
   bool get isGpsDetected => _isGpsDetected;
   bool get hasPromptedPermission => _hasPromptedPermission;
   bool get hasSelectedAddress => _selectedAddress != null;
+  double? get latitude => _selectedAddress?.latitude;
+  double? get longitude => _selectedAddress?.longitude;
 
   String get activeLabel {
     if (_selectedAddress != null) {

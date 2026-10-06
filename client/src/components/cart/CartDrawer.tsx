@@ -202,7 +202,7 @@ export default function CartDrawer() {
             setAvailableCoupons(res.data.coupons);
           }
         })
-        .catch(() => {})
+        .catch(() => { })
         .finally(() => setLoadingCoupons(false));
     }
   }, [isOpen]);
@@ -331,12 +331,12 @@ export default function CartDrawer() {
     addresses[0] ||
     (currentLocation?.isSet && currentLocation?.fullAddress
       ? {
-          _id: currentLocation.addressId || "loc-selected",
-          tag: currentLocation.label || "Delivery Address",
-          line1: currentLocation.fullAddress,
-          city: "Ranchi",
-          pincode: "",
-        }
+        _id: currentLocation.addressId || "loc-selected",
+        tag: currentLocation.label || "Delivery Address",
+        line1: currentLocation.fullAddress,
+        city: "Ranchi",
+        pincode: "",
+      }
       : null);
 
   // Proceed from cart to payment view inside drawer
@@ -585,8 +585,8 @@ export default function CartDrawer() {
                   id="tab-delivery-flow"
                   onClick={() => setFulfillmentType("delivery")}
                   className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "delivery"
-                      ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
-                      : "bg-transparent text-slate-body hover:text-on-surface"
+                    ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
+                    : "bg-transparent text-slate-body hover:text-on-surface"
                     }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">two_wheeler</span>
@@ -599,8 +599,8 @@ export default function CartDrawer() {
                   id="tab-pickup-flow"
                   onClick={() => setFulfillmentType("pickup")}
                   className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "pickup"
-                      ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
-                      : "bg-transparent text-slate-body hover:text-on-surface"
+                    ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
+                    : "bg-transparent text-slate-body hover:text-on-surface"
                     }`}
                 >
                   <span className="material-symbols-outlined text-[18px]">storefront</span>
@@ -734,20 +734,18 @@ export default function CartDrawer() {
                                   setSelectedStoreId(store.storeId);
                                 }
                               }}
-                              className={`p-3 rounded-2xl border transition-all text-left ${
-                                isOutOfStock
+                              className={`p-3 rounded-2xl border transition-all text-left ${isOutOfStock
                                   ? "border-gray-200 bg-gray-50/80 opacity-60 cursor-not-allowed"
                                   : isSelected
-                                  ? "border-primary bg-crimson-soft shadow-xs ring-1 ring-primary/20 cursor-pointer"
-                                  : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60 cursor-pointer"
-                              }`}
+                                    ? "border-primary bg-crimson-soft shadow-xs ring-1 ring-primary/20 cursor-pointer"
+                                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60 cursor-pointer"
+                                }`}
                             >
                               <div className="flex items-start gap-2.5">
                                 {/* Radio Indicator */}
                                 <div
-                                  className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-colors ${
-                                    isSelected ? "border-primary bg-primary" : "border-gray-300 bg-white"
-                                  }`}
+                                  className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-colors ${isSelected ? "border-primary bg-primary" : "border-gray-300 bg-white"
+                                    }`}
                                 >
                                   {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
@@ -777,14 +775,12 @@ export default function CartDrawer() {
 
                                   <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-body flex-wrap">
                                     <span
-                                      className={`flex items-center gap-1 font-bold ${
-                                        isOutOfStock ? "text-red-700" : "text-emerald-700"
-                                      }`}
+                                      className={`flex items-center gap-1 font-bold ${isOutOfStock ? "text-red-700" : "text-emerald-700"
+                                        }`}
                                     >
                                       <span
-                                        className={`w-1.5 h-1.5 rounded-full ${
-                                          isOutOfStock ? "bg-red-600" : "bg-emerald-600 animate-pulse"
-                                        }`}
+                                        className={`w-1.5 h-1.5 rounded-full ${isOutOfStock ? "bg-red-600" : "bg-emerald-600 animate-pulse"
+                                          }`}
                                       ></span>
                                       <span>{isOutOfStock ? "Out of Stock" : "In Stock • Open"}</span>
                                     </span>
@@ -822,7 +818,7 @@ export default function CartDrawer() {
                         <div className="flex items-center justify-between">
                           <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px] flex items-center gap-1.5">
                             <span className="material-symbols-outlined text-primary text-[16px]">store</span>
-                            <span>Fulfilling Butchery Hub</span>
+                            <span>Fulfilling Hub</span>
                           </div>
                           {stores.length > 1 && (
                             <button
@@ -881,13 +877,12 @@ export default function CartDrawer() {
                                       setShowStorePickerInDelivery(false);
                                     }
                                   }}
-                                  className={`p-2.5 rounded-xl border transition-all text-left ${
-                                    isOutOfStock
+                                  className={`p-2.5 rounded-xl border transition-all text-left ${isOutOfStock
                                       ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
                                       : isSel
-                                      ? "border-primary bg-crimson-soft ring-1 ring-primary/20 cursor-pointer"
-                                      : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
-                                  }`}
+                                        ? "border-primary bg-crimson-soft ring-1 ring-primary/20 cursor-pointer"
+                                        : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
+                                    }`}
                                 >
                                   <div className="flex items-start justify-between gap-1.5">
                                     <div className="flex-1 min-w-0">
@@ -930,11 +925,10 @@ export default function CartDrawer() {
                           <button
                             type="button"
                             onClick={() => setSlot("express")}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                              slot === "express"
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "express"
                                 ? "border-primary bg-crimson-soft shadow-xs"
                                 : "border-gray-200 bg-white hover:border-gray-300"
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
                               <span className="material-symbols-outlined text-primary text-[16px]">timer</span>
@@ -945,11 +939,10 @@ export default function CartDrawer() {
                           <button
                             type="button"
                             onClick={() => setSlot("evening")}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
-                              slot === "evening"
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "evening"
                                 ? "border-primary bg-crimson-soft shadow-xs"
                                 : "border-gray-200 bg-white hover:border-gray-300"
-                            }`}
+                              }`}
                           >
                             <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
                               <span className="material-symbols-outlined text-primary text-[16px]">schedule</span>
@@ -1049,8 +1042,8 @@ export default function CartDrawer() {
                           type="button"
                           onClick={() => setTipTab("tip")}
                           className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${tipTab === "tip"
-                              ? "bg-white text-on-surface shadow-xs"
-                              : "bg-transparent text-slate-body hover:text-on-surface"
+                            ? "bg-white text-on-surface shadow-xs"
+                            : "bg-transparent text-slate-body hover:text-on-surface"
                             }`}
                         >
                           Give a Tip
@@ -1059,8 +1052,8 @@ export default function CartDrawer() {
                           type="button"
                           onClick={() => setTipTab("instructions")}
                           className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${tipTab === "instructions"
-                              ? "bg-white text-on-surface shadow-xs"
-                              : "bg-transparent text-slate-body hover:text-on-surface"
+                            ? "bg-white text-on-surface shadow-xs"
+                            : "bg-transparent text-slate-body hover:text-on-surface"
                             }`}
                         >
                           Delivery Instructions
@@ -1096,8 +1089,8 @@ export default function CartDrawer() {
                               type="button"
                               onClick={() => handleSelectTip(10)}
                               className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 10 && !showCustomInput
-                                  ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                  : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
+                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
+                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
                                 }`}
                             >
 
@@ -1109,8 +1102,8 @@ export default function CartDrawer() {
                               type="button"
                               onClick={() => handleSelectTip(35)}
                               className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 35 && !showCustomInput
-                                  ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                  : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
+                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
+                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
                                 }`}
                             >
                               <span className="text-[13px]">₹35</span>
@@ -1121,8 +1114,8 @@ export default function CartDrawer() {
                               type="button"
                               onClick={() => handleSelectTip(50)}
                               className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 50 && !showCustomInput
-                                  ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                  : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
+                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
+                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
                                 }`}
                             >
                               <span className="text-[13px]">₹50</span>
@@ -1135,8 +1128,8 @@ export default function CartDrawer() {
                                 setShowCustomInput((prev) => !prev);
                               }}
                               className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${showCustomInput || (selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50)
-                                  ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                  : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
+                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
+                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
                                 }`}
                             >
                               <span className="text-[12px]">
@@ -1243,11 +1236,10 @@ export default function CartDrawer() {
                       aria-expanded={isCouponsExpanded}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                          appliedCoupon 
-                            ? "bg-emerald-100 text-emerald-700" 
+                        <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${appliedCoupon
+                            ? "bg-emerald-100 text-emerald-700"
                             : "bg-primary/10 text-primary"
-                        }`}>
+                          }`}>
                           <span className="material-symbols-outlined text-[18px]">
                             {appliedCoupon ? "check_circle" : "sell"}
                           </span>
@@ -1273,8 +1265,8 @@ export default function CartDrawer() {
                                 Apply Coupon / Promo Code
                               </span>
                               <p className="font-body-sm text-slate-body text-[11px] mt-0.5">
-                                {availableCoupons.length > 0 
-                                  ? `${availableCoupons.length} offers available to save more` 
+                                {availableCoupons.length > 0
+                                  ? `${availableCoupons.length} offers available to save more`
                                   : "Tap to enter promo code"}
                               </p>
                             </div>
@@ -1295,9 +1287,8 @@ export default function CartDrawer() {
                             Remove
                           </button>
                         )}
-                        <span className={`material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 ${
-                          isCouponsExpanded ? "rotate-90 text-primary" : ""
-                        }`}>
+                        <span className={`material-symbols-outlined text-[20px] text-slate-400 transition-transform duration-200 ${isCouponsExpanded ? "rotate-90 text-primary" : ""
+                          }`}>
                           chevron_right
                         </span>
                       </div>
@@ -1651,8 +1642,8 @@ export default function CartDrawer() {
                       <label
                         key={addr._id}
                         className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${selectedAddressId === addr._id
-                            ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                            : "border-gray-200 hover:border-gray-300 bg-white"
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/20"
+                          : "border-gray-200 hover:border-gray-300 bg-white"
                           }`}
                       >
                         <input
@@ -1767,8 +1758,8 @@ export default function CartDrawer() {
                       }
                     }}
                     className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${walletBalance >= finalPayable
-                        ? "cursor-pointer hover:border-gray-300"
-                        : "opacity-50 cursor-not-allowed bg-gray-50 border-gray-100"
+                      ? "cursor-pointer hover:border-gray-300"
+                      : "opacity-50 cursor-not-allowed bg-gray-50 border-gray-100"
                       } ${selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200"
                       }`}
                   >
@@ -2052,11 +2043,10 @@ export default function CartDrawer() {
                           key={tag}
                           type="button"
                           onClick={() => setNewAddress({ ...newAddress, tag })}
-                          className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
-                            newAddress.tag === tag
+                          className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${newAddress.tag === tag
                               ? "bg-primary text-white border-primary shadow-xs"
                               : "bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300"
-                          }`}
+                            }`}
                         >
                           {tag}
                         </button>
@@ -2168,8 +2158,8 @@ export default function CartDrawer() {
                       tagLower.includes("work") || tagLower.includes("office")
                         ? "business"
                         : tagLower.includes("home")
-                        ? "home"
-                        : "location_on";
+                          ? "home"
+                          : "location_on";
 
                     return (
                       <div
@@ -2188,16 +2178,14 @@ export default function CartDrawer() {
                           setView("cart");
                           toast.success(`Delivering to ${addr.tag} (${addr.city})`, "Address Selected");
                         }}
-                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${
-                          isSelected
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${isSelected
                             ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs"
                             : "border-gray-200 bg-white hover:border-gray-300 hover:bg-slate-50/60"
-                        }`}
+                          }`}
                       >
                         <div
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                            isSelected ? "bg-primary text-white" : "bg-slate-100 text-slate-600"
-                          }`}
+                          className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${isSelected ? "bg-primary text-white" : "bg-slate-100 text-slate-600"
+                            }`}
                         >
                           <span className="material-symbols-outlined text-[20px]">{icon}</span>
                         </div>
@@ -2227,11 +2215,10 @@ export default function CartDrawer() {
 
                         <div className="pt-1 shrink-0">
                           <div
-                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
-                              isSelected
+                            className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected
                                 ? "border-primary bg-primary text-white"
                                 : "border-gray-300 bg-white"
-                            }`}
+                              }`}
                           >
                             {isSelected && <span className="w-2 h-2 rounded-full bg-white"></span>}
                           </div>

@@ -40,15 +40,17 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
   List<StoreModel> _stores = [];
   String _selectedStoreId = 'S001';
+  bool _showStorePickerInDelivery = false;
+  bool _isLoadingStores = false;
 
   @override
   void initState() {
     super.initState();
     _initDefaultStores();
-    _fetchStores();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<CartProvider>().fetchAvailableCoupons();
+        _fetchStores();
       }
     });
   }
@@ -63,8 +65,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         phone: '+91 9779687955',
         status: 'Active',
         pickupEnabled: true,
+        deliveryEnabled: true,
         timings: '08:00 AM - 08:00 PM',
         distance: '0.8 km away',
+        isAvailable: true,
       ),
       const StoreModel(
         storeId: 'S002',
@@ -74,8 +78,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         phone: '+91 9279682955',
         status: 'Active',
         pickupEnabled: true,
+        deliveryEnabled: true,
         timings: '08:00 AM - 08:00 PM',
         distance: '1.6 km away',
+        isAvailable: true,
       ),
       const StoreModel(
         storeId: 'S004',
@@ -85,36 +91,81 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         phone: '1234567891',
         status: 'Active',
         pickupEnabled: true,
+        deliveryEnabled: true,
         timings: '08:00 AM - 08:00 PM',
         distance: '2.4 km away',
+        isAvailable: true,
       ),
     ];
     _selectedStoreId = _stores.first.storeId;
   }
 
   Future<void> _fetchStores() async {
+    if (!mounted) return;
+    setState(() => _isLoadingStores = true);
     try {
+      final location = context.read<LocationProvider>();
+      final cart = context.read<CartProvider>();
+
+      final lat = location.latitude ?? 23.3441;
+      final lng = location.longitude ?? 85.3096;
+
+      final itemsPayload = cart.items.values.map((it) => {
+        'productId': it.product.id,
+        'name': it.product.name,
+        'quantity': it.quantity,
+      }).toList();
+
+      final payload = {
+        'fulfillmentType': _fulfillmentType,
+        'lat': lat,
+        'lng': lng,
+        'items': itemsPayload,
+      };
+
       final api = ApiClient();
-      final res = await api.get(ApiEndpoints.stores);
+      final res = await api.post(ApiEndpoints.availableStores, data: payload);
+
       if (res.data != null && res.data['success'] == true && res.data['stores'] is List) {
         final list = (res.data['stores'] as List)
             .asMap()
             .entries
             .map((entry) => StoreModel.fromJson(entry.value as Map<String, dynamic>, entry.key))
-            .where((s) => s.pickupEnabled && s.status.toLowerCase() != 'inactive')
+            .where((s) => s.status.toLowerCase() != 'inactive')
             .toList();
 
         if (list.isNotEmpty && mounted) {
           setState(() {
             _stores = list;
-            if (!_stores.any((s) => s.storeId == _selectedStoreId)) {
-              _selectedStoreId = _stores.first.storeId;
+
+            String? suggestedId;
+            if (res.data['suggestedStore'] != null && res.data['suggestedStore'] is Map) {
+              suggestedId = (res.data['suggestedStore']['storeId'] ?? res.data['suggestedStore']['id'])?.toString();
+            }
+
+            final currentSel = _stores.where((s) => s.storeId == _selectedStoreId).isNotEmpty
+                ? _stores.firstWhere((s) => s.storeId == _selectedStoreId)
+                : null;
+
+            if (currentSel == null || !currentSel.isAvailable) {
+              if (suggestedId != null && _stores.any((s) => s.storeId == suggestedId)) {
+                _selectedStoreId = suggestedId;
+              } else {
+                final firstAvail = _stores.where((s) => s.isAvailable).isNotEmpty
+                    ? _stores.firstWhere((s) => s.isAvailable)
+                    : _stores.first;
+                _selectedStoreId = firstAvail.storeId;
+              }
             }
           });
         }
       }
     } catch (e) {
-      debugPrint('Error fetching stores for pickup: $e');
+      debugPrint('Error fetching available stores: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingStores = false);
+      }
     }
   }
 
@@ -298,6 +349,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   final ok = await location.detectGpsLocation(userTriggered: true);
+                  _fetchStores();
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
@@ -477,6 +529,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         onTap: () {
                           location.selectAddress(addr);
                           Navigator.pop(ctx);
+                          _fetchStores();
                         },
                       );
                     },
@@ -528,8 +581,19 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
 
     final selStore = _selectedStore;
-    final storeName = isPickup ? (selStore?.name ?? "TeFFe's — Kishore Ganj") : "TeFFe's — Kishore Ganj";
-    final storeId = isPickup ? (selStore?.storeId ?? 'S001') : 'S001';
+    if (selStore != null && !selStore.isAvailable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Selected store (${selStore.name}) is currently out of stock for items in your cart. Please choose another store.'),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final storeName = selStore?.name ?? "TeFFe's — Kishore Ganj";
+    final storeId = selStore?.storeId ?? 'S001';
     final shippingAddress = isPickup
         ? 'Store Pickup: ${selStore?.name ?? "TeFFe's Hub"}, ${selStore?.address ?? "Ranchi"}'
         : location.activeAddressString;
@@ -759,10 +823,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       children: [
                         Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() {
-                              _fulfillmentType = 'delivery';
-                              _selectedSlot = '90 Mins Express Delivery';
-                            }),
+                            onTap: () {
+                              setState(() {
+                                _fulfillmentType = 'delivery';
+                                _selectedSlot = '90 Mins Express Delivery';
+                                _showStorePickerInDelivery = false;
+                              });
+                              _fetchStores();
+                            },
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 9),
                               decoration: BoxDecoration(
@@ -790,10 +858,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         ),
                         Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() {
-                              _fulfillmentType = 'pickup';
-                              _selectedSlot = 'Immediate Pickup (30 Mins)';
-                            }),
+                            onTap: () {
+                              setState(() {
+                                _fulfillmentType = 'pickup';
+                                _selectedSlot = 'Immediate Pickup (30 Mins)';
+                                _showStorePickerInDelivery = false;
+                              });
+                              _fetchStores();
+                            },
                             child: Container(
                               padding: const EdgeInsets.symmetric(vertical: 9),
                               decoration: BoxDecoration(
@@ -868,138 +940,155 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           const SizedBox(height: 10),
                           ..._stores.map((store) {
                             final isSelected = store.storeId == _selectedStoreId;
+                            final isOutOfStock = !store.isAvailable;
                             return GestureDetector(
-                              onTap: () => setState(() => _selectedStoreId = store.storeId),
-                              child: Container(
-                                margin: const EdgeInsets.only(bottom: 8),
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: isSelected ? AppColors.primaryLight.withOpacity(0.35) : Colors.white,
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(
-                                    color: isSelected ? AppColors.primaryMaroon : AppColors.borderHairline,
-                                    width: isSelected ? 1.5 : 1.0,
-                                  ),
-                                  boxShadow: isSelected
-                                      ? [BoxShadow(color: AppColors.primaryMaroon.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))]
-                                      : [const BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
-                                ),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    // Radio circle indicator
-                                    Container(
-                                      width: 18,
-                                      height: 18,
-                                      margin: const EdgeInsets.only(top: 2, right: 10),
-                                      decoration: BoxDecoration(
-                                        shape: BoxShape.circle,
-                                        border: Border.all(
-                                          color: isSelected ? AppColors.primaryMaroon : AppColors.borderHairline,
-                                          width: 2,
-                                        ),
-                                        color: isSelected ? AppColors.primaryMaroon : Colors.white,
-                                      ),
-                                      child: isSelected
-                                          ? Center(
-                                              child: Container(
-                                                width: 6,
-                                                height: 6,
-                                                decoration: const BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: Colors.white,
-                                                ),
-                                              ),
-                                            )
-                                          : null,
+                              onTap: isOutOfStock
+                                  ? null
+                                  : () => setState(() => _selectedStoreId = store.storeId),
+                              child: Opacity(
+                                opacity: isOutOfStock ? 0.6 : 1.0,
+                                child: Container(
+                                  margin: const EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isOutOfStock
+                                        ? const Color(0xFFF9FAFB)
+                                        : (isSelected ? AppColors.primaryLight.withOpacity(0.35) : Colors.white),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: isSelected && !isOutOfStock ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                      width: isSelected && !isOutOfStock ? 1.5 : 1.0,
                                     ),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  store.name,
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.w800,
-                                                    fontSize: 13.5,
-                                                    color: isSelected ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                    boxShadow: isSelected && !isOutOfStock
+                                        ? [BoxShadow(color: AppColors.primaryMaroon.withOpacity(0.08), blurRadius: 6, offset: const Offset(0, 2))]
+                                        : [const BoxShadow(color: Colors.black12, blurRadius: 2, offset: Offset(0, 1))],
+                                  ),
+                                  child: Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      // Radio circle indicator
+                                      Container(
+                                        width: 18,
+                                        height: 18,
+                                        margin: const EdgeInsets.only(top: 2, right: 10),
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: isSelected && !isOutOfStock ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                            width: 2,
+                                          ),
+                                          color: isSelected && !isOutOfStock ? AppColors.primaryMaroon : Colors.white,
+                                        ),
+                                        child: isSelected && !isOutOfStock
+                                            ? Center(
+                                                child: Container(
+                                                  width: 6,
+                                                  height: 6,
+                                                  decoration: const BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: Colors.white,
                                                   ),
                                                 ),
-                                              ),
-                                              if (isSelected)
-                                                Container(
-                                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                  decoration: BoxDecoration(
-                                                    color: AppColors.primaryMaroon,
-                                                    borderRadius: BorderRadius.circular(4),
-                                                  ),
-                                                  child: const Text(
-                                                    'SELECTED',
+                                              )
+                                            : null,
+                                      ),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Expanded(
+                                                  child: Text(
+                                                    store.name,
                                                     style: TextStyle(
-                                                      color: Colors.white,
-                                                      fontSize: 9,
-                                                      fontWeight: FontWeight.w900,
-                                                      letterSpacing: 0.5,
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 13.5,
+                                                      color: isSelected && !isOutOfStock ? AppColors.primaryMaroon : AppColors.textPrimary,
                                                     ),
                                                   ),
                                                 ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 3),
-                                          Text(
-                                            store.address,
-                                            style: const TextStyle(
-                                              fontSize: 11.5,
-                                              color: AppColors.textSecondary,
-                                              height: 1.3,
+                                                if (isSelected && !isOutOfStock)
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors.primaryMaroon,
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: const Text(
+                                                      'SELECTED',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 9,
+                                                        fontWeight: FontWeight.w900,
+                                                        letterSpacing: 0.5,
+                                                      ),
+                                                    ),
+                                                  ),
+                                              ],
                                             ),
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Row(
-                                            children: [
-                                              Container(
-                                                width: 6,
-                                                height: 6,
-                                                decoration: const BoxDecoration(
-                                                  shape: BoxShape.circle,
-                                                  color: AppColors.discountGreen,
-                                                ),
+                                            const SizedBox(height: 3),
+                                            Text(
+                                              store.address,
+                                              style: const TextStyle(
+                                                fontSize: 11.5,
+                                                color: AppColors.textSecondary,
+                                                height: 1.3,
                                               ),
-                                              const SizedBox(width: 4),
-                                              const Text(
-                                                'Open for Pickup',
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.bold,
-                                                  color: AppColors.discountGreen,
-                                                ),
-                                              ),
-                                              const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
-                                              Text(
-                                                store.timings,
-                                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
-                                              ),
-                                              if (store.distance.isNotEmpty) ...[
-                                                const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
-                                                Text(
-                                                  store.distance,
-                                                  style: const TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: AppColors.primaryMaroon,
+                                            ),
+                                            const SizedBox(height: 6),
+                                            Row(
+                                              children: [
+                                                Container(
+                                                  width: 6,
+                                                  height: 6,
+                                                  decoration: BoxDecoration(
+                                                    shape: BoxShape.circle,
+                                                    color: isOutOfStock ? Colors.red : AppColors.discountGreen,
                                                   ),
                                                 ),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  isOutOfStock ? 'Out of Stock' : 'Open for Pickup',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: isOutOfStock ? Colors.red.shade700 : AppColors.discountGreen,
+                                                  ),
+                                                ),
+                                                const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
+                                                Text(
+                                                  store.timings,
+                                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                                ),
+                                                if (store.distance.isNotEmpty) ...[
+                                                  const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
+                                                  Text(
+                                                    store.distance,
+                                                    style: const TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.bold,
+                                                      color: AppColors.primaryMaroon,
+                                                    ),
+                                                  ),
+                                                ],
                                               ],
+                                            ),
+                                            if (isOutOfStock && store.outOfStockItems.isNotEmpty) ...[
+                                              const SizedBox(height: 4),
+                                              Text(
+                                                'Unavailable items: ${store.outOfStockItems.join(", ")}',
+                                                style: TextStyle(fontSize: 10.5, color: Colors.red.shade700, fontWeight: FontWeight.w600),
+                                                maxLines: 2,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
                                             ],
-                                          ),
-                                        ],
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
+                                    ],
+                                  ),
                                 ),
                               ),
                             );
@@ -1148,6 +1237,232 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                 ),
                               ],
                             ),
+                          ],
+                        ],
+                      ),
+                    ),
+
+                  // 1.05 Fulfilling Hub Card for Delivery (Nearest Auto-Selected with Option to Change)
+                  if (!isPickup)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, 0, AppDimensions.spaceMd, AppDimensions.spaceMd),
+                      padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: AppDimensions.roundedLg,
+                        border: Border.all(color: AppColors.borderHairline),
+                        boxShadow: AppDimensions.cardShadow,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Row(
+                                children: [
+                                  const Icon(Icons.storefront_rounded, size: 16, color: AppColors.primaryMaroon),
+                                  const SizedBox(width: 6),
+                                  const Text(
+                                    'FULFILLING HUB',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 11,
+                                      letterSpacing: 0.5,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                  if (_isLoadingStores) ...[
+                                    const SizedBox(width: 8),
+                                    const SizedBox(
+                                      width: 10,
+                                      height: 10,
+                                      child: CircularProgressIndicator(strokeWidth: 1.5, color: AppColors.primaryMaroon),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              if (_stores.length > 1)
+                                GestureDetector(
+                                  onTap: () => setState(() => _showStorePickerInDelivery = !_showStorePickerInDelivery),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        _showStorePickerInDelivery ? 'DONE' : 'CHANGE',
+                                        style: const TextStyle(
+                                          color: AppColors.primaryMaroon,
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 11.5,
+                                        ),
+                                      ),
+                                      Icon(
+                                        _showStorePickerInDelivery ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                                        size: 16,
+                                        color: AppColors.primaryMaroon,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+
+                          // Collapsed Selected Hub
+                          if (!_showStorePickerInDelivery && _selectedStore != null)
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        _selectedStore!.name,
+                                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.textPrimary),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${_selectedStore!.address}${_selectedStore!.distance.isNotEmpty ? " • ${_selectedStore!.distance}" : ""}',
+                                        style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: _selectedStore!.isAvailable ? AppColors.discountGreen.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: _selectedStore!.isAvailable ? AppColors.discountGreen.withOpacity(0.3) : Colors.red.withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          shape: BoxShape.circle,
+                                          color: _selectedStore!.isAvailable ? AppColors.discountGreen : Colors.red,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        _selectedStore!.isAvailable ? 'In Stock • Open' : 'Out of Stock',
+                                        style: TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.bold,
+                                          color: _selectedStore!.isAvailable ? AppColors.discountGreen : Colors.red.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                          // Expanded Hub Selector
+                          if (_showStorePickerInDelivery) ...[
+                            const SizedBox(height: 4),
+                            ..._stores.map((store) {
+                              final isSel = store.storeId == _selectedStoreId;
+                              final isOutOfStock = !store.isAvailable;
+                              return GestureDetector(
+                                onTap: isOutOfStock
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _selectedStoreId = store.storeId;
+                                          _showStorePickerInDelivery = false;
+                                        });
+                                      },
+                                child: Opacity(
+                                  opacity: isOutOfStock ? 0.6 : 1.0,
+                                  child: Container(
+                                    margin: const EdgeInsets.only(top: 6),
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: isOutOfStock
+                                          ? const Color(0xFFF9FAFB)
+                                          : (isSel ? AppColors.primaryLight.withOpacity(0.35) : Colors.white),
+                                      borderRadius: BorderRadius.circular(10),
+                                      border: Border.all(
+                                        color: isSel && !isOutOfStock ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                        width: isSel && !isOutOfStock ? 1.5 : 1.0,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Container(
+                                          width: 16,
+                                          height: 16,
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: isSel && !isOutOfStock ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                              width: 1.5,
+                                            ),
+                                            color: isSel && !isOutOfStock ? AppColors.primaryMaroon : Colors.white,
+                                          ),
+                                          child: isSel && !isOutOfStock
+                                              ? Center(
+                                                  child: Container(
+                                                    width: 5,
+                                                    height: 5,
+                                                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                                                  ),
+                                                )
+                                              : null,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Expanded(
+                                                    child: Text(
+                                                      store.name,
+                                                      style: TextStyle(
+                                                        fontWeight: FontWeight.w700,
+                                                        fontSize: 12.5,
+                                                        color: isSel && !isOutOfStock ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    store.distance,
+                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryMaroon),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                isOutOfStock ? 'Out of stock for selected cart items' : store.address,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: isOutOfStock ? Colors.red.shade700 : AppColors.textSecondary,
+                                                  fontWeight: isOutOfStock ? FontWeight.w600 : FontWeight.normal,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }),
                           ],
                         ],
                       ),

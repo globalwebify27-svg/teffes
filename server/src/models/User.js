@@ -113,6 +113,16 @@ const userSchema = new mongoose.Schema(
       select: false,
     },
 
+    // ─── Password Reset ────────────────────────────────────────────────────────
+    resetPasswordOtp: {
+      type: String,
+      select: false,
+    },
+    resetPasswordExpire: {
+      type: Date,
+      select: false,
+    },
+
     // ─── Profile ──────────────────────────────────────────────────────────────
     avatar: {
       type: String,

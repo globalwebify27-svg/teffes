@@ -1,9 +1,11 @@
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const User = require('../models/User');
 const OTP = require('../models/OTP');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { generateOTP, sendOTP, getOTPExpiry } = require('../utils/otp');
 const { getAuthInstance } = require('../config/firebase');
+const { sendPasswordResetEmail } = require('../services/emailService');
 
 // ─── Cookie Options ───────────────────────────────────────────────────────────
 const REFRESH_COOKIE_OPTIONS = {
@@ -475,6 +477,143 @@ const changePasswordHandler = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/auth/forgot-password
+ * Body: { email }
+ */
+const forgotPasswordHandler = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+
+    if (!email || typeof email !== 'string') {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    // Look for Super Admin user
+    const user = await User.findOne({
+      email: normalizedEmail,
+      role: { $in: ['superadmin', 'admin'] },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No Super Admin account found associated with this email address',
+      });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        success: false,
+        message: 'This administrator account is deactivated. Contact system support.',
+      });
+    }
+
+    // Generate 6-digit numeric OTP
+    const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+
+    // Hash OTP before storing in DB for security
+    const hashedOtp = crypto.createHash('sha256').update(otpCode).digest('hex');
+
+    user.resetPasswordOtp = hashedOtp;
+    user.resetPasswordExpire = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
+    await user.save({ validateBeforeSave: false });
+
+    // Send email via Nodemailer
+    const mailResult = await sendPasswordResetEmail(normalizedEmail, otpCode, user.name || 'Super Admin');
+
+    const isSimulated = mailResult.simulated || false;
+
+    res.status(200).json({
+      success: true,
+      message: 'A 6-digit verification code has been sent to your registered email address.',
+      email: normalizedEmail,
+      simulated: isSimulated,
+      ...(isSimulated ? { devOtp: otpCode } : {}),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/auth/reset-password
+ * Body: { email, otp, newPassword }
+ */
+const resetPasswordHandler = async (req, res, next) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, verification code (OTP), and new password are required',
+      });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must be at least 8 characters long',
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const user = await User.findOne({
+      email: normalizedEmail,
+      role: { $in: ['superadmin', 'admin'] },
+    }).select('+resetPasswordOtp +resetPasswordExpire');
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'No Super Admin account found associated with this email address',
+      });
+    }
+
+    if (!user.resetPasswordOtp || !user.resetPasswordExpire) {
+      return res.status(400).json({
+        success: false,
+        message: 'No active password reset request found. Please request a new verification code.',
+      });
+    }
+
+    if (user.resetPasswordExpire < new Date()) {
+      user.resetPasswordOtp = undefined;
+      user.resetPasswordExpire = undefined;
+      await user.save({ validateBeforeSave: false });
+      return res.status(400).json({
+        success: false,
+        message: 'Verification code has expired. Please request a new code.',
+      });
+    }
+
+    const hashedInputOtp = crypto.createHash('sha256').update(otp.toString().trim()).digest('hex');
+    if (hashedInputOtp !== user.resetPasswordOtp) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification code. Please check your email and try again.',
+      });
+    }
+
+    // Set new password (pre-save hook will hash it)
+    user.password = newPassword;
+    user.resetPasswordOtp = undefined;
+    user.resetPasswordExpire = undefined;
+    await user.save();
+
+    res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully. You can now log in with your new password.',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   sendOTPHandler,
   verifyOTPHandler,
@@ -486,4 +625,6 @@ module.exports = {
   updateMeHandler,
   deleteMeHandler,
   changePasswordHandler,
+  forgotPasswordHandler,
+  resetPasswordHandler,
 };

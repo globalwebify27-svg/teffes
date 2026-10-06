@@ -14,6 +14,8 @@ const {
   updateMeHandler,
   deleteMeHandler,
   changePasswordHandler,
+  forgotPasswordHandler,
+  resetPasswordHandler,
 } = require('../controllers/auth.controller');
 
 const router = Router();
@@ -73,8 +75,10 @@ router.post('/send-otp', otpLimiter, validate(sendOTPSchema), sendOTPHandler);
 router.post('/verify-otp', otpLimiter, validate(verifyOTPSchema), verifyOTPHandler);
 router.post('/firebase-login', loginLimiter, validate(firebaseLoginSchema), firebaseLoginHandler);
 
-// Admin / Rider login
+// Admin / Rider login & password recovery
 router.post('/admin-login', loginLimiter, validate(adminLoginSchema), adminLoginHandler);
+router.post('/forgot-password', otpLimiter, forgotPasswordHandler);
+router.post('/reset-password', loginLimiter, resetPasswordHandler);
 
 // Token management
 router.post('/refresh', refreshTokenHandler);

@@ -9,6 +9,9 @@ class StoreModel {
   final bool deliveryEnabled;
   final String timings;
   final String distance;
+  final bool isAvailable;
+  final List<String> outOfStockItems;
+  final double? distanceKm;
 
   const StoreModel({
     required this.storeId,
@@ -21,12 +24,20 @@ class StoreModel {
     this.deliveryEnabled = true,
     this.timings = '08:00 AM - 08:00 PM',
     this.distance = '',
+    this.isAvailable = true,
+    this.outOfStockItems = const [],
+    this.distanceKm,
   });
 
   factory StoreModel.fromJson(Map<String, dynamic> json, [int index = 0]) {
     final dist = json['distance'] != null && json['distance'].toString().isNotEmpty
         ? json['distance'].toString()
         : '${(0.8 + index * 0.8).toStringAsFixed(1)} km away';
+
+    final isAvail = json['isAvailable'] == null ? true : (json['isAvailable'] == true);
+    final outOfStockList = (json['outOfStockItems'] is List)
+        ? (json['outOfStockItems'] as List).map((e) => e.toString()).toList()
+        : <String>[];
 
     return StoreModel(
       storeId: (json['storeId'] ?? json['id'] ?? 'S00${index + 1}').toString(),
@@ -39,6 +50,9 @@ class StoreModel {
       deliveryEnabled: json['deliveryEnabled'] ?? true,
       timings: (json['timings'] ?? '08:00 AM - 08:00 PM').toString(),
       distance: dist,
+      isAvailable: isAvail,
+      outOfStockItems: outOfStockList,
+      distanceKm: json['distanceKm'] != null ? (json['distanceKm'] as num).toDouble() : null,
     );
   }
 
@@ -54,6 +68,9 @@ class StoreModel {
       'deliveryEnabled': deliveryEnabled,
       'timings': timings,
       'distance': distance,
+      'isAvailable': isAvailable,
+      'outOfStockItems': outOfStockItems,
+      if (distanceKm != null) 'distanceKm': distanceKm,
     };
   }
 }
