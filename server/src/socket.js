@@ -31,6 +31,32 @@ const initSocket = (httpServer) => {
       }
     });
 
+    // Join store room for store-admin order alerts
+    socket.on('join:store', (storeId) => {
+      if (storeId) {
+        const room = storeId.startsWith('store:') ? storeId : `store:${storeId}`;
+        socket.join(room);
+        console.log(`[Socket.IO] Socket ${socket.id} joined store room ${room}`);
+      }
+    });
+
+    socket.on('leave:store', (storeId) => {
+      if (storeId) {
+        const room = storeId.startsWith('store:') ? storeId : `store:${storeId}`;
+        socket.leave(room);
+        console.log(`[Socket.IO] Socket ${socket.id} left store room ${room}`);
+      }
+    });
+
+    // Join role room (e.g. 'role:superadmin')
+    socket.on('join:role', (role) => {
+      if (role) {
+        const room = `role:${role}`;
+        socket.join(room);
+        console.log(`[Socket.IO] Socket ${socket.id} joined role room ${room}`);
+      }
+    });
+
     // Join order room for real-time tracking
     socket.on('join:order', (orderId) => {
       if (orderId) {
@@ -155,7 +181,7 @@ const emitWalletUpdate = (userId, balance, transaction) => {
 
 const emitOrderCreated = (order) => {
   if (!io) return;
-  io.emit('order:created', {
+  const payload = {
     orderId: order.orderId,
     amount: order.amount,
     customerName: order.customer?.name || 'Customer',
@@ -165,9 +191,19 @@ const emitOrderCreated = (order) => {
     itemsCount: order.items?.length || 0,
     createdAt: order.createdAt || new Date().toISOString(),
     order,
-  });
-  // Also broadcast to general feed for Store Admin & Dashboard live refresh
-  io.emit('orders:refreshed', { orderId: order.orderId, status: order.status });
+  };
+
+  // Targeted store room emission (Store Admin of this specific store only)
+  if (order.storeId) {
+    const storeRoom = `store:${order.storeId}`;
+    io.to(storeRoom).emit('order:created', payload);
+  }
+
+  // Super Admin room emission
+  io.to('role:superadmin').emit('order:created', payload);
+
+  // General feed for dashboard statistics live refresh (does not trigger audio alarm)
+  io.emit('orders:refreshed', { orderId: order.orderId, storeId: order.storeId, status: order.status });
 };
 
 module.exports = {

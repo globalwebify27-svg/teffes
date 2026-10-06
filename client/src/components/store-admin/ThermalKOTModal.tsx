@@ -22,6 +22,7 @@ interface ThermalOrder {
   status?: string;
   amount: number;
   deliveryFee?: number;
+  tipAmount?: number;
   discountAmount?: number;
   paymentMethod?: string;
   paymentStatus?: string;
@@ -151,7 +152,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                 onClick={onClose}
                 className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-200"
               >
-                ✕
+                <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
             </div>
           </div>
@@ -171,7 +172,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                 <div className="text-[9px] mt-0.5">Harmu Road, Kishore Ganj, Ranchi</div>
                 <div className="text-[9px]">Ph: +91 91555 88200 · teffes.in</div>
                 <div className="mt-1.5 inline-block border border-black px-2 py-0.5 font-black text-[11px] tracking-wide">
-                  {isPickup ? "🏪 STORE PICKUP KOT" : "🛵 HOME DELIVERY KOT"}
+                  {isPickup ? "STORE PICKUP KOT" : "HOME DELIVERY KOT"}
                 </div>
               </div>
 
@@ -226,7 +227,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                         </div>
                         {(item.cuttingInstructions || item.notes) && (
                           <div className="mt-0.5 pl-2 text-[9px] bg-gray-100 p-0.5 border border-dashed border-gray-400 font-sans">
-                            ✂️ <strong>Note:</strong> {item.cuttingInstructions || item.notes}
+                            <strong>Note:</strong> {item.cuttingInstructions || item.notes}
                           </div>
                         )}
                         <div className="text-right text-[9.5px] text-gray-800 font-semibold mt-0.5">
@@ -260,6 +261,12 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                     <span>₹{deliveryFee}</span>
                   </div>
                 )}
+                {order.tipAmount != null && order.tipAmount > 0 && (
+                  <div className="flex justify-between">
+                    <span>Rider Tip (100% to partner):</span>
+                    <span>₹{order.tipAmount}</span>
+                  </div>
+                )}
                 <div className="flex justify-between font-black text-[13px] pt-1 border-t border-dashed border-black">
                   <span>TOTAL AMOUNT:</span>
                   <span>₹{order.amount}</span>
@@ -269,7 +276,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               {/* Payment Status Strip */}
               <div className="py-2 border-b border-dashed border-black text-center">
                 <div className="font-bold text-[11px]">
-                  PAYMENT: {isPaid ? "✅ PAID ONLINE" : "⚠️ CASH ON DELIVERY (COD)"}
+                  PAYMENT: {isPaid ? "PAID ONLINE" : "CASH ON DELIVERY (COD)"}
                 </div>
                 <div className="text-[9.5px] text-gray-700">
                   {isPaid

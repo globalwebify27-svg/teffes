@@ -173,7 +173,7 @@ const handleRazorpayWebhook = async (req, res, next) => {
           // Push notification to customer
           if (order.customer?.userId) {
             notificationService.sendToUser(order.customer.userId, {
-              title: 'Payment Received! 🥩',
+              title: 'Payment Received',
               body: `Your payment for order #${order.orderId} was confirmed. Butchery preparation is underway!`,
               data: {
                 notificationType: 'ORDER_STATUS',

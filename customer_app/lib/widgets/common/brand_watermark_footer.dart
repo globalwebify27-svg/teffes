@@ -14,7 +14,7 @@ class BrandWatermarkFooter extends StatelessWidget {
     this.showExploreButton = true,
   });
 
-  Widget _buildMiniCircle(String emoji, Color bgColor) {
+  Widget _buildMiniCircle(IconData icon, Color bgColor, Color iconColor) {
     return Container(
       width: 24,
       height: 24,
@@ -31,9 +31,10 @@ class BrandWatermarkFooter extends StatelessWidget {
         ],
       ),
       child: Center(
-        child: Text(
-          emoji,
-          style: const TextStyle(fontSize: 11),
+        child: Icon(
+          icon,
+          size: 13,
+          color: iconColor,
         ),
       ),
     );
@@ -75,15 +76,15 @@ class BrandWatermarkFooter extends StatelessWidget {
                             children: [
                               Positioned(
                                 left: 0,
-                                child: _buildMiniCircle('🍗', const Color(0xFFFFEDD5)),
+                                child: _buildMiniCircle(Icons.restaurant_rounded, const Color(0xFFFFEDD5), const Color(0xFFEA580C)),
                               ),
                               Positioned(
                                 left: 16,
-                                child: _buildMiniCircle('🥩', const Color(0xFFFFE4E6)),
+                                child: _buildMiniCircle(Icons.dinner_dining_rounded, const Color(0xFFFFE4E6), const Color(0xFFE11D48)),
                               ),
                               Positioned(
                                 left: 32,
-                                child: _buildMiniCircle('🐟', const Color(0xFFE0F2FE)),
+                                child: _buildMiniCircle(Icons.set_meal_rounded, const Color(0xFFE0F2FE), const Color(0xFF0284C7)),
                               ),
                             ],
                           ),
@@ -143,9 +144,10 @@ class BrandWatermarkFooter extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 8),
-                    const Text(
-                      '❤️',
-                      style: TextStyle(fontSize: 26, height: 1.15),
+                    const Icon(
+                      Icons.favorite_rounded,
+                      color: Color(0xFFEF4444),
+                      size: 28,
                     ),
                   ],
                 ),

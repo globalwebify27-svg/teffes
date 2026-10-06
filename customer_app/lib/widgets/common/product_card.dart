@@ -225,7 +225,7 @@ class ProductCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Top Badges Row: "✓ 100% Antibiotic-free" and "★ 4.9 (480)"
+            // Top Badges Row: "100% Antibiotic-free" and "4.9 (480)"
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [

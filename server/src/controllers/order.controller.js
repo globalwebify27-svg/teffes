@@ -1,6 +1,7 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Coupon = require('../models/Coupon');
+const ReturnRequest = require('../models/ReturnRequest');
 const mongoose = require('mongoose');
 const notificationService = require('../services/notificationService');
 const { emitOrderCreated } = require('../socket');
@@ -119,7 +120,7 @@ const createOrder = async (req, res, next) => {
     const finalAmount = amount !== undefined ? amount : (totalAmount !== undefined ? totalAmount : computedFinalAmount);
 
     let orderAddress = isPickup
-      ? '🏪 Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi (Takeaway Counter)'
+      ? 'Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi (Takeaway Counter)'
       : (shippingAddress || 'Ranchi Delivery');
 
     if (!isPickup && addressId) {
@@ -170,6 +171,8 @@ const createOrder = async (req, res, next) => {
       couponCode: verifiedCouponSnapshot ? verifiedCouponSnapshot.code : null,
       discountAmount: verifiedDiscount,
       coupon: verifiedCouponSnapshot,
+      tipAmount: tipAmount,
+      riderEarning: 65 + tipAmount,
       status: 'Pending',
     });
 
@@ -204,7 +207,7 @@ const createOrder = async (req, res, next) => {
 
     // Dispatch FCM push notification to customer
     notificationService.sendToUser(user._id, {
-      title: 'Order Placed Successfully! 🥩',
+      title: 'Order Placed Successfully',
       body: `Your order #${newOrder.orderId} for ₹${newOrder.amount} has been received and sent to the butchery.`,
       data: {
         notificationType: 'ORDER_STATUS',
@@ -322,6 +325,26 @@ const requestReturn = async (req, res, next) => {
     order.returnStatus = 'Requested';
     order.returnReason = reason || 'Customer requested return';
     await order.save();
+
+    // Create a corresponding ReturnRequest ticket for Store Admin dashboard
+    try {
+      const existingReq = await ReturnRequest.findOne({ orderId: order.orderId });
+      if (!existingReq) {
+        await ReturnRequest.create({
+          requestId: 'RET-' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100).toString().padStart(2, '0'),
+          orderId: order.orderId,
+          customer: order.customer?.name || 'Customer',
+          phone: order.customer?.phone || '',
+          items: order.itemSummary || (order.items || []).map((i) => `${i.name} ×${i.quantity}`).join(', ') || 'Fresh cuts order',
+          reason: reason || 'Customer requested return/exchange',
+          condition: 'Reported within 60 mins guarantee',
+          status: 'Pending Review',
+          storeId: order.storeId || 'S001',
+        });
+      }
+    } catch (retErr) {
+      console.warn('[ReturnRequest] Creation warning:', retErr.message);
+    }
 
     res.status(200).json({
       success: true,

@@ -125,7 +125,7 @@ class RiderFcmService {
   /// Display high priority notification alert with sound
   Future<void> _showRiderAlert(RemoteMessage message) async {
     final notification = message.notification;
-    final title = notification?.title ?? message.data['title'] ?? 'New Delivery Assignment! 🛵';
+    final title = notification?.title ?? message.data['title'] ?? 'New Delivery Assignment';
     final body = notification?.body ?? message.data['body'] ?? 'You have a new delivery task assigned';
 
     final androidDetails = AndroidNotificationDetails(

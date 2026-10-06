@@ -30,7 +30,10 @@ export default function AboutSection() {
             marginBottom: "16px",
           }}
         >
-          <span>🏆 A Decade of Trust in Ranchi</span>
+          <span className="flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[16px] text-primary">verified</span>
+            <span>A Decade of Trust in Ranchi</span>
+          </span>
         </div>
 
         <h2
@@ -70,22 +73,22 @@ export default function AboutSection() {
         >
           {[
             {
-              icon: "🔪",
+              icon: "content_cut",
               title: "Cut After Order",
               desc: "Never pre-sliced or stored in deep freezers. Every bird or meat cut is prepared freshly once you click order.",
             },
             {
-              icon: "💧",
+              icon: "water_drop",
               title: "RO Water Washed",
               desc: "Thoroughly washed with purified water and hygienic temperature-controlled packing.",
             },
             {
-              icon: "🛡️",
+              icon: "shield",
               title: "100% Chemical Free",
               desc: "Zero formalin, zero artificial growth hormones, and zero chemical preservatives.",
             },
             {
-              icon: "⚡",
+              icon: "schedule",
               title: "90-Min Delivery",
               desc: "Speedy delivery from Kishore Ganj Chowk across Ranchi city straight to your kitchen.",
             },
@@ -100,7 +103,9 @@ export default function AboutSection() {
                 transition: "all var(--transition-base)",
               }}
             >
-              <div style={{ fontSize: "2rem", marginBottom: "12px" }}>{pillar.icon}</div>
+              <div style={{ marginBottom: "12px" }}>
+                <span className="material-symbols-outlined text-[32px] text-primary">{pillar.icon}</span>
+              </div>
               <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--gray-900)", marginBottom: "6px" }}>
                 {pillar.title}
               </h3>

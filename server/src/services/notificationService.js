@@ -149,7 +149,17 @@ const sendToUser = async (userId, { title, body, data = {} }, appType = null) =>
  * Send high-priority alert to a delivery rider
  */
 const sendToRider = async (riderId, { title, body, data = {} }) => {
-  return await sendToUser(riderId, { title, body, data }, 'rider');
+  if (!riderId) return { success: false, reason: 'No riderId provided' };
+  // First attempt: specifically targeting rider app tokens
+  let res = await sendToUser(riderId, { title, body, data }, 'rider');
+  // Fallback: if no tokens registered under appType='rider', check any active token registered for this user
+  if (!res || !res.success || res.failureCount > 0) {
+    const fallbackRes = await sendToUser(riderId, { title, body, data });
+    if (fallbackRes && fallbackRes.success) {
+      return fallbackRes;
+    }
+  }
+  return res;
 };
 
 /**

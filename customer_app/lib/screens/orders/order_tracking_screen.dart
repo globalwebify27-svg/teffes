@@ -270,7 +270,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     if (status == 'Delivered') {
       return {
         'badge': 'DELIVERY COMPLETED',
-        'title': isPickup ? 'Picked Up ✓' : 'Delivered Fresh ✓',
+        'title': isPickup ? 'Picked Up' : 'Delivered Fresh',
         'sub': isPickup
             ? 'Collected from ${order.storeName ?? "Kishore Ganj Hub"}'
             : 'Delivered fresh from ${order.storeName ?? "Kishore Ganj Hub"}',
@@ -804,7 +804,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '${order.rider?.vehicle ?? "Honda Activa"} • ${order.rider?.rating ?? "4.9 ★"} (840+ deliveries)',
+                                  '${order.rider?.vehicle ?? "Honda Activa"} • ${(order.rider?.rating ?? "4.9").replaceAll("★", "").trim()} (840+ deliveries)',
                                   style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                                 ),
                               ],

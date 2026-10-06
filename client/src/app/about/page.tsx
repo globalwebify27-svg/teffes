@@ -110,7 +110,7 @@ export default function AboutPage() {
                 desc: "Zero formalin, zero artificial growth hormones, and zero artificial preservatives. 100% natural farm poultry & goat.",
               },
               {
-                icon: "bolt",
+                icon: "timer",
                 title: "90-Min Delivery",
                 desc: "Speedy delivery from Kishore Ganj Chowk across Ranchi city straight to your kitchen doorstep.",
               },

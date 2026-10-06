@@ -75,7 +75,7 @@ export default function AnnouncementBar() {
                 {/* Coupon Code Pill */}
                 <span className="bg-white/20 text-white font-mono px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-extrabold shrink-0 border border-white/25 shadow-xs flex items-center gap-1">
                   {currentOffer.isSuperOffer && (
-                    <span className="text-amber-300 text-[10px]">★</span>
+                    <span className="material-symbols-outlined text-amber-300 text-[12px] leading-none">star</span>
                   )}
                   <span>{currentOffer.code}</span>
                 </span>

@@ -69,7 +69,7 @@ function getEtaDetails(order) {
   if (status === 'Delivered') {
     return {
       stage: 'DELIVERED',
-      displayText: 'Delivered ✓',
+      displayText: 'Delivered',
       subText: 'Delivered fresh to your kitchen',
       minutesRemaining: 0,
     };

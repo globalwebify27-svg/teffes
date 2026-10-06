@@ -46,10 +46,10 @@ export default function NotificationPrompt() {
         </div>
         <button
           onClick={handleDismiss}
-          className="text-gray-400 hover:text-gray-600 text-sm leading-none p-1"
+          className="text-gray-400 hover:text-gray-600 leading-none p-1 flex items-center justify-center"
           title="Dismiss"
         >
-          ✕
+          <span className="material-symbols-outlined text-[16px]">close</span>
         </button>
       </div>
 

@@ -7,6 +7,8 @@ export interface User {
   phone?: string;
   role: "customer" | "admin" | "rider" | "superadmin" | "storeadmin";
   isVerified: boolean;
+  storeId?: string;
+  storeName?: string;
 }
 
 // ─── Storage Helpers ──────────────────────────────────────────────────────────

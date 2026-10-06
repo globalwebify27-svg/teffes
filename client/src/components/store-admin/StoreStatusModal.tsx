@@ -90,7 +90,7 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
             onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-200"
           >
-            ✕
+            <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
 
@@ -173,7 +173,10 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
                   onChange={(e) => setDeliveryEnabled(e.target.checked)}
                   className="rounded text-primary focus:ring-primary h-4 w-4"
                 />
-                <span className="text-xs font-bold text-gray-700">🛵 Home Delivery</span>
+                <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-primary">two_wheeler</span>
+                  <span>Home Delivery</span>
+                </span>
               </label>
 
               <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
@@ -183,7 +186,10 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
                   onChange={(e) => setPickupEnabled(e.target.checked)}
                   className="rounded text-primary focus:ring-primary h-4 w-4"
                 />
-                <span className="text-xs font-bold text-gray-700">🏪 Store Pickup</span>
+                <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-600">storefront</span>
+                  <span>Store Pickup</span>
+                </span>
               </label>
             </div>
           </div>

@@ -35,7 +35,10 @@ export default function LoginPage() {
         {/* Ranchi Delivery Guarantee Note */}
         <div className="mt-6 p-3.5 bg-slate-50 rounded-2xl border border-gray-200/60 text-center text-xs text-slate-600 leading-relaxed">
           <div className="flex items-center justify-center gap-1.5 text-tertiary font-bold mb-1">
-            <span className="material-symbols-outlined text-[17px]">bolt</span>
+            <svg className="w-4 h-4 text-emerald-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
             <span>90-Min Fresh Delivery in Ranchi</span>
           </div>
           No password needed — 100% secure OTP verification.

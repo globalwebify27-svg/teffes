@@ -16,13 +16,13 @@ import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
-  { key: "dashboard",  label: "Dashboard",         icon: "dashboard" },
-  { key: "orders",     label: "Live Orders",        icon: "local_shipping" },
-  { key: "products",   label: "Products & Stock",   icon: "restaurant" },
-  { key: "inventory",  label: "Inventory",          icon: "inventory_2" },
-  { key: "customers",  label: "Customers",          icon: "group" },
-  { key: "riders",     label: "Riders & Dispatch",  icon: "two_wheeler" },
-  { key: "returns",    label: "Returns & Exchange", icon: "swap_horiz" },
+  { key: "dashboard", label: "Dashboard", icon: "dashboard", sub: "Live overview of today's orders, revenue, and inventory" },
+  { key: "orders", label: "Live Orders", icon: "local_shipping", sub: "Manage today's orders from cutting to customer delivery" },
+  { key: "products", label: "Products & Stock", icon: "restaurant", sub: "Toggle live availability of butchery cuts for your store" },
+  { key: "inventory", label: "Inventory", icon: "inventory_2", sub: "Track fresh stock levels and morning butchery batches" },
+  { key: "customers", label: "Customers", icon: "group", sub: "Directory of customers who ordered from your store" },
+  { key: "riders", label: "Riders & Dispatch", icon: "two_wheeler", sub: "Assign ready orders to available delivery partners" },
+  { key: "returns", label: "Returns & Exchange", icon: "swap_horiz", sub: "Process customer exchange requests under the 60-minute policy" },
 ];
 
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
@@ -35,26 +35,26 @@ const KPICard = ({ icon, label, value, sub, color = "#941717", onClick }: {
       background: "#ffffff",
       border: "1px solid #ede8e0",
       borderRadius: "14px",
-      padding: "22px 20px",
+      padding: "16px 18px",
       boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
       cursor: onClick ? "pointer" : "default",
       transition: "box-shadow 150ms ease",
       borderLeft: `4px solid ${color}`,
     }}
   >
-    <div style={{ marginBottom: "10px" }}>
-      <span className="material-symbols-outlined text-[30px]" style={{ color }}>{icon}</span>
+    <div style={{ marginBottom: "6px" }}>
+      <span className="material-symbols-outlined text-[22px]" style={{ color }}>{icon}</span>
     </div>
-    <div style={{ fontSize: "1.85rem", fontWeight: 900, color, fontFamily: "Outfit, sans-serif", lineHeight: 1 }}>{value}</div>
-    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#423b32", marginTop: "4px" }}>{label}</div>
-    <div style={{ fontSize: "0.75rem", color: "#73695b", marginTop: "2px" }}>{sub}</div>
+    <div style={{ fontSize: "1.35rem", fontWeight: 800, color, fontFamily: "Outfit, sans-serif", lineHeight: 1.1 }}>{value}</div>
+    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginTop: "4px" }}>{label}</div>
+    <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "2px" }}>{sub}</div>
   </div>
 );
 
 const SectionTitle = ({ title, sub }: { title: string; sub?: string }) => (
-  <div style={{ marginBottom: "24px" }}>
-    <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#171410", margin: 0 }}>{title}</h2>
-    {sub && <p style={{ color: "#73695b", fontSize: "0.875rem", marginTop: "4px" }}>{sub}</p>}
+  <div style={{ margin: "20px 0 12px 0" }}>
+    <h2 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#171410", margin: 0 }}>{title}</h2>
+    {sub && <p style={{ color: "#73695b", fontSize: "0.78rem", marginTop: "2px" }}>{sub}</p>}
   </div>
 );
 
@@ -130,8 +130,6 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
 
   return (
     <div>
-      <SectionTitle title="Store Dashboard" sub={`Kishore Ganj — Live overview · ${new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" })}`} />
-
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "16px", marginBottom: "36px" }}>
         {displayKpis.map(k => <KPICard key={k.label} {...k} onClick={() => setActiveTab(k.tab)} />)}
       </div>
@@ -277,8 +275,6 @@ function LiveOrdersTab() {
 
   return (
     <div>
-      <SectionTitle title="Live Order Queue" sub="Manage today's orders from cutting to delivery" />
-
       {/* Status filter pills */}
       <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
         {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"].map(s => (
@@ -337,8 +333,12 @@ function LiveOrdersTab() {
                           fontSize: "0.72rem",
                           fontWeight: 800,
                           letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
                         }}>
-                          🏪 STORE PICKUP (Customer Takeaway)
+                          <span className="material-symbols-outlined text-[14px]">storefront</span>
+                          STORE PICKUP (Customer Takeaway)
                         </span>
                       ) : (
                         <span style={{
@@ -350,8 +350,12 @@ function LiveOrdersTab() {
                           fontSize: "0.72rem",
                           fontWeight: 800,
                           letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
                         }}>
-                          🛵 HOME EXPRESS DELIVERY
+                          <span className="material-symbols-outlined text-[14px]">delivery_dining</span>
+                          HOME EXPRESS DELIVERY
                         </span>
                       )}
                     </div>
@@ -364,9 +368,17 @@ function LiveOrdersTab() {
                       fontWeight: isPickup ? 600 : 400,
                       marginTop: "2px",
                     }}>
-                      {isPickup
-                        ? "🏪 Customer will collect at Kishore Ganj Butchery Counter"
-                        : `📍 ${o.customer?.address || "Ranchi"}`}
+                      {isPickup ? (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <span className="material-symbols-outlined text-[14px]">storefront</span>
+                          Customer will collect at Kishore Ganj Butchery Counter
+                        </span>
+                      ) : (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <span className="material-symbols-outlined text-[14px]">location_on</span>
+                          {o.customer?.address || "Ranchi"}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
@@ -375,8 +387,9 @@ function LiveOrdersTab() {
                   </div>
                 </div>
 
-                <div style={{ color: "#423b32", fontSize: "0.875rem", fontWeight: 600, marginBottom: "12px" }}>
-                  🛒 {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
+                <div style={{ color: "#423b32", fontSize: "0.875rem", fontWeight: 600, marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="material-symbols-outlined text-[16px] text-gray-500">shopping_cart</span>
+                  <span>{o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}</span>
                 </div>
 
                 {/* Dynamic Operational Prep & ETA Strip */}
@@ -394,10 +407,14 @@ function LiveOrdersTab() {
                   fontSize: "0.78rem"
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#574e42", flexWrap: "wrap" }}>
-                    <span>⏱️ Prep Time: <strong>{o.prepTimeMinutes || 25} mins</strong></span>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <span className="material-symbols-outlined text-[14px]">timer</span>
+                      Prep Time: <strong>{o.prepTimeMinutes || 25} mins</strong>
+                    </span>
                     <span>•</span>
-                    <span>
-                      🎯 Target Delivery: <strong>
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                      <span className="material-symbols-outlined text-[14px]">flag</span>
+                      Target Delivery: <strong>
                         {o.targetDeliveryTime
                           ? new Date(o.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
                           : "Calculated"}
@@ -406,8 +423,9 @@ function LiveOrdersTab() {
                     {o.status === "Out for Delivery" && (
                       <>
                         <span>•</span>
-                        <span style={{ color: "#0369a1", fontWeight: 700 }}>
-                          🛵 Rider in transit (~{o.remainingTransitMinutes != null ? o.remainingTransitMinutes : 15} mins away)
+                        <span style={{ color: "#0369a1", fontWeight: 700, display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                          <span className="material-symbols-outlined text-[14px]">delivery_dining</span>
+                          Rider in transit (~{o.remainingTransitMinutes != null ? o.remainingTransitMinutes : 15} mins away)
                         </span>
                       </>
                     )}
@@ -547,7 +565,6 @@ function ProductsStockTab() {
 
   return (
     <div>
-      <SectionTitle title="Products & Stock" sub="Toggle availability for your store" />
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading products from MongoDB Atlas…</div>
       ) : (
@@ -676,7 +693,6 @@ function InventoryTab() {
 
   return (
     <div>
-      <SectionTitle title="Raw Butchery Inventory" sub="Track fresh stock levels for today's butchery" />
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading live inventory…</div>
       ) : (
@@ -721,7 +737,10 @@ function InventoryTab() {
                     gap: "6px",
                   }}
                 >
-                  <span>📦 Adjust Stock (+ / - / Set)</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    <span className="material-symbols-outlined text-[16px]">inventory_2</span>
+                    Adjust Stock (+ / - / Set)
+                  </span>
                 </button>
               </div>
             );
@@ -746,9 +765,9 @@ function InventoryTab() {
               </div>
               <button
                 onClick={() => { setShowStockModal(false); setSelectedItem(null); }}
-                style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
               >
-                ✕
+                <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
@@ -789,9 +808,14 @@ function InventoryTab() {
                     fontSize: "0.82rem",
                     cursor: "pointer",
                     textAlign: "center",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
                   }}
                 >
-                  ➕ Add Stock
+                  <span className="material-symbols-outlined text-[15px]">add</span>
+                  Add Stock
                 </button>
                 <button
                   type="button"
@@ -811,7 +835,7 @@ function InventoryTab() {
                     textAlign: "center",
                   }}
                 >
-                  ➖ Reduce Stock
+                  Reduce Stock
                 </button>
                 <button
                   type="button"
@@ -831,7 +855,7 @@ function InventoryTab() {
                     textAlign: "center",
                   }}
                 >
-                  🎯 Set Exact
+                  Set Exact
                 </button>
               </div>
             </div>
@@ -892,7 +916,7 @@ function InventoryTab() {
               />
               {operation === "reduce" && inputQty > currentStock && (
                 <div style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "4px", fontWeight: 600 }}>
-                  ⚠️ Deducting more than current stock ({currentStock} {selectedItem.unit}). Balance will drop to 0.
+                  Deducting more than current stock ({currentStock} {selectedItem.unit}). Balance will drop to 0.
                 </div>
               )}
             </div>
@@ -911,7 +935,7 @@ function InventoryTab() {
                   {currentStock} {selectedItem.unit}{" "}
                   {operation === "add" && `+ ${inputQty} ${selectedItem.unit}`}
                   {operation === "reduce" && `- ${inputQty} ${selectedItem.unit}`}
-                  {operation === "set" && `➔ New Balance`}
+                  {operation === "set" && `-> New Balance`}
                 </span>
                 <span style={{ fontSize: "1.2rem", fontWeight: 900, color: projectedStock <= (selectedItem.min || 15) ? "#d97706" : "#059669", fontFamily: "Outfit, sans-serif" }}>
                   = {projectedStock} {selectedItem.unit}
@@ -992,7 +1016,6 @@ function CustomersTab() {
 
   return (
     <div>
-      <SectionTitle title="Store Customers" sub="Customers who ordered from your store" />
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading customers…</div>
@@ -1087,10 +1110,8 @@ function RidersTab() {
 
   return (
     <div>
-      <SectionTitle title="Riders & Dispatch" sub="Assign ready orders to available delivery partners" />
-      
       {/* ─── RIDERS POOL ─── */}
-      <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", marginBottom: "12px", marginTop: "24px" }}>👥 Active Rider Pool</h3>
+      <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", marginBottom: "12px", marginTop: "24px" }}>Active Rider Pool</h3>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px", marginBottom: "32px" }}>
         {riders.length === 0 && !loading && (
           <div style={{ padding: "16px", background: "#fff", border: "1px solid #ede8e0", borderRadius: "12px", color: "#73695b", fontSize: "0.85rem" }}>
@@ -1106,17 +1127,17 @@ function RidersTab() {
               <div style={{ fontWeight: 800, color: "#171410", fontSize: "1rem" }}>{r.name}</div>
               <Badge label={r.riderStatus || "Unknown"} color={r.riderStatus === "Available" ? "#059669" : r.riderStatus === "On Delivery" ? "#0284c7" : "#73695b"} />
             </div>
-            <div style={{ fontSize: "0.8rem", color: "#423b32", marginBottom: "4px" }}>📞 {r.phone}</div>
-            <div style={{ fontSize: "0.75rem", color: "#73695b" }}>🛵 {r.vehicleNumber}</div>
+            <div style={{ fontSize: "0.8rem", color: "#423b32", marginBottom: "4px" }}>Phone: {r.phone}</div>
+            <div style={{ fontSize: "0.75rem", color: "#73695b" }}>Vehicle: {r.vehicleNumber}</div>
           </div>
         ))}
       </div>
 
       {/* ─── ORDERS READY FOR DISPATCH ─── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
-        <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>📦 Orders Pending Dispatch (Home Delivery Only)</h3>
+        <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>Orders Pending Dispatch (Home Delivery Only)</h3>
         <span style={{ fontSize: "0.78rem", color: "#92400e", background: "#fef3c7", border: "1px solid #fde68a", padding: "3px 10px", borderRadius: "99px", fontWeight: 700 }}>
-          🏪 Store Pickup orders are excluded (handled at counter)
+          Store Pickup orders are excluded (handled at counter)
         </span>
       </div>
       {loading ? (
@@ -1139,7 +1160,7 @@ function RidersTab() {
                     {o.customer?.name} ({o.customer?.phone})
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "#73695b", marginTop: "2px" }}>
-                    📍 {o.customer?.address}
+                    {o.customer?.address}
                   </div>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
@@ -1163,7 +1184,7 @@ function RidersTab() {
                 </div>
               </div>
               <div style={{ fontSize: "0.85rem", color: "#423b32", background: "#faf8f5", padding: "10px 12px", borderRadius: "8px" }}>
-                🥩 <strong>Items:</strong> {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
+                <strong>Items:</strong> {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
               </div>
             </div>
           ))}
@@ -1177,8 +1198,8 @@ function RidersTab() {
           background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
         }}>
           <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "420px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)" }}>
-            <h3 style={{ margin: "0 0 16px 0", fontSize: "1.2rem", fontWeight: 800, color: "#171410" }}>🛵 Dispatch Order #{selectedOrder.orderId || selectedOrder.id}</h3>
-            
+            <h3 style={{ margin: "0 0 16px 0", fontSize: "1.2rem", fontWeight: 800, color: "#171410" }}>Dispatch Order #{selectedOrder.orderId || selectedOrder.id}</h3>
+
             <div style={{ marginBottom: "20px" }}>
               <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 700, color: "#423b32", marginBottom: "8px" }}>Select an Available Rider:</label>
               <select
@@ -1193,7 +1214,7 @@ function RidersTab() {
               </select>
               {availableRiders.length === 0 && (
                 <p style={{ color: "#dc2626", fontSize: "0.8rem", marginTop: "8px", fontWeight: 600 }}>
-                  ⚠️ There are no available riders right now. Please wait until a rider completes their delivery or comes online.
+                  There are no available riders right now. Please wait until a rider completes their delivery or comes online.
                 </p>
               )}
             </div>
@@ -1263,10 +1284,8 @@ function ReturnsTab() {
 
   return (
     <div>
-      <SectionTitle title="Returns & Exchange Requests" sub="Process 60-minute fresh meat exchange policy" />
-
       <div style={{ background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "12px", padding: "14px 18px", marginBottom: "24px", fontSize: "0.875rem", color: "#92400e" }}>
-        ⚠️ <strong>60-Minute Policy:</strong> All exchange requests must be processed within 60 minutes of delivery to be eligible.
+        <strong>60-Minute Policy:</strong> All exchange requests must be processed within 60 minutes of delivery to be eligible.
       </div>
 
       {loading ? (
@@ -1286,7 +1305,7 @@ function ReturnsTab() {
                 </div>
                 <Badge label={r.status} color={r.status === "Approved" || r.status === "Exchange Dispatched" ? "#059669" : r.status === "Rejected" ? "#941717" : "#d97706"} />
               </div>
-              <div style={{ color: "#423b32", fontSize: "0.875rem", marginBottom: "4px" }}>🥩 <strong>{r.items}</strong></div>
+              <div style={{ color: "#423b32", fontSize: "0.875rem", marginBottom: "4px" }}><strong>{r.items}</strong></div>
               <div style={{ color: "#73695b", fontSize: "0.8rem", marginBottom: "14px" }}>Reason: {r.reason}</div>
               {r.status === "Pending Review" && (
                 <div style={{ display: "flex", gap: "8px" }}>
@@ -1294,13 +1313,13 @@ function ReturnsTab() {
                     onClick={() => updateStatus(r.requestId || r.id, "Approved")}
                     style={{ background: "#059669", border: "none", borderRadius: "8px", padding: "7px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
                   >
-                    ✓ Approve Exchange
+                    Approve Exchange
                   </button>
                   <button
                     onClick={() => updateStatus(r.requestId || r.id, "Rejected")}
                     style={{ background: "#fdf2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "7px 16px", color: "#941717", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
                   >
-                    ✕ Reject
+                    Reject
                   </button>
                 </div>
               )}
@@ -1381,11 +1400,26 @@ export default function StoreAdminPage() {
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
+    const currentStoreId = user.storeId || "S001";
+
+    // Join store-specific room
+    if (currentStoreId) {
+      socket.emit("join:store", currentStoreId);
+    }
+    if (user.role) {
+      socket.emit("join:role", user.role);
+    }
 
     const onOrderCreated = (data: any) => {
       const order = data.order || data;
       const orderId = order.orderId;
       if (!orderId || acknowledgedIdsRef.current.has(orderId)) return;
+
+      // ─── STRICT STORE ISOLATION ───
+      // Ignore orders that do not belong to this store (unless superadmin)
+      if (order.storeId && order.storeId !== currentStoreId && user.role !== "superadmin") {
+        return;
+      }
 
       setIncomingOrders((prev) => {
         if (prev.some((o) => o.orderId === orderId)) return prev;
@@ -1395,14 +1429,14 @@ export default function StoreAdminPage() {
       if (!isMuted) {
         orderAlarm.startAlarm();
       }
-      toast.info(`🔔 New Order #${orderId} received! Total: ₹${order.amount || order.totalAmount || 0}`, "New Order Alert");
+      toast.info(`New Order #${orderId} received! Total: ₹${order.amount || order.totalAmount || 0}`, "New Order Alert");
     };
 
     socket.on("order:created", onOrderCreated);
 
     // Initial check and 12-second polling redundancy for Pending orders
     const checkPendingOrders = () => {
-      api.get<{ success: boolean; orders: any[] }>("/store-admin/orders?status=Pending")
+      api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=Pending&storeId=${currentStoreId}`)
         .then((res) => {
           if (res.data.success && Array.isArray(res.data.orders)) {
             const unacked = res.data.orders.filter((o) => !acknowledgedIdsRef.current.has(o.orderId));
@@ -1417,13 +1451,16 @@ export default function StoreAdminPage() {
             }
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
 
     checkPendingOrders();
     const pollInterval = setInterval(checkPendingOrders, 12000);
 
     return () => {
+      if (currentStoreId) {
+        socket.emit("leave:store", currentStoreId);
+      }
       socket.off("order:created", onOrderCreated);
       clearInterval(pollInterval);
       orderAlarm.stopAlarm();
@@ -1437,7 +1474,7 @@ export default function StoreAdminPage() {
 
   const handleTestAlarmSound = () => {
     orderAlarm.playChime();
-    toast.success("🔊 Chime played! Speakers and audio alerts are fully functional.", "Audio Test Successful");
+    toast.success("Chime played! Speakers and audio alerts are fully functional.", "Audio Test Successful");
   };
 
   const toggleMute = () => {
@@ -1468,13 +1505,13 @@ export default function StoreAdminPage() {
 
 
   const tabComponents: Record<string, React.ReactNode> = {
-    dashboard:  <DashboardTab setActiveTab={setActiveTab} />,
-    orders:     <LiveOrdersTab />,
-    products:   <ProductsStockTab />,
-    inventory:  <InventoryTab />,
-    customers:  <CustomersTab />,
-    riders:     <RidersTab />,
-    returns:    <ReturnsTab />,
+    dashboard: <DashboardTab setActiveTab={setActiveTab} />,
+    orders: <LiveOrdersTab />,
+    products: <ProductsStockTab />,
+    inventory: <InventoryTab />,
+    customers: <CustomersTab />,
+    riders: <RidersTab />,
+    returns: <ReturnsTab />,
   };
 
   return (
@@ -1509,9 +1546,6 @@ export default function StoreAdminPage() {
                 maxWidth: sidebarCollapsed ? "40px" : "160px",
               }}
             />
-            {!sidebarCollapsed && (
-              <div style={{ fontSize: "0.6rem", color: "#fde68a", fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap" }}>STORE ADMIN</div>
-            )}
           </div>
         </div>
 
@@ -1553,6 +1587,14 @@ export default function StoreAdminPage() {
 
         {/* Collapse Toggle + User Info / Sign Out */}
         <div style={{ padding: "12px 8px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+          {/* User info — only when expanded */}
+          {!sidebarCollapsed && (
+            <div style={{ padding: "10px", background: "rgba(255,255,255,0.07)", borderRadius: "10px", marginBottom: "8px", textAlign: "center" }}>
+              <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#fff", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
+              <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
+            </div>
+          )}
+
           {/* Change Password button */}
           <button
             onClick={() => setShowChangePassword(true)}
@@ -1565,7 +1607,7 @@ export default function StoreAdminPage() {
               padding: "9px",
               color: "#fff",
               cursor: "pointer",
-              fontSize: sidebarCollapsed ? "1rem" : "0.78rem",
+              fontSize: sidebarCollapsed ? "1rem" : "0.82rem",
               fontWeight: 700,
               display: "flex",
               alignItems: "center",
@@ -1578,40 +1620,31 @@ export default function StoreAdminPage() {
             <span className="material-symbols-outlined text-[17px]">lock_reset</span>
             {!sidebarCollapsed && <span>Change Password</span>}
           </button>
-
-          {/* Always-visible sign-out icon */}
+          {/* Sign Out button — below user profile card with matching styling */}
           <button
             onClick={handleLogout}
             title="Sign Out"
             style={{
               width: "100%",
-              background: "rgba(148,23,23,0.55)",
-              border: "none",
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(239,68,68,0.25)",
               borderRadius: "8px",
               padding: "9px",
-              color: "#fff",
+              color: "#f87171",
               cursor: "pointer",
-              fontSize: sidebarCollapsed ? "1rem" : "0.78rem",
+              fontSize: sidebarCollapsed ? "1rem" : "0.82rem",
               fontWeight: 700,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "7px",
+              gap: "8px",
               marginBottom: "8px",
-              transition: "background 150ms ease",
+              transition: "all 150ms ease",
             }}
           >
-            <FontAwesomeIcon icon={faPowerOff} style={{ fontSize: "0.9rem" }} />
+            <FontAwesomeIcon icon={faPowerOff} style={{ fontSize: "0.88rem", color: "#ef4444" }} />
             {!sidebarCollapsed && <span>Sign Out</span>}
           </button>
-
-          {/* User info — only when expanded */}
-          {!sidebarCollapsed && (
-            <div style={{ padding: "10px", background: "rgba(255,255,255,0.07)", borderRadius: "10px", marginBottom: "8px" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#fff", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
-              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
-            </div>
-          )}
 
           {/* Collapse toggle — hide on mobile where sidebar is always icon-only */}
           {!isMobile && (
@@ -1642,7 +1675,8 @@ export default function StoreAdminPage() {
       {/* ─── Main Content ────────────────────────────────────────────── */}
       <main style={{ flex: 1, padding: isMobile ? "16px" : "32px", overflowY: "auto", minWidth: 0 }}>
         {/* CSS Keyframes for Alarm Bell Shake & Glowing Pulse */}
-        <style dangerouslySetInnerHTML={{ __html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           @keyframes bellRing {
             0%, 100% { transform: rotate(0deg); }
             15% { transform: rotate(18deg) scale(1.1); }
@@ -1791,88 +1825,125 @@ export default function StoreAdminPage() {
                 }}
               >
                 <span className="material-symbols-outlined text-[18px]">done_all</span>
-                <span>Acknowledge ✓</span>
+                <span>Acknowledge</span>
               </button>
             </div>
           </div>
         )}
 
-        {/* Top bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
-          <div>
-            <div style={{ fontSize: "0.78rem", color: "#73695b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>
-              Store Admin · {user.name || "Kishore Ganj"}, Ranchi
-            </div>
-            <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span className="material-symbols-outlined text-[24px] text-primary">{TABS.find(t => t.key === activeTab)?.icon}</span>
-              <span>{TABS.find(t => t.key === activeTab)?.label}</span>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <button
-              type="button"
-              onClick={handleTestAlarmSound}
-              title="Test audio alert chime and confirm speaker volume"
+        {/* Unified Page Header */}
+        {(() => {
+          const currentTab = TABS.find((t) => t.key === activeTab);
+          return (
+            <div
               style={{
-                background: "#fff",
-                border: "1px solid #ede8e0",
-                borderRadius: "10px",
-                padding: "8px 14px",
-                fontSize: "0.8rem",
-                color: "#73695b",
-                fontWeight: 700,
                 display: "flex",
-                alignItems: "center",
-                gap: "6px",
-                cursor: "pointer",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                transition: "all 150ms ease",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "22px",
+                paddingBottom: "14px",
+                borderBottom: "1px solid #ede8e0",
+                flexWrap: "wrap",
+                gap: "14px",
               }}
             >
-              <span className="material-symbols-outlined text-[16px]" style={{ color: "#941717" }}>
-                volume_up
-              </span>
-              <span>Test Alarm</span>
-            </button>
+              <div>
+                <h1
+                  style={{
+                    fontSize: "1.35rem",
+                    fontWeight: 800,
+                    color: "#171410",
+                    margin: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[22px]" style={{ color: "#941717" }}>
+                    {currentTab?.icon}
+                  </span>
+                  <span>{currentTab?.label}</span>
+                </h1>
+                {currentTab?.sub && (
+                  <p
+                    style={{
+                      fontSize: "0.825rem",
+                      color: "#73695b",
+                      margin: "4px 0 0 0",
+                    }}
+                  >
+                    {currentTab.sub}
+                  </p>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={handleTestAlarmSound}
+                  title="Test audio alert chime and confirm speaker volume"
+                  style={{
+                    background: "#fff",
+                    border: "1px solid #ede8e0",
+                    borderRadius: "10px",
+                    padding: "8px 14px",
+                    fontSize: "0.8rem",
+                    color: "#73695b",
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    cursor: "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                    transition: "all 150ms ease",
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[16px]" style={{ color: "#941717" }}>
+                    volume_up
+                  </span>
+                  <span>Test Alarm</span>
+                </button>
 
-            <button
-              type="button"
-              onClick={() => setIsStatusModalOpen(true)}
-              title="Click to toggle Store Online/Paused or update timings & notices"
-              style={{
-                background: storeData?.isOpen === false ? "#fef2f2" : "#ecfdf5",
-                border: `1.5px solid ${storeData?.isOpen === false ? "#fecaca" : "#a7f3d0"}`,
-                borderRadius: "10px",
-                padding: "8px 14px",
-                fontSize: "0.8rem",
-                color: storeData?.isOpen === false ? "#dc2626" : "#059669",
-                fontWeight: 700,
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                cursor: "pointer",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
-                transition: "all 150ms ease",
-              }}
-            >
-              <span
-                style={{
-                  width: "9px",
-                  height: "9px",
-                  borderRadius: "99px",
-                  background: storeData?.isOpen === false ? "#ef4444" : "#10b981",
-                  display: "inline-block",
-                }}
-              />
-              <span>{storeData?.isOpen === false ? "Store Paused" : "Store Open"}</span>
-              <span className="material-symbols-outlined text-[16px]">tune</span>
-            </button>
-            <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#73695b", display: "flex", alignItems: "center", gap: "6px" }}>
-              <span className="material-symbols-outlined text-[16px]">calendar_today</span>
-              <span>{new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
+                <button
+                  type="button"
+                  onClick={() => setIsStatusModalOpen(true)}
+                  title="Click to toggle Store Online/Paused or update timings & notices"
+                  style={{
+                    background: storeData?.isOpen === false ? "#fef2f2" : "#ecfdf5",
+                    border: `1.5px solid ${storeData?.isOpen === false ? "#fecaca" : "#a7f3d0"}`,
+                    borderRadius: "10px",
+                    padding: "8px 14px",
+                    fontSize: "0.8rem",
+                    color: storeData?.isOpen === false ? "#dc2626" : "#059669",
+                    fontWeight: 700,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    cursor: "pointer",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                    transition: "all 150ms ease",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: "9px",
+                      height: "9px",
+                      borderRadius: "99px",
+                      background: storeData?.isOpen === false ? "#ef4444" : "#10b981",
+                      display: "inline-block",
+                    }}
+                  />
+                  <span>{storeData?.isOpen === false ? "Store Paused" : "Store Open"}</span>
+                  <span className="material-symbols-outlined text-[16px]">tune</span>
+                </button>
+                <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#73695b", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="material-symbols-outlined text-[16px]">calendar_today</span>
+                  <span>{new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Tab Content */}
         {tabComponents[activeTab]}

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { use, useMemo, useState, useEffect } from "react";
+import React, { use, useMemo, useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { getProductById, getRelatedProducts, fetchProductById, Product } from "@/lib/products";
@@ -8,6 +8,7 @@ import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
 import { toast } from "@/lib/toast";
 import { isYouTubeUrl, getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
+import { ProductDetailSkeleton } from "@/components/common/Skeletons";
 
 export type ProductMediaItem =
   | { type: "image"; url: string }
@@ -54,7 +55,11 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
   const [copiedShare, setCopiedShare] = useState(false);
   const [addedAnimation, setAddedAnimation] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [zoomOrigin, setZoomOrigin] = useState({ x: 50, y: 50 });
+  const [mousePos, setMousePos] = useState({ x: 250, y: 250 });
+  const [containerDimensions, setContainerDimensions] = useState({ width: 500, height: 500 });
+  const [zoomMode, setZoomMode] = useState<"circular" | "window">("circular");
+  const zoomLevel = 2.0; // Fixed default 2.0x zoom
+  const imageContainerRef = useRef<HTMLDivElement>(null);
 
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewStats, setReviewStats] = useState({ totalRatings: 0, averageRating: "0" });
@@ -147,21 +152,20 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-    const y = Math.max(0, Math.min(100, ((e.clientY - rect.top) / rect.height) * 100));
-    setZoomOrigin({ x, y });
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    setMousePos({ x, y });
+    if (
+      containerDimensions.width !== rect.width ||
+      containerDimensions.height !== rect.height
+    ) {
+      setContainerDimensions({ width: rect.width, height: rect.height });
+    }
   };
 
   // Loading State
   if (loading) {
-    return (
-      <div className="min-h-[70vh] bg-surface-container-low flex items-center justify-center p-6">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-3 border-primary/20 border-t-primary rounded-full animate-spin" />
-          <p className="font-label-md text-slate-body">Loading fresh artisanal cut...</p>
-        </div>
-      </div>
-    );
+    return <ProductDetailSkeleton />;
   }
 
   // If product not found
@@ -300,35 +304,196 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
 
               {/* Main Media Viewport with Image Zoom, YouTube Embed, or Direct Video Player */}
               <div
-                className="relative flex-1 w-full aspect-square max-h-[540px] rounded-3xl overflow-hidden bg-gray-100 border border-gray-200/80 shadow-xs group select-none"
+                ref={imageContainerRef}
+                className="relative flex-1 w-full aspect-square max-h-[540px] rounded-3xl bg-gray-100 border border-gray-200/80 shadow-xs group select-none"
               >
                 {activeMedia?.type === "image" ? (
-                  <div
-                    className="w-full h-full cursor-crosshair overflow-hidden relative"
-                    onMouseEnter={() => setIsHovered(true)}
-                    onMouseLeave={() => setIsHovered(false)}
-                    onMouseMove={handleMouseMove}
-                  >
-                    <img
-                      src={activeMedia.url}
-                      alt={product.name}
-                      className="w-full h-full object-cover select-none transition-transform duration-150 ease-out"
-                      style={{
-                        transformOrigin: `${zoomOrigin.x}% ${zoomOrigin.y}%`,
-                        transform: isHovered ? "scale(2.2)" : "scale(1)",
-                      }}
-                    />
-
-                    {/* Hover to Zoom Hint Pill */}
+                  <>
+                    {/* Inner Image Canvas with Rounded Corners and Overflow Hidden */}
                     <div
-                      className={`absolute bottom-3 left-3 bg-black/60 backdrop-blur-xs text-white text-[11px] font-medium px-2.5 py-1 rounded-full flex items-center gap-1.5 transition-opacity duration-200 pointer-events-none ${
-                        isHovered ? "opacity-0" : "opacity-90"
-                      }`}
+                      className="w-full h-full rounded-3xl overflow-hidden relative cursor-crosshair"
+                      onMouseEnter={() => setIsHovered(true)}
+                      onMouseLeave={() => setIsHovered(false)}
+                      onMouseMove={handleMouseMove}
                     >
-                      <span className="material-symbols-outlined text-[14px]">zoom_in</span>
-                      <span>Hover to zoom</span>
+                      {/* Base Image at 100% Quality */}
+                      <img
+                        src={activeMedia.url}
+                        alt={product.name}
+                        className="w-full h-full object-cover select-none pointer-events-none"
+                      />
+
+                      {/* ─── MODE 1: Circular Liquid Glass Magnifier Loupe ─── */}
+                      {isHovered && zoomMode === "circular" && (() => {
+                        const LENS_DIAMETER = 190;
+                        const LENS_RADIUS = LENS_DIAMETER / 2;
+                        const clampedLoupeX = Math.max(
+                          0,
+                          Math.min(containerDimensions.width - LENS_DIAMETER, mousePos.x - LENS_RADIUS)
+                        );
+                        const clampedLoupeY = Math.max(
+                          0,
+                          Math.min(containerDimensions.height - LENS_DIAMETER, mousePos.y - LENS_RADIUS)
+                        );
+                        const bgLoupeX = -(mousePos.x * zoomLevel - LENS_RADIUS);
+                        const bgLoupeY = -(mousePos.y * zoomLevel - LENS_RADIUS);
+
+                        return (
+                          <div
+                            className="pointer-events-none absolute rounded-full overflow-hidden z-30 transition-transform duration-75 ease-out"
+                            style={{
+                              width: `${LENS_DIAMETER}px`,
+                              height: `${LENS_DIAMETER}px`,
+                              left: `${clampedLoupeX}px`,
+                              top: `${clampedLoupeY}px`,
+                              boxShadow:
+                                "0 22px 50px rgba(0, 0, 0, 0.42), 0 0 0 3px rgba(255, 255, 255, 0.95), 0 0 0 5.5px rgba(148, 23, 23, 0.35), inset 0 0 20px rgba(0, 0, 0, 0.38)",
+                            }}
+                          >
+                            {/* High-Resolution Zoom Texture */}
+                            <div
+                              style={{
+                                width: "100%",
+                                height: "100%",
+                                backgroundImage: `url(${activeMedia.url})`,
+                                backgroundSize: `${containerDimensions.width * zoomLevel}px ${containerDimensions.height * zoomLevel}px`,
+                                backgroundPosition: `${bgLoupeX}px ${bgLoupeY}px`,
+                                backgroundRepeat: "no-repeat",
+                              }}
+                            />
+
+                            {/* Realistic Convex Glass Glare & Reflection */}
+                            <div
+                              className="absolute inset-0 pointer-events-none rounded-full"
+                              style={{
+                                background:
+                                  "radial-gradient(circle at 35% 25%, rgba(255,255,255,0.48) 0%, rgba(255,255,255,0.12) 42%, rgba(0,0,0,0.18) 100%)",
+                                boxShadow: "inset 0 2px 5px rgba(255,255,255,0.7), inset 0 -3px 8px rgba(0,0,0,0.3)",
+                              }}
+                            />
+
+                            {/* Precision Optical Center Reticle */}
+                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                              <div className="relative w-6 h-6 flex items-center justify-center">
+                                <div className="absolute w-full h-[1px] bg-white/70 shadow-xs" />
+                                <div className="absolute h-full w-[1px] bg-white/70 shadow-xs" />
+                                <div className="relative w-2 h-2 rounded-full border border-white bg-primary/95 shadow-xs" />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
+
+                      {/* ─── MODE 2: Dotted Lens Box on Main Canvas (Matches Screenshot) ─── */}
+                      {isHovered && zoomMode === "window" && (() => {
+                        const FLYOUT_SIZE = 480;
+                        const LENS_BOX_W = FLYOUT_SIZE / zoomLevel;
+                        const LENS_BOX_H = FLYOUT_SIZE / zoomLevel;
+                        const clampedBoxX = Math.max(
+                          0,
+                          Math.min(containerDimensions.width - LENS_BOX_W, mousePos.x - LENS_BOX_W / 2)
+                        );
+                        const clampedBoxY = Math.max(
+                          0,
+                          Math.min(containerDimensions.height - LENS_BOX_H, mousePos.y - LENS_BOX_H / 2)
+                        );
+
+                        return (
+                          <div
+                            className="pointer-events-none absolute z-20 rounded-2xl transition-all duration-75 ease-out"
+                            style={{
+                              width: `${LENS_BOX_W}px`,
+                              height: `${LENS_BOX_H}px`,
+                              left: `${clampedBoxX}px`,
+                              top: `${clampedBoxY}px`,
+                              backgroundColor: "rgba(59, 130, 246, 0.15)",
+                              border: "2px solid rgba(59, 130, 246, 0.8)",
+                              backgroundImage: "radial-gradient(#2563eb 1.3px, transparent 1.3px)",
+                              backgroundSize: "8px 8px",
+                              boxShadow: "0 0 20px rgba(59, 130, 246, 0.35)",
+                            }}
+                          />
+                        );
+                      })()}
+
+                      {/* Interactive Zoom Mode Switcher Pill */}
+                      <div className="absolute bottom-3 left-3 z-30 flex items-center pointer-events-auto">
+                        {/* Mode Switcher Buttons */}
+                        <div className="flex items-center gap-1 bg-white/90 backdrop-blur-md p-1 rounded-full shadow-lg border border-white/80">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setZoomMode("circular");
+                            }}
+                            className={`px-3 py-1 rounded-full text-[11px] font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+                              zoomMode === "circular"
+                                ? "bg-primary text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                            }`}
+                            title="Circular Glass Magnifier (follows cursor with glass reflections)"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">search</span>
+                            <span>Glass Lens</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setZoomMode("window");
+                            }}
+                            className={`hidden lg:flex px-3 py-1 rounded-full text-[11px] font-bold transition-all items-center gap-1.5 cursor-pointer ${
+                              zoomMode === "window"
+                                ? "bg-primary text-white shadow-xs"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                            }`}
+                            title="Pro Side Flyout Window (eCommerce Detail View)"
+                          >
+                            <span className="material-symbols-outlined text-[14px]">splitscreen</span>
+                            <span>Side Window</span>
+                          </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
+
+                    {/* ─── MODE 2 FLYOUT: Pro Side Window (Visible on Desktop when window mode active) ─── */}
+                    {isHovered && zoomMode === "window" && (() => {
+                      const FLYOUT_SIZE = 480;
+                      const LENS_BOX_W = FLYOUT_SIZE / zoomLevel;
+                      const LENS_BOX_H = FLYOUT_SIZE / zoomLevel;
+                      const clampedBoxX = Math.max(
+                        0,
+                        Math.min(containerDimensions.width - LENS_BOX_W, mousePos.x - LENS_BOX_W / 2)
+                      );
+                      const clampedBoxY = Math.max(
+                        0,
+                        Math.min(containerDimensions.height - LENS_BOX_H, mousePos.y - LENS_BOX_H / 2)
+                      );
+                      const flyoutScaleX = FLYOUT_SIZE / LENS_BOX_W;
+                      const flyoutScaleY = FLYOUT_SIZE / LENS_BOX_H;
+
+                      return (
+                        <div
+                          className="hidden lg:block absolute top-0 left-[calc(100%+16px)] w-[480px] h-[480px] rounded-3xl overflow-hidden bg-white z-50 pointer-events-none shadow-2xl border-2 border-white/90"
+                          style={{
+                            boxShadow: "0 25px 60px -15px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0,0,0,0.08)",
+                          }}
+                        >
+                          <div
+                            style={{
+                              width: "100%",
+                              height: "100%",
+                              backgroundImage: `url(${activeMedia.url})`,
+                              backgroundSize: `${containerDimensions.width * flyoutScaleX}px ${containerDimensions.height * flyoutScaleY}px`,
+                              backgroundPosition: `-${clampedBoxX * flyoutScaleX}px -${clampedBoxY * flyoutScaleY}px`,
+                              backgroundRepeat: "no-repeat",
+                            }}
+                          />
+                        </div>
+                      );
+                    })()}
+                  </>
                 ) : activeMedia?.isYouTube && activeMedia.embedUrl ? (
                   <div className="w-full h-full bg-black relative">
                     <iframe

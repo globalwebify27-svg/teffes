@@ -11,11 +11,12 @@ const cookieParser = require('cookie-parser');
 const { connectDB } = require('./config/db');
 const routes = require('./routes');
 
+const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
 // ─── Security Middleware ──────────────────────────────────────────────────────
-app.use(helmet());
+app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -62,6 +63,9 @@ app.get('/health', (req, res) => {
     env: process.env.NODE_ENV,
   });
 });
+
+// ─── Static Uploads Directory ─────────────────────────────────────────────────
+app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 
 // ─── API Routes ───────────────────────────────────────────────────────────────
 app.use('/api', routes);

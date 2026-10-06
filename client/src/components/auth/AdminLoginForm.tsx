@@ -68,6 +68,7 @@ export default function AdminLoginForm() {
             required
             autoFocus
             autoComplete="email"
+            suppressHydrationWarning
           />
         </div>
       </div>
@@ -89,6 +90,7 @@ export default function AdminLoginForm() {
             onChange={handleChange}
             required
             autoComplete="current-password"
+            suppressHydrationWarning
           />
           <button
             type="button"
@@ -113,8 +115,10 @@ export default function AdminLoginForm() {
 
       {/* Demo Credentials Info */}
       <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 mb-5 text-xs text-slate-600 space-y-1">
-        <div className="font-bold text-slate-800 flex items-center gap-1 mb-1">
-          <span className="material-symbols-outlined text-[16px] text-amber-600">key</span>
+        <div className="font-bold text-slate-800 flex items-center gap-1.5 mb-1">
+          <svg className="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
           <span>Demo Credentials</span>
         </div>
         <div className="flex justify-between">

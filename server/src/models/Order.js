@@ -70,6 +70,10 @@ const orderSchema = new mongoose.Schema(
       type: Number,
       default: 65,
     },
+    tipAmount: {
+      type: Number,
+      default: 0,
+    },
     cashCollected: {
       type: Number,
       default: 0,

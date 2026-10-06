@@ -77,10 +77,10 @@ class RiderEarningsModel {
       completedTodayCount: (json['completedTodayCount'] as num?)?.toInt() ?? (json['completedCount'] as num?)?.toInt() ?? 0,
       completedWeeklyCount: (json['completedWeeklyCount'] as num?)?.toInt() ?? 12,
       cashInHand: (json['cashInHand'] as num?)?.toDouble() ?? (json['cashCollected'] as num?)?.toDouble() ?? 0.0,
-      basePay: today > 0 ? (today * 0.75) : 520.0,
+      basePay: (json['basePay'] as num?)?.toDouble() ?? (today > 0 ? (today * 0.75) : 520.0),
       distanceIncentive: today > 0 ? (today * 0.15) : 110.0,
       peakSurge: today > 0 ? (today * 0.10) : 50.0,
-      tips: 0.0,
+      tips: (json['tips'] as num?)?.toDouble() ?? (json['todayTips'] as num?)?.toDouble() ?? 0.0,
       recentEarnings: items,
     );
   }

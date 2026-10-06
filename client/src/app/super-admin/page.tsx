@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
 import type { User } from "@/lib/auth";
@@ -14,8 +14,11 @@ import {
   faMotorcycle,
   faPen,
   faTriangleExclamation,
+  faCircleInfo,
+  faCrown,
 } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
+import axios from "axios";
 import { toast } from "@/lib/toast";
 import { isYouTubeUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
@@ -27,17 +30,16 @@ const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
 
 // ─── Sidebar navigation items ──────────────────────────────────────────────────
 const TABS = [
-  { key: "dashboard", label: "Dashboard", icon: "dashboard" },
-  { key: "stores", label: "Stores", icon: "storefront" },
-  { key: "store-admins", label: "Store Admins", icon: "admin_panel_settings" },
-  { key: "products", label: "Products", icon: "restaurant" },
-  { key: "categories", label: "Categories", icon: "category" },
-  { key: "orders", label: "All Orders", icon: "local_shipping" },
-  { key: "riders", label: "Riders", icon: "two_wheeler" },
-  { key: "customers", label: "Customers", icon: "group" },
-  { key: "coupons", label: "Coupons & Offers", icon: "sell" },
-  { key: "banners", label: "Hero Banners", icon: "view_carousel" },
-  { key: "settings", label: "Settings", icon: "settings" },
+  { key: "dashboard", label: "Dashboard", icon: "dashboard", sub: "Live metrics and performance overview across all Ranchi stores" },
+  { key: "stores", label: "Stores", icon: "storefront", sub: "Manage physical butcher hubs, active branches, and operational radii" },
+  { key: "store-admins", label: "Store Admins", icon: "admin_panel_settings", sub: "Manage store managers, assignments, and credential access" },
+  { key: "products", label: "Products", icon: "restaurant", sub: "Master meat and seafood catalog across all Teffes branches" },
+  { key: "categories", label: "Categories", icon: "category", sub: "Butchery categories displayed live on mobile apps and website" },
+  { key: "orders", label: "All Orders", icon: "local_shipping", sub: "Consolidated platform-wide orders placed across all store branches" },
+  { key: "riders", label: "Riders", icon: "two_wheeler", sub: "Manage delivery fleet, assigned hubs, and vehicle details" },
+  { key: "customers", label: "Customers", icon: "group", sub: "Registered customer directory and order history across Ranchi" },
+  { key: "coupons", label: "Coupons & Offers", icon: "sell", sub: "Platform promo engine for discount codes, first-order deals, and banners" },
+  { key: "banners", label: "Hero Banners", icon: "view_carousel", sub: "Promotional hero carousels and marketing banners on the home screen" },
 ];
 
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
@@ -48,22 +50,23 @@ const KPICard = ({ icon, label, value, sub, color = "#941717" }: {
     background: "#ffffff",
     border: "1px solid #ede8e0",
     borderRadius: "14px",
-    padding: "22px 20px",
+    padding: "16px 18px",
     boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
+    borderLeft: `4px solid ${color}`,
   }}>
-    <div style={{ marginBottom: "10px" }}>
-      <span className="material-symbols-outlined text-[30px]" style={{ color }}>{icon}</span>
+    <div style={{ marginBottom: "6px" }}>
+      <span className="material-symbols-outlined text-[22px]" style={{ color }}>{icon}</span>
     </div>
-    <div style={{ fontSize: "1.85rem", fontWeight: 900, color, fontFamily: "Outfit, sans-serif", lineHeight: 1 }}>{value}</div>
-    <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#423b32", marginTop: "4px" }}>{label}</div>
-    <div style={{ fontSize: "0.75rem", color: "#73695b", marginTop: "2px" }}>{sub}</div>
+    <div style={{ fontSize: "1.35rem", fontWeight: 800, color, fontFamily: "Outfit, sans-serif", lineHeight: 1.1 }}>{value}</div>
+    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginTop: "4px" }}>{label}</div>
+    <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "2px" }}>{sub}</div>
   </div>
 );
 
 const SectionTitle = ({ title, sub }: { title: string; sub?: string }) => (
-  <div style={{ marginBottom: "24px" }}>
-    <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#171410", margin: 0 }}>{title}</h2>
-    {sub && <p style={{ color: "#73695b", fontSize: "0.875rem", marginTop: "4px" }}>{sub}</p>}
+  <div style={{ margin: "20px 0 12px 0" }}>
+    <h2 style={{ fontSize: "1.05rem", fontWeight: 700, color: "#171410", margin: 0 }}>{title}</h2>
+    {sub && <p style={{ color: "#73695b", fontSize: "0.78rem", marginTop: "2px" }}>{sub}</p>}
   </div>
 );
 
@@ -138,6 +141,128 @@ const AdminDeleteButton = ({ onClick, title = "Delete", disabled, loading, style
   </button>
 );
 
+const FileUploadButton = ({
+  onUploadSuccess,
+  folder = "products",
+  label = "Upload",
+  accept = "image/*",
+}: {
+  onUploadSuccess: (url: string) => void;
+  folder?: string;
+  label?: string;
+  accept?: string;
+}) => {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", folder);
+
+    try {
+      let finalUrl = "";
+
+      // 1. Primary: Try standard API endpoint
+      try {
+        const res = await api.post<{ success: boolean; url: string }>("/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (res.data?.success && res.data.url) {
+          finalUrl = res.data.url;
+        }
+      } catch (primaryErr: any) {
+        // Fallback 1: If remote backend (e.g. Render) returns 404 (not deployed yet), try local backend
+        if (
+          primaryErr.response?.status === 404 ||
+          primaryErr.response?.data?.message?.includes("not found") ||
+          primaryErr.code === "ERR_NETWORK"
+        ) {
+          try {
+            const localRes = await axios.post<{ success: boolean; url: string }>("http://localhost:5000/api/upload", formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+            });
+            if (localRes.data?.success && localRes.data.url) {
+              finalUrl = localRes.data.url;
+            }
+          } catch (localErr: any) {
+            console.warn("[Upload] Local backend fallback failed, attempting Firebase Storage...", localErr);
+          }
+        }
+
+        // Fallback 2: Direct browser upload to Firebase Storage
+        if (!finalUrl) {
+          try {
+            const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+            const { firebaseApp } = await import("@/lib/firebase");
+            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+            const storageRef = ref(getStorage(firebaseApp), `${folder}/${Date.now()}-${safeName}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            finalUrl = await getDownloadURL(snapshot.ref);
+          } catch (fbErr: any) {
+            console.warn("[Upload] Firebase Storage fallback failed:", fbErr);
+          }
+        }
+
+        if (!finalUrl) {
+          throw primaryErr;
+        }
+      }
+
+      if (finalUrl) {
+        onUploadSuccess(finalUrl);
+        toast.success("File uploaded successfully!", "Upload Complete");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || "Upload failed. Please try again.", "Upload Error");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept={accept}
+        style={{ display: "none" }}
+      />
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={() => fileInputRef.current?.click()}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "5px",
+          background: "#fff",
+          border: "1px solid #d1cbbf",
+          borderRadius: "8px",
+          padding: "8px 12px",
+          fontSize: "0.8rem",
+          fontWeight: 700,
+          color: "#423b32",
+          cursor: uploading ? "not-allowed" : "pointer",
+          whiteSpace: "nowrap",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+        }}
+      >
+        <span className="material-symbols-outlined text-[16px]">
+          {uploading ? "sync" : "cloud_upload"}
+        </span>
+        <span>{uploading ? "Uploading..." : label}</span>
+      </button>
+    </>
+  );
+};
+
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
 function DashboardTab() {
@@ -170,7 +295,6 @@ function DashboardTab() {
 
   return (
     <div>
-      <SectionTitle title="Platform Overview" sub="Live metrics across all Teffes stores in Ranchi" />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "16px", marginBottom: "36px" }}>
         {displayKpis.map(k => <KPICard key={k.label} {...k} />)}
       </div>
@@ -311,8 +435,7 @@ function StoresTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <SectionTitle title="Stores" sub="Manage all Teffes store branches in Ranchi" />
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px" }}>
         <button onClick={() => setShowAddStoreModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Add Store</button>
       </div>
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
@@ -393,7 +516,9 @@ function StoresTab() {
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
                 <FontAwesomeIcon icon={faStore} style={{ color: "#941717" }} /> Add New Store Branch
               </h3>
-              <button onClick={() => setShowAddStoreModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
+              <button onClick={() => setShowAddStoreModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>close</span>
+              </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
@@ -469,13 +594,20 @@ function StoresTab() {
 
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Store Photo / Image URL</label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/... or direct image link"
-                  value={newStore.image || ""}
-                  onChange={e => setNewStore({ ...newStore, image: e.target.value })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
-                />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/... or direct image link"
+                    value={newStore.image || ""}
+                    onChange={e => setNewStore({ ...newStore, image: e.target.value })}
+                    style={{ flex: 1, padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", fontSize: "0.9rem", boxSizing: "border-box" }}
+                  />
+                  <FileUploadButton
+                    folder="stores"
+                    label="Upload Photo"
+                    onUploadSuccess={(url) => setNewStore(prev => ({ ...prev, image: url }))}
+                  />
+                </div>
                 {newStore.image && newStore.image.trim() !== "" && (
                   <div style={{ marginTop: "8px", width: "100%", height: "100px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
                     <img src={newStore.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -527,7 +659,9 @@ function StoresTab() {
                 </h3>
                 <span style={{ fontSize: "0.8rem", color: "#73695b" }}>Store ID: {editingStore.storeId || editingStore.id}</span>
               </div>
-              <button onClick={() => setEditingStore(null)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
+              <button onClick={() => setEditingStore(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>close</span>
+              </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
@@ -598,13 +732,20 @@ function StoresTab() {
 
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Store Photo / Image URL</label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/... or direct image link"
-                  value={editingStore.image || ""}
-                  onChange={e => setEditingStore({ ...editingStore, image: e.target.value })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
-                />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/... or direct image link"
+                    value={editingStore.image || ""}
+                    onChange={e => setEditingStore({ ...editingStore, image: e.target.value })}
+                    style={{ flex: 1, padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", fontSize: "0.9rem", boxSizing: "border-box" }}
+                  />
+                  <FileUploadButton
+                    folder="stores"
+                    label="Upload Photo"
+                    onUploadSuccess={(url) => setEditingStore((prev: any) => ({ ...prev, image: url }))}
+                  />
+                </div>
                 {editingStore.image && editingStore.image.trim() !== "" && (
                   <div style={{ marginTop: "8px", width: "100%", height: "100px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
                     <img src={editingStore.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
@@ -786,8 +927,7 @@ function StoreAdminsTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <SectionTitle title="Store Admins" sub="Manage who can access which store" />
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px" }}>
         <button onClick={() => setShowCreateModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Create Admin</button>
       </div>
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
@@ -977,6 +1117,7 @@ function StoreAdminsTab() {
   );
 }
 
+
 function ProductMediaManager({
   images,
   onImagesChange,
@@ -1066,7 +1207,7 @@ function ProductMediaManager({
               </span>
             </div>
             <div style={{ fontSize: "0.72rem", color: "#786f66", marginTop: "2px" }}>
-              Cover photo is marked with ★ Cover. First photo is always the storefront cover.
+              Cover photo is marked with Cover badge. First photo is always the storefront cover.
             </div>
           </div>
         </div>
@@ -1115,9 +1256,12 @@ function ProductMediaManager({
                         borderRadius: "4px",
                         letterSpacing: "0.03em",
                         boxShadow: "0 1px 3px rgba(0,0,0,0.4)",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "2px",
                       }}
                     >
-                      ★ Cover
+                      <span className="material-symbols-outlined" style={{ fontSize: "10px" }}>star</span> Cover
                     </div>
                   )}
 
@@ -1140,15 +1284,13 @@ function ProductMediaManager({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "11px",
-                      fontWeight: 800,
                       boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
                       transition: "transform 150ms ease",
                     }}
                     onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.15)")}
                     onMouseLeave={(e) => (e.currentTarget.style.transform = "scale(1)")}
                   >
-                    ✕
+                    <span className="material-symbols-outlined" style={{ fontSize: "12px" }}>close</span>
                   </button>
 
                   {/* Make Cover Button for non-cover photos */}
@@ -1225,25 +1367,62 @@ function ProductMediaManager({
           />
           <button
             type="button"
+            disabled={!currentImageUrl.trim()}
             onClick={handleAddImage}
             style={{
-              background: "#941717",
-              color: "#fff",
+              background: currentImageUrl.trim() ? "#941717" : "#e5e7eb",
+              color: currentImageUrl.trim() ? "#fff" : "#9ca3af",
               border: "none",
               padding: "8px 14px",
               borderRadius: "8px",
               fontSize: "0.8rem",
               fontWeight: 700,
-              cursor: "pointer",
+              cursor: currentImageUrl.trim() ? "pointer" : "not-allowed",
               whiteSpace: "nowrap",
               display: "flex",
               alignItems: "center",
               gap: "4px",
+              transition: "all 150ms ease",
             }}
           >
             + Add Photo
           </button>
+          <FileUploadButton
+            folder="products"
+            label="Upload Photo"
+            onUploadSuccess={(url) => {
+              onImagesChange([...images, url]);
+              setImageUrl("");
+            }}
+          />
         </div>
+        {currentImageUrl.trim() && (
+          <div style={{ marginTop: "10px", padding: "8px 12px", background: "#fff", border: "1px solid #e2dcd4", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div style={{ width: "54px", height: "54px", borderRadius: "6px", overflow: "hidden", background: "#1c1815", flexShrink: 0, border: "1px solid #d1cbbf" }}>
+              <img
+                src={currentImageUrl.trim()}
+                alt="Preview"
+                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = "none";
+                }}
+              />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "0.76rem", fontWeight: 700, color: "#1c1815" }}>Live Image Preview</div>
+              <div style={{ fontSize: "0.7rem", color: "#786f66", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {currentImageUrl.trim()}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setImageUrl("")}
+              style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: "6px", padding: "5px 10px", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
         {imageInputError && (
           <div style={{ color: "#dc2626", fontSize: "0.74rem", marginTop: "4px", fontWeight: 600 }}>
             {imageInputError}
@@ -1292,7 +1471,7 @@ function ProductMediaManager({
                     {isYT ? (
                       <span
                         style={{
-                          background: "#fef2f2",
+                          background: "#fee2e2",
                           color: "#dc2626",
                           border: "1px solid #fecaca",
                           padding: "3px 8px",
@@ -1305,7 +1484,7 @@ function ProductMediaManager({
                           gap: "4px",
                         }}
                       >
-                        ▶ YouTube
+                        <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>play_arrow</span> YouTube
                       </span>
                     ) : (
                       <span
@@ -1323,7 +1502,7 @@ function ProductMediaManager({
                           gap: "4px",
                         }}
                       >
-                        🎬 Direct Video
+                        <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>movie</span> Direct Video
                       </span>
                     )}
 
@@ -1348,14 +1527,18 @@ function ProductMediaManager({
                           fontSize: "0.78rem",
                           color: "#2563eb",
                           textDecoration: "none",
-                          display: "block",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "2px",
                           overflow: "hidden",
                           textOverflow: "ellipsis",
                           whiteSpace: "nowrap",
+                          maxWidth: "100%",
                         }}
                         title={vUrl}
                       >
-                        {vUrl} ↗
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{vUrl}</span>
+                        <span className="material-symbols-outlined" style={{ fontSize: "13px" }}>open_in_new</span>
                       </a>
                     </div>
                   </div>
@@ -1375,12 +1558,10 @@ function ProductMediaManager({
                       display: "flex",
                       alignItems: "center",
                       justifyContent: "center",
-                      fontSize: "12px",
-                      fontWeight: 800,
                       flexShrink: 0,
                     }}
                   >
-                    ✕
+                    <span className="material-symbols-outlined" style={{ fontSize: "14px" }}>close</span>
                   </button>
                 </div>
               );
@@ -1432,25 +1613,82 @@ function ProductMediaManager({
           />
           <button
             type="button"
+            disabled={!currentVideoUrl.trim()}
             onClick={handleAddVideo}
             style={{
-              background: "#1e293b",
-              color: "#fff",
+              background: currentVideoUrl.trim() ? "#1e293b" : "#e5e7eb",
+              color: currentVideoUrl.trim() ? "#fff" : "#9ca3af",
               border: "none",
               padding: "8px 14px",
               borderRadius: "8px",
               fontSize: "0.8rem",
               fontWeight: 700,
-              cursor: "pointer",
+              cursor: currentVideoUrl.trim() ? "pointer" : "not-allowed",
               whiteSpace: "nowrap",
               display: "flex",
               alignItems: "center",
               gap: "4px",
+              transition: "all 150ms ease",
             }}
           >
             + Add Video
           </button>
+          <FileUploadButton
+            folder="videos"
+            accept="video/*"
+            label="Upload Video"
+            onUploadSuccess={(url) => {
+              onVideoURLsChange([...videoURLs, url]);
+              setVideoUrl("");
+            }}
+          />
         </div>
+        {currentVideoUrl.trim() && (
+          <div style={{ marginTop: "10px", padding: "8px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
+            <div style={{ width: "64px", height: "42px", borderRadius: "6px", overflow: "hidden", background: "#0f172a", flexShrink: 0, border: "1px solid #94a3b8", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              {isYouTubeUrl(currentVideoUrl.trim()) ? (
+                <img
+                  src={getYouTubeThumbnailUrl(currentVideoUrl.trim()) || ""}
+                  alt="Video Preview"
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
+              ) : (
+                <video
+                  src={currentVideoUrl.trim()}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  muted
+                  playsInline
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
+              )}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: "0.76rem", fontWeight: 700, color: "#1e293b", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>Live Video Preview</span>
+                {isYouTubeUrl(currentVideoUrl.trim()) && (
+                  <span style={{ fontSize: "0.68rem", background: "#fee2e2", color: "#dc2626", padding: "1px 6px", borderRadius: "4px", fontWeight: 700 }}>
+                    YouTube
+                  </span>
+                )}
+              </div>
+              <div style={{ fontSize: "0.7rem", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {currentVideoUrl.trim()}
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setVideoUrl("")}
+              style={{ background: "#fee2e2", color: "#dc2626", border: "none", borderRadius: "6px", padding: "5px 10px", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
         {videoInputError && (
           <div style={{ color: "#dc2626", fontSize: "0.74rem", marginTop: "4px", fontWeight: 600 }}>
             {videoInputError}
@@ -1554,13 +1792,13 @@ function ProductsTab() {
   };
 
   const populateEditForm = (p: any) => {
-    const rawImages: string[] = Array.isArray(p.images) && p.images.length > 0 
+    const rawImages: string[] = Array.isArray(p.images) && p.images.length > 0
       ? p.images.map((s: any) => String(s).trim()).filter(Boolean)
       : (p.image ? [p.image.trim()] : []);
     const primaryImg = rawImages[0] || p.image || "";
     const additionalImgs = rawImages.slice(1);
-    const rawVideos: string[] = Array.isArray(p.videoURLs) 
-      ? p.videoURLs.map((s: any) => String(s).trim()).filter(Boolean) 
+    const rawVideos: string[] = Array.isArray(p.videoURLs)
+      ? p.videoURLs.map((s: any) => String(s).trim()).filter(Boolean)
       : (typeof p.videoURLs === "string" && p.videoURLs ? [p.videoURLs.trim()] : []);
 
     setEditingProduct(p);
@@ -1787,8 +2025,7 @@ function ProductsTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-        <SectionTitle title="Products" sub="Master catalog across all Teffes stores" />
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
         <button
           className="btn btn-primary"
           onClick={() => setShowAddModal(true)}
@@ -2384,10 +2621,7 @@ function CategoriesTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-        <div>
-          <SectionTitle title="Categories Management" sub="Manage butchery categories that reflect live across website and mobile app" />
-        </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -2565,13 +2799,20 @@ function CategoriesTab() {
 
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Image URL</label>
-                <input
-                  type="url"
-                  placeholder="https://images.unsplash.com/..."
-                  value={newCat.image}
-                  onChange={e => setNewCat({ ...newCat, image: e.target.value })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
-                />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="url"
+                    placeholder="https://images.unsplash.com/..."
+                    value={newCat.image}
+                    onChange={e => setNewCat({ ...newCat, image: e.target.value })}
+                    style={{ flex: 1, padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                  <FileUploadButton
+                    folder="categories"
+                    label="Upload"
+                    onUploadSuccess={(url) => setNewCat(prev => ({ ...prev, image: url }))}
+                  />
+                </div>
                 {newCat.image.trim() && (
                   <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
                     <img src={newCat.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
@@ -2652,12 +2893,19 @@ function CategoriesTab() {
 
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Image URL</label>
-                <input
-                  type="url"
-                  value={editingCategory.image || ""}
-                  onChange={e => setEditingCategory({ ...editingCategory, image: e.target.value })}
-                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
-                />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="url"
+                    value={editingCategory.image || ""}
+                    onChange={e => setEditingCategory({ ...editingCategory, image: e.target.value })}
+                    style={{ flex: 1, padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                  <FileUploadButton
+                    folder="categories"
+                    label="Upload"
+                    onUploadSuccess={(url) => setEditingCategory((prev: any) => ({ ...prev, image: url }))}
+                  />
+                </div>
                 {editingCategory.image && (
                   <div style={{ marginTop: "8px", height: "90px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e5e0d8", background: "#1c1815" }}>
                     <img src={editingCategory.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => (e.target as HTMLElement).style.display = "none"} />
@@ -2720,7 +2968,6 @@ function OrdersTab() {
 
   return (
     <div>
-      <SectionTitle title="Platform Orders" sub="All orders placed across all store branches" />
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading platform orders…</div>
@@ -2902,8 +3149,7 @@ function RidersTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-        <SectionTitle title="Delivery Riders" sub="Manage express delivery staff, assigned stores, and vehicle info" />
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px" }}>
         <button onClick={() => setShowAddRiderModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Add Rider</button>
       </div>
       {/* Responsive styles for rider actions and layout */}
@@ -2990,7 +3236,9 @@ function RidersTab() {
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
                 <FontAwesomeIcon icon={faMotorcycle} style={{ color: "#941717" }} /> Add Delivery Rider
               </h3>
-              <button onClick={() => setShowAddRiderModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
+              <button onClick={() => setShowAddRiderModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>close</span>
+              </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
@@ -3065,7 +3313,9 @@ function RidersTab() {
                 </h3>
                 <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#73695b" }}>Update phone, vehicle number, and store assignment</p>
               </div>
-              <button onClick={() => setEditingRider(null)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
+              <button onClick={() => setEditingRider(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>close</span>
+              </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: "14px", marginBottom: "24px" }}>
@@ -3229,7 +3479,6 @@ function CustomersTab() {
 
   return (
     <div>
-      <SectionTitle title="Customer Directory" sub="Registered customers across Ranchi" />
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading customers…</div>
@@ -3786,8 +4035,7 @@ function CouponsTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
-        <SectionTitle title="Coupons & Promo Codes" sub="Full lifecycle promo engine for discounts, first-order deals & Super Offers" />
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "16px" }}>
         <button onClick={openCreateModal} className="btn btn-primary" style={{ fontSize: "0.875rem", display: "flex", alignItems: "center", gap: "6px" }}>
           <FontAwesomeIcon icon={faTicket} /> Create New Coupon
         </button>
@@ -3805,8 +4053,8 @@ function CouponsTab() {
         alignItems: "center",
         gap: "10px"
       }}>
-        <span style={{ fontSize: "1.2rem", color: "#f59e0b" }}>
-          <FontAwesomeIcon icon={faStar} />
+        <span style={{ fontSize: "1.1rem", color: "#d97706", display: "flex", alignItems: "center" }}>
+          <FontAwesomeIcon icon={faCircleInfo} />
         </span>
         <div>
           <strong>Super Offer Engine:</strong> Designating a coupon as Super Offer highlights it across the <strong>Top Announcement Bar</strong>, <strong>Home Celebration Ribbon</strong>, and <strong>Offers Page</strong>. Coupons require explicit customer Claim/Apply and are revalidated on backend during order placement.
@@ -3896,7 +4144,7 @@ function CouponsTab() {
                           gap: "5px",
                           marginTop: "2px"
                         }}>
-                          <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Super Offer
+                          <FontAwesomeIcon icon={faCrown} style={{ color: "#d97706", fontSize: "11px" }} /> Super Offer
                         </div>
                       )}
                     </div>
@@ -3935,7 +4183,7 @@ function CouponsTab() {
                         gap: "6px"
                       }}
                     >
-                      <FontAwesomeIcon icon={faStar} style={{ fontSize: "12px" }} />
+                      <FontAwesomeIcon icon={faCrown} style={{ fontSize: "12px", color: "#d97706" }} />
                       <span>Set as Super Offer</span>
                     </button>
                   )}
@@ -4001,7 +4249,9 @@ function CouponsTab() {
               <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
                 <FontAwesomeIcon icon={faTicket} style={{ color: "#941717" }} /> {editingCoupon ? "Edit Coupon" : "Create New Coupon"}
               </h3>
-              <button onClick={() => setShowModal(false)} style={{ background: "none", border: "none", fontSize: "1.25rem", cursor: "pointer", color: "#73695b" }}>✕</button>
+              <button onClick={() => setShowModal(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>close</span>
+              </button>
             </div>
 
             {validationError && (
@@ -4185,7 +4435,6 @@ function SettingsTab() {
 
   return (
     <div>
-      <SectionTitle title="Platform Settings" sub="Global configurations for Teffes Butchery Network" />
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "24px", maxWidth: "600px" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
           <div style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid #ede8e0", paddingBottom: "12px" }}>
@@ -4304,13 +4553,7 @@ function BannersTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px", flexWrap: "wrap", gap: "12px" }}>
-        <div>
-          <h2 style={{ fontSize: "1.5rem", fontWeight: 800, color: "#171410", margin: 0 }}>Hero Sliding Banners</h2>
-          <p style={{ color: "#73695b", fontSize: "0.875rem", marginTop: "4px" }}>
-            Add and manage dynamic sliding banners displayed at the top of the Customer Website and Customer Mobile App.
-          </p>
-        </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -4512,21 +4755,28 @@ function BannersTab() {
                 <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
                   Image URL <span style={{ color: "#dc2626" }}>*</span>
                 </label>
-                <input
-                  type="url"
-                  placeholder="https://.../banner.webp"
-                  required
-                  value={newBanner.image}
-                  onChange={(e) => setNewBanner({ ...newBanner, image: e.target.value })}
-                  style={{
-                    width: "100%",
-                    padding: "10px 14px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1cbbf",
-                    fontSize: "0.9rem",
-                    boxSizing: "border-box",
-                  }}
-                />
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <input
+                    type="url"
+                    placeholder="https://.../banner.webp"
+                    required
+                    value={newBanner.image}
+                    onChange={(e) => setNewBanner({ ...newBanner, image: e.target.value })}
+                    style={{
+                      flex: 1,
+                      padding: "10px 14px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1cbbf",
+                      fontSize: "0.9rem",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <FileUploadButton
+                    folder="banners"
+                    label="Upload Banner"
+                    onUploadSuccess={(url) => setNewBanner(prev => ({ ...prev, image: url }))}
+                  />
+                </div>
               </div>
 
               {/* Live Image Preview */}
@@ -4696,7 +4946,6 @@ export default function SuperAdminPage() {
     customers: <CustomersTab />,
     coupons: <CouponsTab />,
     banners: <BannersTab />,
-    settings: <SettingsTab />,
   };
 
   return (
@@ -4731,9 +4980,6 @@ export default function SuperAdminPage() {
                 maxWidth: sidebarCollapsed ? "40px" : "160px",
               }}
             />
-            {!sidebarCollapsed && (
-              <div style={{ fontSize: "0.6rem", color: "#fde68a", fontWeight: 700, letterSpacing: "0.08em", whiteSpace: "nowrap" }}>SUPER ADMIN</div>
-            )}
           </div>
         </div>
 
@@ -4775,6 +5021,15 @@ export default function SuperAdminPage() {
 
         {/* Collapse Toggle + User Info / Sign Out */}
         <div style={{ padding: "12px 8px", borderTop: "1px solid rgba(255,255,255,0.08)" }}>
+
+          {/* User info — only when expanded */}
+          {!sidebarCollapsed && (
+            <div style={{ padding: "10px", background: "rgba(255,255,255,0.07)", borderRadius: "10px", marginBottom: "8px", textAlign: "center" }}>
+              <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#fff", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
+              <div style={{ fontSize: "0.72rem", color: "rgba(255,255,255,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
+            </div>
+          )}
+
           {/* Change Password button */}
           <button
             onClick={() => setShowChangePassword(true)}
@@ -4787,7 +5042,7 @@ export default function SuperAdminPage() {
               padding: "9px",
               color: "#fff",
               cursor: "pointer",
-              fontSize: sidebarCollapsed ? "1rem" : "0.78rem",
+              fontSize: sidebarCollapsed ? "1rem" : "0.82rem",
               fontWeight: 700,
               display: "flex",
               alignItems: "center",
@@ -4801,39 +5056,31 @@ export default function SuperAdminPage() {
             {!sidebarCollapsed && <span>Change Password</span>}
           </button>
 
-          {/* Always-visible sign-out icon */}
+          {/* Sign Out button — below user profile card with matching styling */}
           <button
             onClick={handleLogout}
             title="Sign Out"
             style={{
               width: "100%",
-              background: "rgba(148,23,23,0.55)",
-              border: "none",
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(239,68,68,0.25)",
               borderRadius: "8px",
               padding: "9px",
-              color: "#fff",
+              color: "#f87171",
               cursor: "pointer",
-              fontSize: sidebarCollapsed ? "1rem" : "0.78rem",
+              fontSize: sidebarCollapsed ? "1rem" : "0.82rem",
               fontWeight: 700,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "7px",
+              gap: "8px",
               marginBottom: "8px",
-              transition: "background 150ms ease",
+              transition: "all 150ms ease",
             }}
           >
-            <FontAwesomeIcon icon={faPowerOff} style={{ fontSize: "0.9rem" }} />
+            <FontAwesomeIcon icon={faPowerOff} style={{ fontSize: "0.88rem", color: "#ef4444" }} />
             {!sidebarCollapsed && <span>Sign Out</span>}
           </button>
-
-          {/* User info — only when expanded */}
-          {!sidebarCollapsed && (
-            <div style={{ padding: "10px", background: "rgba(255,255,255,0.07)", borderRadius: "10px", marginBottom: "8px" }}>
-              <div style={{ fontSize: "0.8rem", fontWeight: 700, color: "#fff", marginBottom: "2px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.name}</div>
-              <div style={{ fontSize: "0.7rem", color: "rgba(255,255,255,0.55)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{user.email}</div>
-            </div>
-          )}
 
           {/* Collapse toggle */}
           <button
@@ -4862,28 +5109,65 @@ export default function SuperAdminPage() {
 
       {/* ─── Main Content ────────────────────────────────────────────── */}
       <main style={{ flex: 1, padding: isMobile ? "16px 12px" : "28px 24px", overflowY: "auto", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
-        {/* Top bar */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "28px", flexWrap: "wrap", gap: "14px" }}>
-          <div>
-            <div style={{ fontSize: "0.78rem", color: "#73695b", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: "2px" }}>
-              Super Admin Portal · Teffes Headquarters
+        {/* Unified Page Header */}
+        {(() => {
+          const currentTab = TABS.find((t) => t.key === activeTab);
+          return (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "flex-start",
+                marginBottom: "22px",
+                paddingBottom: "14px",
+                borderBottom: "1px solid #ede8e0",
+                flexWrap: "wrap",
+                gap: "14px",
+              }}
+            >
+              <div>
+                <h1
+                  style={{
+                    fontSize: "1.35rem",
+                    fontWeight: 800,
+                    color: "#171410",
+                    margin: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    lineHeight: 1.2,
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[22px]" style={{ color: "#941717" }}>
+                    {currentTab?.icon}
+                  </span>
+                  <span>{currentTab?.label}</span>
+                </h1>
+                {currentTab?.sub && (
+                  <p
+                    style={{
+                      fontSize: "0.825rem",
+                      color: "#73695b",
+                      margin: "4px 0 0 0",
+                    }}
+                  >
+                    {currentTab.sub}
+                  </p>
+                )}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+                <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#059669", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="material-symbols-outlined text-[16px]">verified</span>
+                  <span>All Systems Normal</span>
+                </div>
+                <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#73695b", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="material-symbols-outlined text-[16px]">calendar_today</span>
+                  <span>{new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
+                </div>
+              </div>
             </div>
-            <div style={{ fontSize: "1.2rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
-              <span className="material-symbols-outlined text-[24px] text-primary">{TABS.find(t => t.key === activeTab)?.icon}</span>
-              <span>{TABS.find(t => t.key === activeTab)?.label}</span>
-            </div>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#059669", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
-              <span className="material-symbols-outlined text-[16px]">verified</span>
-              <span>All Systems Normal</span>
-            </div>
-            <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#73695b", display: "flex", alignItems: "center", gap: "6px" }}>
-              <span className="material-symbols-outlined text-[16px]">calendar_today</span>
-              <span>{new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
         {/* Tab Content */}
         {tabComponents[activeTab]}

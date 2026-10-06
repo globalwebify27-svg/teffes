@@ -42,6 +42,10 @@ const getDashboard = async (req, res, next) => {
     });
 
     const completedCount = completedOrdersToday.length;
+    const todayTips = completedOrdersToday.reduce(
+      (sum, ord) => sum + (ord.tipAmount || 0),
+      0
+    );
     const todayEarnings = completedOrdersToday.reduce(
       (sum, ord) => sum + (ord.riderEarning || 65),
       0
@@ -82,6 +86,7 @@ const getDashboard = async (req, res, next) => {
       todayStats: {
         completedCount,
         todayEarnings,
+        todayTips,
         targetCount: 16,
       },
       activeOrder,
@@ -261,7 +266,7 @@ const confirmPickup = async (req, res, next) => {
     // Push notification to customer on order pickup
     if (order.customer && order.customer.userId) {
       notificationService.sendToUser(order.customer.userId, {
-        title: 'Order Picked Up! 🛵',
+        title: 'Order Picked Up',
         body: `Rider ${order.rider?.name || ''} has picked up your fresh order #${order.orderId} and is on the way.`,
         data: {
           notificationType: 'ORDER_STATUS',
@@ -413,7 +418,7 @@ const completeDelivery = async (req, res, next) => {
     // Push notification to customer on order delivery
     if (order.customer && order.customer.userId) {
       notificationService.sendToUser(order.customer.userId, {
-        title: 'Order Delivered! 🎉',
+        title: 'Order Delivered',
         body: `Your order #${order.orderId} has been delivered successfully. Thank you for ordering from Teffe's!`,
         data: {
           notificationType: 'ORDER_STATUS',
@@ -426,7 +431,7 @@ const completeDelivery = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'Order delivered and verified successfully! 🎉',
+      message: 'Order delivered and verified successfully.',
       order,
     });
   } catch (error) {
@@ -456,6 +461,10 @@ const getEarnings = async (req, res, next) => {
     const todayOrders = allDelivered.filter((o) => new Date(o.deliveredAt || o.updatedAt) >= startOfToday);
     const weeklyOrders = allDelivered.filter((o) => new Date(o.deliveredAt || o.updatedAt) >= startOfWeek);
 
+    const todayTips = todayOrders.reduce((sum, o) => sum + (o.tipAmount || 0), 0);
+    const weeklyTips = weeklyOrders.reduce((sum, o) => sum + (o.tipAmount || 0), 0);
+    const todayBase = todayOrders.reduce((sum, o) => sum + 65, 0);
+
     const todayEarnings = todayOrders.reduce((sum, o) => sum + (o.riderEarning || 65), 0);
     const weeklyEarnings = weeklyOrders.reduce((sum, o) => sum + (o.riderEarning || 65), 0);
 
@@ -463,12 +472,17 @@ const getEarnings = async (req, res, next) => {
       success: true,
       todayEarnings,
       weeklyEarnings,
+      tips: todayTips,
+      todayTips,
+      weeklyTips,
+      basePay: todayBase,
       completedTodayCount: todayOrders.length,
       completedWeeklyCount: weeklyOrders.length,
       recentEarnings: allDelivered.slice(0, 15).map((o) => ({
         orderId: o.orderId,
         amount: o.amount,
         earning: o.riderEarning || 65,
+        tipAmount: o.tipAmount || 0,
         deliveredAt: o.deliveredAt || o.updatedAt,
         paymentMethod: o.paymentMethod,
         itemsCount: o.items?.length || 1,

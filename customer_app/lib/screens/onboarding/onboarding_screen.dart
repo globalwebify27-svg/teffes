@@ -462,10 +462,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
           // Feature Rows
           _buildFeatureCard(
-            icon: Icons.bolt_rounded,
+            icon: Icons.timer_outlined,
             iconColor: const Color(0xFFD97706),
             bgColor: const Color(0xFFFEF3C7),
-            title: "Lightning 90-Min Dispatch",
+            title: "Express 90-Min Dispatch",
             subtitle: "Fast, hyper-local hub delivery directly to your kitchen table.",
           ),
           const SizedBox(height: 8),

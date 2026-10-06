@@ -10,6 +10,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faStar } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
 import RegisteredShopsSection from "@/components/home/RegisteredShopsSection";
+import { BannerSkeleton, ProductGridSkeleton, CategoryBarSkeleton } from "@/components/common/Skeletons";
 
 export default function HomePage() {
   const router = useRouter();
@@ -19,6 +20,9 @@ export default function HomePage() {
   const [liveProducts, setLiveProducts] = useState<Product[]>([]);
   const [liveCategories, setLiveCategories] = useState<Category[]>([]);
   const [superOffer, setSuperOffer] = useState<any>(null);
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true);
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true);
+  const [isLoadingBanners, setIsLoadingBanners] = useState(true);
 
   const trendingProducts = useMemo(() => {
     const list = liveProducts.filter((p) => p.isBestseller || p.badge?.toLowerCase().includes("bestseller") || p.badge?.toLowerCase().includes("trending"));
@@ -50,16 +54,22 @@ export default function HomePage() {
   const [isBannerHovered, setIsBannerHovered] = useState(false);
 
   useEffect(() => {
-    fetchProducts().then((prods) => {
-      if (prods && prods.length > 0) {
-        setLiveProducts(prods);
-      }
-    });
-    fetchCategories().then((cats) => {
-      if (cats && cats.length > 0) {
-        setLiveCategories(cats);
-      }
-    });
+    fetchProducts()
+      .then((prods) => {
+        if (prods && prods.length > 0) {
+          setLiveProducts(prods);
+        }
+      })
+      .finally(() => setIsLoadingProducts(false));
+
+    fetchCategories()
+      .then((cats) => {
+        if (cats && cats.length > 0) {
+          setLiveCategories(cats);
+        }
+      })
+      .finally(() => setIsLoadingCategories(false));
+
     api.get<{ success: boolean; superOffer: any }>("/coupons/super-offer")
       .then((res) => {
         if (res.data?.success && res.data.superOffer) {
@@ -74,7 +84,8 @@ export default function HomePage() {
           setHeroBanners(res.data.banners);
         }
       })
-      .catch((err) => console.warn("Failed to load hero banners:", err));
+      .catch((err) => console.warn("Failed to load hero banners:", err))
+      .finally(() => setIsLoadingBanners(false));
   }, []);
 
   // Auto-slide hero window every 4.5 seconds
@@ -110,109 +121,144 @@ export default function HomePage() {
           onMouseLeave={() => setIsBannerHovered(false)}
         >
           {/* Sliding Window Container */}
-          <div className="relative w-full aspect-[2.4/1] sm:aspect-[3.1/1] md:aspect-[3.4/1] min-h-[220px] max-h-[460px] overflow-hidden">
+          {isLoadingBanners ? (
+            <BannerSkeleton />
+          ) : heroBanners.length === 0 ? (
             <div
-              className="flex w-full h-full transition-transform duration-500 ease-out"
-              style={{
-                transform: `translateX(-${activeBannerIndex * 100}%)`,
-              }}
+              className="relative w-full aspect-[2.4/1] sm:aspect-[3.1/1] md:aspect-[3.4/1] min-h-[220px] max-h-[460px] overflow-hidden flex items-center justify-between p-6 sm:p-10 md:p-12 bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-white cursor-pointer select-none"
+              onClick={() => router.push("/category?type=all")}
             >
-              {heroBanners.map((banner, index) => {
-                const handleClick = () => {
-                  if (banner.link) {
-                    if (banner.link.startsWith("http")) {
-                      window.open(banner.link, "_blank");
-                    } else if (banner.link.includes("chicken")) {
-                      router.push("/category?type=chicken");
-                    } else if (banner.link.includes("mutton")) {
-                      router.push("/category?type=mutton");
-                    } else if (banner.link.includes("fish")) {
-                      router.push("/category?type=fish");
-                    } else if (banner.link.includes("marinated")) {
-                      router.push("/category?type=marinated");
-                    } else if (banner.link.startsWith("#")) {
-                      router.push("/category?type=all");
-                    } else {
-                      router.push(banner.link);
-                    }
-                  } else {
-                    router.push("/category?type=all");
-                  }
-                };
-
-                return (
-                  <div
-                    key={banner.id || banner._id || index}
-                    className="w-full h-full shrink-0 relative overflow-hidden flex items-center justify-center bg-neutral-950"
-                    style={{ cursor: banner.link ? "pointer" : "default" }}
-                    onClick={handleClick}
-                  >
-                    <img
-                      src={banner.image}
-                      alt={banner.title || "Teffes Fresh Meat Hero"}
-                      className="w-full h-full object-cover object-center select-none"
-                      draggable={false}
-                    />
-                  </div>
-                );
-              })}
+              <div className="max-w-xl z-10 space-y-2.5 sm:space-y-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-crimson-bright/20 text-crimson-bright text-xs sm:text-sm font-bold border border-crimson-bright/30">
+                  <span className="w-2 h-2 rounded-full bg-crimson-bright animate-ping" />
+                  Ranchi&apos;s Premier Fresh Butchery
+                </span>
+                <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight">
+                  Farm-Fresh Cuts Delivered In <span className="text-crimson-bright">90 Mins</span>
+                </h1>
+                <p className="text-xs sm:text-sm text-gray-300 max-w-md hidden sm:block leading-relaxed">
+                  100% Halal certified, fresh morning cuts with zero preservatives. Order online or visit our verified butcher hubs across Ranchi.
+                </p>
+                <div className="pt-1 sm:pt-2">
+                  <span className="inline-flex items-center gap-2 px-5 py-2 sm:px-6 sm:py-2.5 rounded-full bg-primary hover:bg-primary-dark text-white font-bold text-xs sm:text-sm shadow-md transition-all">
+                    <span>Order Fresh Cuts Now</span>
+                    <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
+                  </span>
+                </div>
+              </div>
+              <div className="hidden md:flex items-center justify-center pr-6 opacity-90">
+                <img
+                  src="/teffes-logo-maroon.png"
+                  alt="Teffes"
+                  className="w-32 h-32 lg:w-44 lg:h-44 object-contain filter drop-shadow-[0_10px_25px_rgba(255,255,255,0.08)]"
+                />
+              </div>
             </div>
+          ) : (
+            <div className="relative w-full aspect-[2.4/1] sm:aspect-[3.1/1] md:aspect-[3.4/1] min-h-[220px] max-h-[460px] overflow-hidden">
+              <div
+                className="flex w-full h-full transition-transform duration-500 ease-out"
+                style={{
+                  transform: `translateX(-${activeBannerIndex * 100}%)`,
+                }}
+              >
+                {heroBanners.map((banner, index) => {
+                  const handleClick = () => {
+                    if (banner.link) {
+                      if (banner.link.startsWith("http")) {
+                        window.open(banner.link, "_blank");
+                      } else if (banner.link.includes("chicken")) {
+                        router.push("/category?type=chicken");
+                      } else if (banner.link.includes("mutton")) {
+                        router.push("/category?type=mutton");
+                      } else if (banner.link.includes("fish")) {
+                        router.push("/category?type=fish");
+                      } else if (banner.link.includes("marinated")) {
+                        router.push("/category?type=marinated");
+                      } else if (banner.link.startsWith("#")) {
+                        router.push("/category?type=all");
+                      } else {
+                        router.push(banner.link);
+                      }
+                    } else {
+                      router.push("/category?type=all");
+                    }
+                  };
 
-            {/* Left & Right Chevron Arrows */}
-            {heroBanners.length > 1 && (
-              <>
-                <button
-                  type="button"
-                  aria-label="Previous Banner"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    prevBanner();
-                  }}
-                  className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/75 text-white backdrop-blur-md flex items-center justify-center transition-all duration-200 shadow-md opacity-80 hover:opacity-100 hover:scale-105 z-10 border border-white/20"
-                >
-                  <span className="material-symbols-outlined text-[20px] sm:text-[24px]">chevron_left</span>
-                </button>
-                <button
-                  type="button"
-                  aria-label="Next Banner"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    nextBanner();
-                  }}
-                  className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/75 text-white backdrop-blur-md flex items-center justify-center transition-all duration-200 shadow-md opacity-80 hover:opacity-100 hover:scale-105 z-10 border border-white/20"
-                >
-                  <span className="material-symbols-outlined text-[20px] sm:text-[24px]">chevron_right</span>
-                </button>
-              </>
-            )}
+                  return (
+                    <div
+                      key={banner.id || banner._id || index}
+                      className="w-full h-full shrink-0 relative overflow-hidden flex items-center justify-center bg-neutral-950"
+                      style={{ cursor: banner.link ? "pointer" : "default" }}
+                      onClick={handleClick}
+                    >
+                      <img
+                        src={banner.image}
+                        alt={banner.title || "Teffes Fresh Meat Hero"}
+                        className="w-full h-full object-cover object-center select-none"
+                        draggable={false}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
 
-            {/* Indicator Dots */}
-            {heroBanners.length > 1 && (
-              <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 bg-black/35 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/15">
-                {heroBanners.map((_, dotIdx) => (
+              {/* Left & Right Chevron Arrows */}
+              {heroBanners.length > 1 && (
+                <>
                   <button
-                    key={dotIdx}
                     type="button"
-                    aria-label={`Slide ${dotIdx + 1}`}
+                    aria-label="Previous Banner"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setActiveBannerIndex(dotIdx);
+                      prevBanner();
                     }}
-                    className={`transition-all duration-300 rounded-full ${activeBannerIndex === dotIdx
-                      ? "w-6 h-2 bg-crimson-bright shadow-xs"
-                      : "w-2 h-2 bg-white/60 hover:bg-white"
-                      }`}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
+                    className="absolute left-3 sm:left-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/75 text-white backdrop-blur-md flex items-center justify-center transition-all duration-200 shadow-md opacity-80 hover:opacity-100 hover:scale-105 z-10 border border-white/20"
+                  >
+                    <span className="material-symbols-outlined text-[20px] sm:text-[24px]">chevron_left</span>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next Banner"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nextBanner();
+                    }}
+                    className="absolute right-3 sm:right-5 top-1/2 -translate-y-1/2 w-9 h-9 sm:w-11 sm:h-11 rounded-full bg-black/45 hover:bg-black/75 text-white backdrop-blur-md flex items-center justify-center transition-all duration-200 shadow-md opacity-80 hover:opacity-100 hover:scale-105 z-10 border border-white/20"
+                  >
+                    <span className="material-symbols-outlined text-[20px] sm:text-[24px]">chevron_right</span>
+                  </button>
+                </>
+              )}
+
+              {/* Indicator Dots */}
+              {heroBanners.length > 1 && (
+                <div className="absolute bottom-3 sm:bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 z-10 bg-black/35 backdrop-blur-sm px-3 py-1.5 rounded-full border border-white/15">
+                  {heroBanners.map((_, dotIdx) => (
+                    <button
+                      key={dotIdx}
+                      type="button"
+                      aria-label={`Slide ${dotIdx + 1}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveBannerIndex(dotIdx);
+                      }}
+                      className={`transition-all duration-300 rounded-full ${activeBannerIndex === dotIdx
+                        ? "w-6 h-2 bg-crimson-bright shadow-xs"
+                        : "w-2 h-2 bg-white/60 hover:bg-white"
+                        }`}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Key Service Proof Points Strip */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 bg-surface-container-low p-3 sm:p-4 text-on-surface border-t border-gray-200/50">
             <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-surface-card shadow-xs border border-gray-100">
               <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                <span className="material-symbols-outlined text-[20px]">bolt</span>
+                <span className="material-symbols-outlined text-[20px]">timer</span>
               </div>
               <div>
                 <span className="block font-headline-sm text-[13.5px] sm:text-[15px] text-on-surface leading-tight font-bold">
@@ -318,42 +364,56 @@ export default function HomePage() {
           </span>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {displayCategories.map((cat) => {
-            return (
-              <Link
-                key={cat.id || cat.slug}
-                className="group relative rounded-2xl overflow-hidden bg-surface-card shadow-sm hover:shadow-md transition-all flex flex-col border border-gray-100 text-decoration-none cursor-pointer"
-                href={`/category?type=${cat.slug}`}
-              >
-                <div className="relative w-full aspect-[4/3] max-h-56 overflow-hidden bg-surface-container">
-                  <img
-                    alt={cat.name}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                    src={cat.image || "/teffes-logo-maroon.png"}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
-                  <div className="absolute bottom-3 left-4 text-white pr-2">
-                    <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
-                      {cat.name}
+        {isLoadingCategories && displayCategories.length === 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={idx} className="rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm flex flex-col">
+                <div className="w-full aspect-[4/3] skeleton-shimmer" />
+                <div className="p-3.5 flex items-center justify-between">
+                  <div className="h-4 w-28 bg-gray-200 rounded skeleton-shimmer" />
+                  <div className="h-4 w-4 bg-gray-200 rounded-full skeleton-shimmer" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {displayCategories.map((cat) => {
+              return (
+                <Link
+                  key={cat.id || cat.slug}
+                  className="group relative rounded-2xl overflow-hidden bg-surface-card shadow-sm hover:shadow-md transition-all flex flex-col border border-gray-100 text-decoration-none cursor-pointer"
+                  href={`/category?type=${cat.slug}`}
+                >
+                  <div className="relative w-full aspect-[4/3] max-h-56 overflow-hidden bg-surface-container">
+                    <img
+                      alt={cat.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      src={cat.image || "/teffes-logo-maroon.png"}
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
+                    <div className="absolute bottom-3 left-4 text-white pr-2">
+                      <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
+                        {cat.name}
+                      </span>
+                      <span className="font-body-sm text-body-sm text-white/90 text-[12px] line-clamp-1">
+                        {cat.tagline || "Fresh Daily Cuts"}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="p-3.5 flex items-center justify-between bg-surface-card">
+                    <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
+                      Shop {cat.name} <span className="material-symbols-outlined text-[16px]">chevron_right</span>
                     </span>
-                    <span className="font-body-sm text-body-sm text-white/90 text-[12px] line-clamp-1">
-                      {cat.tagline || "Fresh Daily Cuts"}
+                    <span className="font-label-badge text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
+                      Fresh Stock
                     </span>
                   </div>
-                </div>
-                <div className="p-3.5 flex items-center justify-between bg-surface-card">
-                  <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                    Shop {cat.name} <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-                  </span>
-                  <span className="font-label-badge text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
-                    Fresh Stock
-                  </span>
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* ─── 4. Trending & Best Sellers Section ─────────────────────────────────── */}
@@ -377,7 +437,10 @@ export default function HomePage() {
         </div>
 
         {/* 5 Best Seller Items */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        {isLoadingProducts && liveProducts.length === 0 ? (
+          <ProductGridSkeleton count={5} columns="grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {trendingProducts.map((item) => {
             const qty = getItemQuantity(item.id);
             const isJustAdded = addedItem === item.id;
@@ -469,6 +532,7 @@ export default function HomePage() {
             );
           })}
         </div>
+      )}
       </section>
 
       {/* ─── 5. Section Divider / Fresh Meat Mid Banner ────────────────────────── */}
@@ -525,7 +589,10 @@ export default function HomePage() {
         </div>
 
         {/* 7 Chicken Items + 1 Custom Cuts Showcase */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {isLoadingProducts && liveProducts.length === 0 ? (
+          <ProductGridSkeleton count={4} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {chickenProducts.map((item) => {
             const qty = getItemQuantity(item.id);
             const isJustAdded = addedItem === item.id;
@@ -643,6 +710,7 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+      )}
       </section>
 
       {/* ─── 7. Premium Country Mutton Section ─────────────────────────────────── */}
@@ -665,8 +733,11 @@ export default function HomePage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {muttonProducts.map((product) => {
+          {isLoadingProducts && liveProducts.length === 0 ? (
+            <ProductGridSkeleton count={3} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {muttonProducts.map((product) => {
               const qty = getItemQuantity(product.id);
               const isJustAdded = addedItem === product.id;
               const wishlisted = isInWishlist(product.id);
@@ -761,6 +832,7 @@ export default function HomePage() {
               );
             })}
           </div>
+        )}
         </div>
       </section>
 
@@ -784,7 +856,10 @@ export default function HomePage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {isLoadingProducts && liveProducts.length === 0 ? (
+          <ProductGridSkeleton count={3} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {fishProducts.map((product) => {
             const qty = getItemQuantity(product.id);
             const isJustAdded = addedItem === product.id;
@@ -913,6 +988,7 @@ export default function HomePage() {
             </div>
           </div>
         </div>
+      )}
       </section>
 
       {/* ─── 9. Marinated Cuts Section ─────────────────────────────────── */}
@@ -935,7 +1011,9 @@ export default function HomePage() {
           </div>
         </div>
 
-        {marinatedProducts.length > 0 ? (
+        {isLoadingProducts && liveProducts.length === 0 ? (
+          <ProductGridSkeleton count={4} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" />
+        ) : marinatedProducts.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {marinatedProducts.map((product) => {
               const qty = getItemQuantity(product.id);

@@ -210,13 +210,15 @@ export default function ProductImageZoom({
             <span
               className={`badge ${
                 badge === "Bestseller" || badge === "Special Cut" ? "badge-red" : "badge-green"
-              }`}
+              } inline-flex items-center gap-1`}
               style={{ fontSize: "0.8rem", padding: "4px 12px", boxShadow: "0 2px 6px rgba(0,0,0,0.15)" }}
             >
-              ★ {badge}
+              <span className="material-symbols-outlined text-[13px] leading-none">star</span>
+              <span>{badge}</span>
             </span>
           )}
           <span
+            className="inline-flex items-center gap-1"
             style={{
               background: "rgba(17, 28, 54, 0.85)",
               backdropFilter: "blur(4px)",
@@ -227,7 +229,8 @@ export default function ProductImageZoom({
               borderRadius: "var(--radius-full)",
             }}
           >
-            🔪 Cut On Order
+            <span className="material-symbols-outlined text-[13px] leading-none">content_cut</span>
+            <span>Cut On Order</span>
           </span>
         </div>
 
@@ -379,7 +382,8 @@ export default function ProductImageZoom({
               letterSpacing: "0.04em",
             }}
           >
-            🔍 High-Res Butchery Zoom (2.8x)
+            <span className="material-symbols-outlined text-[13px] align-middle mr-1">zoom_in</span>
+            High-Res Butchery Zoom (2.8x)
           </div>
         </div>
       )}

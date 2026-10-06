@@ -22,7 +22,7 @@ class OrderRiderModel {
       name: json['name'],
       phone: json['phone'],
       vehicle: json['vehicle'] ?? json['vehicleNumber'],
-      rating: json['rating'] ?? '4.9 ★',
+      rating: json['rating'] ?? '4.9',
       eta: json['eta']?.toString(),
       lat: (json['lat'] as num?)?.toDouble(),
       lng: (json['lng'] as num?)?.toDouble(),

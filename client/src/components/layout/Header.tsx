@@ -639,11 +639,13 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Drawer Footer */}
             <div className="p-4 bg-surface-container-low border-t border-gray-200">
               <div className="text-xs text-slate-body mb-3 leading-relaxed">
-                📍 <strong>Teffes Butchery Ranchi</strong>
+                <span className="material-symbols-outlined text-primary text-[15px] align-middle mr-1">location_on</span>
+                <strong>Teffes Butchery Ranchi</strong>
                 <br />
                 Near Kishore Ganj Chowk, Harmu Road
                 <br />
-                ⚡ <span className="text-tertiary font-bold">90-Min Fresh Delivery</span>
+                <span className="material-symbols-outlined text-tertiary text-[15px] align-middle mr-1">timer</span>
+                <span className="text-tertiary font-bold">90-Min Fresh Delivery</span>
               </div>
 
               <a

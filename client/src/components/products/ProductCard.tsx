@@ -252,7 +252,10 @@ export default function ProductCard({ product }: { product: Product }) {
               borderRadius: "var(--radius-sm)",
             }}
           >
-            <span>⚖️ <strong>Net: {product.netWeight}</strong></span>
+            <span className="flex items-center">
+              <span className="material-symbols-outlined text-[13px] mr-1 text-gray-500">scale</span>
+              <strong>Net: {product.netWeight}</strong>
+            </span>
             {product.pieces && <span>• {product.pieces}</span>}
             {product.serves && <span>• {product.serves}</span>}
           </div>

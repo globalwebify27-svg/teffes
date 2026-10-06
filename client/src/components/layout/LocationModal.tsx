@@ -91,7 +91,7 @@ export default function LocationModal() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
+      className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
       onClick={(e) => {
         if (e.target === e.currentTarget) closeLocationModal();
       }}
@@ -330,7 +330,7 @@ export default function LocationModal() {
 
           {/* Delivery Note */}
           <div className="text-[11px] text-slate-body bg-surface-container-low p-3 rounded-xl flex items-center gap-2">
-            <span className="material-symbols-outlined text-tertiary text-[18px]">bolt</span>
+            <span className="material-symbols-outlined text-tertiary text-[18px]">timer</span>
             <span>
               <strong>90-Min Fresh Delivery</strong> available across Kishore Ganj, Harmu, Lalpur, Morabadi, Doranda & Ranchi city.
             </span>

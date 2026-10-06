@@ -15,7 +15,7 @@ export default function AdminLoginPage() {
   return (
     <div
       style={{
-        minHeight: "calc(100vh - 120px)",
+        minHeight: "100vh",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -48,7 +48,7 @@ export default function AdminLoginPage() {
               marginBottom: "16px",
             }}
           >
-            🛡️
+            <span className="material-symbols-outlined text-[24px]">shield</span>
           </div>
           <h1
             style={{

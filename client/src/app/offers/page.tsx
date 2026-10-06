@@ -68,7 +68,7 @@ export default function OffersPage() {
         return {
           color: "border-emerald-300/80 bg-emerald-50/20",
           badge: "Free Express Shipping",
-          icon: "bolt",
+          icon: "delivery_dining",
           iconBg: "bg-emerald-100 text-emerald-800",
         };
       default:

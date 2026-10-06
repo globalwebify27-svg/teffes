@@ -1,9 +1,22 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import api from "@/lib/api";
 
 export default function Footer() {
+  const [stores, setStores] = useState<any[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.get("/stores").then((res) => {
+      if (isMounted && res.data?.success) {
+        setStores(res.data.data || []);
+      }
+    }).catch(console.error);
+    return () => { isMounted = false; };
+  }, []);
+
   return (
     <footer className="w-full bg-surface-container-low mt-space-3xl border-t border-gray-200/80">
       {/* 3 Proof Points Strip */}
@@ -144,10 +157,10 @@ export default function Footer() {
         <div className="space-y-space-sm">
           <h5 className="font-headline-sm text-headline-sm text-on-surface font-bold">Ranchi Hubs</h5>
           <p className="font-body-sm text-body-sm text-slate-body leading-snug">
-            Main Dispatch Hub: Kacheri Chowk, Kishore Ganj Chowk, Harmu Road, Ranchi 834001
+            Main Dispatch Hub: teffes.com , near Kishore Ganj chowk, harmu road, ranchi , Jharkhand, 834001
           </p>
           <p className="font-label-badge text-label-badge text-tertiary uppercase font-bold text-[10.5px]">
-            90-Min Zones: Lalpur, Morabadi, Kishore Ganj, Doranda &amp; Harmu
+            90-Min Zones: {stores.length > 0 ? stores.map(s => s.name || s.city).join(", ") : "Loading zones..."}
           </p>
 
           <div className="pt-space-xs">

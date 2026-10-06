@@ -676,7 +676,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 name: 'Md. Imran Ansari',
                 phone: '+91 94311 88204',
                 vehicle: 'Honda Activa (JH-01-BK-4920)',
-                rating: '4.9 ★ (840+ deliveries)',
+                rating: '4.9 (840+ deliveries)',
                 eta: '12 mins',
                 lat: 23.3512,
                 lng: 85.3154,
@@ -1186,7 +1186,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                     children: [
                                       Row(
                                         children: [
-                                          Icon(Icons.bolt_rounded, size: 16, color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.textPrimary),
+                                          Icon(Icons.timer_outlined, size: 16, color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.textPrimary),
                                           const SizedBox(width: 4),
                                           Text(
                                             isPickup ? 'Ready in 30 Mins' : 'Express 90 Mins',

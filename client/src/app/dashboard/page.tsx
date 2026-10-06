@@ -292,7 +292,7 @@ export default function DashboardPage() {
     try {
       if (rechargeMethod === "razorpay") {
         const loaded = await loadRazorpayScript();
-        const rzpRes = await api.post<{ success: boolean; order: any; keyId: string }>("/payment/create-order", {
+        const rzpRes = await api.post<{ success: boolean; order: any; keyId: string }>("/wallet/create-order", {
           amount: amountNum,
         });
 
@@ -303,12 +303,14 @@ export default function DashboardPage() {
             currency: "INR",
             name: "Teffe's Butcher Shop",
             description: `Wallet Recharge: ₹${amountNum}`,
-            order_id: rzpRes.data.order.id?.startsWith("order_dev_") ? undefined : rzpRes.data.order.id,
+            order_id: rzpRes.data.order.id?.startsWith("order_") ? undefined : rzpRes.data.order.id,
             handler: async function (response: any) {
               try {
-                const addRes = await api.post<{ success: boolean; balance: number }>("/wallet/add", {
+                const addRes = await api.post<{ success: boolean; balance: number }>("/wallet/verify-topup", {
                   amount: amountNum,
-                  description: `Recharge via Razorpay (${response.razorpay_payment_id || "UPI/Online"})`,
+                  razorpay_order_id: response.razorpay_order_id || rzpRes.data.order?.id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
                 });
                 if (addRes.data.success) {
                   setTeffesCash(addRes.data.balance);
@@ -625,7 +627,7 @@ export default function DashboardPage() {
         name: "Md. Imran Ansari",
         phone: "+91 98351 22410",
         vehicle: "Honda Activa (JH-01-BX-4921)",
-        rating: "4.9 ★",
+        rating: "4.9",
         deliveriesCount: "840+",
         bagTemp: "Fresh-Lock Insulated Box",
         eta: "14 min",
@@ -770,7 +772,7 @@ export default function DashboardPage() {
         name: o.rider?.name || (o.deliverySlot === "Store Pickup" ? "Store Pickup Counter" : "Express Rider Assigned"),
         phone: o.rider?.phone || "+91 94311 00000",
         vehicle: o.rider?.vehicleNumber || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : "Insulated Cold-Box (JH-01)"),
-        rating: "4.9 ★",
+        rating: "4.9",
         deliveriesCount: "420+",
         bagTemp: "Fresh-Lock Insulated Box",
         eta: etaText,
@@ -783,7 +785,7 @@ export default function DashboardPage() {
     };
   });
 
-  const ordersList: any[] = [...mappedLiveOrders, ...mockOrdersList];
+  const ordersList: any[] = mappedLiveOrders;
 
   const faqItems = [
     { title: "General Inquiry", desc: "Know about Teffe's shop timings, Ranchi delivery zones, and customer care." },
@@ -1614,10 +1616,10 @@ export default function DashboardPage() {
                     <p className="text-xs text-slate-600 mt-1">
                       Contact support within 60 mins with your Order ID and photo of the cut.
                     </p>
-                    <div className="mt-2 text-xs text-slate-700 space-y-0.5">
-                      <div>📞 Hotline: <strong>+91 97796 87955</strong> / <strong>+91 94311 00000</strong></div>
-                      <div>💬 WhatsApp: <strong>+91 97796 87955</strong></div>
-                      <div>✉️ Email: <strong>support@teffes.com</strong></div>
+                    <div className="mt-2 text-xs text-slate-700 space-y-1">
+                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">call</span> Hotline: <strong>+91 97796 87955</strong> / <strong>+91 94311 00000</strong></div>
+                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">chat</span> WhatsApp: <strong>+91 97796 87955</strong></div>
+                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">mail</span> Email: <strong>support@teffes.com</strong></div>
                     </div>
                   </div>
 
@@ -1692,7 +1694,7 @@ export default function DashboardPage() {
 
                 if (isDelivered) {
                   badgeText = "Order Completed";
-                  mainHeading = "Delivered Fresh ✓";
+                  mainHeading = "Delivered Fresh";
                   subHeading = "Delivered directly to your kitchen";
                   iconName = "check_circle";
                   bannerColor = "bg-emerald-50 border-emerald-200 text-emerald-950";
@@ -1823,8 +1825,9 @@ export default function DashboardPage() {
                         <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
                           {trackingOrder.rider?.name || "Md. Imran (Rider)"}
                         </h4>
-                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.2 rounded border border-amber-200">
-                          {trackingOrder.rider?.rating || "4.9 ★"}
+                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-0.5">
+                          <span>{(trackingOrder.rider?.rating || "4.9").replace("★", "").trim()}</span>
+                          <span className="material-symbols-outlined text-[12px] fill-current text-amber-500">star</span>
                         </span>
                       </div>
                       <p className="text-xs text-slate-500 font-medium">
@@ -2130,7 +2133,7 @@ export default function DashboardPage() {
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                          <span className="material-symbols-outlined text-[18px]">bolt</span>
+                          <span className="material-symbols-outlined text-[18px]">add_card</span>
                         </div>
                         <div>
                           <span className="font-bold text-gray-900 text-xs sm:text-sm block">

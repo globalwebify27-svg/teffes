@@ -15,6 +15,7 @@ import {
   faLayerGroup,
   faStore,
 } from "@fortawesome/free-solid-svg-icons";
+import { ProductGridSkeleton } from "@/components/common/Skeletons";
 
 type SortOption = "featured" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
 
@@ -156,7 +157,7 @@ function CategoryContent() {
             {/* Guarantee Badge */}
             <div className="flex items-center gap-3 p-3 bg-surface-container-low rounded-2xl border border-gray-200/60 shrink-0">
               <div className="w-10 h-10 rounded-xl bg-tertiary/15 flex items-center justify-center text-tertiary">
-                <span className="material-symbols-outlined text-[24px]">bolt</span>
+                <span className="material-symbols-outlined text-[24px]">timer</span>
               </div>
               <div className="text-left">
                 <span className="font-headline-sm font-extrabold text-gray-900 text-xs block">
@@ -223,7 +224,11 @@ function CategoryContent() {
         </div>
 
         {/* ─── Product Grid ─────────────────────────────────────────────────── */}
-        {sortedProducts.length === 0 ? (
+        {loading ? (
+          <div className="mb-16">
+            <ProductGridSkeleton count={8} columns="grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4" />
+          </div>
+        ) : sortedProducts.length === 0 ? (
           <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-gray-200 shadow-xs my-8 max-w-lg mx-auto">
             <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
               <span className="material-symbols-outlined text-[36px]">

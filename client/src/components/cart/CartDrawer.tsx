@@ -15,6 +15,8 @@ interface Address {
   city: string;
   pincode: string;
   isDefault?: boolean;
+  lat?: number;
+  lng?: number;
 }
 
 const loadRazorpayScript = (): Promise<boolean> => {
@@ -39,8 +41,14 @@ interface StoreOption {
   phone?: string;
   timings?: string;
   distance?: string;
+  distanceKm?: number;
   status?: string;
   pickupEnabled?: boolean;
+  deliveryEnabled?: boolean;
+  isOpen?: boolean;
+  isAvailable?: boolean;
+  stockStatus?: string;
+  outOfStockItems?: string[];
 }
 
 export default function CartDrawer() {
@@ -65,12 +73,21 @@ export default function CartDrawer() {
     removeCoupon,
   } = useCart();
 
+  const {
+    currentLocation,
+    selectSavedAddress,
+    refreshSavedAddresses,
+    isLocationSet,
+    openLocationModal,
+  } = useLocation();
+
   // Top fulfillment mode: "delivery" (auto-selected by default) or "pickup"
   const [fulfillmentType, setFulfillmentType] = useState<"delivery" | "pickup">("delivery");
 
-  // Stores for self-pickup
+  // Stores for fulfillment (both Delivery and Pickup)
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
+  const [showStorePickerInDelivery, setShowStorePickerInDelivery] = useState<boolean>(false);
   const [pickupNote, setPickupNote] = useState<string>("");
 
   // Navigation views: "cart" -> "payment" -> "success" | "address"
@@ -78,32 +95,71 @@ export default function CartDrawer() {
   const [slot, setSlot] = useState<"express" | "evening">("express");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Addresses state
+  const [addresses, setAddresses] = useState<Address[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
+
+  // Fetch available stores verifying active status, delivery/pickup flag, and cart items inventory
+  const fetchAvailableStores = async (addrs?: Address[], selectedAddrId?: string) => {
+    try {
+      const addrList = addrs || addresses;
+      const addrId = selectedAddrId || selectedAddressId;
+      const activeAddr = addrList.find((a) => a._id === addrId) || addrList[0];
+      const payload = {
+        type: fulfillmentType,
+        items: items.map((i) => ({
+          id: i.product.id,
+          name: i.product.name,
+          quantity: i.quantity,
+        })),
+        customerLat: activeAddr?.lat || 23.3512,
+        customerLng: activeAddr?.lng || 85.3154,
+      };
+
+      const res = await api.post<{
+        success: boolean;
+        stores: StoreOption[];
+        eligibleStores: StoreOption[];
+        suggestedStore: StoreOption;
+      }>("/stores/available", payload);
+
+      if (res.data.success && Array.isArray(res.data.stores)) {
+        setStores(res.data.stores);
+
+        // Auto-select nearest shop among filtered shop list (eligible stores are sorted by distance)
+        const bestStore = res.data.suggestedStore || res.data.eligibleStores?.[0] || res.data.stores[0];
+        if (bestStore) {
+          setSelectedStoreId((prev) => {
+            const isPrevStillEligible = res.data.eligibleStores?.some((s) => s.storeId === prev);
+            if (!prev || !isPrevStillEligible) {
+              return bestStore.storeId;
+            }
+            return prev;
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to fetch available stores for fulfillment:", err);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       setIsLoggedIn(isAuthenticated());
       fetchAddresses();
-
-      // Fetch live stores list from backend API
-      api.get<{ success: boolean; stores: StoreOption[] }>("/stores")
-        .then((res) => {
-          if (res.data.success && Array.isArray(res.data.stores) && res.data.stores.length > 0) {
-            const mapped = res.data.stores.map((s, idx) => ({
-              ...s,
-              distance: s.distance || `${(0.8 + idx * 0.8).toFixed(1)} km away`,
-            }));
-            setStores(mapped);
-            if (!selectedStoreId && mapped.length > 0) {
-              const firstActive = mapped.find((x) => x.pickupEnabled !== false && x.status !== "Inactive");
-              setSelectedStoreId(firstActive ? firstActive.storeId : mapped[0].storeId);
-            }
-          }
-        })
-        .catch((err) => console.warn("Failed to fetch stores for pickup:", err));
+      fetchAvailableStores();
     } else {
       setView("cart");
       setShowAddAddressForm(false);
+      setShowStorePickerInDelivery(false);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchAvailableStores();
+    }
+  }, [fulfillmentType, items]);
 
   // Tip Delivery Partner state (Zepto style)
   const [selectedTip, setSelectedTip] = useState<number>(0);
@@ -115,8 +171,6 @@ export default function CartDrawer() {
   // Payment method state ("cod" | "razorpay" | "wallet")
   const [selectedPayment, setSelectedPayment] = useState<string>("cod");
   const [walletBalance, setWalletBalance] = useState<number>(0);
-  const [addresses, setAddresses] = useState<Address[]>([]);
-  const [selectedAddressId, setSelectedAddressId] = useState<string>("");
   const [showAddAddressForm, setShowAddAddressForm] = useState<boolean>(false);
   const [isSavingAddress, setIsSavingAddress] = useState<boolean>(false);
   const [newAddress, setNewAddress] = useState({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
@@ -196,14 +250,6 @@ export default function CartDrawer() {
     }
   };
 
-  const {
-    currentLocation,
-    selectSavedAddress,
-    refreshSavedAddresses,
-    isLocationSet,
-    openLocationModal,
-  } = useLocation();
-
   // Fetch user addresses from backend
   const fetchAddresses = async () => {
     try {
@@ -213,6 +259,7 @@ export default function CartDrawer() {
         const match = res.data.addresses.find((a) => a._id === currentLocation.addressId);
         const def = match || res.data.addresses.find((a) => a.isDefault) || res.data.addresses[0];
         if (def && !selectedAddressId) setSelectedAddressId(def._id);
+        fetchAvailableStores(res.data.addresses, def?._id);
       }
     } catch (err) {
       console.warn("Could not fetch addresses:", err);
@@ -279,10 +326,18 @@ export default function CartDrawer() {
 
   const activeAddress =
     addresses.find((a) => a._id === selectedAddressId) ||
-    addresses.find((a) => a._id === currentLocation.addressId) ||
+    addresses.find((a) => a._id === currentLocation?.addressId) ||
     addresses.find((a) => a.isDefault) ||
     addresses[0] ||
-    null;
+    (currentLocation?.isSet && currentLocation?.fullAddress
+      ? {
+          _id: currentLocation.addressId || "loc-selected",
+          tag: currentLocation.label || "Delivery Address",
+          line1: currentLocation.fullAddress,
+          city: "Ranchi",
+          pincode: "",
+        }
+      : null);
 
   // Proceed from cart to payment view inside drawer
   const handleProceedToPayment = async () => {
@@ -343,7 +398,7 @@ export default function CartDrawer() {
           image: i.product.image,
         })),
         amount: finalPayable,
-        addressId: fulfillmentType === "delivery" ? selectedAddressId : undefined,
+        addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
         storeName: selectedStore?.name || "Kishore Ganj",
@@ -390,7 +445,7 @@ export default function CartDrawer() {
           image: i.product.image,
         })),
         amount: finalPayable,
-        addressId: fulfillmentType === "delivery" ? selectedAddressId : undefined,
+        addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
         storeName: selectedStore?.name || "Kishore Ganj",
@@ -587,7 +642,7 @@ export default function CartDrawer() {
                           </span>
                           <button
                             type="button"
-                            onClick={() => setView("address")}
+                            onClick={() => openLocationModal()}
                             className="text-primary font-black text-[11.5px] uppercase tracking-wider hover:underline bg-transparent border-none cursor-pointer py-0.5 px-2 rounded-md hover:bg-primary/10 transition-colors"
                           >
                             CHANGE
@@ -619,10 +674,7 @@ export default function CartDrawer() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => {
-                          setShowAddAddressForm(true);
-                          setView("address");
-                        }}
+                        onClick={() => openLocationModal()}
                         className="bg-primary hover:bg-primary-dark text-white font-bold text-[11px] uppercase tracking-wider py-1.5 px-3 rounded-lg border-none cursor-pointer shadow-xs transition-colors shrink-0"
                       >
                         + ADD
@@ -655,7 +707,7 @@ export default function CartDrawer() {
 
                 {/* Scrollable Body: Stores List OR Delivery Speed + Items + Instructions */}
                 <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
-                  {/* ─── TAB 2 CONTENT: STORE SELECTION LIST ─── */}
+                  {/* ─── TAB 2 CONTENT: STORE SELECTION LIST (PICKUP) ─── */}
                   {fulfillmentType === "pickup" && (
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between">
@@ -664,36 +716,54 @@ export default function CartDrawer() {
                           <span>Select Pickup Store nearby you</span>
                         </div>
                         <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
-                          {stores.length} Available
+                          {stores.filter((s) => s.isAvailable !== false).length} Available
                         </span>
                       </div>
 
                       <div className="space-y-2">
-                        {stores.map((store) => {
+                        {stores.map((store, idx) => {
                           const isSelected = store.storeId === selectedStoreId;
+                          const isNearest = idx === 0;
+                          const isOutOfStock = store.isAvailable === false;
+
                           return (
                             <div
                               key={store.storeId}
-                              onClick={() => setSelectedStoreId(store.storeId)}
-                              className={`p-3 rounded-2xl border transition-all cursor-pointer text-left ${isSelected
-                                  ? "border-primary bg-crimson-soft shadow-xs ring-1 ring-primary/20"
-                                  : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60"
-                                }`}
+                              onClick={() => {
+                                if (!isOutOfStock) {
+                                  setSelectedStoreId(store.storeId);
+                                }
+                              }}
+                              className={`p-3 rounded-2xl border transition-all text-left ${
+                                isOutOfStock
+                                  ? "border-gray-200 bg-gray-50/80 opacity-60 cursor-not-allowed"
+                                  : isSelected
+                                  ? "border-primary bg-crimson-soft shadow-xs ring-1 ring-primary/20 cursor-pointer"
+                                  : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60 cursor-pointer"
+                              }`}
                             >
                               <div className="flex items-start gap-2.5">
                                 {/* Radio Indicator */}
                                 <div
-                                  className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-colors ${isSelected ? "border-primary bg-primary" : "border-gray-300 bg-white"
-                                    }`}
+                                  className={`w-5 h-5 rounded-full border-2 mt-0.5 flex items-center justify-center shrink-0 transition-colors ${
+                                    isSelected ? "border-primary bg-primary" : "border-gray-300 bg-white"
+                                  }`}
                                 >
                                   {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                 </div>
 
                                 <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-1">
-                                    <span className="font-headline-sm font-extrabold text-on-surface text-[13.5px]">
-                                      {store.name}
-                                    </span>
+                                  <div className="flex items-center justify-between gap-1 flex-wrap">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="font-headline-sm font-extrabold text-on-surface text-[13.5px]">
+                                        {store.name}
+                                      </span>
+                                      {isNearest && (
+                                        <span className="text-[9.5px] uppercase font-black px-1.5 py-0.2 bg-emerald-700 text-white rounded-full">
+                                          Nearest
+                                        </span>
+                                      )}
+                                    </div>
                                     {isSelected && (
                                       <span className="text-[10px] uppercase font-black px-1.5 py-0.2 bg-primary text-white rounded-full shrink-0">
                                         Selected
@@ -706,12 +776,20 @@ export default function CartDrawer() {
                                   </p>
 
                                   <div className="flex items-center gap-2 mt-1.5 text-[11px] text-slate-body flex-wrap">
-                                    <span className="flex items-center gap-1 text-emerald-700 font-bold">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
-                                      <span>Open for Pickup</span>
+                                    <span
+                                      className={`flex items-center gap-1 font-bold ${
+                                        isOutOfStock ? "text-red-700" : "text-emerald-700"
+                                      }`}
+                                    >
+                                      <span
+                                        className={`w-1.5 h-1.5 rounded-full ${
+                                          isOutOfStock ? "bg-red-600" : "bg-emerald-600 animate-pulse"
+                                        }`}
+                                      ></span>
+                                      <span>{isOutOfStock ? "Out of Stock" : "In Stock • Open"}</span>
                                     </span>
                                     <span>•</span>
-                                    <span>{store.timings || "08:00 AM - 08:00 PM"}</span>
+                                    <span>{store.timings || "08:00 AM - 08:30 PM"}</span>
                                     {store.distance && (
                                       <>
                                         <span>•</span>
@@ -730,47 +808,156 @@ export default function CartDrawer() {
                       <div className="p-3 bg-amber-50/80 border border-amber-200/70 rounded-xl flex items-start gap-2.5 text-[11.5px] text-amber-900">
                         <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0 mt-0.2">schedule</span>
                         <div>
-                          <strong>Quick Pickup:</strong> Order will be freshly carved and packaged within <strong>15 minutes</strong>. Collect anytime before 8:00 PM today!
+                          <strong>Quick Pickup:</strong> Order will be freshly carved and packaged within <strong>15 minutes</strong>. Collect anytime before 8:30 PM today!
                         </div>
                       </div>
                     </div>
                   )}
 
-                  {/* ─── TAB 1 CONTENT: DELIVERY SPEED SLOTS ─── */}
+                  {/* ─── TAB 1 CONTENT: DELIVERY SPEED SLOTS & FULFILLING STORE HUB ─── */}
                   {fulfillmentType === "delivery" && (
-                    <div className="p-3 bg-slate-50 rounded-2xl border border-gray-200">
-                      <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px] mb-2">
-                        Select Delivery Speed (Ranchi Only)
+                    <div className="space-y-3">
+                      {/* Fulfilling Store Hub Card (Nearest Auto-Selected with Option to Change) */}
+                      <div className="p-3 bg-white rounded-2xl border border-gray-200 shadow-xs space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px] flex items-center gap-1.5">
+                            <span className="material-symbols-outlined text-primary text-[16px]">store</span>
+                            <span>Fulfilling Butchery Hub</span>
+                          </div>
+                          {stores.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => setShowStorePickerInDelivery(!showStorePickerInDelivery)}
+                              className="text-[11.5px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
+                            >
+                              <span>{showStorePickerInDelivery ? "Hide Stores" : "Change Hub"}</span>
+                              <span className="material-symbols-outlined text-[15px]">
+                                {showStorePickerInDelivery ? "expand_less" : "expand_more"}
+                              </span>
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Selected Store Summary */}
+                        {selectedStore && (
+                          <div className="flex items-start gap-2.5 p-2.5 bg-slate-50/90 rounded-xl border border-gray-200/80">
+                            <span className="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">location_on</span>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between gap-1">
+                                <span className="font-headline-sm font-extrabold text-on-surface text-[13px] truncate">
+                                  {selectedStore.name}
+                                </span>
+                                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-full shrink-0">
+                                  {selectedStore === stores[0] ? "Nearest • In Stock" : "In Stock"}
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-body truncate mt-0.5">{selectedStore.address}</p>
+                              <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-body">
+                                <span className="font-bold text-primary">{selectedStore.distance || "0.7 km away"}</span>
+                                <span>•</span>
+                                <span>Dispatching to your address</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Expandable Hub Selector */}
+                        {showStorePickerInDelivery && (
+                          <div className="space-y-1.5 pt-2 border-t border-gray-100">
+                            <div className="text-[11px] font-semibold text-slate-body mb-1">
+                              Select from available butchery stores with items in stock:
+                            </div>
+                            {stores.map((st, idx) => {
+                              const isSel = st.storeId === selectedStoreId;
+                              const isNearest = idx === 0;
+                              const isOutOfStock = st.isAvailable === false;
+
+                              return (
+                                <div
+                                  key={st.storeId}
+                                  onClick={() => {
+                                    if (!isOutOfStock) {
+                                      setSelectedStoreId(st.storeId);
+                                      setShowStorePickerInDelivery(false);
+                                    }
+                                  }}
+                                  className={`p-2.5 rounded-xl border transition-all text-left ${
+                                    isOutOfStock
+                                      ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
+                                      : isSel
+                                      ? "border-primary bg-crimson-soft ring-1 ring-primary/20 cursor-pointer"
+                                      : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
+                                  }`}
+                                >
+                                  <div className="flex items-start justify-between gap-1.5">
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="font-bold text-on-surface text-[12.5px]">{st.name}</span>
+                                        {isNearest && (
+                                          <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded-full">
+                                            Nearest
+                                          </span>
+                                        )}
+                                        {isSel && (
+                                          <span className="text-[9.5px] font-bold text-primary bg-primary/10 px-1.5 py-0.2 rounded-full">
+                                            Selected
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-slate-body truncate mt-0.5">{st.address}</div>
+                                      <div className="flex items-center gap-2 mt-0.5 text-[10.5px]">
+                                        <span className="text-primary font-bold">{st.distance}</span>
+                                        <span>•</span>
+                                        <span className={isOutOfStock ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>
+                                          {isOutOfStock ? "Out of Stock" : "In Stock"}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setSlot("express")}
-                          className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "express"
-                              ? "border-primary bg-crimson-soft shadow-xs"
-                              : "border-gray-200 bg-white hover:border-gray-300"
+
+                      {/* Delivery Speed Slots */}
+                      <div className="p-3 bg-slate-50 rounded-2xl border border-gray-200">
+                        <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px] mb-2">
+                          Select Delivery Speed (Ranchi Only)
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setSlot("express")}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                              slot === "express"
+                                ? "border-primary bg-crimson-soft shadow-xs"
+                                : "border-gray-200 bg-white hover:border-gray-300"
                             }`}
-                        >
-                          <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
-                            <span className="material-symbols-outlined text-primary text-[16px]">bolt</span>
-                            <span>90-Min Express</span>
-                          </div>
-                          <div className="font-body-sm text-slate-body text-[11px] mt-0.5">Cut &amp; delivered fresh</div>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSlot("evening")}
-                          className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "evening"
-                              ? "border-primary bg-crimson-soft shadow-xs"
-                              : "border-gray-200 bg-white hover:border-gray-300"
+                          >
+                            <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
+                              <span className="material-symbols-outlined text-primary text-[16px]">timer</span>
+                              <span>90-Min Express</span>
+                            </div>
+                            <div className="font-body-sm text-slate-body text-[11px] mt-0.5">Cut &amp; delivered fresh</div>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setSlot("evening")}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${
+                              slot === "evening"
+                                ? "border-primary bg-crimson-soft shadow-xs"
+                                : "border-gray-200 bg-white hover:border-gray-300"
                             }`}
-                        >
-                          <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
-                            <span className="material-symbols-outlined text-primary text-[16px]">schedule</span>
-                            <span>Evening Slot</span>
-                          </div>
-                          <div className="font-body-sm text-slate-body text-[11px] mt-0.5">5:00 PM – 7:30 PM</div>
-                        </button>
+                          >
+                            <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
+                              <span className="material-symbols-outlined text-primary text-[16px]">schedule</span>
+                              <span>Evening Slot</span>
+                            </div>
+                            <div className="font-body-sm text-slate-body text-[11px] mt-0.5">5:00 PM – 7:30 PM</div>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1658,8 +1845,9 @@ export default function CartDrawer() {
                     )}
                   </button>
                 )}
-                <p className="text-center text-[11px] text-gray-400 mt-2">
-                  🔒 100% Secure Transaction • Live Tracking on Dashboard
+                <p className="text-center text-[11px] text-gray-400 mt-2 flex items-center justify-center gap-1">
+                  <span className="material-symbols-outlined text-[13px] text-gray-400">lock</span>
+                  <span>100% Secure Transaction • Live Tracking on Dashboard</span>
                 </p>
               </div>
 
@@ -1700,8 +1888,11 @@ export default function CartDrawer() {
             <div className="bg-surface-container-low border border-gray-200/80 rounded-2xl p-4 w-full mb-6 text-left space-y-2.5 text-xs">
               <div className="flex items-center justify-between pb-2 border-b border-gray-200/60">
                 <span className="text-slate-body">Fulfillment Mode</span>
-                <span className="font-bold text-gray-900">
-                  {orderSummary?.fulfillmentType === "pickup" ? "🏪 Self Store Pickup" : "🛵 Express Home Delivery"}
+                <span className="font-bold text-gray-900 inline-flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[15px] text-primary">
+                    {orderSummary?.fulfillmentType === "pickup" ? "storefront" : "delivery_dining"}
+                  </span>
+                  <span>{orderSummary?.fulfillmentType === "pickup" ? "Self Store Pickup" : "Express Home Delivery"}</span>
                 </span>
               </div>
 
@@ -1741,7 +1932,7 @@ export default function CartDrawer() {
 
               <div className="flex items-center gap-1.5 text-tertiary font-bold pt-1">
                 <span className="material-symbols-outlined text-[18px]">
-                  {orderSummary?.fulfillmentType === "pickup" ? "verified" : "bolt"}
+                  {orderSummary?.fulfillmentType === "pickup" ? "verified" : "timer"}
                 </span>
                 <span>
                   {orderSummary?.fulfillmentType === "pickup"

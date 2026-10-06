@@ -371,7 +371,7 @@ class RiderProfileScreen extends StatelessWidget {
                                 Icon(Icons.star_rounded, size: 16, color: AppColors.ratingStar),
                                 SizedBox(width: 2),
                                 Text(
-                                  '4.9 ★',
+                                  '4.9',
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w800,
