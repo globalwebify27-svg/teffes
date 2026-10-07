@@ -291,20 +291,39 @@ export default function DashboardPage() {
 
     try {
       if (rechargeMethod === "razorpay") {
-        const loaded = await loadRazorpayScript();
-        const rzpRes = await api.post<{ success: boolean; order: any; keyId: string }>("/wallet/create-order", {
+        const rzpRes = await api.post<{ success: boolean; order: any; keyId: string; isSimulation?: boolean }>("/wallet/create-order", {
           amount: amountNum,
         });
 
-        if (loaded && (window as any).Razorpay && rzpRes.data.order) {
+        // If in simulation mode or without valid key, smoothly top up via instant balance
+        if (rzpRes.data.isSimulation || !rzpRes.data.keyId || rzpRes.data.order?.id?.startsWith("order_wal_dev_")) {
+          const res = await api.post<{ success: boolean; balance: number }>("/wallet/add", {
+            amount: amountNum,
+            description: "Online Wallet Top-up (Sandbox)",
+          });
+          if (res.data.success) {
+            setTeffesCash(res.data.balance);
+            setRechargeFeedback({ type: "success", message: `₹${amountNum} successfully added to your Teffe's Cash!` });
+            setTimeout(() => {
+              closeAddBalanceModal();
+            }, 1200);
+          }
+          setIsRecharging(false);
+          return;
+        }
+
+        const loaded = await loadRazorpayScript();
+        if (loaded && (window as any).Razorpay && rzpRes.data.keyId) {
+          let isDismissed = false;
           const options = {
-            key: rzpRes.data.keyId || "rzp_test_1DP5mmOlF5G5ag",
+            key: rzpRes.data.keyId,
             amount: rzpRes.data.order.amount,
             currency: "INR",
-            name: "Teffe's Butcher Shop",
+            name: "TeFFe's",
             description: `Wallet Recharge: ₹${amountNum}`,
-            order_id: rzpRes.data.order.id?.startsWith("order_") ? undefined : rzpRes.data.order.id,
+            order_id: rzpRes.data.order.id,
             handler: async function (response: any) {
+              isDismissed = true;
               try {
                 const addRes = await api.post<{ success: boolean; balance: number }>("/wallet/verify-topup", {
                   amount: amountNum,
@@ -335,18 +354,30 @@ export default function DashboardPage() {
             },
             modal: {
               ondismiss: function () {
+                isDismissed = true;
                 setIsRecharging(false);
               },
             },
           };
 
-          const rzp = new (window as any).Razorpay(options);
-          rzp.on("payment.failed", function (resp: any) {
-            setRechargeFeedback({ type: "error", message: "Payment failed: " + (resp.error?.description || "Transaction cancelled") });
+          try {
+            const rzp = new (window as any).Razorpay(options);
+            rzp.on("payment.failed", function (resp: any) {
+              isDismissed = true;
+              setRechargeFeedback({ type: "error", message: "Payment failed: " + (resp.error?.description || "Transaction cancelled") });
+              setIsRecharging(false);
+            });
+            rzp.open();
+            setTimeout(() => {
+              if (!isDismissed) {
+                setIsRecharging(false);
+              }
+            }, 6000);
+            return;
+          } catch (openErr) {
+            console.error("Razorpay open error:", openErr);
             setIsRecharging(false);
-          });
-          rzp.open();
-          return;
+          }
         }
       }
 

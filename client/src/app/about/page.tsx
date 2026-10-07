@@ -4,8 +4,8 @@ import type { Metadata } from "next";
 import RegisteredShopsSection from "@/components/home/RegisteredShopsSection";
 
 export const metadata: Metadata = {
-  title: "About Us - Teffes Ranchi Butcher Shop",
-  description: "Learn about Teffes, Ranchi's trusted shop for over a decade. Fresh, hygienic chicken, mutton, fish, and eggs delivered in 90 minutes.",
+  title: "About Us - TeFFe's Ranchi",
+  description: "Learn about Teffes, Ranchi's trusted store for over a decade. Fresh, hygienic chicken, mutton, fish, and eggs delivered in 90 minutes.",
 };
 
 export default function AboutPage() {

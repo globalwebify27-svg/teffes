@@ -230,15 +230,49 @@ async function reverseGeocode(lat, lng) {
     }
   }
 
-  // Graceful fallback for development / offline environments
+  // Try OpenStreetMap Nominatim (Free, highly accurate reverse geocoder for all coordinates)
+  try {
+    const nominatimUrl = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`;
+    const nomRes = await fetch(nominatimUrl, {
+      headers: { 'User-Agent': 'TeffesApp/1.0 (contact@teffes.com)' },
+    });
+    if (nomRes.ok) {
+      const nomData = await nomRes.json();
+      if (nomData && nomData.address) {
+        const addr = nomData.address;
+        const locality = addr.suburb || addr.neighbourhood || addr.residential || addr.city_district || addr.county || addr.city || 'Current Location';
+        const road = addr.road || addr.street || locality;
+        const city = addr.city || addr.town || addr.village || addr.state_district || 'Ranchi';
+        const state = addr.state || 'Jharkhand';
+        const pincode = addr.postcode || '834001';
+
+        return {
+          success: true,
+          addressLine: road,
+          locality,
+          city,
+          state,
+          pincode,
+          formattedAddress: nomData.display_name || `${locality}, ${city}, ${pincode}`,
+          latitude,
+          longitude,
+          provider: 'nominatim',
+        };
+      }
+    }
+  } catch (nomErr) {
+    console.warn('[Nominatim Geocode] Request failed:', nomErr.message);
+  }
+
+  // Graceful generic fallback if offline
   return {
     success: true,
-    addressLine: 'Albert Ekka Chowk, Main Road',
-    locality: 'Kishore Ganj',
+    addressLine: 'Current Location',
+    locality: 'Current Location',
     city: 'Ranchi',
     state: 'Jharkhand',
     pincode: '834001',
-    formattedAddress: 'Kishore Ganj, Harmu Road, Ranchi, Jharkhand 834001',
+    formattedAddress: 'Current Location, Ranchi, Jharkhand',
     latitude,
     longitude,
     provider: 'fallback',

@@ -104,7 +104,7 @@ export default function OffersPage() {
               Teffe&apos;s Special Offers &amp; Deals
             </h1>
             <p className="text-xs sm:text-sm text-slate-body mt-1 leading-relaxed">
-              Explore authentic butcher shop promotions, instant discount codes, and special coupon milestones for healthy, hygienic meat delivered fresh in Ranchi.
+              Explore authentic TeFFe&apos;s promotions, instant discount codes, and special coupon milestones for healthy, hygienic meat delivered fresh in Ranchi.
             </p>
           </div>
         </div>

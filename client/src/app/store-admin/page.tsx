@@ -716,22 +716,83 @@ function InventoryTab() {
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading live inventory…</div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: "16px" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "14px" }}>
           {items.map(item => {
             const isLow = item.status === "Low Stock" || item.stock <= (item.min || 15);
             return (
-              <div key={item.itemId || item.id} style={{ background: "#fff", border: `1px solid ${isLow ? "#fecaca" : "#ede8e0"}`, borderRadius: "14px", padding: "20px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                  <div>
-                    <div style={{ fontWeight: 700, color: "#171410", fontSize: "1rem" }}>{item.item}</div>
-                    <div style={{ color: "#73695b", fontSize: "0.75rem" }}>Category: {item.category}</div>
+              <div
+                key={item.itemId || item.id}
+                style={{
+                  background: "#fff",
+                  border: `1px solid ${isLow ? "#fecaca" : "#ede8e0"}`,
+                  borderRadius: "14px",
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                  height: "100%",
+                  boxSizing: "border-box",
+                  boxShadow: isLow ? "0 2px 8px rgba(217, 119, 6, 0.08)" : "0 2px 8px rgba(0,0,0,0.03)",
+                }}
+              >
+                <div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "10px" }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div
+                        title={item.item}
+                        style={{
+                          fontWeight: 700,
+                          color: "#171410",
+                          fontSize: "0.95rem",
+                          lineHeight: "1.3",
+                          minHeight: "2.6em",
+                          display: "-webkit-box",
+                          WebkitLineClamp: 2,
+                          WebkitBoxOrient: "vertical",
+                          overflow: "hidden",
+                        }}
+                      >
+                        {item.item}
+                      </div>
+                      <div
+                        title={item.category}
+                        style={{
+                          color: "#73695b",
+                          fontSize: "0.74rem",
+                          marginTop: "3px",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        Category: {item.category}
+                      </div>
+                    </div>
+                    <div style={{ flexShrink: 0, marginLeft: "4px" }}>
+                      <Badge label={item.status} color={isLow ? "#d97706" : "#059669"} />
+                    </div>
                   </div>
-                  <Badge label={item.status} color={isLow ? "#d97706" : "#059669"} />
+
+                  <div style={{ paddingTop: "4px" }}>
+                    <div style={{ fontSize: "1.55rem", fontWeight: 900, color: isLow ? "#d97706" : "#059669", fontFamily: "Outfit, sans-serif", lineHeight: 1.1 }}>
+                      {item.stock} <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#73695b" }}>{item.unit}</span>
+                    </div>
+                    <div
+                      title={`Min Alert: ${item.min} ${item.unit} · ${item.lastRestocked}`}
+                      style={{
+                        fontSize: "0.72rem",
+                        color: "#73695b",
+                        marginTop: "5px",
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      }}
+                    >
+                      Min Alert: {item.min} {item.unit} · {item.lastRestocked}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: "1.6rem", fontWeight: 900, color: isLow ? "#d97706" : "#059669", fontFamily: "Outfit, sans-serif" }}>
-                  {item.stock} <span style={{ fontSize: "0.9rem", fontWeight: 600, color: "#73695b" }}>{item.unit}</span>
-                </div>
-                <div style={{ fontSize: "0.75rem", color: "#73695b", marginTop: "6px" }}>Min Alert: {item.min} {item.unit} · {item.lastRestocked}</div>
+
                 <button
                   onClick={() => {
                     setSelectedItem(item);
@@ -745,9 +806,9 @@ function InventoryTab() {
                     background: isLow ? "#d97706" : "#941717",
                     border: "none",
                     borderRadius: "8px",
-                    padding: "9px 14px",
+                    padding: "8px 10px",
                     color: "#fff",
-                    fontSize: "0.85rem",
+                    fontSize: "0.82rem",
                     fontWeight: 700,
                     cursor: "pointer",
                     width: "100%",
@@ -755,12 +816,13 @@ function InventoryTab() {
                     alignItems: "center",
                     justifyContent: "center",
                     gap: "6px",
+                    whiteSpace: "nowrap",
+                    flexShrink: 0,
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
                   }}
                 >
-                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
-                    <span className="material-symbols-outlined text-[16px]">inventory_2</span>
-                    Adjust Stock (+ / - / Set)
-                  </span>
+                  <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>inventory_2</span>
+                  <span>Adjust Stock (+ / - / Set)</span>
                 </button>
               </div>
             );

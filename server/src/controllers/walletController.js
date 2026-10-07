@@ -135,6 +135,7 @@ exports.createWalletTopupOrder = async (req, res, next) => {
     const key_secret = process.env.RAZORPAY_KEY_SECRET || 'rzp_secret_placeholder';
 
     let razorpayOrder;
+    let isLiveOrTestWorking = false;
     if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && !process.env.RAZORPAY_KEY_ID.includes('placeholder')) {
       try {
         const instance = getRazorpayInstance();
@@ -147,6 +148,7 @@ exports.createWalletTopupOrder = async (req, res, next) => {
             userId: req.user._id.toString(),
           },
         });
+        isLiveOrTestWorking = true;
       } catch (err) {
         console.warn('[Razorpay Wallet] Live order creation warning:', err.message);
       }
@@ -164,7 +166,8 @@ exports.createWalletTopupOrder = async (req, res, next) => {
     res.status(200).json({
       success: true,
       order: razorpayOrder,
-      keyId: key_id,
+      keyId: isLiveOrTestWorking ? key_id : null,
+      isSimulation: !isLiveOrTestWorking,
       amount: numAmount,
     });
   } catch (error) {

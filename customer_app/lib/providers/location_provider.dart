@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -165,6 +166,7 @@ class LocationProvider with ChangeNotifier {
       String pincode = '834001';
 
       if (position != null) {
+        bool resolvedLive = false;
         try {
           // Google Geocoding via TeFFe backend proxy (API key protected on server)
           final res = await _api.get(
@@ -175,7 +177,10 @@ class LocationProvider with ChangeNotifier {
             },
           );
 
-          if (res.data != null && res.data['success'] == true) {
+          if (res.data != null &&
+              res.data['success'] == true &&
+              res.data['provider'] != 'fallback' &&
+              res.data['locality'] != 'Kishore Ganj') {
             line1 = res.data['addressLine'] ?? 'Live Location';
             localityName = res.data['locality'] ?? res.data['city'] ?? 'Current Location';
             city = res.data['city'] ?? 'Ranchi';
@@ -183,9 +188,21 @@ class LocationProvider with ChangeNotifier {
             line2 = city;
             if (res.data['latitude'] != null) detectedLat = (res.data['latitude'] as num).toDouble();
             if (res.data['longitude'] != null) detectedLng = (res.data['longitude'] as num).toDouble();
+            resolvedLive = true;
           }
         } catch (e) {
-          debugPrint('Google Geocoding error via proxy: $e');
+          debugPrint('Backend reverse geocoding error: $e');
+        }
+
+        // If backend proxy didn't resolve live locality or returned fallback, query Nominatim directly
+        if (!resolvedLive) {
+          await _reverseGeocodeNominatim(position.latitude, position.longitude, (l1, loc, c, p) {
+            line1 = l1;
+            localityName = loc;
+            city = c;
+            pincode = p;
+            line2 = c;
+          });
         }
       }
 
@@ -221,18 +238,58 @@ class LocationProvider with ChangeNotifier {
       final fallback = AddressModel(
         id: 'gps-${DateTime.now().millisecondsSinceEpoch}',
         tag: 'Current Location',
-        line1: 'Main Road, Albert Ekka Chowk',
-        line2: 'Lower Bazar',
+        line1: 'Live Location',
+        line2: 'Ranchi',
         city: 'Ranchi',
         pincode: '834001',
-        landmark: 'Near Capitol Hill',
-        latitude: 23.3512,
-        longitude: 85.3154,
+        latitude: 23.3441,
+        longitude: 85.3096,
         isDefault: false,
       );
       _selectedAddress = fallback;
       _isGpsDetected = true;
       _persistSelectedAddress(fallback);
+    }
+  }
+
+  Future<void> _reverseGeocodeNominatim(
+    double lat,
+    double lng,
+    void Function(String line1, String locality, String city, String pincode) onResult,
+  ) async {
+    try {
+      final dio = Dio();
+      final res = await dio.get(
+        'https://nominatim.openstreetmap.org/reverse',
+        queryParameters: {
+          'format': 'json',
+          'lat': lat,
+          'lon': lng,
+          'zoom': 18,
+          'addressdetails': 1,
+        },
+        options: Options(
+          headers: {'User-Agent': 'TeffesCustomerApp/1.0 (contact@teffes.com)'},
+          sendTimeout: const Duration(seconds: 5),
+          receiveTimeout: const Duration(seconds: 5),
+        ),
+      );
+      if (res.data != null && res.data['address'] is Map) {
+        final addr = res.data['address'] as Map<String, dynamic>;
+        final locality = addr['suburb'] ??
+            addr['neighbourhood'] ??
+            addr['residential'] ??
+            addr['city_district'] ??
+            addr['county'] ??
+            addr['city'] ??
+            'Current Location';
+        final road = addr['road'] ?? addr['street'] ?? locality;
+        final city = addr['city'] ?? addr['town'] ?? addr['village'] ?? addr['state_district'] ?? 'Ranchi';
+        final pincode = addr['postcode'] ?? '834001';
+        onResult(road.toString(), locality.toString(), city.toString(), pincode.toString());
+      }
+    } catch (e) {
+      debugPrint('Nominatim direct reverse geocode error: $e');
     }
   }
 

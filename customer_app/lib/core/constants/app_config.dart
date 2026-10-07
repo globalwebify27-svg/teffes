@@ -3,7 +3,7 @@ class AppConfig {
   /// Drop client's key in --dart-define=RAZORPAY_KEY_ID=... or edit defaultValue here
   static const String razorpayKeyId = String.fromEnvironment(
     'RAZORPAY_KEY_ID',
-    defaultValue: 'rzp_test_placeholder',
+    defaultValue: 'rzp_test_TkyiIn9CcaHTah',
   );
 
   /// Plug-and-Play Google Maps API Key
@@ -13,6 +13,6 @@ class AppConfig {
     defaultValue: 'AIzaSy_demo_placeholder_key',
   );
 
-  static const String appName = "TeFFe's Artisanal Butchery";
+  static const String appName = "TeFFe's";
   static const String supportPhone = "+918340010000";
 }
