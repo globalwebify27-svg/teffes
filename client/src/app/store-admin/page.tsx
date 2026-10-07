@@ -648,7 +648,7 @@ function InventoryTab() {
   const [selectedItem, setSelectedItem] = useState<any | null>(null);
   const [operation, setOperation] = useState<"add" | "reduce" | "set">("add");
   const [quantity, setQuantity] = useState<string>("");
-  const [reason, setReason] = useState<string>("Fresh supply arrival");
+  const [minAlert, setMinAlert] = useState<string>("");
   const [submitting, setSubmitting] = useState(false);
 
   // Compute calculated projected stock
@@ -665,49 +665,31 @@ function InventoryTab() {
 
   const handleUpdateStock = async () => {
     if (!selectedItem) return;
-    if (operation !== "set" && (!quantity || inputQty <= 0)) {
+    if (operation !== "set" && quantity !== "" && inputQty <= 0) {
       toast.warning("Please enter a valid quantity", "Invalid Input");
       return;
     }
     setSubmitting(true);
     try {
       const id = selectedItem.itemId || selectedItem.id;
-      await api.patch(`/store-admin/inventory/${id}`, { stock: projectedStock });
-      toast.success("Inventory stock updated successfully", "Stock Updated");
+      const payload: any = {};
+      if (quantity !== "" || operation === "set") {
+        payload.stock = projectedStock;
+      }
+      const parsedMin = minAlert.trim() === "" ? 0 : parseFloat(minAlert);
+      if (!isNaN(parsedMin)) {
+        payload.min = Math.max(0, parsedMin);
+      }
+      await api.patch(`/store-admin/inventory/${id}`, payload);
+      toast.success("Inventory updated successfully", "Stock Updated");
       fetchInventory();
       setShowStockModal(false);
       setSelectedItem(null);
       setQuantity("");
     } catch (err) {
-      toast.error("Failed to update stock quantity", "Inventory Error");
+      toast.error("Failed to update inventory", "Inventory Error");
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const getReasonOptions = () => {
-    if (operation === "add") {
-      return [
-        "Fresh supply received from supplier",
-        "Inter-store transfer in",
-        "Customer order cancellation / restock",
-        "Other / Manual correction",
-      ];
-    } else if (operation === "reduce") {
-      return [
-        "Daily butchery trimming & fat/bone discard",
-        "Spoilage / quality rejection",
-        "Walk-in offline counter sale",
-        "Damaged / expired meat removal",
-        "Other / Manual reduction",
-      ];
-    } else {
-      return [
-        "End-of-day physical count reconciliation",
-        "Weekly stock audit",
-        "Morning opening count adjustment",
-        "Other / Calibration",
-      ];
     }
   };
 
@@ -718,13 +700,17 @@ function InventoryTab() {
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "14px" }}>
           {items.map(item => {
-            const isLow = item.status === "Low Stock" || item.stock <= (item.min || 15);
+            const minThreshold = item.min !== undefined && item.min !== null ? Number(item.min) : 0;
+            const hasMinAlert = minThreshold > 0;
+            const isOutOfStock = item.stock <= 0;
+            const isLow = hasMinAlert && item.stock <= minThreshold;
+            const displayStatus = isOutOfStock ? "Out of Stock" : isLow ? "Low Stock" : "In Stock";
             return (
               <div
                 key={item.itemId || item.id}
                 style={{
                   background: "#fff",
-                  border: `1px solid ${isLow ? "#fecaca" : "#ede8e0"}`,
+                  border: `1px solid ${isOutOfStock ? "#fecaca" : isLow ? "#fef3c7" : "#ede8e0"}`,
                   borderRadius: "14px",
                   padding: "16px",
                   display: "flex",
@@ -769,7 +755,10 @@ function InventoryTab() {
                       </div>
                     </div>
                     <div style={{ flexShrink: 0, marginLeft: "4px" }}>
-                      <Badge label={item.status} color={isLow ? "#d97706" : "#059669"} />
+                      <Badge
+                        label={displayStatus}
+                        color={isOutOfStock ? "#dc2626" : isLow ? "#d97706" : "#059669"}
+                      />
                     </div>
                   </div>
 
@@ -778,7 +767,7 @@ function InventoryTab() {
                       {item.stock} <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#73695b" }}>{item.unit}</span>
                     </div>
                     <div
-                      title={`Min Alert: ${item.min} ${item.unit} · ${item.lastRestocked}`}
+                      title={hasMinAlert ? `Min Alert: ${minThreshold} ${item.unit} · ${item.lastRestocked}` : `Min Alert: Not set · ${item.lastRestocked}`}
                       style={{
                         fontSize: "0.72rem",
                         color: "#73695b",
@@ -788,7 +777,7 @@ function InventoryTab() {
                         textOverflow: "ellipsis",
                       }}
                     >
-                      Min Alert: {item.min} {item.unit} · {item.lastRestocked}
+                      {hasMinAlert ? `Min Alert: ${minThreshold} ${item.unit}` : "Min Alert: Not set"} · {item.lastRestocked}
                     </div>
                   </div>
                 </div>
@@ -798,7 +787,7 @@ function InventoryTab() {
                     setSelectedItem(item);
                     setOperation("add");
                     setQuantity("");
-                    setReason("Fresh supply received from supplier");
+                    setMinAlert(hasMinAlert ? String(minThreshold) : "");
                     setShowStockModal(true);
                   }}
                   style={{
@@ -1019,32 +1008,63 @@ function InventoryTab() {
                   {operation === "reduce" && `- ${inputQty} ${selectedItem.unit}`}
                   {operation === "set" && `-> New Balance`}
                 </span>
-                <span style={{ fontSize: "1.2rem", fontWeight: 900, color: projectedStock <= (selectedItem.min || 15) ? "#d97706" : "#059669", fontFamily: "Outfit, sans-serif" }}>
+                <span style={{
+                  fontSize: "1.2rem",
+                  fontWeight: 900,
+                  color: ((parseFloat(minAlert) || 0) > 0 && projectedStock <= (parseFloat(minAlert) || 0)) ? "#d97706" : "#059669",
+                  fontFamily: "Outfit, sans-serif"
+                }}>
                   = {projectedStock} {selectedItem.unit}
                 </span>
               </div>
             </div>
 
-            {/* Reason Selector */}
-            <div style={{ marginBottom: "22px" }}>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Reason / Note:</label>
-              <select
-                value={reason}
-                onChange={e => setReason(e.target.value)}
+            {/* Min Alert Threshold Configuration (Add, Edit, or Remove) */}
+            <div style={{ marginBottom: "24px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#423b32" }}>
+                  Min Stock Alert Threshold ({selectedItem.unit}):
+                </label>
+                {minAlert !== "" && (
+                  <button
+                    type="button"
+                    onClick={() => setMinAlert("")}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#dc2626",
+                      fontSize: "0.74rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      padding: 0,
+                    }}
+                  >
+                    ✕ Remove Alert
+                  </button>
+                )}
+              </div>
+              <input
+                type="number"
+                min="0"
+                step="1"
+                placeholder="e.g. 15 (leave blank or 0 to turn off alert)"
+                value={minAlert}
+                onChange={e => setMinAlert(e.target.value)}
                 style={{
                   padding: "10px 12px",
                   borderRadius: "8px",
                   border: "1px solid #d1cbbf",
                   width: "100%",
-                  fontSize: "0.85rem",
-                  background: "#fff",
+                  fontSize: "0.95rem",
+                  fontWeight: 600,
                   boxSizing: "border-box",
                 }}
-              >
-                {getReasonOptions().map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))}
-              </select>
+              />
+              <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "4px", lineHeight: "1.3" }}>
+                {minAlert && parseFloat(minAlert) > 0
+                  ? `Triggers "Low Stock" warning and turns button amber when stock reaches ≤ ${minAlert} ${selectedItem.unit}.`
+                  : `Alert disabled — no low stock warnings will be triggered for this item.`}
+              </div>
             </div>
 
             {/* Actions */}
@@ -1071,7 +1091,15 @@ function InventoryTab() {
                   fontWeight: 700,
                 }}
               >
-                {submitting ? "Updating…" : operation === "add" ? `Add ${inputQty} ${selectedItem.unit}` : operation === "reduce" ? `Deduct ${inputQty} ${selectedItem.unit}` : `Set to ${inputQty} ${selectedItem.unit}`}
+                {submitting
+                  ? "Saving…"
+                  : quantity !== ""
+                    ? operation === "add"
+                      ? `Add ${inputQty} ${selectedItem.unit}`
+                      : operation === "reduce"
+                        ? `Deduct ${inputQty} ${selectedItem.unit}`
+                        : `Set to ${inputQty} ${selectedItem.unit}`
+                    : "Save Changes"}
               </button>
             </div>
           </div>
