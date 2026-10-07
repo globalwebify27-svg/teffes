@@ -160,6 +160,16 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    isInventoryDeducted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    isInventoryRestocked: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,

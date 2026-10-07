@@ -206,10 +206,32 @@ const emitOrderCreated = (order) => {
   io.emit('orders:refreshed', { orderId: order.orderId, storeId: order.storeId, status: order.status });
 };
 
+const emitInventoryUpdate = (storeId, data) => {
+  if (!io) return;
+  const payload = {
+    storeId,
+    data,
+    updatedAt: new Date().toISOString(),
+  };
+
+  // Targeted store room emission
+  if (storeId) {
+    const storeRoom = storeId.startsWith('store:') ? storeId : `store:${storeId}`;
+    io.to(storeRoom).emit('inventory:updated', payload);
+  }
+
+  // Super Admin room emission
+  io.to('role:superadmin').emit('inventory:updated', payload);
+
+  // General feed so any active store admin dashboard tab refreshes instantly
+  io.emit('inventory:updated', payload);
+};
+
 module.exports = {
   initSocket,
   getIO,
   emitOrderStatusUpdate,
   emitOrderCreated,
   emitWalletUpdate,
+  emitInventoryUpdate,
 };

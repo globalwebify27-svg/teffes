@@ -150,6 +150,13 @@ const updateOrderStatus = async (req, res, next) => {
 
     const wasDelivered = order.status === 'Delivered';
     order.status = status;
+
+    // If order was cancelled and inventory was deducted, restore inventory to store
+    if (status === 'Cancelled' && order.isInventoryDeducted && !order.isInventoryRestocked) {
+      const { restoreOrderInventory } = require('../services/inventoryService');
+      await restoreOrderInventory(order).catch((err) => console.error('[StoreAdmin] Inventory restore error:', err.message));
+    }
+
     await order.save();
 
     // Update loyalty tier if just delivered
@@ -249,6 +256,13 @@ const updateInventoryItem = async (req, res, next) => {
     item.lastRestocked = `Today ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
     await item.save();
+
+    try {
+      const { emitInventoryUpdate } = require('../socket');
+      emitInventoryUpdate(item.storeId, item);
+    } catch (socketErr) {
+      console.warn('[StoreAdmin] Inventory socket emission warning:', socketErr.message);
+    }
 
     res.status(200).json({ success: true, item });
   } catch (error) {

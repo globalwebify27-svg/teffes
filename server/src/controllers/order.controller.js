@@ -7,6 +7,7 @@ const notificationService = require('../services/notificationService');
 const { emitOrderCreated } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
 const { validateCouponEligibility } = require('../utils/couponCalculator');
+const { validateAndDeductInventory, rollbackDeductedInventory } = require('../services/inventoryService');
 
 const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -18,6 +19,7 @@ const generateOrderId = () => {
  */
 const createOrder = async (req, res, next) => {
   let couponDocToRollback = null;
+  let deductedInventoryItems = null;
   try {
     const {
       items,
@@ -176,9 +178,30 @@ const createOrder = async (req, res, next) => {
       status: 'Pending',
     });
 
+    // ─── Backend Atomic Stock Validation & Inventory Deduction ───
+    const deductionResult = await validateAndDeductInventory(newOrder.storeId, items);
+    if (!deductionResult.success) {
+      if (couponDocToRollback) {
+        await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
+      }
+      return res.status(400).json({
+        success: false,
+        message: deductionResult.message || 'One or more items are out of stock. Please adjust your order.',
+      });
+    }
+
+    deductedInventoryItems = deductionResult.deductedItems;
+    newOrder.isInventoryDeducted = true;
+
     // If payment method is wallet, check balance and deduct
     if (paymentMethod === 'wallet' || paymentMethod === 'Wallet' || paymentMethod === 'Teffes Cash' || req.body.paymentMethod === 'wallet') {
       if (user.walletBalance < amount) {
+        if (deductedInventoryItems && deductedInventoryItems.length > 0) {
+          await rollbackDeductedInventory(deductedInventoryItems).catch(() => {});
+        }
+        if (couponDocToRollback) {
+          await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
+        }
         return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
       }
       user.walletBalance -= amount;
@@ -223,6 +246,9 @@ const createOrder = async (req, res, next) => {
       order: newOrder,
     });
   } catch (error) {
+    if (deductedInventoryItems && deductedInventoryItems.length > 0) {
+      await rollbackDeductedInventory(deductedInventoryItems).catch(() => {});
+    }
     if (couponDocToRollback) {
       await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
     }

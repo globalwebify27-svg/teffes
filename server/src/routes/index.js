@@ -33,48 +33,7 @@ router.use('/notifications', require('./notification.routes'));
 router.use('/location', require('./location.routes'));
 router.use('/upload', require('./upload.routes'));
 
-// Helper to normalize product/inventory names for comparison
-function normalizeItemName(str) {
-  return (str || '')
-    .toLowerCase()
-    .replace(/\b(\.?[0-9]+(\.[0-9]+)?\s*(kg|gm|g|gram|grams|ml|l))\b/gi, '')
-    .replace(/[().,\-_]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-// Smart matcher linking cart item to butchery inventory item
-function matchCartItemToInventory(cartItem, invList) {
-  if (!invList || invList.length === 0) return null;
-  const normProd = normalizeItemName(cartItem.name);
-  const prodWords = normProd.split(' ').filter((w) => w.length > 2);
-
-  // 1. Direct ID match or exact normalized match
-  for (const inv of invList) {
-    if (inv.itemId === cartItem.id || inv.itemId === cartItem.productId) return inv;
-    const normInv = normalizeItemName(inv.item);
-    if (normInv === normProd || normInv.includes(normProd) || normProd.includes(normInv)) {
-      return inv;
-    }
-  }
-
-  // 2. Keyword score matching
-  let best = null;
-  let bestScore = 0;
-  for (const inv of invList) {
-    const normInv = normalizeItemName(inv.item);
-    const invWords = normInv.split(' ').filter((w) => w.length > 2);
-    let score = 0;
-    for (const w of prodWords) {
-      if (invWords.includes(w)) score++;
-    }
-    if (score > bestScore && score >= 1) {
-      bestScore = score;
-      best = inv;
-    }
-  }
-  return bestScore >= 1 ? best : null;
-}
+const { matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
 
 // Distance calculation between customer and store coordinates (in km)
 const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
@@ -148,13 +107,13 @@ const getAvailableStoresHandler = async (req, res, next) => {
         } else {
           for (const item of items) {
             const matchedInv = matchCartItemToInventory(item, invList);
-            const reqQty = Number(item.quantity) || 1;
+            const reqAmount = matchedInv ? getItemRequiredAmount(item, matchedInv.unit) : (Number(item.quantity) || 1);
             if (!matchedInv) {
               isAvailable = false;
               outOfStockItems.push(item.name || 'Item unavailable');
-            } else if (matchedInv.status === 'Out of Stock' || (matchedInv.stock !== undefined && matchedInv.stock < reqQty)) {
+            } else if (matchedInv.status === 'Out of Stock' || (matchedInv.stock !== undefined && matchedInv.stock < reqAmount)) {
               isAvailable = false;
-              outOfStockItems.push(`${item.name} (Stock: ${matchedInv.stock || 0})`);
+              outOfStockItems.push(`${item.name} (Stock: ${matchedInv.stock || 0} ${matchedInv.unit || 'kg'})`);
             }
           }
         }

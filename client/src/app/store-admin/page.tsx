@@ -115,6 +115,18 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
 
   useEffect(() => {
     loadData();
+    const socket = getSocket();
+    const handleUpdate = () => {
+      loadData();
+    };
+    socket.on("orders:refreshed", handleUpdate);
+    socket.on("order:created", handleUpdate);
+    socket.on("inventory:updated", handleUpdate);
+    return () => {
+      socket.off("orders:refreshed", handleUpdate);
+      socket.off("order:created", handleUpdate);
+      socket.off("inventory:updated", handleUpdate);
+    };
   }, []);
 
   const defaultKpis = [
@@ -622,6 +634,14 @@ function InventoryTab() {
 
   useEffect(() => {
     fetchInventory();
+    const socket = getSocket();
+    const handleInventoryUpdated = () => {
+      fetchInventory();
+    };
+    socket.on("inventory:updated", handleInventoryUpdated);
+    return () => {
+      socket.off("inventory:updated", handleInventoryUpdated);
+    };
   }, []);
 
   const [showStockModal, setShowStockModal] = useState(false);
