@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { firebaseLogin } from "@/lib/auth";
+import { firebaseLogin, sendOTP, verifyOTP } from "@/lib/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { toast } from "@/lib/toast";
@@ -99,14 +99,31 @@ export default function OTPForm({
       setCanResend(false);
       toast.success("Verification code sent via SMS", "OTP Sent");
     } catch (err: any) {
-      console.error("[Firebase Web Phone Auth] Error sending OTP:", err);
+      console.warn("[Firebase Web Phone Auth] Firebase failed, trying backend SMS fallback:", err?.message || err);
+
+      // Graceful Fallback: If Firebase Web Phone Auth fails (domain not whitelisted or API key issue), fallback to backend OTP
+      try {
+        const formattedPhone = `+91${cleanPhone.slice(-10)}`;
+        const fallbackRes = await sendOTP(formattedPhone);
+        if (fallbackRes.success) {
+          confirmationResultRef.current = null; // marks that we are using backend OTP
+          setStep("otp");
+          setResendTimer(30);
+          setCanResend(false);
+          toast.success("Verification code sent via SMS", "OTP Sent");
+          return;
+        }
+      } catch (backendErr: any) {
+        console.error("[Backend OTP Fallback] Error:", backendErr);
+      }
+
       let msg = "Failed to send verification SMS. Please try again.";
       if (err.code === "auth/invalid-phone-number") {
         msg = "Invalid phone number format.";
       } else if (err.code === "auth/too-many-requests") {
         msg = "Too many attempts. Please try again in a few minutes.";
       } else if (err.code === "auth/quota-exceeded") {
-        msg = "Daily SMS quota exceeded for testing. Use registered test number.";
+        msg = "Daily SMS quota exceeded. Use registered test number.";
       } else if (err.message) {
         msg = err.message;
       }
@@ -133,14 +150,33 @@ export default function OTPForm({
       return;
     }
 
-    if (!confirmationResultRef.current) {
-      setError("Session expired. Please request a new verification code.");
-      setStep("phone");
-      return;
-    }
-
     setError("");
     setLoading(true);
+
+    // If using backend OTP fallback
+    if (!confirmationResultRef.current) {
+      try {
+        const cleanPhone = phone.replace(/\D/g, "");
+        const formattedPhone = `+91${cleanPhone.slice(-10)}`;
+        const authRes = await verifyOTP(formattedPhone, cleanOtp);
+
+        if (authRes.success) {
+          toast.success("Welcome to TeFFe! You are signed in.", "Login Successful");
+          if (onSuccess) {
+            onSuccess(authRes.user);
+          } else if (redirectOnSuccess) {
+            router.push("/");
+          }
+        } else {
+          setError("Invalid verification code. Please try again.");
+        }
+      } catch (backendErr: any) {
+        setError(backendErr.response?.data?.message || "Invalid verification code. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     try {
       // 1. Verify OTP with Firebase
