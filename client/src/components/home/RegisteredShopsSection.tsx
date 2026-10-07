@@ -36,9 +36,9 @@ interface RegisteredShopsSectionProps {
 }
 
 export default function RegisteredShopsSection({
-  title = "Visit Our Registered Butcher Shops",
-  subtitle = "Experience our open-counter butcheries across Ranchi where you can select live poultry, inspect custom cuts, and collect freshwater catches in person.",
-  badgeText = "Verified Physical Hubs & Butchery Outlets",
+  title = "Visit Our Registered TeFFe's Stores",
+  subtitle = "Experience our open-counter stores across Ranchi where you can select live poultry, inspect custom cuts, and collect freshwater catches in person.",
+  badgeText = "Verified Physical Hubs & Outlets",
   className = "",
   id = "registered-shops",
 }: RegisteredShopsSectionProps) {

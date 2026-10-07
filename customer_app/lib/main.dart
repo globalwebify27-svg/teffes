@@ -53,7 +53,7 @@ class TeffesCustomerApp extends StatelessWidget {
       ],
       child: MaterialApp(
         navigatorKey: navigatorKey,
-        title: "TeFFe's Artisanal Butchery",
+        title: "TeFFe's",
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         home: hasSeenOnboarding ? const MainShellScreen() : const OnboardingScreen(),

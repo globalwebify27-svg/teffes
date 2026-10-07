@@ -11,8 +11,10 @@ import '../../providers/cart_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../widgets/common/quantity_stepper.dart';
 import '../orders/order_tracking_screen.dart';
+import 'package:razorpay_flutter/razorpay_flutter.dart';
+import '../../core/constants/app_config.dart';
+import '../../core/services/razorpay_service.dart';
 
-import '../checkout/payment_proceed_screen.dart';
 import '../auth/login_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
@@ -38,6 +40,16 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   String _deliveryInstruction = '';
   bool _isCouponsExpanded = false;
 
+  late RazorpayService _razorpayService;
+  String? _pendingRazorpayOrderId;
+  double _pendingRazorpayAmount = 0.0;
+  String _pendingShippingAddress = '';
+  String _pendingDeliverySlot = '';
+  String _pendingStoreId = 'S001';
+  String _pendingStoreName = '';
+  String _pendingInstruction = '';
+  bool _pendingIsPickup = false;
+
   List<StoreModel> _stores = [];
   String _selectedStoreId = 'S001';
   bool _showStorePickerInDelivery = false;
@@ -46,6 +58,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   @override
   void initState() {
     super.initState();
+    _razorpayService = RazorpayService(
+      onSuccess: _onRazorpaySuccess,
+      onError: _onRazorpayError,
+      onExternalWallet: _onRazorpayWallet,
+    );
     _initDefaultStores();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
@@ -179,10 +196,213 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
   @override
   void dispose() {
+    _razorpayService.dispose();
     _couponController.dispose();
     _customTipController.dispose();
     _pickupInstructionController.dispose();
     super.dispose();
+  }
+
+  void _onRazorpaySuccess(PaymentSuccessResponse response) async {
+    debugPrint('[CartCheckout] Razorpay success paymentId: ${response.paymentId}');
+    await _finalizeRazorpayOrderAndNavigate(
+      paymentId: response.paymentId ?? 'pay_${DateTime.now().millisecondsSinceEpoch}',
+      razorpayOrderId: response.orderId ?? _pendingRazorpayOrderId ?? '',
+      signature: response.signature,
+    );
+  }
+
+  void _onRazorpayError(PaymentFailureResponse response) {
+    if (mounted) {
+      setState(() => _isPlacingOrder = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment cancelled or failed: ${response.message ?? "Try again"}'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _onRazorpayWallet(ExternalWalletResponse response) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Redirecting to external wallet: ${response.walletName}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _processRazorpayPayment({
+    required double amount,
+    required String shippingAddress,
+    required String deliverySlot,
+    required bool isPickup,
+    required String storeId,
+    required String storeName,
+    required String instruction,
+    required AuthProvider auth,
+  }) async {
+    setState(() => _isPlacingOrder = true);
+
+    _pendingRazorpayAmount = amount;
+    _pendingShippingAddress = shippingAddress;
+    _pendingDeliverySlot = deliverySlot;
+    _pendingIsPickup = isPickup;
+    _pendingStoreId = storeId;
+    _pendingStoreName = storeName;
+    _pendingInstruction = instruction;
+
+    try {
+      final api = ApiClient();
+      String razorpayOrderId = '';
+      String? razorpayKeyId;
+
+      try {
+        final res = await api.post(ApiEndpoints.createRazorpayOrder, data: {
+          'amount': amount,
+        });
+        if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
+          final id = res.data['order']['id']?.toString() ?? '';
+          if (id.startsWith('order_') &&
+              !id.startsWith('order_dev_') &&
+              !id.startsWith('order_rzp_') &&
+              !id.startsWith('order_sim_')) {
+            razorpayOrderId = id;
+          }
+          razorpayKeyId = res.data['keyId'];
+        }
+      } catch (e) {
+        debugPrint('Razorpay create-order error: $e');
+      }
+
+      _pendingRazorpayOrderId = razorpayOrderId.isNotEmpty ? razorpayOrderId : 'order_rzp_${DateTime.now().millisecondsSinceEpoch}';
+
+      _razorpayService.openCheckout(
+        amount: amount,
+        orderId: razorpayOrderId,
+        keyId: (razorpayKeyId != null && razorpayKeyId.isNotEmpty && !razorpayKeyId.contains('placeholder'))
+            ? razorpayKeyId
+            : AppConfig.razorpayKeyId,
+        contact: auth.user?.phone,
+        email: auth.user?.email,
+      );
+    } catch (e) {
+      debugPrint('Error starting Razorpay checkout: $e');
+      if (mounted) {
+        setState(() => _isPlacingOrder = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error launching payment gateway: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _finalizeRazorpayOrderAndNavigate({
+    required String paymentId,
+    required String razorpayOrderId,
+    String? signature,
+  }) async {
+    final auth = context.read<AuthProvider>();
+    final cart = context.read<CartProvider>();
+    final location = context.read<LocationProvider>();
+
+    try {
+      final api = ApiClient();
+      try {
+        await api.post(ApiEndpoints.verifyRazorpayPayment, data: {
+          'razorpay_order_id': razorpayOrderId,
+          'razorpay_payment_id': paymentId,
+          if (signature != null) 'razorpay_signature': signature,
+        });
+      } catch (_) {}
+
+      final newOrderId = 'TEF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+      final orderPayload = {
+        'orderId': newOrderId,
+        'items': cart.items.values.map((i) => {
+          'productId': i.product.id,
+          'name': i.product.name,
+          'price': i.product.price,
+          'quantity': i.quantity,
+          'weight': i.selectedWeight,
+          'image': i.product.image,
+        }).toList(),
+        'subtotal': cart.subtotal,
+        'deliveryFee': _pendingIsPickup ? 0.0 : cart.deliveryFee,
+        'discount': cart.couponDiscount,
+        'couponCode': cart.appliedCoupon,
+        'discountAmount': cart.couponDiscount,
+        'amount': _pendingRazorpayAmount,
+        'totalAmount': _pendingRazorpayAmount,
+        'fulfillmentType': _pendingIsPickup ? 'pickup' : _fulfillmentType,
+        'pickupMode': _pendingIsPickup,
+        'paymentMethod': 'Online Payment (Razorpay)',
+        'paymentStatus': 'Paid',
+        'razorpayOrderId': razorpayOrderId,
+        'razorpayPaymentId': paymentId,
+        'shippingAddress': _pendingShippingAddress.isNotEmpty ? _pendingShippingAddress : location.activeAddressString,
+        'deliverySlot': _pendingIsPickup ? 'Store Pickup (Counter Takeaway)' : _pendingDeliverySlot,
+        'storeId': _pendingStoreId,
+        'storeName': _pendingStoreName,
+        'deliveryInstruction': _pendingInstruction,
+      };
+
+      try {
+        final res = await api.post(ApiEndpoints.createOrder, data: orderPayload);
+        if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
+          final serverOrder = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
+          auth.addOrder(serverOrder);
+          cart.clearCart();
+          if (mounted) {
+            Navigator.of(context).pushAndRemoveUntil(
+              SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
+              (route) => route.isFirst,
+            );
+          }
+          return;
+        }
+      } catch (_) {}
+
+      final createdOrder = OrderModel(
+        id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
+        orderId: newOrderId,
+        status: 'Pending',
+        amount: _pendingRazorpayAmount,
+        placedAt: 'Just Now',
+        items: cart.items.values.map((i) => {
+          'name': i.product.name,
+          'quantity': i.quantity,
+          'price': i.product.price,
+          'weight': i.selectedWeight,
+        }).toList(),
+        deliveryAddress: _pendingShippingAddress,
+        paymentMethod: 'Online Payment (Razorpay)',
+        paymentStatus: 'Paid',
+        storeName: _pendingStoreName,
+        fulfillmentType: _pendingIsPickup ? 'pickup' : _fulfillmentType,
+        pickupMode: _pendingIsPickup,
+        targetDeliveryTime: DateTime.now().add(const Duration(minutes: 35)).toIso8601String(),
+        prepTimeMinutes: 25,
+        remainingTransitMinutes: _pendingIsPickup ? 0 : 12,
+        etaStage: 'PREPARING',
+      );
+      auth.addOrder(createdOrder);
+      cart.clearCart();
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          SmoothPageRoute(page: OrderTrackingScreen(orderId: createdOrder.orderId)),
+          (route) => route.isFirst,
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isPlacingOrder = false);
+      }
+    }
   }
 
   void _showAddAddressDialog(BuildContext context, LocationProvider location) {
@@ -599,22 +819,17 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         : location.activeAddressString;
     final activeInstruction = isPickup ? _pickupInstructionController.text.trim() : _deliveryInstruction;
 
-    // 1. If Razorpay is selected, navigate directly to dedicated Payment Proceed Screen
+    // 1. If Razorpay is selected, trigger Razorpay native checkout directly
     if (_selectedPaymentMethod == 'razorpay') {
-      Navigator.of(context).push(
-        SmoothPageRoute(
-          page: PaymentProceedScreen(
-            payableAmount: effectiveGrandTotal,
-            deliveryAddress: shippingAddress,
-            deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : _selectedSlot,
-            paymentMethod: 'razorpay',
-            isPickup: isPickup,
-            fulfillmentType: _fulfillmentType,
-            storeId: storeId,
-            storeName: storeName,
-            instruction: activeInstruction,
-          ),
-        ),
+      await _processRazorpayPayment(
+        amount: effectiveGrandTotal,
+        shippingAddress: shippingAddress,
+        deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : _selectedSlot,
+        isPickup: isPickup,
+        storeId: storeId,
+        storeName: storeName,
+        instruction: activeInstruction,
+        auth: auth,
       );
       return;
     }
@@ -1038,32 +1253,40 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                               ),
                                             ),
                                             const SizedBox(height: 6),
-                                            Row(
+                                            Wrap(
+                                              crossAxisAlignment: WrapCrossAlignment.center,
+                                              spacing: 5,
+                                              runSpacing: 2,
                                               children: [
-                                                Container(
-                                                  width: 6,
-                                                  height: 6,
-                                                  decoration: BoxDecoration(
-                                                    shape: BoxShape.circle,
-                                                    color: isOutOfStock ? Colors.red : AppColors.discountGreen,
-                                                  ),
+                                                Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Container(
+                                                      width: 6,
+                                                      height: 6,
+                                                      decoration: BoxDecoration(
+                                                        shape: BoxShape.circle,
+                                                        color: isOutOfStock ? Colors.red : AppColors.discountGreen,
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 4),
+                                                    Text(
+                                                      isOutOfStock ? 'Out of Stock' : 'Open for Pickup',
+                                                      style: TextStyle(
+                                                        fontSize: 11,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: isOutOfStock ? Colors.red.shade700 : AppColors.discountGreen,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  isOutOfStock ? 'Out of Stock' : 'Open for Pickup',
-                                                  style: TextStyle(
-                                                    fontSize: 11,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: isOutOfStock ? Colors.red.shade700 : AppColors.discountGreen,
-                                                  ),
-                                                ),
-                                                const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
+                                                const Text('•', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
                                                 Text(
                                                   store.timings,
                                                   style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                                 ),
                                                 if (store.distance.isNotEmpty) ...[
-                                                  const Text(' • ', style: TextStyle(color: AppColors.textMuted)),
+                                                  const Text('•', style: TextStyle(color: AppColors.textMuted, fontSize: 10)),
                                                   Text(
                                                     store.distance,
                                                     style: const TextStyle(
@@ -1916,14 +2139,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           badge: 'Recommended',
                         ),
                         _buildPaymentOption(
-                          'wallet',
-                          "Teffe's Cash Wallet (${CurrencyFormatter.format(auth.user?.walletBalance ?? 0)})",
-                          Icons.account_balance_wallet_rounded,
-                        ),
-                        _buildPaymentOption(
                           'cod',
                           isPickup ? 'Pay at Store Counter (Cash / POS Machine)' : 'Cash on Delivery (COD)',
                           Icons.money_rounded,
+                        ),
+                        _buildPaymentOption(
+                          'wallet',
+                          "Teffe's Cash Wallet (${CurrencyFormatter.format(auth.user?.walletBalance ?? 0)})",
+                          Icons.account_balance_wallet_rounded,
                         ),
                       ],
                     ),

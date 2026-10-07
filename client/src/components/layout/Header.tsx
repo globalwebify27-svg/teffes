@@ -640,7 +640,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             <div className="p-4 bg-surface-container-low border-t border-gray-200">
               <div className="text-xs text-slate-body mb-3 leading-relaxed">
                 <span className="material-symbols-outlined text-primary text-[15px] align-middle mr-1">location_on</span>
-                <strong>Teffes Butchery Ranchi</strong>
+                <strong>TeFFe&apos;s Ranchi</strong>
                 <br />
                 Near Kishore Ganj Chowk, Harmu Road
                 <br />

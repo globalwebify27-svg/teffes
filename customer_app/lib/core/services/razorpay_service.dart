@@ -55,16 +55,28 @@ class RazorpayService {
         ? keyId
         : AppConfig.razorpayKeyId;
 
+    // Clean contact phone number (10-digit numeric format expected by Razorpay)
+    String cleanContact = (contact ?? '').replaceAll(RegExp(r'[^0-9]'), '');
+    if (cleanContact.length > 10 && cleanContact.startsWith('91')) {
+      cleanContact = cleanContact.substring(2);
+    }
+
     final options = {
       'key': activeKey,
       'amount': (amount * 100).toInt(), // amount in paise
       'name': AppConfig.appName,
       'description': description,
-      'order_id': orderId.startsWith('order_') ? orderId : null,
-      'timeout': 300, // 5 minutes
+      'image': 'https://teffes.onrender.com/uploads/teffes-logo-maroon.png',
+      'order_id': (orderId.isNotEmpty &&
+              orderId.startsWith('order_') &&
+              !orderId.startsWith('order_rzp_') &&
+              !orderId.startsWith('order_dev_') &&
+              !orderId.startsWith('order_sim_'))
+          ? orderId
+          : null,
       'prefill': {
-        'contact': contact ?? '',
-        'email': email ?? 'customer@teffes.com',
+        if (cleanContact.isNotEmpty) 'contact': cleanContact,
+        'email': (email != null && email.isNotEmpty) ? email : 'customer@teffes.com',
       },
       'theme': {
         'color': '#941717', // Teffe's Primary Maroon

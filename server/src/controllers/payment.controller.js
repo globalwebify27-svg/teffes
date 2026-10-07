@@ -26,6 +26,7 @@ const createRazorpayOrder = async (req, res, next) => {
     const key_secret = process.env.RAZORPAY_KEY_SECRET || 'default_secret';
 
     let razorpayOrder;
+    let isLiveOrTestWorking = false;
 
     if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && !process.env.RAZORPAY_KEY_ID.includes('placeholder')) {
       try {
@@ -35,6 +36,7 @@ const createRazorpayOrder = async (req, res, next) => {
           currency: 'INR',
           receipt: `rcpt_${Date.now()}`,
         });
+        isLiveOrTestWorking = true;
       } catch (err) {
         console.warn('[Razorpay] Live order creation warning:', err.message);
       }
@@ -52,7 +54,8 @@ const createRazorpayOrder = async (req, res, next) => {
     res.status(200).json({
       success: true,
       order: razorpayOrder,
-      keyId: key_id,
+      keyId: isLiveOrTestWorking ? key_id : null,
+      isSimulation: !isLiveOrTestWorking,
     });
   } catch (error) {
     next(error);

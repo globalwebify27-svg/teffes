@@ -175,6 +175,8 @@ export default function CartDrawer() {
   const [isSavingAddress, setIsSavingAddress] = useState<boolean>(false);
   const [newAddress, setNewAddress] = useState({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
   const [isPlacingOrder, setIsPlacingOrder] = useState<boolean>(false);
+  const [showSimulatedPaymentModal, setShowSimulatedPaymentModal] = useState<boolean>(false);
+  const [simulatedOrderData, setSimulatedOrderData] = useState<any>(null);
 
   const [orderSummary, setOrderSummary] = useState<{
     id: string;
@@ -433,8 +435,6 @@ export default function CartDrawer() {
 
     setIsPlacingOrder(true);
     try {
-      const loaded = await loadRazorpayScript();
-
       const orderPayload = {
         items: items.map((i) => ({
           productId: i.product.id,
@@ -455,21 +455,35 @@ export default function CartDrawer() {
       };
 
       // Create Razorpay order on backend
-      const rzpRes = await api.post<{ success: boolean; order: any; keyId: string }>("/payment/create-order", {
+      const rzpRes = await api.post<{ success: boolean; order: any; keyId: string; isSimulation?: boolean }>("/payment/create-order", {
         amount: finalPayable,
       });
 
+      // If backend reports simulation mode, or if keyId is absent or order ID is dev simulated:
+      if (rzpRes.data.isSimulation || !rzpRes.data.keyId || rzpRes.data.order?.id?.startsWith("order_dev_")) {
+        setSimulatedOrderData({
+          orderPayload,
+          rzpOrder: rzpRes.data.order,
+        });
+        setShowSimulatedPaymentModal(true);
+        setIsPlacingOrder(false);
+        return;
+      }
+
+      const loaded = await loadRazorpayScript();
       const storedUser = getStoredUser();
 
-      if (loaded && (window as any).Razorpay) {
+      if (loaded && (window as any).Razorpay && rzpRes.data.keyId) {
+        let isDismissed = false;
         const options = {
-          key: rzpRes.data.keyId || "rzp_test_default",
+          key: rzpRes.data.keyId,
           amount: rzpRes.data.order.amount,
           currency: "INR",
-          name: "TeFFe's Butcher Shop",
+          name: "TeFFe's",
           description: `Order of ${totalItemsCount} item(s)`,
-          order_id: rzpRes.data.order.id.startsWith("order_dev_") ? undefined : rzpRes.data.order.id,
+          order_id: rzpRes.data.order.id,
           handler: async function (response: any) {
+            isDismissed = true;
             try {
               await api.post("/orders", {
                 ...orderPayload,
@@ -486,6 +500,8 @@ export default function CartDrawer() {
               clearCart();
               closeCart();
               window.location.href = "/dashboard";
+            } finally {
+              setIsPlacingOrder(false);
             }
           },
           prefill: {
@@ -498,27 +514,43 @@ export default function CartDrawer() {
           },
           modal: {
             ondismiss: function () {
+              isDismissed = true;
               setIsPlacingOrder(false);
             },
           },
         };
 
-        const rzp = new (window as any).Razorpay(options);
-        rzp.on("payment.failed", function (resp: any) {
-          toast.error("Payment failed: " + (resp.error?.description || "Transaction declined"), "Payment Error");
+        try {
+          const rzp = new (window as any).Razorpay(options);
+          rzp.on("payment.failed", function (resp: any) {
+            isDismissed = true;
+            toast.error("Payment failed: " + (resp.error?.description || "Transaction declined"), "Payment Error");
+            setIsPlacingOrder(false);
+          });
+          rzp.open();
+          // Watchdog: If modal fails to launch within 6 seconds, reset isPlacingOrder so button is never stuck
+          setTimeout(() => {
+            if (!isDismissed) {
+              setIsPlacingOrder(false);
+            }
+          }, 6000);
+        } catch (openErr) {
+          console.error("Razorpay instance launch error:", openErr);
           setIsPlacingOrder(false);
-        });
-        rzp.open();
+          setSimulatedOrderData({
+            orderPayload,
+            rzpOrder: rzpRes.data.order,
+          });
+          setShowSimulatedPaymentModal(true);
+        }
       } else {
-        // Fallback for simulated test environment
-        await api.post("/orders", {
-          ...orderPayload,
-          paymentMethod: "Online Payment (Razorpay)",
-          paymentStatus: "Paid",
+        // Fallback to simulated payment modal
+        setSimulatedOrderData({
+          orderPayload,
+          rzpOrder: rzpRes.data.order,
         });
-        clearCart();
-        closeCart();
-        window.location.href = "/dashboard";
+        setShowSimulatedPaymentModal(true);
+        setIsPlacingOrder(false);
       }
     } catch (err: any) {
       console.error("Razorpay error:", err);
@@ -563,7 +595,7 @@ export default function CartDrawer() {
                 <div>
                   <h2 className="font-headline-sm text-on-surface font-extrabold m-0 text-[1.1rem]">My Basket</h2>
                   <span className="font-body-sm text-slate-body text-[12px] block">
-                    {totalItemsCount} {totalItemsCount === 1 ? "item" : "items"} from TeFFe&apos;s Butcher Shop
+                    {totalItemsCount} {totalItemsCount === 1 ? "item" : "items"} from TeFFe&apos;s
                   </span>
                 </div>
               </div>
@@ -1866,7 +1898,7 @@ export default function CartDrawer() {
             <p className="font-body-md text-slate-body max-w-xs leading-relaxed mb-6 text-[13.5px]">
               {orderSummary?.fulfillmentType === "pickup" ? (
                 <>
-                  Thank you! Our master butchers at <strong>{orderSummary?.storeName || "TeFFe's Butcher Shop"}</strong> are cutting and packing your order.
+                  Thank you! Our master butchers at <strong>{orderSummary?.storeName || "TeFFe's"}</strong> are cutting and packing your order.
                 </>
               ) : (
                 <>
@@ -2227,6 +2259,126 @@ export default function CartDrawer() {
                     );
                   })
                 )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── RAZORPAY SANDBOX TEST SIMULATOR MODAL ─── */}
+        {showSimulatedPaymentModal && simulatedOrderData && (
+          <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+            <div className="bg-white rounded-3xl max-w-md w-full shadow-2xl border border-gray-100 overflow-hidden">
+              {/* Header */}
+              <div className="bg-[#0c2340] text-white p-5 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center font-black text-lg text-emerald-400">
+                    ₹
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-[15px] leading-tight">Razorpay Sandbox Gateway</h3>
+                    <p className="text-white/60 text-xs">TeFFe&apos;s • Development Mode</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSimulatedPaymentModal(false);
+                    setIsPlacingOrder(false);
+                  }}
+                  className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer border-none"
+                >
+                  <span className="material-symbols-outlined text-[18px]">close</span>
+                </button>
+              </div>
+
+              {/* Amount Bar */}
+              <div className="bg-emerald-50 border-b border-emerald-100 px-5 py-3 flex items-center justify-between">
+                <span className="text-xs font-semibold text-emerald-800">Total Payable Amount:</span>
+                <span className="text-lg font-black text-emerald-700">₹{simulatedOrderData.orderPayload.amount}</span>
+              </div>
+
+              {/* Body */}
+              <div className="p-5 space-y-4">
+                <div className="bg-amber-50 border border-amber-200/80 rounded-xl p-3 text-xs text-amber-900 leading-relaxed">
+                  <strong>Sandbox Notice:</strong> Live Razorpay API keys are not yet configured in the environment. This interactive simulator lets you test the end-to-end payment confirmation, order dispatch, and store admin workflows seamlessly.
+                </div>
+
+                <div className="space-y-2 text-xs">
+                  <div className="font-bold text-gray-700 mb-1">Available Payment Channels</div>
+                  <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-[#0c2340]">qr_code_2</span>
+                      <span className="font-medium text-gray-800">UPI / QR (Google Pay, PhonePe, Paytm)</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Test Ready</span>
+                  </div>
+                  <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-[#0c2340]">credit_card</span>
+                      <span className="font-medium text-gray-800">Credit / Debit Cards (Visa, Mastercard, RuPay)</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Test Ready</span>
+                  </div>
+                  <div className="p-3 rounded-xl border border-gray-200 bg-gray-50/50 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-[#0c2340]">account_balance</span>
+                      <span className="font-medium text-gray-800">Net Banking (SBI, HDFC, ICICI, Axis)</span>
+                    </div>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-full">Test Ready</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="pt-2 space-y-2">
+                  <button
+                    type="button"
+                    disabled={isPlacingOrder}
+                    onClick={async () => {
+                      setIsPlacingOrder(true);
+                      try {
+                        const randomSuffix = Math.floor(100000 + Math.random() * 900000);
+                        await api.post("/orders", {
+                          ...simulatedOrderData.orderPayload,
+                          paymentMethod: "Online Payment (Razorpay)",
+                          paymentStatus: "Paid",
+                          razorpayOrderId: simulatedOrderData.rzpOrder?.id || `order_sim_${Date.now()}`,
+                          razorpayPaymentId: `pay_sim_${randomSuffix}`,
+                        });
+                        toast.success("Payment verified! Order placed successfully.", "Order Confirmed");
+                        setShowSimulatedPaymentModal(false);
+                        clearCart();
+                        closeCart();
+                        window.location.href = "/dashboard";
+                      } catch (err: any) {
+                        toast.error(err.response?.data?.message || "Failed to confirm simulated order", "Order Error");
+                      } finally {
+                        setIsPlacingOrder(false);
+                      }
+                    }}
+                    className="w-full py-3.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2"
+                  >
+                    {isPlacingOrder ? (
+                      <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-[18px]">verified</span>
+                        <span>Simulate Successful Payment (₹{simulatedOrderData.orderPayload.amount})</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      toast.info("Payment was cancelled by user.", "Cancelled");
+                      setShowSimulatedPaymentModal(false);
+                      setIsPlacingOrder(false);
+                    }}
+                    className="w-full py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs transition-colors cursor-pointer border-none"
+                  >
+                    Cancel Transaction
+                  </button>
+                </div>
               </div>
             </div>
           </div>
