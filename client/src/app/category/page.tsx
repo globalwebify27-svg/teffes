@@ -1,0 +1,402 @@
+"use client";
+
+import React, { useState, useMemo, useEffect, Suspense } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Product, fetchProducts, fetchCategories } from "@/lib/products";
+import { useCart } from "@/lib/cart";
+import { useWishlist } from "@/lib/wishlist";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import {
+  faDrumstickBite,
+  faUtensils,
+  faFishFins,
+  faEgg,
+  faLayerGroup,
+  faStore,
+} from "@fortawesome/free-solid-svg-icons";
+import { ProductGridSkeleton } from "@/components/common/Skeletons";
+
+type SortOption = "featured" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
+
+function getCategoryFontAwesomeIcon(key: string) {
+  const k = (key || "").toLowerCase();
+  if (k.includes("chicken")) return faDrumstickBite;
+  if (k.includes("mutton")) return faUtensils;
+  if (k.includes("fish") || k.includes("seafood")) return faFishFins;
+  if (k.includes("egg")) return faEgg;
+  if (k.includes("all")) return faLayerGroup;
+  return faStore;
+}
+
+const DEFAULT_TABS = [
+  { key: "chicken", label: "Chicken", icon: "drumstick-bite", desc: "Curry cuts, lollipops, boneless & wings" },
+  { key: "mutton", label: "Mutton", icon: "utensils", desc: "Tender goat cuts, curry pieces & ribs" },
+  { key: "fish", label: "Fish & Seafood", icon: "fish-fins", desc: "Freshwater Rohu, Catla & steaks" },
+  { key: "eggs", label: "Fresh Eggs", icon: "egg", desc: "Farm fresh, organic desi & brown eggs" },
+];
+
+function CategoryContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const [categoriesList, setCategoriesList] = useState<any[]>([]);
+  // Read initial category from query param if available, default to "chicken"
+  const typeParam = searchParams.get("type");
+  const [selectedCategory, setSelectedCategory] = useState<string>(typeParam || "chicken");
+  const [sortBy, setSortBy] = useState<SortOption>("featured");
+
+  useEffect(() => {
+    fetchCategories().then((cats) => {
+      if (cats && cats.length > 0) {
+        const filtered = cats.filter((c) => c.slug !== "all" && (c as any).isActive !== false);
+        if (filtered.length > 0) {
+          setCategoriesList(filtered);
+        }
+      }
+    });
+  }, []);
+
+  // Sync state if URL query param changes
+  useEffect(() => {
+    const currentType = searchParams.get("type");
+    if (currentType) {
+      setSelectedCategory(currentType);
+    }
+  }, [searchParams]);
+
+  const { addToCart, updateQuantity, getItemQuantity } = useCart();
+  const { isInWishlist, toggleWishlist } = useWishlist();
+
+  // Dynamic Category Tabs
+  const tabs = useMemo(() => {
+    if (categoriesList.length > 0) {
+      return categoriesList.map((c) => ({
+        key: c.slug,
+        label: c.name,
+        icon: c.icon || "restaurant",
+        desc: c.tagline || `Fresh ${c.name} cuts`,
+      }));
+    }
+    return DEFAULT_TABS;
+  }, [categoriesList]);
+
+  const [productsList, setProductsList] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch products dynamically from backend API
+  useEffect(() => {
+    let isMounted = true;
+    setLoading(true);
+
+    fetchProducts({ category: selectedCategory, sort: sortBy })
+      .then((data) => {
+        if (isMounted) {
+          setProductsList(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        console.error("Error fetching category products:", err);
+        if (isMounted) setLoading(false);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCategory, sortBy]);
+
+  const sortedProducts = productsList;
+
+  const activeTabMeta = useMemo(() => {
+    return (
+      tabs.find((t) => t.key === selectedCategory) || {
+        key: selectedCategory,
+        label: selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1),
+        icon: "restaurant",
+        desc: "Fresh daily butcher cuts",
+      }
+    );
+  }, [tabs, selectedCategory]);
+
+  const handleTabChange = (key: string) => {
+    setSelectedCategory(key);
+    router.push(`/category?type=${key}`);
+  };
+
+  return (
+    <div className="w-full min-h-screen bg-[#f8fafc] py-6 sm:py-8 font-body-md text-on-surface">
+      <div className="w-full max-w-container-max mx-auto px-gutter-desktop">
+        {/* ─── Top Breadcrumbs ────────────────────────────────────────────── */}
+        <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-xs text-slate-body mb-4 flex-wrap">
+          <Link href="/" className="hover:text-primary transition-colors text-inherit">
+            Home
+          </Link>
+          <span>/</span>
+          <span className="text-slate-400">Categories</span>
+          <span>/</span>
+          <span className="font-bold text-gray-900">{activeTabMeta.label}</span>
+        </nav>
+
+        {/* ─── Hero Title & 4 Category Tabs ─────────────────────────────────── */}
+        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xs mb-6 sm:mb-8">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-crimson-soft text-primary font-label-badge text-label-badge uppercase font-bold text-[11px] mb-2">
+                <span className="material-symbols-outlined text-[15px]">verified</span>
+                <span>Ranchi's Fresh Counter</span>
+              </div>
+              <h1 className="font-headline-xl text-2xl sm:text-3xl md:text-4xl font-black text-on-surface tracking-tight">
+                Fresh {activeTabMeta.label} Cuts
+              </h1>
+              <p className="text-xs sm:text-sm text-slate-body mt-1 max-w-xl leading-relaxed">
+                {activeTabMeta.desc}. Cut fresh upon order with 90-min delivery across Ranchi.
+              </p>
+            </div>
+
+            {/* Guarantee Badge */}
+            <div className="flex items-center gap-3 p-3 bg-surface-container-low rounded-2xl border border-gray-200/60 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-tertiary/15 flex items-center justify-center text-tertiary">
+                <span className="material-symbols-outlined text-[24px]">timer</span>
+              </div>
+              <div className="text-left">
+                <span className="font-headline-sm font-extrabold text-gray-900 text-xs block">
+                  90-Min Express Delivery
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium">
+                  Dispatched from Kishore Ganj Hub
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── 4 CATEGORY TABS (Chicken auto-selected by default) ─────────── */}
+          <div className="mt-6 pt-5 border-t border-gray-100 flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+            {tabs.map((tab) => {
+              const isSelected = selectedCategory === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => handleTabChange(tab.key)}
+                  className={`px-5 py-2.5 rounded-full flex items-center gap-2 font-headline-sm font-bold text-xs sm:text-sm cursor-pointer transition-all border-none whitespace-nowrap ${isSelected
+                      ? "bg-primary text-white shadow-sm ring-2 ring-primary/20 scale-105"
+                      : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
+                    }`}
+                >
+                  <FontAwesomeIcon
+                    icon={getCategoryFontAwesomeIcon(tab.key)}
+                    className={`text-[15px] ${isSelected ? "text-white" : "text-primary"}`}
+                  />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ─── Filter & Sorting Controls ────────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-6 bg-white p-3.5 sm:p-4 rounded-2xl border border-gray-200/70 shadow-2xs">
+          <div className="text-xs sm:text-sm text-slate-body font-medium">
+            Showing <strong className="text-gray-900 font-bold">{sortedProducts.length}</strong> cuts in{" "}
+            <strong className="text-primary font-bold">{activeTabMeta.label}</strong>
+          </div>
+
+          {/* Sort Dropdown */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <label htmlFor="sort-select" className="text-xs font-bold text-gray-500 whitespace-nowrap flex items-center gap-1">
+              <span className="material-symbols-outlined text-[16px]">swap_vert</span>
+              <span>Sort By:</span>
+            </label>
+            <select
+              id="sort-select"
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="px-3 py-1.5 bg-surface-container-low border border-gray-200 rounded-xl text-xs font-bold text-gray-800 outline-none focus:border-primary cursor-pointer"
+            >
+              <option value="featured">Featured / Recommended</option>
+              <option value="price-asc">Price: Low to High</option>
+              <option value="price-desc">Price: High to Low</option>
+              <option value="name-asc">Alphabetical: A to Z</option>
+              <option value="name-desc">Alphabetical: Z to A</option>
+            </select>
+          </div>
+        </div>
+
+        {/* ─── Product Grid ─────────────────────────────────────────────────── */}
+        {loading ? (
+          <div className="mb-16">
+            <ProductGridSkeleton count={8} columns="grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4" />
+          </div>
+        ) : sortedProducts.length === 0 ? (
+          <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-gray-200 shadow-xs my-8 max-w-lg mx-auto">
+            <div className="w-16 h-16 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
+              <span className="material-symbols-outlined text-[36px]">
+                {selectedCategory === 'eggs' ? "egg" : "restaurant"}
+              </span>
+            </div>
+            <h3 className="font-headline-sm font-bold text-gray-900 text-lg">
+              {selectedCategory === 'eggs' ? "Farm Fresh Eggs Coming Soon" : "No fresh cuts found"}
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-500 mt-1 max-w-sm mx-auto leading-relaxed">
+              {selectedCategory === 'eggs'
+                ? "We are onboarding certified local organic farms for antibiotic-free desi and table eggs. In the meantime, explore our fresh chicken, mutton, and fish cuts!"
+                : "Please select another category above or clear your filters."}
+            </p>
+            {selectedCategory === 'eggs' ? (
+              <button
+                type="button"
+                onClick={() => handleTabChange('chicken')}
+                className="mt-5 px-5 py-2 rounded-full bg-primary hover:bg-primary-dark text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                Browse Chicken Cuts →
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => handleTabChange('all')}
+                className="mt-5 px-5 py-2 rounded-full bg-primary hover:bg-primary-dark text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                View All Cuts
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 mb-16">
+            {sortedProducts.map((item: Product) => {
+              const qty = getItemQuantity(item.id);
+              const isLiked = isInWishlist(item.id);
+              const discount = (item.originalPrice && item.originalPrice > item.price)
+                ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
+                : 0;
+
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => router.push(`/product/${item.id}`)}
+                  className="bg-white rounded-2xl overflow-hidden border border-gray-200/80 p-3.5 shadow-2xs hover:shadow-md hover:border-gray-300 transition-all cursor-pointer flex flex-col justify-between group"
+                >
+                  <div>
+                    {/* Image Box */}
+                    <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-3 border border-gray-100">
+                      <img
+                        src={item.image || (item.images && item.images[0]) || "/images/chicken.png"}
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/LtbiqVBO.jpeg";
+                        }}
+                      />
+
+                      {/* Wishlist Heart */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleWishlist(item.id);
+                        }}
+                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-sm cursor-pointer transition-all border border-gray-100 hover:scale-110 active:scale-95 ${isLiked ? "bg-white text-crimson-bright" : "bg-white/90 text-slate-body hover:text-primary"
+                          }`}
+                        aria-label="Toggle Wishlist"
+                      >
+                        <span className={`material-symbols-outlined text-[18px] ${isLiked ? "filled text-crimson-bright" : ""}`}>
+                          favorite
+                        </span>
+                      </button>
+                    </div>
+
+                    {/* Meta */}
+                    <h3 className="font-headline-sm font-bold text-[14px] text-gray-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
+                      {item.name}
+                    </h3>
+                    <div className="font-body-sm text-slate-body text-[11.5px] mt-0.5 flex items-center gap-1.5">
+                      <span>{item.netWeight}</span>
+                      {item.cutType && (
+                        <>
+                          <span>•</span>
+                          <span className="truncate">{item.cutType}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Pricing & Add to Cart */}
+                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
+                    <div>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="font-headline-sm font-extrabold text-primary text-[15px]">
+                          ₹{item.price}
+                        </span>
+                        {item.originalPrice > item.price && (
+                          <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11px]">
+                            ₹{item.originalPrice}
+                          </span>
+                        )}
+                      </div>
+                      {discount > 0 && (
+                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                          {discount}% OFF
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Quantity Stepper or + ADD Button */}
+                    <div onClick={(e) => e.stopPropagation()}>
+                      {qty === 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => addToCart(item)}
+                          className="px-4 py-1.5 rounded-full font-label-badge font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1 btn-hover-fill"
+                        >
+                          <span>+</span>
+                          <span>ADD</span>
+                        </button>
+                      ) : (
+                        <div className="flex items-center bg-gray-100/90 rounded-full px-1 py-0.5 border border-gray-200">
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, qty - 1)}
+                            className="w-6 h-6 rounded-full bg-white text-gray-800 hover:bg-primary hover:text-white flex items-center justify-center font-bold text-xs border-none cursor-pointer shadow-2xs"
+                          >
+                            −
+                          </button>
+                          <span className="px-2 font-extrabold text-xs text-gray-900 min-w-[18px] text-center">
+                            {qty}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => updateQuantity(item.id, qty + 1)}
+                            className="w-6 h-6 rounded-full bg-white text-gray-800 hover:bg-primary hover:text-white flex items-center justify-center font-bold text-xs border-none cursor-pointer shadow-2xs"
+                          >
+                            +
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function CategoryPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-[70vh] flex items-center justify-center bg-[#f8fafc]">
+          <div className="text-center">
+            <div className="w-10 h-10 border-3 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-3" />
+            <p className="text-sm font-semibold text-slate-500">Loading fresh meat cuts…</p>
+          </div>
+        </div>
+      }
+    >
+      <CategoryContent />
+    </Suspense>
+  );
+}

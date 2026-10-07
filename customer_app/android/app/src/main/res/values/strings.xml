@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Replace with client Google Maps Android API Key in production -->
+    <string name="google_maps_key">YOUR_GOOGLE_MAPS_ANDROID_API_KEY</string>
+</resources>

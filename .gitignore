@@ -1,0 +1,61 @@
+# Dependencies
+node_modules/
+
+# Env files
+.env
+.env.local
+.env.production
+
+# Build outputs
+.next/
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage & Agent configs
+coverage/
+.agents/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+*.iml
+
+# Mobile OS & Build
+**/android/.gradle/
+**/android/local.properties
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/ephemeral/
+**/macos/Flutter/ephemeral/
+
+# Scratch & Temporary files
+scratch/
+server/scratch/
+server/src/scripts/update_files.js
+**/emulator_*.png
+downloaded_ui.html
+
+# Firebase & Secret Keys
+server/config/
+**/firebase-adminsdk*.json
+**/*firebase-adminsdk*.json
+**/google-services.json
+**/GoogleService-Info.plist
