@@ -21,7 +21,7 @@ export default function GoogleLiveMap({
   riderLat = 23.3512,
   riderLng = 23.3154,
   riderName = "Delivery Rider",
-  storeName = "Kishore Ganj Hub",
+  storeName = "Fulfillment Store",
   storeLat = 23.3441,
   storeLng = 85.3096,
   customerLat = 23.3644,

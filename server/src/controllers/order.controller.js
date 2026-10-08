@@ -122,7 +122,7 @@ const createOrder = async (req, res, next) => {
     const finalAmount = amount !== undefined ? amount : (totalAmount !== undefined ? totalAmount : computedFinalAmount);
 
     let orderAddress = isPickup
-      ? 'Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi (Takeaway Counter)'
+      ? (shippingAddress || 'Store Pickup: Store Takeaway Counter, Ranchi')
       : (shippingAddress || 'Ranchi Delivery');
 
     if (!isPickup && addressId) {
@@ -158,7 +158,7 @@ const createOrder = async (req, res, next) => {
       items,
       amount: finalAmount,
       storeId: storeId || 'S001',
-      storeName: storeName || 'Kishore Ganj',
+      storeName: storeName || 'Central Store',
       deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
       fulfillmentType: resolvedFulfillmentType,
       pickupMode: isPickup,
@@ -231,7 +231,7 @@ const createOrder = async (req, res, next) => {
     // Dispatch FCM push notification to customer
     notificationService.sendToUser(user._id, {
       title: 'Order Placed Successfully',
-      body: `Your order #${newOrder.orderId} for ₹${newOrder.amount} has been received and sent to the butchery.`,
+      body: `Your order #${newOrder.orderId} for ₹${newOrder.amount} has been received and sent to the store.`,
       data: {
         notificationType: 'ORDER_STATUS',
         orderId: newOrder.orderId,

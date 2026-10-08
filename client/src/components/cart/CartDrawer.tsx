@@ -403,7 +403,7 @@ export default function CartDrawer() {
         addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
-        storeName: selectedStore?.name || "Kishore Ganj",
+        storeName: selectedStore?.name || "Central Store",
         deliverySlot: fulfillmentType === "pickup" ? "Store Pickup" : slot === "express" ? "90 Mins Express Delivery" : "Evening Delivery (6-9 PM)",
         paymentMethod: selectedPayment === "wallet" ? "wallet" : fulfillmentType === "pickup" ? "Pay at Store Counter" : "Cash on Delivery",
         couponCode: appliedCoupon?.code,
@@ -448,7 +448,7 @@ export default function CartDrawer() {
         addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
-        storeName: selectedStore?.name || "Kishore Ganj",
+        storeName: selectedStore?.name || "Central Store",
         deliverySlot: fulfillmentType === "pickup" ? "Store Pickup" : slot === "express" ? "90 Mins Express Delivery" : "Evening Delivery (6-9 PM)",
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
@@ -893,7 +893,7 @@ export default function CartDrawer() {
                         {showStorePickerInDelivery && (
                           <div className="space-y-1.5 pt-2 border-t border-gray-100">
                             <div className="text-[11px] font-semibold text-slate-body mb-1">
-                              Select from available butchery stores with items in stock:
+                              Select from available stores with items in stock:
                             </div>
                             {stores.map((st, idx) => {
                               const isSel = st.storeId === selectedStoreId;
@@ -1898,11 +1898,11 @@ export default function CartDrawer() {
             <p className="font-body-md text-slate-body max-w-xs leading-relaxed mb-6 text-[13.5px]">
               {orderSummary?.fulfillmentType === "pickup" ? (
                 <>
-                  Thank you! Our master butchers at <strong>{orderSummary?.storeName || "TeFFe's"}</strong> are cutting and packing your order.
+                  Thank you! Our team at <strong>{orderSummary?.storeName || "TeFFe's"}</strong> is cutting and packing your order.
                 </>
               ) : (
                 <>
-                  Thank you! Our master butchers at <strong>Kishore Ganj Chowk, Ranchi</strong> are cutting your order fresh right now.
+                  Thank you! Our store team is cutting your order fresh right now.
                 </>
               )}
             </p>

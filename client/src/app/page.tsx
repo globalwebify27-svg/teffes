@@ -131,13 +131,13 @@ export default function HomePage() {
               <div className="max-w-xl z-10 space-y-2.5 sm:space-y-4">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-crimson-bright/20 text-crimson-bright text-xs sm:text-sm font-bold border border-crimson-bright/30">
                   <span className="w-2 h-2 rounded-full bg-crimson-bright animate-ping" />
-                  Ranchi&apos;s Premier Fresh Butchery
+                  Ranchi&apos;s Premier Fresh Meat Store
                 </span>
                 <h1 className="text-2xl sm:text-4xl md:text-5xl font-extrabold tracking-tight leading-tight">
                   Farm-Fresh Cuts Delivered In <span className="text-crimson-bright">90 Mins</span>
                 </h1>
                 <p className="text-xs sm:text-sm text-gray-300 max-w-md hidden sm:block leading-relaxed">
-                  100% Halal certified, fresh morning cuts with zero preservatives. Order online or visit our verified butcher hubs across Ranchi.
+                  100% Halal certified, fresh morning cuts with zero preservatives. Order online or visit our verified stores across Ranchi.
                 </p>
                 <div className="pt-1 sm:pt-2">
                   <span className="inline-flex items-center gap-2 px-5 py-2 sm:px-6 sm:py-2.5 rounded-full bg-primary hover:bg-primary-dark text-white font-bold text-xs sm:text-sm shadow-md transition-all">
@@ -292,8 +292,8 @@ export default function HomePage() {
                 <span className="block font-headline-sm text-[13.5px] sm:text-[15px] text-on-surface leading-tight font-bold">
                   Cut After Order
                 </span>
-                <span className="block font-body-sm text-slate-body text-[11px] sm:text-[12px]">
-                  Handled by master butchers
+                <span className="block font-body-sm text-slate-body text-[11px] sm:text-[12px]" suppressHydrationWarning>
+                  Cleanly cut fresh on order
                 </span>
               </div>
             </div>
@@ -546,7 +546,7 @@ export default function HomePage() {
           <div className="absolute inset-0 bg-black/50 flex items-center justify-between px-6 sm:px-12 md:px-16 text-white">
             <div>
               <span className="font-label-badge text-label-badge uppercase tracking-widest text-primary-fixed font-bold text-[11px] whitespace-nowrap">
-                Butchered Hygienically
+                Hygienically Cut &amp; Packed
               </span>
               <h3 className="font-headline-lg text-white font-extrabold mt-0.5 text-[1.4rem] sm:text-[1.8rem]">
                 Pure Protein. Zero Preservatives.
@@ -693,7 +693,7 @@ export default function HomePage() {
               </h3>
               <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
                 Need special thin slices, kathi roll juliennes, or biryani 4-piece cuts? Add instructions on checkout
-                and our master butchers will hand-cut to your exact spec.
+                and our team will hand-cut to your exact spec.
               </p>
             </div>
 

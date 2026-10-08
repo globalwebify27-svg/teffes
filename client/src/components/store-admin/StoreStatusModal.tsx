@@ -18,6 +18,7 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
   const [emergencyNotice, setEmergencyNotice] = useState("");
   const [pickupEnabled, setPickupEnabled] = useState(true);
   const [deliveryEnabled, setDeliveryEnabled] = useState(true);
+  const [storeName, setStoreName] = useState("Store Outlet");
 
   useEffect(() => {
     if (!isOpenModal) return;
@@ -26,6 +27,7 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
       .then((res) => {
         if (res.data.success && res.data.store) {
           const s = res.data.store;
+          if (s.name) setStoreName(s.name);
           setStoreOpen(s.isOpen !== false);
           setTimings(s.timings || "08:00 AM - 08:00 PM");
           setEmergencyNotice(s.emergencyNotice || "");
@@ -82,7 +84,7 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
             <span className="material-symbols-outlined text-primary text-[24px]">storefront</span>
             <div>
               <h3 className="font-bold text-gray-900 text-base">Store Operational Control</h3>
-              <p className="text-xs text-gray-500">Kishore Ganj Central Butchery Hub</p>
+              <p className="text-xs text-gray-500">{storeName}</p>
             </div>
           </div>
           <button

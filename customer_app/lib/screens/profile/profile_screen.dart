@@ -651,7 +651,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 12),
               const Divider(height: 1, color: AppColors.borderHairline),
               const SizedBox(height: 12),
-              const Text('Items Butchered & Delivered', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              const Text('Items Prepared & Delivered', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
               const SizedBox(height: 8),
               ...ord.items.map((item) {
                 return Padding(
@@ -936,7 +936,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 12),
                     _buildGuestBenefitRow(
                       icon: Icons.receipt_long_outlined,
-                      title: "Live Butchery Order Tracking",
+                      title: "Live Order Tracking",
                       subtitle: "Track cutting progress & GPS delivery in real-time",
                     ),
                     const SizedBox(height: 18),
@@ -1172,7 +1172,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: AppDimensions.spaceMd),
             ],
 
-            // 4. Recent Butchery Orders History Section
+            // 4. Recent Orders History Section
             if (auth.myOrders.isNotEmpty) ...[
               Container(
                 padding: const EdgeInsets.all(AppDimensions.spaceMd),
@@ -1410,7 +1410,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: AppDimensions.spaceMd),
             ],
 
-            // 6. Butchery Hub Support
+            // 6. Store Hub Support
             Container(
               padding: const EdgeInsets.all(AppDimensions.spaceMd),
               decoration: BoxDecoration(
@@ -1433,7 +1433,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           label: const Text('Call Teffe\'s'),
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Calling Kishore Ganj Hub at +91 94311 88204...')),
+                              const SnackBar(content: Text('Calling Store Support at +91 94311 88204...')),
                             );
                           },
                         ),
@@ -1446,7 +1446,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           label: const Text('WhatsApp Us', style: TextStyle(color: Colors.white)),
                           onPressed: () {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Opening WhatsApp with Teffe\'s Butchery Support...')),
+                              const SnackBar(content: Text('Opening WhatsApp with Teffe\'s Support...')),
                             );
                           },
                         ),

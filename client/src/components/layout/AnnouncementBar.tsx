@@ -111,7 +111,7 @@ export default function AnnouncementBar() {
             FSSAI Certified Fresh
           </span>
           <span className="text-on-primary-container font-medium text-[12px] whitespace-nowrap">
-            Never Frozen Butcher Standard
+            Never Frozen Fresh Standard
           </span>
         </div>
       </div>

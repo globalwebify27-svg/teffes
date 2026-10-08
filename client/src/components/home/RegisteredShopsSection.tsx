@@ -235,7 +235,7 @@ export default function RegisteredShopsSection({
             <div className="absolute bottom-4 left-4 right-4 text-white">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300 mb-0.5">
                 <span className="material-symbols-outlined text-[16px]">store</span>
-                <span>Flagship Live Butchery Hub</span>
+                <span>Flagship Store Hub</span>
               </div>
               <h3 className="font-headline-md text-lg sm:text-xl font-bold leading-snug">
                 {stores[0].name}
@@ -265,7 +265,7 @@ export default function RegisteredShopsSection({
                   <span>Physical Address</span>
                 </div>
                 <p className="text-xs text-on-surface font-medium mt-1 leading-snug">
-                  {stores[0].address || "Kishore Ganj Chowk, Harmu Road, Ranchi 834001"}
+                  {stores[0].address || "Harmu Road, Ranchi 834001"}
                 </p>
               </div>
 

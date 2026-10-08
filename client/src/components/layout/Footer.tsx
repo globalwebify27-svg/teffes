@@ -29,7 +29,7 @@ export default function Footer() {
             <div>
               <h4 className="font-headline-sm text-headline-sm text-on-surface font-bold">90 Mins Express Cut</h4>
               <p className="font-body-sm text-body-sm text-slate-body mt-0.5">
-                Butchered fresh after your order confirmation, never stored frozen.
+                Cut fresh after your order confirmation, never stored frozen.
               </p>
             </div>
           </div>
@@ -53,7 +53,7 @@ export default function Footer() {
             <div>
               <h4 className="font-headline-sm text-headline-sm text-on-surface font-bold">Never Frozen Promise</h4>
               <p className="font-body-sm text-body-sm text-slate-body mt-0.5">
-                100% Fresh butchery cuts straight from the block to your kitchen.
+                100% Fresh meat cuts straight from the counter to your kitchen.
               </p>
             </div>
           </div>
@@ -73,7 +73,7 @@ export default function Footer() {
           </Link>
 
           <p className="font-body-md text-body-md text-slate-body max-w-sm leading-relaxed">
-            Ranchi&apos;s premier artisanal butcher and hygienic meats storefront. Bringing antibiotic-free farm poultry,
+            Ranchi&apos;s premier fresh and hygienic meat store. Bringing antibiotic-free farm poultry,
             pasture-raised mutton, and pristine fresh catches with precision portioning right to your doorstep.
           </p>
 
@@ -157,7 +157,7 @@ export default function Footer() {
         <div className="space-y-space-sm">
           <h5 className="font-headline-sm text-headline-sm text-on-surface font-bold">Ranchi Hubs</h5>
           <p className="font-body-sm text-body-sm text-slate-body leading-snug">
-            Main Dispatch Hub: teffes.com , near Kishore Ganj chowk, harmu road, ranchi , Jharkhand, 834001
+            Main Dispatch Hub: Harmu Road, Ranchi, Jharkhand 834001
           </p>
           <p className="font-label-badge text-label-badge text-tertiary uppercase font-bold text-[10.5px]">
             90-Min Zones: {stores.length > 0 ? stores.map(s => s.name || s.city).join(", ") : "Loading zones..."}

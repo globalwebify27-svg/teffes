@@ -31,10 +31,10 @@ const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
 // ─── Sidebar navigation items ──────────────────────────────────────────────────
 const TABS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard", sub: "Live metrics and performance overview across all Ranchi stores" },
-  { key: "stores", label: "Stores", icon: "storefront", sub: "Manage physical butcher hubs, active branches, and operational radii" },
+  { key: "stores", label: "Stores", icon: "storefront", sub: "Manage physical store hubs, active branches, and operational radii" },
   { key: "store-admins", label: "Store Admins", icon: "admin_panel_settings", sub: "Manage store managers, assignments, and credential access" },
   { key: "products", label: "Products", icon: "restaurant", sub: "Master meat and seafood catalog across all Teffes branches" },
-  { key: "categories", label: "Categories", icon: "category", sub: "Butchery categories displayed live on mobile apps and website" },
+  { key: "categories", label: "Categories", icon: "category", sub: "Product categories displayed live on mobile apps and website" },
   { key: "orders", label: "All Orders", icon: "local_shipping", sub: "Consolidated platform-wide orders placed across all store branches" },
   { key: "riders", label: "Riders", icon: "two_wheeler", sub: "Manage delivery fleet, assigned hubs, and vehicle details" },
   { key: "customers", label: "Customers", icon: "group", sub: "Registered customer directory and order history across Ranchi" },
@@ -2660,7 +2660,7 @@ function CategoriesTab() {
         <div style={{ textAlign: "center", padding: "60px 20px", background: "#fff", borderRadius: "14px", border: "1px solid #ede8e0" }}>
           <span className="material-symbols-outlined text-[48px]" style={{ color: "#a89f91", marginBottom: "12px" }}>category</span>
           <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "#171410" }}>No Categories Configured</h3>
-          <p style={{ color: "#73695b", fontSize: "0.85rem", marginTop: "4px" }}>Add your first butchery category to populate products.</p>
+          <p style={{ color: "#73695b", fontSize: "0.85rem", marginTop: "4px" }}>Add your first category to populate products.</p>
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: "18px" }}>
@@ -4804,7 +4804,7 @@ function BannersTab() {
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Fresh Butchery Cut • Delivered in 90 Mins"
+                  placeholder="e.g. Fresh Meat Cut • Delivered in 90 Mins"
                   value={newBanner.title}
                   onChange={(e) => setNewBanner({ ...newBanner, title: e.target.value })}
                   style={{

@@ -824,7 +824,7 @@ export default function DashboardPage() {
     { title: "Feedback & Suggestions", desc: "Help us serve you better with your cut preferences and packing feedback." },
     { title: "Order / Products Related", desc: "Cut styles, custom meat portions, gross vs net weight assurance." },
     { title: "Gift Card & Teffes Cash", desc: "Redeeming wallet credits and promotional cashback." },
-    { title: "Freshness & 90-Min Guarantee", desc: "Our 100% fresh shop cuts and delivery dispatch from Kishore Ganj Chowk." },
+    { title: "Freshness & 90-Min Guarantee", desc: "Our 100% fresh shop cuts and fast delivery dispatch straight to your door." },
     { title: "Wallet Related", desc: "Instant refunds credited directly to Teffes Cash wallet." },
     { title: "Teffes shop Club", desc: "Exclusive monthly subscription with free express deliveries." },
     { title: "Referral Program", desc: "Invite Ranchi friends and get ₹100 off on your next fresh meat order." },
@@ -1153,7 +1153,7 @@ export default function DashboardPage() {
                       Need Immediate Help with Your Order?
                     </h4>
                     <p className="text-xs text-slate-body mt-0.5">
-                      Call our Ranchi butchery hub directly at <strong>+91 94311 00000</strong> (7 AM – 9 PM).
+                      Call our Ranchi store directly at <strong>+91 94311 00000</strong> (7 AM – 9 PM).
                     </p>
                   </div>
                 </div>
@@ -1213,7 +1213,7 @@ export default function DashboardPage() {
                       <span className="material-symbols-outlined text-[36px] text-gray-300 mb-2">location_off</span>
                       <h4 className="text-sm font-bold text-gray-800">No saved addresses yet</h4>
                       <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                        Add your home or office address in Ranchi for fast, 10-minute butchery delivery.
+                        Add your home or office address in Ranchi for fast, 10-minute delivery.
                       </p>
                     </div>
                   ) : (
@@ -1577,7 +1577,7 @@ export default function DashboardPage() {
                     Fresh Meat Exchange Within 60 Mins
                   </h2>
                   <p className="text-xs sm:text-sm text-white/90 mt-1 max-w-2xl leading-relaxed">
-                    At Teffes Farm and Foods LLP, we are committed to delivering healthy, fresh, and cleanly butchered meat. Due to perishable food safety standards, we do not offer refunds, but provide a 100% free exchange facility under eligible conditions.
+                    At Teffes Farm and Foods LLP, we are committed to delivering healthy, fresh, and cleanly cut meat. Due to perishable food safety standards, we do not offer refunds, but provide a 100% free exchange facility under eligible conditions.
                   </p>
                 </div>
 
@@ -1620,7 +1620,7 @@ export default function DashboardPage() {
                     <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4 leading-relaxed">
                       <li>Incorrect cut or wrong item delivered</li>
                       <li>Quality defect, odor, or damaged packaging</li>
-                      <li>Weight mismatch beyond butchery tolerance</li>
+                      <li>Weight mismatch beyond cutting tolerance</li>
                     </ul>
                   </div>
 
@@ -1633,7 +1633,7 @@ export default function DashboardPage() {
                       4. Order Cancellation
                     </h3>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      Orders can be cancelled before cutting begins. Once our butcher starts custom dressing or bird dispatch, cancellations cannot be processed.
+                      Orders can be cancelled before cutting begins. Once our team starts custom preparation or dispatch, cancellations cannot be processed.
                     </p>
                   </div>
                 </div>
@@ -1740,17 +1740,17 @@ export default function DashboardPage() {
                 } else if (isOutForDelivery) {
                   badgeText = "Rider on the Road";
                   mainHeading = `Arriving in ${transitMins} min`;
-                  subHeading = `Dispatched fresh from ${trackingOrder.storeName || "Kishore Ganj Butchery Hub"}`;
+                  subHeading = `Dispatched fresh from ${trackingOrder.storeName || "our store"}`;
                   iconName = "two_wheeler";
                   bannerColor = "bg-sky-50 border-sky-200 text-sky-950";
                   iconColor = "bg-sky-500/20 text-sky-800";
                 } else if (status === "Cutting") {
-                  badgeText = "Live Butchery Station";
+                  badgeText = "Live Cutting Station";
                   mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
                       ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
                       : "soon"
                     }`;
-                  subHeading = "Master butcher slicing & packing your fresh cuts";
+                  subHeading = "Store team slicing & packing your fresh cuts";
                   iconName = "content_cut";
                 } else if (status === "Ready") {
                   badgeText = "Packed & Ready";
@@ -1812,7 +1812,7 @@ export default function DashboardPage() {
                 riderLat={liveRiderCoords?.lat || trackingOrder.rider?.lat || 23.3512}
                 riderLng={liveRiderCoords?.lng || trackingOrder.rider?.lng || 85.3154}
                 riderName={trackingOrder.rider?.name || "Md. Imran"}
-                storeName={trackingOrder.storeName || "Kishore Ganj Hub"}
+                storeName={trackingOrder.storeName || "Fulfillment Store"}
                 customerAddress={trackingOrder.customer?.address || "Your Kitchen"}
                 orderStatus={trackingOrder.status || "Out for Delivery"}
                 className="h-52 w-full rounded-2xl overflow-hidden shadow-inner"
@@ -1909,7 +1909,7 @@ export default function DashboardPage() {
                     </span>
                     <div>
                       <span className="font-bold text-gray-900 block">Order Confirmed</span>
-                      <span className="text-slate-500 text-[11px]">Verified by butchery manager</span>
+                      <span className="text-slate-500 text-[11px]">Verified by store manager</span>
                     </div>
                   </div>
 
@@ -1928,14 +1928,14 @@ export default function DashboardPage() {
                         </span>
                         <div>
                           <span className={`font-bold block ${isCutting ? "text-amber-900" : "text-gray-900"}`}>
-                            {isCutting ? "Master Butcher Cutting Meat" : "Fresh Meat Cut & Packed"}
+                            {isCutting ? "Fresh Meat Cutting in Progress" : "Fresh Meat Cut & Packed"}
                           </span>
                           <span className={`text-[11px] ${isCutting ? "text-amber-800" : "text-slate-500"}`}>
                             {isCutting
-                              ? "Clean cutting on sanitized butcher block in progress"
+                              ? "Clean cutting on sanitized cutting block in progress"
                               : isDone
-                                ? "Cleanly butchered upon order & sealed fresh"
-                                : "Next up: Butchery preparation"}
+                                ? "Cleanly cut upon order & sealed fresh"
+                                : "Next up: Order preparation"}
                           </span>
                         </div>
                       </div>
@@ -1966,7 +1966,7 @@ export default function DashboardPage() {
                                 : `Rider is on the way (arriving in ${trackingOrder.remainingTransitMinutes ?? 14} min)`)
                               : isDone
                                 ? "Dispatched & safely reached your address"
-                                : "Assigned to delivery fleet from Kishore Ganj"}
+                                : `Assigned to delivery fleet from ${trackingOrder.storeName || "our store"}`}
                           </span>
                         </div>
                       </div>
@@ -2302,7 +2302,7 @@ export default function DashboardPage() {
                     rows={3}
                     value={returnReasonInput}
                     onChange={(e) => setReturnReasonInput(e.target.value)}
-                    placeholder="Provide any additional details for our butcher team..."
+                    placeholder="Provide any additional details for our store team..."
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none text-xs text-gray-900 resize-none font-medium"
                   />
                 </div>

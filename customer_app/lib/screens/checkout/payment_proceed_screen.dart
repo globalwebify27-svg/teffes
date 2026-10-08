@@ -34,7 +34,7 @@ class PaymentProceedScreen extends StatefulWidget {
     this.isPickup = false,
     this.fulfillmentType = 'delivery',
     this.storeId = 'S001',
-    this.storeName = 'Kishore Ganj Hub',
+    this.storeName = "TeFFe's Store",
     this.instruction = '',
   });
 
@@ -272,7 +272,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 1. Butchery Checkout Security Banner
+            // 1. Checkout Security Banner
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(

@@ -282,7 +282,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
           // Description
           const Text(
-            "We source antibiotic-residue-free chicken, pasture-fed mutton, and pristine fresh seafood — cleaned with RO water and cut strictly on demand by master butchers.",
+            "We source antibiotic-residue-free chicken, pasture-fed mutton, and pristine fresh seafood — cleaned with RO water and cut cleanly on your order.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12.5,
@@ -448,7 +448,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
           // Description
           const Text(
-            "Packed in hygienic insulated boxes with real-time GPS tracking from our local butchery hub straight to your doorstep.",
+            "Packed in hygienic insulated boxes with real-time GPS tracking from our local store straight to your doorstep.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12.5,
@@ -552,14 +552,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   ),
                 ),
               ),
-              // Bottom-Left Badge: Grade A Artisanal Butchery
+              // Bottom-Left Badge: 100% Fresh & Hygienic
               Positioned(
                 bottom: 14,
                 left: 14,
                 child: _buildPillBadge(
                   icon: Icons.verified_outlined,
                   iconColor: Colors.amberAccent,
-                  text: 'Grade A Artisanal Butchery',
+                  text: '100% Fresh & Hygienic',
                   bgColor: Colors.black.withOpacity(0.65),
                   textColor: Colors.white,
                 ),

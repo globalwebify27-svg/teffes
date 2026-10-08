@@ -186,9 +186,9 @@ const updateOrderStatus = async (req, res, next) => {
         Cancelled: 'Order Cancelled',
       };
       const bodies = {
-        Cutting: `Butcher is preparing your fresh cuts for order #${order.orderId}.`,
+        Cutting: `Our team is preparing your fresh cuts for order #${order.orderId}.`,
         Ready: order.fulfillmentType === 'pickup'
-          ? `Your order #${order.orderId} is packed and ready for takeaway at Kishore Ganj counter.`
+          ? `Your order #${order.orderId} is packed and ready for takeaway at the store counter.`
           : `Order #${order.orderId} is packed and awaiting rider dispatch.`,
         'Out for Delivery': `Your order #${order.orderId} is on the way to your address!`,
         Delivered: `Your order #${order.orderId} has been delivered. Thank you for choosing Teffe's!`,
@@ -524,7 +524,7 @@ const getStoreStatus = async (req, res, next) => {
     if (!store) {
       store = await Store.create({
         storeId,
-        name: 'Kishore Ganj Butchery',
+        name: 'Kishore Ganj Store',
         city: 'Ranchi',
         address: 'Harmu Road, Kishore Ganj, Ranchi, Jharkhand 834001',
         isOpen: true,

@@ -12,7 +12,7 @@ class RiderUserModel {
   final String riderStatus;
   final bool isOnline;
 
-  String get assignedStore => storeName ?? 'TeFFe\'s — Kishore Ganj ($storeId)';
+  String get assignedStore => storeName ?? 'TeFFe\'s Store ($storeId)';
 
   RiderUserModel({
     required this.id,

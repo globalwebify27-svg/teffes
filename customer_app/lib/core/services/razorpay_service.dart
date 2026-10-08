@@ -49,7 +49,7 @@ class RazorpayService {
     String? keyId,
     String? contact,
     String? email,
-    String description = "Fresh Butchery Order Payment",
+    String description = "Fresh Order Payment",
   }) {
     final activeKey = (keyId != null && keyId.isNotEmpty && !keyId.contains('placeholder'))
         ? keyId

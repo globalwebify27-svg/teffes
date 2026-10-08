@@ -18,8 +18,8 @@ import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 const TABS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard", sub: "Live overview of today's orders, revenue, and inventory" },
   { key: "orders", label: "Live Orders", icon: "local_shipping", sub: "Manage today's orders from cutting to customer delivery" },
-  { key: "products", label: "Products & Stock", icon: "restaurant", sub: "Toggle live availability of butchery cuts for your store" },
-  { key: "inventory", label: "Inventory", icon: "inventory_2", sub: "Track fresh stock levels and morning butchery batches" },
+  { key: "products", label: "Products & Stock", icon: "restaurant", sub: "Toggle live availability of fresh cuts for your store" },
+  { key: "inventory", label: "Inventory", icon: "inventory_2", sub: "Track fresh stock levels and morning fresh batches" },
   { key: "customers", label: "Customers", icon: "group", sub: "Directory of customers who ordered from your store" },
   { key: "riders", label: "Riders & Dispatch", icon: "two_wheeler", sub: "Assign ready orders to available delivery partners" },
   { key: "returns", label: "Returns & Exchange", icon: "swap_horiz", sub: "Process customer exchange requests under the 60-minute policy" },
@@ -383,7 +383,7 @@ function LiveOrdersTab() {
                       {isPickup ? (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                           <span className="material-symbols-outlined text-[14px]">storefront</span>
-                          Customer will collect at Kishore Ganj Butchery Counter
+                          Customer will collect at Store Counter
                         </span>
                       ) : (
                         <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
@@ -865,10 +865,7 @@ function InventoryTab() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
                 <button
                   type="button"
-                  onClick={() => {
-                    setOperation("add");
-                    setReason("Fresh supply received from supplier");
-                  }}
+                  onClick={() => setOperation("add")}
                   style={{
                     padding: "10px 8px",
                     borderRadius: "8px",
@@ -890,10 +887,7 @@ function InventoryTab() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setOperation("reduce");
-                    setReason("Daily butchery trimming & fat/bone discard");
-                  }}
+                  onClick={() => setOperation("reduce")}
                   style={{
                     padding: "10px 8px",
                     borderRadius: "8px",
@@ -910,10 +904,7 @@ function InventoryTab() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
-                    setOperation("set");
-                    setReason("End-of-day physical count reconciliation");
-                  }}
+                  onClick={() => setOperation("set")}
                   style={{
                     padding: "10px 8px",
                     borderRadius: "8px",

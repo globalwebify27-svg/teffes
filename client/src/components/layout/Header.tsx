@@ -642,7 +642,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 <span className="material-symbols-outlined text-primary text-[15px] align-middle mr-1">location_on</span>
                 <strong>TeFFe&apos;s Ranchi</strong>
                 <br />
-                Near Kishore Ganj Chowk, Harmu Road
+                Harmu Road, Ranchi, Jharkhand
                 <br />
                 <span className="material-symbols-outlined text-tertiary text-[15px] align-middle mr-1">timer</span>
                 <span className="text-tertiary font-bold">90-Min Fresh Delivery</span>

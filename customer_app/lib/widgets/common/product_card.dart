@@ -31,7 +31,7 @@ class ProductCard extends StatelessWidget {
     return _buildHorizontalCard(context);
   }
 
-  // 1. Compact Grid Card (Matches Image 1 - Fresh Butchery Cuts)
+  // 1. Compact Grid Card (Matches Image 1 - Fresh Meat Cuts)
   Widget _buildCompactGrid(BuildContext context) {
     final cart = context.watch<CartProvider>();
     final quantity = cart.getQuantity(product.id);

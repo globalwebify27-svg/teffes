@@ -114,7 +114,7 @@ function CategoryContent() {
         key: selectedCategory,
         label: selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1),
         icon: "restaurant",
-        desc: "Fresh daily butcher cuts",
+        desc: "Fresh daily meat cuts",
       }
     );
   }, [tabs, selectedCategory]);
@@ -164,7 +164,7 @@ function CategoryContent() {
                   90-Min Express Delivery
                 </span>
                 <span className="text-[11px] text-slate-500 font-medium">
-                  Dispatched from Kishore Ganj Hub
+                  Dispatched from Nearest Store
                 </span>
               </div>
             </div>

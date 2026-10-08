@@ -283,7 +283,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   _buildProductSection(
                     context: context,
                     title: 'Fresh Chicken Cuts',
-                    subtitle: 'Antibiotic-free, freshly butchered today',
+                    subtitle: 'Antibiotic-free, freshly cut today',
                     categoryKey: 'chicken',
                     products: chickenCuts,
                     productsProvider: productsProvider,

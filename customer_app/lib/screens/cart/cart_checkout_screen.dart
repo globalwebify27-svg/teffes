@@ -76,8 +76,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     _stores = [
       const StoreModel(
         storeId: 'S001',
-        name: "TeFFe's — Kishore Ganj",
-        address: 'Plot 42, Main Road, Kishore Ganj, Ranchi, Jharkhand 834001',
+        name: "TeFFe's — Central Store",
+        address: 'Harmu Road, Ranchi, Jharkhand 834001',
         city: 'Ranchi',
         phone: '+91 9779687955',
         status: 'Active',
@@ -812,10 +812,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       return;
     }
 
-    final storeName = selStore?.name ?? "TeFFe's — Kishore Ganj";
+    final storeName = selStore?.name ?? "TeFFe's Store";
     final storeId = selStore?.storeId ?? 'S001';
     final shippingAddress = isPickup
-        ? 'Store Pickup: ${selStore?.name ?? "TeFFe's Hub"}, ${selStore?.address ?? "Ranchi"}'
+        ? 'Store Pickup: ${selStore?.name ?? "Store Counter"}, ${selStore?.address ?? "Ranchi"}'
         : location.activeAddressString;
     final activeInstruction = isPickup ? _pickupInstructionController.text.trim() : _deliveryInstruction;
 
@@ -1737,7 +1737,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                         ],
                                       ),
                                       const SizedBox(height: 2),
-                                      Text(isPickup ? 'Freshly packed' : 'Priority butchering', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                                      Text(isPickup ? 'Freshly packed' : 'Priority fresh cut', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
                                     ],
                                   ),
                                 ),

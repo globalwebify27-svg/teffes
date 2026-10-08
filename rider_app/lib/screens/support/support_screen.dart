@@ -119,7 +119,7 @@ class _SupportScreenState extends State<SupportScreen> {
     final rider = auth.rider;
 
     // Dynamically retrieve associated Store Admin details from live API or Rider Profile
-    final storeName = _dispatchData?['storeName'] ?? rider?.storeName ?? 'TeFFe\'s — Kishore Ganj Hub';
+    final storeName = _dispatchData?['storeName'] ?? rider?.storeName ?? 'TeFFe\'s Store Hub';
     final adminName = _dispatchData?['storeAdminName'] ?? rider?.storeAdminName ?? 'Rahul Sharma';
     final adminPhone = _dispatchData?['storeAdminPhone'] ?? rider?.storeAdminPhone ?? '+91 9779687955';
     final timings = _dispatchData?['timings'] ?? '08:00 AM - 08:00 PM';

@@ -70,7 +70,7 @@ export default function AboutPage() {
               <div className="relative w-full max-w-md aspect-4/3 rounded-3xl overflow-hidden shadow-md border border-gray-200">
                 <img
                   src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80"
-                  alt="Teffes Master Butchery"
+                  alt="Teffes Fresh Meat Store"
                   className="w-full h-full object-cover"
                 />
               </div>
@@ -97,7 +97,7 @@ export default function AboutPage() {
               {
                 icon: "content_cut",
                 title: "Cut After Order",
-                desc: "Never pre-sliced or stored in deep freezers. Every bird or meat cut is prepared freshly by master butchers once you click order.",
+                desc: "Never pre-sliced or stored in deep freezers. Every bird or meat cut is prepared freshly by trained staff once you click order.",
               },
               {
                 icon: "water_drop",
@@ -112,7 +112,7 @@ export default function AboutPage() {
               {
                 icon: "timer",
                 title: "90-Min Delivery",
-                desc: "Speedy delivery from Kishore Ganj Chowk across Ranchi city straight to your kitchen doorstep.",
+                desc: "Speedy delivery from our nearest store across Ranchi city straight to your kitchen doorstep.",
               },
             ].map((pillar) => (
               <div

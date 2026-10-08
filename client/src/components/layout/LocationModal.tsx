@@ -108,7 +108,7 @@ export default function LocationModal() {
                 Select Delivery Location
               </h3>
               <p className="text-xs text-slate-body">
-                Fast 90-min butchery delivery across Ranchi
+                Fast 90-min fresh delivery across Ranchi
               </p>
             </div>
           </div>

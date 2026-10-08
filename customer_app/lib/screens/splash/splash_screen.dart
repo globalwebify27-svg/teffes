@@ -149,7 +149,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                 ),
                 const SizedBox(height: 14),
                 Text(
-                  "100% Fresh Daily Cuts • Ranchi Butchery Hub",
+                  "100% Fresh Daily Cuts • Ranchi Central Store",
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,

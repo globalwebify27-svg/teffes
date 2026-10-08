@@ -183,7 +183,7 @@ class BrandWatermarkFooter extends StatelessWidget {
                       ),
                     ),
                     const Text(
-                      'Fresh Artisanal Butchery',
+                      'Fresh Meat & Poultry',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w600,

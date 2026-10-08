@@ -52,7 +52,7 @@ const orderSchema = new mongoose.Schema(
     },
     storeName: {
       type: String,
-      default: 'Kishore Ganj',
+      default: 'Central Store',
     },
     rider: {
       riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },

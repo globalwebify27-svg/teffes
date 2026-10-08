@@ -109,7 +109,7 @@ function getEtaDetails(order) {
   }
 
   const prepSubText = status === 'Cutting'
-    ? 'Master butcher slicing fresh cuts'
+    ? 'Store team slicing fresh cuts'
     : status === 'Ready'
     ? 'Packed fresh & waiting for rider'
     : 'Order confirmed & sent to cutting station';

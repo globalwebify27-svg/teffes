@@ -41,7 +41,7 @@ export default function NotificationPrompt() {
         <div className="flex-1">
           <h4 className="text-sm font-bold text-gray-900 leading-tight">Enable Live Order Tracking</h4>
           <p className="text-xs text-gray-500 mt-1 leading-snug">
-            Receive instant alerts when the butcher starts cutting and when your rider is approaching.
+            Receive instant alerts when our team starts cutting and when your rider is approaching.
           </p>
         </div>
         <button

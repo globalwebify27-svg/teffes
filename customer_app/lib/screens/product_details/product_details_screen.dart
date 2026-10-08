@@ -130,7 +130,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             tooltip: 'Share Product',
             onPressed: () async {
               final shareText =
-                  "Check out ${product.name} on Teffe's Artisanal Butchery!\n"
+                  "Check out ${product.name} on TeFFe's!\n"
                   "Fresh, tender & hygienically packed.\n"
                   "Order now: https://teffes.com/product/${product.id}";
               try {
@@ -466,14 +466,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 
                         // Description
                         Text(
-                          'About this Butchery Cut',
+                          'About this Fresh Cut',
                           style: Theme.of(context).textTheme.titleLarge?.copyWith(fontSize: 15),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           product.description.isNotEmpty
                               ? product.description
-                              : '100% freshly slaughtered and cleaned in our temperature-controlled butchery hub. Carefully packaged in vacuum cold-seal for maximum nutrition and freshness.',
+                              : '100% fresh and cleanly prepared in our temperature-controlled store hub. Carefully packaged in cold-seal for maximum nutrition and freshness.',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: AppColors.textSecondary,
                                 height: 1.5,
@@ -498,7 +498,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                               ),
                               const SizedBox(height: 8),
                               _buildCheckItem('Never frozen, cut strictly fresh on order'),
-                              _buildCheckItem('100% certified butchering process'),
+                              _buildCheckItem('100% certified hygienic cutting process'),
                               _buildCheckItem('Veterinary inspected before dispatch'),
                             ],
                           ),
