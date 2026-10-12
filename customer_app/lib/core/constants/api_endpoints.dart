@@ -48,6 +48,7 @@ class ApiEndpoints {
   static const String products = '/products';
   static const String search = '/products/search';
   static const String banners = '/banners';
+  static const String activeAnnouncements = '/announcements/active';
 
   // User Cart & Wishlist
   static const String cart = '/user/cart';

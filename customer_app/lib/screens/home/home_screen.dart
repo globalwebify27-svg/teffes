@@ -14,6 +14,7 @@ import '../../widgets/common/promo_banner.dart';
 import '../../widgets/common/search_input_bar.dart';
 import '../../widgets/common/super_offer_card.dart';
 import '../../widgets/common/brand_watermark_footer.dart';
+import '../../widgets/common/running_announcement_bar.dart';
 import '../category/category_listing_screen.dart';
 import '../product_details/product_details_screen.dart';
 
@@ -126,7 +127,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   // 1. Top Location Header (Home ⌄ + Address + Bell)
                   const LocationHeader(),
 
-                  // 2. Search Bar - Active on Home screen with Debounce
+                  // 2. Running Marquee Announcement Bar (Live Store Alert & Updates)
+                  const RunningAnnouncementBar(),
+
+                  // 3. Search Bar - Active on Home screen with Debounce
                   SearchInputBar(
                     controller: _searchController,
                     focusNode: _searchFocusNode,

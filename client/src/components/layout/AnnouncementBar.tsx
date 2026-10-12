@@ -17,13 +17,43 @@ export default function AnnouncementBar() {
   const [offers, setOffers] = useState<OfferItem[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  const [emergencyNotice, setEmergencyNotice] = useState<string>("");
 
   useEffect(() => {
-    // Fetch all active coupons from backend without filtering out any super offer
+    // 1. Fetch active emergency notice from store admin
+    const fetchEmergencyNotice = async () => {
+      try {
+        const res = await api.get<{ success: boolean; notice?: string; storeName?: string }>("/announcements/active");
+        if (res.data?.success && res.data.notice && res.data.notice.trim()) {
+          setEmergencyNotice(res.data.notice.trim());
+          return;
+        }
+      } catch (_) {
+        // Fallback to /stores/available if endpoint is 404 on deployed server
+      }
+
+      try {
+        const storesRes = await api.get<{ success: boolean; stores: any[] }>("/stores/available");
+        if (storesRes.data?.success && Array.isArray(storesRes.data.stores)) {
+          const storeWithNotice = storesRes.data.stores.find(
+            (s: any) => s.emergencyNotice && typeof s.emergencyNotice === "string" && s.emergencyNotice.trim().length > 0
+          );
+          if (storeWithNotice) {
+            setEmergencyNotice(storeWithNotice.emergencyNotice.trim());
+            return;
+          }
+        }
+      } catch (_) {}
+
+      setEmergencyNotice("");
+    };
+
+    fetchEmergencyNotice();
+
+    // 2. Fetch all active coupons from backend
     api.get<{ success: boolean; count?: number; coupons: any[] }>("/coupons/active")
       .then((res) => {
         if (res.data?.success && Array.isArray(res.data.coupons) && res.data.coupons.length > 0) {
-          // Include EVERY coupon from data, sorting super offer first for prominent display
           const allCoupons = [...res.data.coupons].sort((a, b) => {
             if (a.isSuperOffer && !b.isSuperOffer) return -1;
             if (!a.isSuperOffer && b.isSuperOffer) return 1;
@@ -35,6 +65,16 @@ export default function AnnouncementBar() {
       .catch((err) => {
         console.warn("AnnouncementBar active coupons fetch error:", err);
       });
+
+    // Auto-refresh emergency notice periodically & when user focuses window
+    const interval = setInterval(fetchEmergencyNotice, 15000);
+    const onFocus = () => fetchEmergencyNotice();
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   // Timer to rotate all offers one by one every 3 seconds
@@ -51,70 +91,81 @@ export default function AnnouncementBar() {
   const currentOffer = offers.length > 0 ? offers[currentIndex % offers.length] : null;
 
   return (
-    <div className="w-full bg-primary text-on-primary py-2 px-gutter-desktop border-b border-primary-container/40 select-none">
-      <div className="w-full max-w-container-max mx-auto flex items-center justify-between font-label-md text-label-md">
-        {/* Left Section: All offers sliding left-to-right one by one before the separator line */}
-        <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap min-w-0 flex-1 sm:flex-initial">
-          <span className="material-symbols-outlined text-[17px] text-amber-300 flex-shrink-0 animate-pulse">
-            local_offer
-          </span>
+    <>
+      {/* Dynamic Emergency Notice / Store Update Alert Ribbon */}
+      {emergencyNotice && (
+        <div className="w-full bg-gradient-to-r from-amber-500 via-amber-400 to-amber-500 text-amber-950 font-bold px-4 py-1.5 border-b border-amber-600 flex items-center justify-center gap-2 text-xs shadow-xs z-50">
+          <span className="material-symbols-outlined text-[16px] text-amber-900 animate-pulse">campaign</span>
+          <span className="bg-amber-950 text-white text-[10px] px-2 py-0.5 rounded font-black tracking-wider uppercase">STORE UPDATE</span>
+          <span className="text-[12px] font-bold">{emergencyNotice}</span>
+        </div>
+      )}
 
-          {/* Animated Offer Container with all coupons cycling one by one */}
-          <div
-            className="relative overflow-hidden min-w-0 max-w-[320px] sm:max-w-[460px] md:max-w-[560px] h-6 flex items-center"
-            onMouseEnter={() => setIsPaused(true)}
-            onMouseLeave={() => setIsPaused(false)}
-          >
-            {currentOffer ? (
-              <Link
-                key={currentOffer.code + "-" + currentIndex}
-                href="/offers"
-                className="font-bold truncate text-[13px] flex items-center gap-2 text-white hover:underline text-decoration-none animate-offer-slide"
-                title={`${currentOffer.code}: ${currentOffer.discount} - Click to see all ${offers.length} offers`}
-              >
-                {/* Coupon Code Pill */}
-                <span className="bg-white/20 text-white font-mono px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-extrabold shrink-0 border border-white/25 shadow-xs flex items-center gap-1">
-                  {currentOffer.isSuperOffer && (
-                    <span className="material-symbols-outlined text-amber-300 text-[12px] leading-none">star</span>
-                  )}
-                  <span>{currentOffer.code}</span>
-                </span>
+      <div className="w-full bg-primary text-on-primary py-2 px-gutter-desktop border-b border-primary-container/40 select-none">
+        <div className="w-full max-w-container-max mx-auto flex items-center justify-between font-label-md text-label-md">
+          {/* Left Section: All offers sliding left-to-right one by one before the separator line */}
+          <div className="flex items-center gap-2 overflow-hidden text-ellipsis whitespace-nowrap min-w-0 flex-1 sm:flex-initial">
+            <span className="material-symbols-outlined text-[17px] text-amber-300 flex-shrink-0 animate-pulse">
+              local_offer
+            </span>
 
-                {/* Discount Description */}
-                <span className="truncate">{currentOffer.discount}</span>
-
-                {/* Minimum Order Qualifier */}
-                {currentOffer.minOrder !== undefined && currentOffer.minOrder > 0 && (
-                  <span className="hidden sm:inline text-white/80 text-[11.5px] font-normal shrink-0">
-                    (Min Order ₹{currentOffer.minOrder})
+            {/* Animated Offer Container with all coupons cycling one by one */}
+            <div
+              className="relative overflow-hidden min-w-0 max-w-[320px] sm:max-w-[460px] md:max-w-[560px] h-6 flex items-center"
+              onMouseEnter={() => setIsPaused(true)}
+              onMouseLeave={() => setIsPaused(false)}
+            >
+              {currentOffer ? (
+                <Link
+                  key={currentOffer.code + "-" + currentIndex}
+                  href="/offers"
+                  className="font-bold truncate text-[13px] flex items-center gap-2 text-white hover:underline text-decoration-none animate-offer-slide"
+                  title={`${currentOffer.code}: ${currentOffer.discount} - Click to see all ${offers.length} offers`}
+                >
+                  {/* Coupon Code Pill */}
+                  <span className="bg-white/20 text-white font-mono px-2 py-0.5 rounded text-[11px] uppercase tracking-wider font-extrabold shrink-0 border border-white/25 shadow-xs flex items-center gap-1">
+                    {currentOffer.isSuperOffer && (
+                      <span className="material-symbols-outlined text-amber-300 text-[12px] leading-none">star</span>
+                    )}
+                    <span>{currentOffer.code}</span>
                   </span>
-                )}
-              </Link>
-            ) : (
-              <span className="font-bold truncate text-[13px] text-white">
-                Fresh Hand-Cut Meats &amp; Farm Fresh Poultry in Ranchi
-              </span>
-            )}
+
+                  {/* Discount Description */}
+                  <span className="truncate">{currentOffer.discount}</span>
+
+                  {/* Minimum Order Qualifier */}
+                  {currentOffer.minOrder !== undefined && currentOffer.minOrder > 0 && (
+                    <span className="hidden sm:inline text-white/80 text-[11.5px] font-normal shrink-0">
+                      (Min Order ₹{currentOffer.minOrder})
+                    </span>
+                  )}
+                </Link>
+              ) : (
+                <span className="font-bold truncate text-[13px] text-white">
+                  Fresh Hand-Cut Meats &amp; Farm Fresh Poultry in Ranchi
+                </span>
+              )}
+            </div>
+
+            {/* Divider Line & 90-Min delivery guarantee */}
+            <span className="hidden md:inline text-on-primary-container px-1 flex-shrink-0">|</span>
+            <span className="hidden md:inline font-medium text-white/90 text-[13px] flex-shrink-0">
+              90-Min Delivery
+            </span>
           </div>
 
-          {/* Divider Line & 90-Min delivery guarantee */}
-          <span className="hidden md:inline text-on-primary-container px-1 flex-shrink-0">|</span>
-          <span className="hidden md:inline font-medium text-white/90 text-[13px] flex-shrink-0">
-            90-Min Delivery within 5Km of Kacheri Chowk
-          </span>
-        </div>
-
-        {/* Right Section: Trust badges */}
-        <div className="hidden lg:flex items-center gap-4 font-label-badge text-label-badge uppercase tracking-wider flex-shrink-0">
-          <span className="bg-tertiary text-on-tertiary px-3 py-1 rounded-full flex items-center gap-1.5 font-bold shadow-xs border border-tertiary-fixed/30 text-[11px] whitespace-nowrap">
-            <span className="w-2 h-2 rounded-full bg-tertiary-fixed inline-block animate-pulse"></span>
-            FSSAI Certified Fresh
-          </span>
-          <span className="text-on-primary-container font-medium text-[12px] whitespace-nowrap">
-            Never Frozen Fresh Standard
-          </span>
+          {/* Right Section: Trust badges */}
+          <div className="hidden lg:flex items-center gap-4 font-label-badge text-label-badge uppercase tracking-wider flex-shrink-0">
+            <span className="bg-tertiary text-on-tertiary px-3 py-1 rounded-full flex items-center gap-1.5 font-bold shadow-xs border border-tertiary-fixed/30 text-[11px] whitespace-nowrap">
+              <span className="w-2 h-2 rounded-full bg-tertiary-fixed inline-block animate-pulse"></span>
+              FSSAI Certified Fresh
+            </span>
+            <span className="text-on-primary-container font-medium text-[12px] whitespace-nowrap">
+              Never Frozen Fresh Standard
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -9,6 +9,7 @@ import { useWishlist } from "@/lib/wishlist";
 import { toast } from "@/lib/toast";
 import { isYouTubeUrl, getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
 import { ProductDetailSkeleton } from "@/components/common/Skeletons";
+import ProductQuantityStepper from "@/components/products/ProductQuantityStepper";
 
 export type ProductMediaItem =
   | { type: "image"; url: string }
@@ -48,7 +49,7 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     };
   }, [productId]);
 
-  const { addToCart, getItemQuantity, openCart } = useCart();
+  const { addToCart, updateQuantity, getItemQuantity, openCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();
 
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(0);
@@ -199,13 +200,6 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
     addToCart(product);
     setAddedAnimation(true);
     setTimeout(() => setAddedAnimation(false), 1500);
-  };
-
-  const handleBuyNow = () => {
-    if (quantity === 0) {
-      addToCart(product);
-    }
-    openCart();
   };
 
   const handleShare = async () => {
@@ -616,28 +610,70 @@ export default function ProductDetailPage({ params }: ProductPageProps) {
                 </button>
               </div>
 
-              {/* ─── Action Buttons: Buy Now + Add to Cart ────────────────────── */}
-              <div className="flex flex-col sm:flex-row gap-3.5 my-6">
-                {/* Buy Now (Primary Solid Crimson/Red) */}
-                <button
-                  type="button"
-                  onClick={handleBuyNow}
-                  className="flex-1 py-3.5 px-6 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-extrabold text-[15px] shadow-md transition-all cursor-pointer border-none text-center"
-                >
-                  Buy Now
-                </button>
+              {/* ─── Go to Cart & Quantity Stepper Row ────────────────────── */}
+              <div className="flex items-center justify-between gap-3.5 my-6">
+                {/* Left: Go to Cart (or Add to Cart if not yet added) */}
+                {quantity === 0 ? (
+                  <button
+                    type="button"
+                    onClick={handleAddToCart}
+                    className="h-[44px] sm:h-[46px] px-6 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-extrabold text-[15px] shadow-sm hover:shadow transition-all cursor-pointer border-none flex items-center justify-center gap-2 active:scale-[0.98]"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {addedAnimation ? "done" : "add_shopping_cart"}
+                    </span>
+                    <span>Add to Cart</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={openCart}
+                    className="h-[44px] sm:h-[46px] px-6 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-extrabold text-[15px] shadow-sm hover:shadow transition-all cursor-pointer border-none flex items-center justify-center gap-2 active:scale-[0.98]"
+                  >
+                    <span className="material-symbols-outlined text-[20px]">shopping_cart</span>
+                    <span>Go to Cart</span>
+                  </button>
+                )}
 
-                {/* Add to Cart (White with Red Border/Text) */}
-                <button
-                  type="button"
-                  onClick={handleAddToCart}
-                  className="flex-1 py-3.5 px-6 rounded-xl bg-white hover:bg-crimson-soft border-2 border-primary text-primary font-headline-sm font-extrabold text-[15px] shadow-xs transition-all cursor-pointer text-center flex items-center justify-center gap-1.5"
-                >
-                  <span className="material-symbols-outlined text-[20px]">
-                    {quantity > 0 || addedAnimation ? "done" : "add_shopping_cart"}
+                {/* Right: Plus Minus Stepper */}
+                <div className="flex items-center bg-primary text-white rounded-full px-1.5 py-1 shadow-xs select-none h-[36px] sm:h-[38px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (quantity > 0) {
+                        updateQuantity(product.id, quantity - 1);
+                      }
+                    }}
+                    disabled={quantity <= 0}
+                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-base border-none transition-all ${
+                      quantity > 0
+                        ? "bg-white/20 hover:bg-white/35 active:scale-90 text-white cursor-pointer"
+                        : "opacity-35 cursor-not-allowed bg-transparent text-white"
+                    }`}
+                    aria-label="Decrease quantity"
+                    title="Decrease quantity"
+                  >
+                    −
+                  </button>
+                  <span className="px-3 sm:px-3.5 font-black text-sm sm:text-base text-white min-w-[28px] text-center leading-none">
+                    {quantity > 0 ? quantity : 0}
                   </span>
-                  <span>{quantity > 0 ? `In Cart (${quantity})` : "Add to Cart"}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (quantity > 0) {
+                        updateQuantity(product.id, quantity + 1);
+                      } else {
+                        addToCart(product);
+                      }
+                    }}
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 hover:bg-white/35 active:scale-90 text-white flex items-center justify-center font-bold text-base border-none cursor-pointer transition-all shrink-0"
+                    aria-label="Increase quantity"
+                    title="Increase quantity"
+                  >
+                    +
+                  </button>
+                </div>
               </div>
 
               {/* ─── Product Description Section ───────────────────────────── */}

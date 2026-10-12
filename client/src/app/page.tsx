@@ -11,10 +11,11 @@ import { faStar } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
 import RegisteredShopsSection from "@/components/home/RegisteredShopsSection";
 import { BannerSkeleton, ProductGridSkeleton, CategoryBarSkeleton } from "@/components/common/Skeletons";
+import ProductQuantityStepper from "@/components/products/ProductQuantityStepper";
 
 export default function HomePage() {
   const router = useRouter();
-  const { addToCart, totalItemsCount, subtotal, openCart, getItemQuantity } = useCart();
+  const { addToCart, updateQuantity, totalItemsCount, subtotal, openCart, getItemQuantity } = useCart();
   const { toggleWishlist, isInWishlist } = useWishlist();
   const [addedItem, setAddedItem] = useState<string | null>(null);
   const [liveProducts, setLiveProducts] = useState<Product[]>([]);
@@ -498,35 +499,27 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="p-3.5 sm:p-4 pt-0">
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.2rem]">
+                <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
                       ₹{item.price}
                     </span>
                     {origPrice > item.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
+                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
                         ₹{origPrice}
                       </span>
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleAdd(item);
-                    }}
-                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
-                      ? "bg-primary text-on-primary shadow-sm border border-transparent"
-                      : "btn-hover-fill"
-                      }`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {qty > 0 || isJustAdded ? "done" : "add_shopping_cart"}
-                    </span>
-                    <span>{qty > 0 ? `ADDED (${qty})` : "+ ADD"}</span>
-                  </button>
+                  <ProductQuantityStepper
+                    quantity={qty}
+                    isJustAdded={isJustAdded}
+                    addLabel="+ ADD"
+                    compact
+                    onAdd={() => handleAdd(item)}
+                    onIncrease={() => updateQuantity(item.id, qty + 1)}
+                    onDecrease={() => updateQuantity(item.id, qty - 1)}
+                  />
                 </div>
               </article>
             );
@@ -650,35 +643,27 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="p-4 pt-0">
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.2rem]">
+                <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
                       ₹{item.price}
                     </span>
                     {origPrice > item.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
+                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
                         ₹{origPrice}
                       </span>
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleAdd(item);
-                    }}
-                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
-                      ? "bg-primary text-on-primary shadow-sm border border-transparent"
-                      : "btn-hover-fill"
-                      }`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {qty > 0 || isJustAdded ? "done" : "add_shopping_cart"}
-                    </span>
-                    <span>{qty > 0 ? `IN CART (${qty})` : "+ ADD TO CART"}</span>
-                  </button>
+                  <ProductQuantityStepper
+                    quantity={qty}
+                    isJustAdded={isJustAdded}
+                    addLabel="+ ADD"
+                    compact
+                    onAdd={() => handleAdd(item)}
+                    onIncrease={() => updateQuantity(item.id, qty + 1)}
+                    onDecrease={() => updateQuantity(item.id, qty - 1)}
+                  />
                 </div>
               </article>
             );
@@ -798,35 +783,27 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div className="p-4 pt-0">
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[18px]">
+                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
                         ₹{product.price}
                       </span>
                       {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[13px]">
+                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
                           ₹{product.originalPrice}
                         </span>
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleAdd(product);
-                      }}
-                      className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
-                        ? "bg-primary text-on-primary shadow-sm border border-transparent"
-                        : "btn-hover-fill"
-                        }`}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">
-                        {qty > 0 || isJustAdded ? "done" : "add_shopping_cart"}
-                      </span>
-                      <span>{qty > 0 ? `IN CART (${qty})` : "+ ADD TO CART"}</span>
-                    </button>
+                    <ProductQuantityStepper
+                      quantity={qty}
+                      isJustAdded={isJustAdded}
+                      addLabel="+ ADD"
+                      compact
+                      onAdd={() => handleAdd(product)}
+                      onIncrease={() => updateQuantity(product.id, qty + 1)}
+                      onDecrease={() => updateQuantity(product.id, qty - 1)}
+                    />
                   </div>
                 </article>
               );
@@ -920,35 +897,27 @@ export default function HomePage() {
                   </div>
                 </div>
 
-                <div className="p-4 pt-0">
-                  <div className="flex items-baseline gap-2 mb-3">
-                    <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[18px]">
+                <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
                       ₹{product.price}
                     </span>
                     {product.originalPrice && product.originalPrice > product.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[13px]">
+                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
                         ₹{product.originalPrice}
                       </span>
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleAdd(product);
-                    }}
-                    className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
-                      ? "bg-primary text-on-primary shadow-sm border border-transparent"
-                      : "btn-hover-fill"
-                      }`}
-                  >
-                    <span className="material-symbols-outlined text-[18px]">
-                      {qty > 0 || isJustAdded ? "done" : "add_shopping_cart"}
-                    </span>
-                    <span>{qty > 0 ? `IN CART (${qty})` : "+ ADD TO CART"}</span>
-                  </button>
+                  <ProductQuantityStepper
+                    quantity={qty}
+                    isJustAdded={isJustAdded}
+                    addLabel="+ ADD"
+                    compact
+                    onAdd={() => handleAdd(product)}
+                    onIncrease={() => updateQuantity(product.id, qty + 1)}
+                    onDecrease={() => updateQuantity(product.id, qty - 1)}
+                  />
                 </div>
               </article>
             );
@@ -1075,9 +1044,9 @@ export default function HomePage() {
                     </div>
                   </div>
 
-                  <div className="p-4 pt-0">
-                    <div className="flex items-baseline gap-2 mb-3">
-                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[18px]">
+                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
                         ₹{product.price}
                       </span>
                       {product.originalPrice && product.originalPrice > product.price && (
@@ -1087,23 +1056,15 @@ export default function HomePage() {
                       )}
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleAdd(product);
-                      }}
-                      className={`w-full py-2.5 px-space-sm rounded-full transition-all font-label-md text-label-md flex items-center justify-center gap-1.5 font-bold cursor-pointer shadow-xs ${qty > 0 || isJustAdded
-                        ? "bg-primary text-on-primary shadow-sm border border-transparent"
-                        : "btn-hover-fill"
-                        }`}
-                    >
-                      <span className="material-symbols-outlined text-[18px]">
-                        {qty > 0 || isJustAdded ? "done" : "add_shopping_cart"}
-                      </span>
-                      <span>{qty > 0 ? `IN CART (${qty})` : "+ ADD TO CART"}</span>
-                    </button>
+                    <ProductQuantityStepper
+                      quantity={qty}
+                      isJustAdded={isJustAdded}
+                      addLabel="+ ADD"
+                      compact
+                      onAdd={() => handleAdd(product)}
+                      onIncrease={() => updateQuantity(product.id, qty + 1)}
+                      onDecrease={() => updateQuantity(product.id, qty - 1)}
+                    />
                   </div>
                 </article>
               );
