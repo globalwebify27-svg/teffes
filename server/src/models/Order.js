@@ -90,6 +90,10 @@ const orderSchema = new mongoose.Schema(
       type: String,
       default: '90 Mins Express Delivery',
     },
+    expressFee: {
+      type: Number,
+      default: 0,
+    },
     fulfillmentType: {
       type: String,
       enum: ['delivery', 'pickup'],

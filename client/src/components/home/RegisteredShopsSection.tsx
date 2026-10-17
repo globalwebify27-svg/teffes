@@ -119,7 +119,7 @@ export default function RegisteredShopsSection({
   const isSingleShop = stores.length === 1;
 
   return (
-    <section id={id} className={`w-full max-w-container-max mx-auto px-gutter-desktop my-space-2xl ${className}`}>
+    <section id={id} className={`w-full max-w-container-max mx-auto px-gutter-desktop mt-14 sm:mt-18 mb-4 sm:mb-6 pt-2 ${className}`}>
       {/* ─── Header & Controls ──────────────────────────────────────────────── */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 mb-6">
         <div>
@@ -143,11 +143,10 @@ export default function RegisteredShopsSection({
               onClick={() => handleScroll("left")}
               disabled={!canScrollLeft}
               aria-label="Scroll left"
-              className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
-                canScrollLeft
+              className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${canScrollLeft
                   ? "bg-white text-on-surface border-gray-300 hover:bg-gray-50 hover:border-primary shadow-xs"
                   : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50"
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-[20px]">chevron_left</span>
             </button>
@@ -156,11 +155,10 @@ export default function RegisteredShopsSection({
               onClick={() => handleScroll("right")}
               disabled={!canScrollRight}
               aria-label="Scroll right"
-              className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${
-                canScrollRight
+              className={`w-10 h-10 rounded-full flex items-center justify-center border transition-all ${canScrollRight
                   ? "bg-white text-on-surface border-gray-300 hover:bg-gray-50 hover:border-primary shadow-xs"
                   : "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed opacity-50"
-              }`}
+                }`}
             >
               <span className="material-symbols-outlined text-[20px]">chevron_right</span>
             </button>
@@ -222,7 +220,7 @@ export default function RegisteredShopsSection({
             />
 
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-            
+
             {/* Top Status Badge */}
             <div className="absolute top-4 left-4 flex flex-wrap gap-2">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600/90 text-white font-bold text-[11px] backdrop-blur-xs shadow-sm">
@@ -340,13 +338,12 @@ export default function RegisteredShopsSection({
                   {/* Top Status Tags */}
                   <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
                     <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10.5px] backdrop-blur-xs text-white shadow-xs ${
-                        isOpen
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10.5px] backdrop-blur-xs text-white shadow-xs ${isOpen
                           ? "bg-emerald-600/90"
                           : isPlanned
-                          ? "bg-amber-600/90"
-                          : "bg-gray-700/90"
-                      }`}
+                            ? "bg-amber-600/90"
+                            : "bg-gray-700/90"
+                        }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                       {isOpen ? "Open Now" : isPlanned ? "Planned Opening Soon" : "Closed Today"}

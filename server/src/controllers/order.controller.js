@@ -116,9 +116,14 @@ const createOrder = async (req, res, next) => {
       };
     }
 
+    const isExpressSlot = !isPickup && Boolean(
+      (deliverySlot && deliverySlot.toLowerCase().includes('60 min')) ||
+      (deliverySlot && deliverySlot.toLowerCase().includes('express (60'))
+    );
+    const expressFee = isExpressSlot ? 50 : (Number(req.body.expressFee) || 0);
     const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
     const tipAmount = Number(req.body.tip) || 0;
-    const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + tipAmount - verifiedDiscount);
+    const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + expressFee + tipAmount - verifiedDiscount);
     const finalAmount = amount !== undefined ? amount : (totalAmount !== undefined ? totalAmount : computedFinalAmount);
 
     let orderAddress = isPickup
@@ -160,6 +165,7 @@ const createOrder = async (req, res, next) => {
       storeId: storeId || 'S001',
       storeName: storeName || 'Central Store',
       deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
+      expressFee: expressFee,
       fulfillmentType: resolvedFulfillmentType,
       pickupMode: isPickup,
       prepTimeMinutes: prepMinutes,

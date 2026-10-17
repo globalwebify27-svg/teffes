@@ -22,6 +22,9 @@ export interface Product {
   cutType?: string;
   cookingTime?: string;
   benefits?: string[];
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string[];
 }
 
 export interface Category {

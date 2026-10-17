@@ -260,6 +260,18 @@ const createProduct = async (req, res, next) => {
       data.netWeight = '500g';
     }
 
+    if (typeof data.seoTitle === 'string') {
+      data.seoTitle = data.seoTitle.trim();
+    }
+    if (typeof data.seoDescription === 'string') {
+      data.seoDescription = data.seoDescription.trim();
+    }
+    if (typeof data.seoKeywords === 'string') {
+      data.seoKeywords = data.seoKeywords.split(',').map(k => k.trim()).filter(Boolean);
+    } else if (Array.isArray(data.seoKeywords)) {
+      data.seoKeywords = data.seoKeywords.map(k => String(k).trim()).filter(Boolean);
+    }
+
     const product = await Product.create(data);
     res.status(201).json({ success: true, product });
   } catch (error) {
@@ -301,6 +313,18 @@ const updateProduct = async (req, res, next) => {
     }
     if (typeof updates.originalPrice !== 'undefined' && updates.originalPrice !== '') {
       updates.originalPrice = Number(updates.originalPrice);
+    }
+
+    if (typeof updates.seoTitle === 'string') {
+      updates.seoTitle = updates.seoTitle.trim();
+    }
+    if (typeof updates.seoDescription === 'string') {
+      updates.seoDescription = updates.seoDescription.trim();
+    }
+    if (typeof updates.seoKeywords === 'string') {
+      updates.seoKeywords = updates.seoKeywords.split(',').map(k => k.trim()).filter(Boolean);
+    } else if (Array.isArray(updates.seoKeywords)) {
+      updates.seoKeywords = updates.seoKeywords.map(k => String(k).trim()).filter(Boolean);
     }
 
     const product = await Product.findOneAndUpdate(

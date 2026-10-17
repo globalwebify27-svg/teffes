@@ -54,4 +54,18 @@ router.patch('/returns/:id/status', updateReturnStatus);
 // 7. Riders
 router.get('/riders', getRiders);
 
+// 8. Cross-Selling Items Management
+const {
+  getAdminCrossSellItems,
+  createCrossSellItem,
+  updateCrossSellItem,
+  deleteCrossSellItem,
+} = require('../controllers/crossSell.controller');
+
+router.get('/cross-sell', getAdminCrossSellItems);
+router.post('/cross-sell', createCrossSellItem);
+router.put('/cross-sell/:id', updateCrossSellItem);
+router.patch('/cross-sell/:id', updateCrossSellItem);
+router.delete('/cross-sell/:id', deleteCrossSellItem);
+
 module.exports = router;

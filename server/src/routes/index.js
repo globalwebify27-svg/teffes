@@ -33,6 +33,15 @@ router.use('/notifications', require('./notification.routes'));
 router.use('/location', require('./location.routes'));
 router.use('/upload', require('./upload.routes'));
 
+// Public SEO and metadata endpoint
+const { getPublicSeoSettings } = require('../controllers/seo.controller');
+router.get('/seo', getPublicSeoSettings);
+router.get('/settings/seo', getPublicSeoSettings);
+
+// Public Cart Cross-Selling endpoint
+const { getPublicCrossSellItems } = require('../controllers/crossSell.controller');
+router.get('/cross-sell', getPublicCrossSellItems);
+
 const { matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
 
 // Distance calculation between customer and store coordinates (in km)

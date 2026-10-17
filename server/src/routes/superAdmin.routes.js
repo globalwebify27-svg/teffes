@@ -63,8 +63,15 @@ router.put('/coupons/:id/super-offer', setSuperOffer);
 // 7. Orders
 router.get('/orders', getAllOrders);
 
-// 8. Settings
+// 8. Settings & Homepage SEO
+const {
+  getSuperAdminSeoSettings,
+  updateSuperAdminSeoSettings,
+} = require('../controllers/seo.controller');
+
 router.get('/settings', getSettings);
+router.get('/seo', getSuperAdminSeoSettings);
+router.put('/seo', updateSuperAdminSeoSettings);
 
 // 9. Hero Banners
 const {

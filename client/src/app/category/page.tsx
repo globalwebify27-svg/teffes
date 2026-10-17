@@ -307,18 +307,16 @@ function CategoryContent() {
                     </div>
 
                     {/* Meta */}
+                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                      <span>Net: {item.netWeight}</span>
+                      <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.cutType || "Standard Cut"}</span>
+                    </div>
                     <h3 className="font-headline-sm font-bold text-[14px] text-gray-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
                       {item.name}
                     </h3>
-                    <div className="font-body-sm text-slate-body text-[11.5px] mt-0.5 flex items-center gap-1.5">
-                      <span>{item.netWeight}</span>
-                      {item.cutType && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate">{item.cutType}</span>
-                        </>
-                      )}
-                    </div>
+                    <p className="font-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">
+                      {item.description || (item.cutType ? `Artisanal ${item.cutType}` : "Fresh cut to order")}
+                    </p>
                   </div>
 
                   {/* Pricing & Add to Cart */}

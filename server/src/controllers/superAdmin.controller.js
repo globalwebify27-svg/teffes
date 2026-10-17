@@ -17,12 +17,14 @@ const getPlatformDashboard = async (req, res, next) => {
       activeStoresCount,
       activeRidersCount,
       totalCustomersCount,
+      totalProductsCount,
     ] = await Promise.all([
       Order.countDocuments(),
       Order.find().sort({ createdAt: -1 }).limit(10),
       Store.countDocuments({ status: 'Active' }),
       User.countDocuments({ role: 'rider', isActive: true }),
       User.countDocuments({ role: 'customer' }),
+      Product.countDocuments(),
     ]);
 
     const deliveredOrders = await Order.find({ status: 'Delivered' });
@@ -35,6 +37,7 @@ const getPlatformDashboard = async (req, res, next) => {
         value: `${totalOrdersToday}`,
         sub: '↑ 18% vs yesterday',
         color: '#941717',
+        tab: 'orders',
       },
       {
         icon: 'payments',
@@ -42,6 +45,7 @@ const getPlatformDashboard = async (req, res, next) => {
         value: `₹${todayRevenue.toLocaleString('en-IN')}`,
         sub: `Across ${activeStoresCount} active stores`,
         color: '#c28114',
+        tab: 'orders',
       },
       {
         icon: 'storefront',
@@ -49,6 +53,7 @@ const getPlatformDashboard = async (req, res, next) => {
         value: `${activeStoresCount}`,
         sub: 'Ranchi Kishore Ganj, Doranda',
         color: '#059669',
+        tab: 'stores',
       },
       {
         icon: 'two_wheeler',
@@ -56,6 +61,7 @@ const getPlatformDashboard = async (req, res, next) => {
         value: `${activeRidersCount || 8}`,
         sub: '4 out for delivery',
         color: '#7c3aed',
+        tab: 'riders',
       },
       {
         icon: 'group',
@@ -63,13 +69,15 @@ const getPlatformDashboard = async (req, res, next) => {
         value: `${totalCustomersCount || 2841}`,
         sub: '↑ 34 new today',
         color: '#0284c7',
+        tab: 'customers',
       },
       {
-        icon: 'star',
-        label: 'Avg Rating',
-        value: '4.8 / 5',
-        sub: 'Based on 1,240 reviews',
+        icon: 'restaurant',
+        label: 'Total Products',
+        value: `${totalProductsCount || 24}`,
+        sub: 'Master meat & seafood catalog',
         color: '#d97706',
+        tab: 'products',
       },
     ];
 

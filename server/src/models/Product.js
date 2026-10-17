@@ -110,6 +110,20 @@ const productSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
+    seoTitle: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    seoDescription: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    seoKeywords: {
+      type: [String],
+      default: [],
+    },
   },
   {
     timestamps: true,

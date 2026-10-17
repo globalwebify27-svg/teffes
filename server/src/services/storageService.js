@@ -68,7 +68,7 @@ const uploadFile = async (fileBuffer, originalName, mimeType, folder = 'general'
   const localFilePath = path.join(uploadsDir, localFileName);
   fs.writeFileSync(localFilePath, fileBuffer);
 
-  const baseUrl = process.env.SERVER_URL || 'http://localhost:5000';
+  const baseUrl = process.env.SERVER_URL || process.env.RENDER_EXTERNAL_URL || 'http://localhost:5000';
   const localUrl = `${baseUrl}/uploads/${localFileName}`;
   console.log(`[StorageService] Saved locally: ${localUrl}`);
 

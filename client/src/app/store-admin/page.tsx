@@ -19,6 +19,7 @@ const TABS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard", sub: "Live overview of today's orders, revenue, and inventory" },
   { key: "orders", label: "Live Orders", icon: "local_shipping", sub: "Manage today's orders from cutting to customer delivery" },
   { key: "products", label: "Products & Stock", icon: "restaurant", sub: "Toggle live availability of fresh cuts for your store" },
+  { key: "cross_sell", label: "Cross-Selling", icon: "shopping_basket", sub: "Manage addon products shown to customers in cart" },
   { key: "inventory", label: "Inventory", icon: "inventory_2", sub: "Track fresh stock levels and morning fresh batches" },
   { key: "customers", label: "Customers", icon: "group", sub: "Directory of customers who ordered from your store" },
   { key: "riders", label: "Riders & Dispatch", icon: "two_wheeler", sub: "Assign ready orders to available delivery partners" },
@@ -26,30 +27,215 @@ const TABS = [
 ];
 
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
-const KPICard = ({ icon, label, value, sub, color = "#941717", onClick }: {
-  icon: string; label: string; value: string; sub: string; color?: string; onClick?: () => void;
-}) => (
-  <div
-    onClick={onClick}
-    style={{
-      background: "#ffffff",
-      border: "1px solid #ede8e0",
-      borderRadius: "14px",
-      padding: "16px 18px",
-      boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-      cursor: onClick ? "pointer" : "default",
-      transition: "box-shadow 150ms ease",
-      borderLeft: `4px solid ${color}`,
-    }}
-  >
-    <div style={{ marginBottom: "6px" }}>
-      <span className="material-symbols-outlined text-[22px]" style={{ color }}>{icon}</span>
+const KPICard = ({
+  icon,
+  label,
+  value,
+  sub,
+  color = "#941717",
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  sub: string;
+  color?: string;
+  onClick?: () => void;
+}) => {
+  const [hovered, setHovered] = useState(false);
+  const [active, setActive] = useState(false);
+
+  // Helper to extract clean trend (e.g., "↑ 18%")
+  const trendMatch = sub.match(/^[↑↓]\s*[\d.]+%?/);
+  const trend = trendMatch ? trendMatch[0] : null;
+  const cleanSub = trend ? sub.replace(trend, "").trim() : sub;
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setActive(false);
+      }}
+      onMouseDown={() => setActive(true)}
+      onMouseUp={() => setActive(false)}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{
+        position: "relative",
+        background: "linear-gradient(145deg, #ffffff 0%, #fcfaf7 100%)",
+        borderRadius: "16px",
+        padding: "14px 16px",
+        cursor: onClick ? "pointer" : "default",
+        userSelect: "none",
+        outline: "none",
+        transform: active
+          ? "translateY(2px) scale(0.985)"
+          : hovered
+            ? "translateY(-4px) scale(1.015)"
+            : "translateY(0) scale(1)",
+        boxShadow: hovered
+          ? `0 16px 28px -6px ${color}24, 0 8px 14px -4px rgba(0,0,0,0.05), inset 2px 2px 4px rgba(255,255,255,0.95), inset -2px -2px 6px rgba(0,0,0,0.03)`
+          : `0 8px 18px -6px rgba(0,0,0,0.05), 0 3px 8px -2px rgba(0,0,0,0.03), inset 2px 2px 4px rgba(255,255,255,0.95), inset -2px -2px 6px rgba(0,0,0,0.03)`,
+        border: `1.5px solid ${hovered ? color + "45" : "#ede8e0"}`,
+        transition: "all 240ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        minHeight: "112px",
+      }}
+    >
+      {/* Top decorative accent pill */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "3px",
+          background: `linear-gradient(90deg, ${color} 0%, ${color}60 100%)`,
+          opacity: hovered ? 1 : 0.75,
+          transition: "opacity 200ms ease",
+        }}
+      />
+
+      {/* Decorative Faint Watermark Icon in background right corner */}
+      <div
+        style={{
+          position: "absolute",
+          right: "-6px",
+          bottom: "-10px",
+          color,
+          opacity: hovered ? 0.08 : 0.035,
+          pointerEvents: "none",
+          userSelect: "none",
+          transform: hovered ? "scale(1.1) rotate(-5deg)" : "scale(1) rotate(0deg)",
+          transition: "all 300ms ease",
+        }}
+      >
+        <span className="material-symbols-outlined text-[72px]">{icon}</span>
+      </div>
+
+      {/* Header Row: Left Icon Pod + Right Big Metric Value */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "10px",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        {/* Left: Clay Icon Pod */}
+        <div
+          style={{
+            width: "38px",
+            height: "38px",
+            borderRadius: "11px",
+            background: `linear-gradient(135deg, ${color}18 0%, ${color}08 100%)`,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: `inset 2px 2px 4px rgba(255,255,255,0.8), inset -2px -2px 4px ${color}20`,
+            border: `1px solid ${color}30`,
+            transform: hovered ? "scale(1.08) rotate(3deg)" : "scale(1) rotate(0deg)",
+            transition: "transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          }}
+        >
+          <span
+            className="material-symbols-outlined text-[20px]"
+            style={{ color, display: "block", lineHeight: 1 }}
+          >
+            {icon}
+          </span>
+        </div>
+
+        {/* Right: Big Metric Value */}
+        <div
+          style={{
+            textAlign: "right",
+            fontSize: "1.45rem",
+            fontWeight: 800,
+            color,
+            fontFamily: "Outfit, sans-serif",
+            lineHeight: 1,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+
+      {/* Bottom Content: Metric Label + Trend & Subtext */}
+      <div style={{ position: "relative", zIndex: 1, marginTop: "auto" }}>
+        <div
+          style={{
+            fontSize: "0.82rem",
+            fontWeight: 700,
+            color: "#2b251e",
+            letterSpacing: "-0.01em",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          title={label}
+        >
+          {label}
+        </div>
+
+        {/* Subtext info with optional trend chip */}
+        <div
+          style={{
+            fontSize: "0.7rem",
+            color: "#73695b",
+            marginTop: "3px",
+            fontWeight: 500,
+            lineHeight: 1.3,
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "nowrap",
+            gap: "4px",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          title={sub}
+        >
+          {trend && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "1px 5px",
+                borderRadius: "5px",
+                fontSize: "0.66rem",
+                fontWeight: 700,
+                background: trend.startsWith("↑") ? "#ecfdf5" : "#fef2f2",
+                color: trend.startsWith("↑") ? "#059669" : "#dc2626",
+                border: `1px solid ${trend.startsWith("↑") ? "#a7f3d0" : "#fecaca"}`,
+                flexShrink: 0,
+              }}
+            >
+              {trend}
+            </span>
+          )}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {cleanSub}
+          </span>
+        </div>
+      </div>
     </div>
-    <div style={{ fontSize: "1.35rem", fontWeight: 800, color, fontFamily: "Outfit, sans-serif", lineHeight: 1.1 }}>{value}</div>
-    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginTop: "4px" }}>{label}</div>
-    <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "2px" }}>{sub}</div>
-  </div>
-);
+  );
+};
 
 const SectionTitle = ({ title, sub }: { title: string; sub?: string }) => (
   <div style={{ margin: "20px 0 12px 0" }}>
@@ -140,10 +326,36 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
 
   const displayKpis = kpis.length > 0 ? kpis : defaultKpis;
 
+  const labelToTab: Record<string, string> = {
+    "Pending Orders": "orders",
+    "Delivered Today": "orders",
+    "Today's Revenue": "orders",
+    "Chicken Stock": "inventory",
+    "Mutton Stock": "inventory",
+    "Active Riders": "riders",
+  };
+
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "16px", marginBottom: "36px" }}>
-        {displayKpis.map(k => <KPICard key={k.label} {...k} onClick={() => setActiveTab(k.tab)} />)}
+      {/* Responsive Grid: 6 cards in 1 row on wide screens, 3-3 on laptops, 2-2-2 on tablets */}
+      <div
+        className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
+        style={{
+          gap: "14px",
+          marginBottom: "32px",
+        }}
+      >
+        {displayKpis.map(k => {
+          // Explicitly map Active Riders to 'riders' tab even if remote backend sends 'slots'
+          const targetTab = labelToTab[k.label] || (k.tab === "slots" ? "riders" : k.tab);
+          return (
+            <KPICard
+              key={k.label}
+              {...k}
+              onClick={targetTab ? () => setActiveTab(targetTab) : undefined}
+            />
+          );
+        })}
       </div>
 
       {/* Live order summary mini-list */}
@@ -610,6 +822,654 @@ function ProductsStockTab() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CrossSellTab() {
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: "",
+    price: "",
+    originalPrice: "",
+    weight: "",
+    image: "",
+    inStock: true,
+    isActive: true,
+  });
+
+  const fetchItems = () => {
+    setLoading(true);
+    api.get<{ success: boolean; data: any[] }>("/store-admin/cross-sell")
+      .then((res) => {
+        if (res.data.success) {
+          setItems(res.data.data || []);
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to fetch cross-sell items:", err);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchItems();
+  }, []);
+
+  const openAddModal = () => {
+    setEditingItem(null);
+    setFormData({
+      name: "",
+      price: "",
+      originalPrice: "",
+      weight: "1 unit",
+      image: "",
+      inStock: true,
+      isActive: true,
+    });
+    setIsModalOpen(true);
+  };
+
+  const openEditModal = (item: any) => {
+    setEditingItem(item);
+    setFormData({
+      name: item.name || "",
+      price: item.price !== undefined ? String(item.price) : "",
+      originalPrice: item.originalPrice !== undefined ? String(item.originalPrice) : "",
+      weight: item.weight || "1 unit",
+      image: item.image || "",
+      inStock: item.inStock !== false,
+      isActive: item.isActive !== false,
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name.trim()) {
+      toast.warning("Please enter the item name.", "Validation Error");
+      return;
+    }
+    if (!formData.price || isNaN(Number(formData.price)) || Number(formData.price) < 0) {
+      toast.warning("Please enter a valid price.", "Validation Error");
+      return;
+    }
+    if (!formData.image.trim()) {
+      toast.warning("Please provide a product image URL.", "Validation Error");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      if (editingItem) {
+        await api.put(`/store-admin/cross-sell/${editingItem.id || editingItem._id}`, {
+          name: formData.name.trim(),
+          price: Number(formData.price),
+          originalPrice: Number(formData.originalPrice) || 0,
+          weight: formData.weight.trim(),
+          image: formData.image.trim(),
+          inStock: formData.inStock,
+          isActive: formData.isActive,
+        });
+        toast.success("Cross-sell item updated successfully!", "Updated");
+      } else {
+        await api.post("/store-admin/cross-sell", {
+          name: formData.name.trim(),
+          price: Number(formData.price),
+          originalPrice: Number(formData.originalPrice) || 0,
+          weight: formData.weight.trim(),
+          image: formData.image.trim(),
+          inStock: formData.inStock,
+          isActive: formData.isActive,
+        });
+        toast.success("New cross-sell item added successfully!", "Created");
+      }
+      setIsModalOpen(false);
+      fetchItems();
+    } catch (err: any) {
+      console.error("Save cross-sell item error:", err);
+      toast.error(err.response?.data?.message || "Failed to save item.", "Error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete "${name}" from cart cross-selling?`)) return;
+    try {
+      await api.delete(`/store-admin/cross-sell/${id}`);
+      toast.success(`"${name}" deleted successfully.`, "Deleted");
+      fetchItems();
+    } catch (err: any) {
+      console.error("Delete cross-sell item error:", err);
+      toast.error(err.response?.data?.message || "Failed to delete item.", "Error");
+    }
+  };
+
+  const toggleStock = async (item: any) => {
+    try {
+      await api.put(`/store-admin/cross-sell/${item.id || item._id}`, {
+        inStock: !item.inStock,
+      });
+      toast.success(item.inStock ? "Marked Out of Stock" : "Marked In Stock", "Stock Status");
+      fetchItems();
+    } catch (err) {
+      toast.error("Failed to update stock status.", "Error");
+    }
+  };
+
+  const toggleActive = async (item: any) => {
+    try {
+      await api.put(`/store-admin/cross-sell/${item.id || item._id}`, {
+        isActive: !item.isActive,
+      });
+      toast.success(item.isActive ? "Hidden from cart" : "Visible in cart", "Cart Visibility");
+      fetchItems();
+    } catch (err) {
+      toast.error("Failed to toggle visibility.", "Error");
+    }
+  };
+
+  return (
+    <div>
+      {/* Header with stats and Add Button */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap", gap: "12px" }}>
+        <div>
+          <h2 style={{ fontSize: "1.15rem", fontWeight: 800, color: "#171410", margin: 0 }}>
+            Cart Cross-Selling Products
+          </h2>
+          <p style={{ color: "#73695b", fontSize: "0.82rem", marginTop: "3px" }}>
+            Manage recipe essentials and add-ons displayed directly above the tip and instruction box in customer carts.
+          </p>
+        </div>
+
+        <button
+          onClick={openAddModal}
+          style={{
+            background: "#941717",
+            color: "#fff",
+            border: "none",
+            borderRadius: "10px",
+            padding: "9px 18px",
+            fontSize: "0.84rem",
+            fontWeight: 700,
+            cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            boxShadow: "0 2px 8px rgba(148, 23, 23, 0.25)",
+          }}
+        >
+          <span className="material-symbols-outlined text-[18px]">add_circle</span>
+          <span>Add Cross-Sell Item</span>
+        </button>
+      </div>
+
+      {loading ? (
+        <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading cross-selling items…</div>
+      ) : items.length === 0 ? (
+        <div style={{
+          background: "#fff",
+          border: "1px dashed #d6cec5",
+          borderRadius: "16px",
+          padding: "48px 24px",
+          textAlign: "center",
+        }}>
+          <span className="material-symbols-outlined text-[48px] text-gray-300">shopping_basket</span>
+          <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "#171410", marginTop: "12px" }}>No Cross-Selling Items Found</h3>
+          <p style={{ fontSize: "0.82rem", color: "#73695b", maxWidth: "380px", margin: "6px auto 16px" }}>
+            Add cooking essentials like Onions, Ginger Garlic Paste, or Chicken Masala to boost customer basket size.
+          </p>
+          <button
+            onClick={openAddModal}
+            style={{
+              background: "#941717",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "8px 16px",
+              fontSize: "0.82rem",
+              fontWeight: 700,
+              cursor: "pointer",
+            }}
+          >
+            + Add First Item
+          </button>
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "16px" }}>
+          {items.map((item) => (
+            <div
+              key={item.id || item._id}
+              style={{
+                background: "#fff",
+                border: "1px solid #ede8e0",
+                borderRadius: "16px",
+                padding: "16px",
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.03)",
+                position: "relative",
+              }}
+            >
+              <div>
+                <div style={{ display: "flex", gap: "12px", alignItems: "flex-start", marginBottom: "12px" }}>
+                  <div style={{
+                    width: "74px",
+                    height: "74px",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    background: "#f4f1ec",
+                    border: "1px solid #e5ded4",
+                    flexShrink: 0,
+                  }}>
+                    <img
+                      src={item.image}
+                      alt={item.name}
+                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      onError={(e) => {
+                        (e.target as any).src = "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400";
+                      }}
+                    />
+                  </div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginBottom: "4px" }}>
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: 800,
+                        padding: "2px 7px",
+                        borderRadius: "99px",
+                        background: item.inStock ? "#ecfdf5" : "#fef2f2",
+                        color: item.inStock ? "#059669" : "#dc2626",
+                        border: `1px solid ${item.inStock ? "#a7f3d0" : "#fecaca"}`,
+                      }}>
+                        {item.inStock ? "In Stock" : "Out of Stock"}
+                      </span>
+                      <span style={{
+                        fontSize: "0.68rem",
+                        fontWeight: 700,
+                        padding: "2px 7px",
+                        borderRadius: "99px",
+                        background: item.isActive ? "#f0f9ff" : "#f3f4f6",
+                        color: item.isActive ? "#0284c7" : "#6b7280",
+                        border: `1px solid ${item.isActive ? "#bae6fd" : "#e5e7eb"}`,
+                      }}>
+                        {item.isActive ? "Active in Cart" : "Hidden"}
+                      </span>
+                    </div>
+
+                    <h4 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#171410", margin: "0 0 3px 0", lineHeight: 1.3 }}>
+                      {item.name}
+                    </h4>
+                    <div style={{ fontSize: "0.78rem", color: "#73695b", fontWeight: 500 }}>
+                      Unit / Weight: <strong style={{ color: "#2b251e" }}>{item.weight || "1 unit"}</strong>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Price Display */}
+                <div style={{
+                  background: "#faf8f5",
+                  borderRadius: "10px",
+                  padding: "8px 12px",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  marginBottom: "14px",
+                }}>
+                  <span style={{ fontSize: "0.78rem", color: "#73695b", fontWeight: 600 }}>Selling Price:</span>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: "6px" }}>
+                    <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "#941717" }}>₹{item.price}</span>
+                    {item.originalPrice && item.originalPrice > item.price && (
+                      <span style={{ fontSize: "0.78rem", color: "#9ca3af", textDecoration: "line-through" }}>
+                        ₹{item.originalPrice}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Action buttons */}
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", borderTop: "1px solid #f0ebe4", paddingTop: "12px" }}>
+                <button
+                  onClick={() => openEditModal(item)}
+                  style={{
+                    flex: 1,
+                    background: "#f4f1ec",
+                    color: "#2b251e",
+                    border: "1px solid #e0d8ce",
+                    borderRadius: "8px",
+                    padding: "7px 10px",
+                    fontSize: "0.78rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "4px",
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[15px]">edit</span>
+                  <span>Edit</span>
+                </button>
+
+                <button
+                  onClick={() => toggleStock(item)}
+                  style={{
+                    background: item.inStock ? "#fff" : "#ecfdf5",
+                    color: item.inStock ? "#73695b" : "#059669",
+                    border: "1px solid #dcd5cb",
+                    borderRadius: "8px",
+                    padding: "7px 10px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                  title="Toggle stock availability"
+                >
+                  {item.inStock ? "Disable" : "Enable"}
+                </button>
+
+                <button
+                  onClick={() => toggleActive(item)}
+                  style={{
+                    background: item.isActive ? "#fff" : "#eff6ff",
+                    color: item.isActive ? "#73695b" : "#0284c7",
+                    border: "1px solid #dcd5cb",
+                    borderRadius: "8px",
+                    padding: "7px 10px",
+                    fontSize: "0.75rem",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                  title="Toggle visibility in customer cart"
+                >
+                  {item.isActive ? "Hide" : "Show"}
+                </button>
+
+                <button
+                  onClick={() => handleDelete(item.id || item._id, item.name)}
+                  style={{
+                    background: "#fff",
+                    color: "#dc2626",
+                    border: "1px solid #fecaca",
+                    borderRadius: "8px",
+                    padding: "7px 9px",
+                    fontSize: "0.78rem",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  title="Delete cross-sell item"
+                >
+                  <span className="material-symbols-outlined text-[16px]">delete</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add / Edit Modal */}
+      {isModalOpen && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(10, 22, 40, 0.65)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: "16px",
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "18px",
+            width: "100%",
+            maxWidth: "480px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            overflow: "hidden",
+            animation: "fadeIn 180ms ease-out",
+          }}>
+            <div style={{
+              padding: "18px 20px",
+              borderBottom: "1px solid #ede8e0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "#faf8f5",
+            }}>
+              <div>
+                <h3 style={{ fontSize: "1.05rem", fontWeight: 800, color: "#171410", margin: 0 }}>
+                  {editingItem ? "Edit Cross-Sell Product" : "Add New Cross-Sell Product"}
+                </h3>
+                <p style={{ fontSize: "0.75rem", color: "#73695b", margin: "2px 0 0 0" }}>
+                  Customers can quickly add this item above the tip box.
+                </p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#73695b",
+                  padding: "4px",
+                  display: "flex",
+                }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <form onSubmit={handleSave} style={{ padding: "20px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+                {/* Item Name */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#2b251e", marginBottom: "4px" }}>
+                    Product Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1 kg Onion, Ginger Garlic Paste, Chicken Masala"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "10px",
+                      border: "1px solid #d6cec5",
+                      fontSize: "0.85rem",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+
+                {/* Weight / Unit */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#2b251e", marginBottom: "4px" }}>
+                    Weight / Quantity Unit *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1 kg, 200g, 100g, 1 pack"
+                    value={formData.weight}
+                    onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "10px",
+                      border: "1px solid #d6cec5",
+                      fontSize: "0.85rem",
+                      outline: "none",
+                    }}
+                  />
+                </div>
+
+                {/* Prices: Selling Price & MRP */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#2b251e", marginBottom: "4px" }}>
+                      Selling Price (₹) *
+                    </label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 40"
+                      value={formData.price}
+                      onChange={(e) => setFormData({ ...formData, price: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "9px 12px",
+                        borderRadius: "10px",
+                        border: "1px solid #d6cec5",
+                        fontSize: "0.85rem",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#2b251e", marginBottom: "4px" }}>
+                      Original MRP (₹) (Optional)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="1"
+                      placeholder="e.g. 50"
+                      value={formData.originalPrice}
+                      onChange={(e) => setFormData({ ...formData, originalPrice: e.target.value })}
+                      style={{
+                        width: "100%",
+                        padding: "9px 12px",
+                        borderRadius: "10px",
+                        border: "1px solid #d6cec5",
+                        fontSize: "0.85rem",
+                        outline: "none",
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Image URL */}
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#2b251e", marginBottom: "4px" }}>
+                    Image URL *
+                  </label>
+                  <input
+                    type="url"
+                    required
+                    placeholder="https://..."
+                    value={formData.image}
+                    onChange={(e) => setFormData({ ...formData, image: e.target.value })}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "10px",
+                      border: "1px solid #d6cec5",
+                      fontSize: "0.85rem",
+                      outline: "none",
+                    }}
+                  />
+                  {formData.image && (
+                    <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "0.72rem", color: "#73695b" }}>Preview:</span>
+                      <img
+                        src={formData.image}
+                        alt="Preview"
+                        style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover", border: "1px solid #ddd" }}
+                        onError={(e) => { (e.target as any).style.display = "none"; }}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Toggles */}
+                <div style={{ display: "flex", gap: "20px", marginTop: "4px" }}>
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", fontWeight: 600, color: "#2b251e", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.inStock}
+                      onChange={(e) => setFormData({ ...formData, inStock: e.target.checked })}
+                      style={{ width: "16px", height: "16px", accentColor: "#941717" }}
+                    />
+                    <span>Available In Stock</span>
+                  </label>
+
+                  <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.82rem", fontWeight: 600, color: "#2b251e", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={formData.isActive}
+                      onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })}
+                      style={{ width: "16px", height: "16px", accentColor: "#941717" }}
+                    />
+                    <span>Visible in Cart</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* Modal footer */}
+              <div style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  style={{
+                    background: "#f4f1ec",
+                    border: "1px solid #d6cec5",
+                    color: "#73695b",
+                    borderRadius: "9px",
+                    padding: "9px 16px",
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  disabled={saving}
+                  style={{
+                    background: "#941717",
+                    border: "none",
+                    color: "#fff",
+                    borderRadius: "9px",
+                    padding: "9px 20px",
+                    fontSize: "0.82rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "6px",
+                  }}
+                >
+                  {saving ? (
+                    <span>Saving…</span>
+                  ) : (
+                    <span>{editingItem ? "Update Item" : "Create Item"}</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
@@ -1212,11 +2072,22 @@ function RidersTab() {
   return (
     <div>
       {/* ─── RIDERS POOL ─── */}
-      <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", marginBottom: "12px", marginTop: "24px" }}>Active Rider Pool</h3>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", marginTop: "12px" }}>
+        <div>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>Active Rider Pool</h3>
+          <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>Delivery partners active in your hub delivery area</p>
+        </div>
+        {riders.length > 0 && (
+          <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "99px", padding: "4px 12px", fontSize: "0.75rem", color: "#059669", fontWeight: 700 }}>
+            {availableRiders.length} Available for Dispatch
+          </div>
+        )}
+      </div>
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px", marginBottom: "32px" }}>
         {riders.length === 0 && !loading && (
-          <div style={{ padding: "16px", background: "#fff", border: "1px solid #ede8e0", borderRadius: "12px", color: "#73695b", fontSize: "0.85rem" }}>
-            No riders assigned to this store.
+          <div style={{ padding: "24px", background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", color: "#73695b", fontSize: "0.85rem", textAlign: "center", gridColumn: "1 / -1" }}>
+            No riders registered or assigned to this store hub yet.
           </div>
         )}
         {riders.map(r => (
@@ -1466,6 +2337,19 @@ export default function StoreAdminPage() {
   const [isMuted, setIsMuted] = useState(false);
   const acknowledgedIdsRef = React.useRef<Set<string>>(new Set());
 
+  // Load persistently acknowledged orders from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("teffes_acked_order_ids");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          acknowledgedIdsRef.current = new Set(parsed);
+        }
+      }
+    } catch { }
+  }, []);
+
   // Auto-collapse sidebar on tablet/mobile
   useEffect(() => {
     const checkWidth = () => {
@@ -1592,13 +2476,40 @@ export default function StoreAdminPage() {
     }
   };
 
-  const acknowledgeAllIncoming = () => {
-    incomingOrders.forEach((o) => {
+  const acknowledgeAllIncoming = async () => {
+    const ordersToAck = [...incomingOrders];
+
+    // 1. Immediately silence alarm and clear banner UI
+    ordersToAck.forEach((o) => {
       if (o.orderId) acknowledgedIdsRef.current.add(o.orderId);
     });
     setIncomingOrders([]);
     orderAlarm.stopAlarm();
-    toast.success("All incoming orders acknowledged", "Alarm Silenced");
+
+    // 2. Persist acknowledged IDs to localStorage (up to last 100 orders)
+    try {
+      const idsArray = Array.from(acknowledgedIdsRef.current).slice(-100);
+      localStorage.setItem("teffes_acked_order_ids", JSON.stringify(idsArray));
+    } catch { }
+
+    // 3. Update database status of each acknowledged order to 'Cutting'
+    toast.info("Acknowledging orders and moving to Cutting…", "Order Accepted");
+    try {
+      await Promise.all(
+        ordersToAck.map(async (o) => {
+          const id = o.orderId || o.id || o._id;
+          if (id) {
+            await api.patch(`/store-admin/orders/${id}/status`, { status: "Cutting" }).catch(() => { });
+          }
+        })
+      );
+      toast.success("Orders moved to Cutting queue in Live Orders", "Orders Acknowledged");
+      // Trigger order refresh event so orders tab updates automatically
+      const socket = getSocket();
+      socket.emit("orders:refresh");
+    } catch (err) {
+      console.warn("Failed to update order status to Cutting:", err);
+    }
   };
 
   if (!user) return null;
@@ -1609,6 +2520,7 @@ export default function StoreAdminPage() {
     dashboard: <DashboardTab setActiveTab={setActiveTab} />,
     orders: <LiveOrdersTab />,
     products: <ProductsStockTab />,
+    cross_sell: <CrossSellTab />,
     inventory: <InventoryTab />,
     customers: <CustomersTab />,
     riders: <RidersTab />,

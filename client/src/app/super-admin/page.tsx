@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
 import type { User } from "@/lib/auth";
@@ -40,28 +40,219 @@ const TABS = [
   { key: "customers", label: "Customers", icon: "group", sub: "Registered customer directory and order history across Ranchi" },
   { key: "coupons", label: "Coupons & Offers", icon: "sell", sub: "Platform promo engine for discount codes, first-order deals, and banners" },
   { key: "banners", label: "Hero Banners", icon: "view_carousel", sub: "Promotional hero carousels and marketing banners on the home screen" },
+  { key: "seo", label: "Homepage SEO", icon: "travel_explore", sub: "Search engine metadata, Open Graph tags, canonical URL, and JSON-LD structured data" },
 ];
 
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
-const KPICard = ({ icon, label, value, sub, color = "#941717" }: {
-  icon: string; label: string; value: string; sub: string; color?: string;
-}) => (
-  <div style={{
-    background: "#ffffff",
-    border: "1px solid #ede8e0",
-    borderRadius: "14px",
-    padding: "16px 18px",
-    boxShadow: "0 2px 8px rgba(0,0,0,0.04)",
-    borderLeft: `4px solid ${color}`,
-  }}>
-    <div style={{ marginBottom: "6px" }}>
-      <span className="material-symbols-outlined text-[22px]" style={{ color }}>{icon}</span>
+const KPICard = ({
+  icon,
+  label,
+  value,
+  sub,
+  color = "#941717",
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  sub: string;
+  color?: string;
+  onClick?: () => void;
+}) => {
+  const [hovered, setHovered] = useState(false);
+  const [active, setActive] = useState(false);
+
+  // Helper to extract clean trend (e.g., "↑ 18%")
+  const trendMatch = sub.match(/^[↑↓]\s*[\d.]+%?/);
+  const trend = trendMatch ? trendMatch[0] : null;
+  const cleanSub = trend ? sub.replace(trend, "").trim() : sub;
+
+  return (
+    <div
+      onClick={onClick}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => {
+        setHovered(false);
+        setActive(false);
+      }}
+      onMouseDown={() => setActive(true)}
+      onMouseUp={() => setActive(false)}
+      role={onClick ? "button" : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={(e) => {
+        if (onClick && (e.key === "Enter" || e.key === " ")) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      style={{
+        position: "relative",
+        background: "linear-gradient(145deg, #ffffff 0%, #fcfaf7 100%)",
+        borderRadius: "16px",
+        padding: "14px 16px",
+        cursor: onClick ? "pointer" : "default",
+        userSelect: "none",
+        outline: "none",
+        transform: active
+          ? "translateY(2px) scale(0.985)"
+          : hovered
+            ? "translateY(-4px) scale(1.015)"
+            : "translateY(0) scale(1)",
+        boxShadow: hovered
+          ? `0 16px 28px -6px ${color}24, 0 8px 14px -4px rgba(0,0,0,0.05), inset 2px 2px 4px rgba(255,255,255,0.95), inset -2px -2px 6px rgba(0,0,0,0.03)`
+          : `0 8px 18px -6px rgba(0,0,0,0.05), 0 3px 8px -2px rgba(0,0,0,0.03), inset 2px 2px 4px rgba(255,255,255,0.95), inset -2px -2px 6px rgba(0,0,0,0.03)`,
+        border: `1.5px solid ${hovered ? color + "45" : "#ede8e0"}`,
+        transition: "all 240ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+        overflow: "hidden",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        minHeight: "112px",
+      }}
+    >
+      {/* Top decorative accent pill */}
+      <div
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: "3px",
+          background: `linear-gradient(90deg, ${color} 0%, ${color}60 100%)`,
+          opacity: hovered ? 1 : 0.75,
+          transition: "opacity 200ms ease",
+        }}
+      />
+
+      {/* Decorative Faint Watermark Icon in background right corner */}
+      <div
+        style={{
+          position: "absolute",
+          right: "-6px",
+          bottom: "-10px",
+          color,
+          opacity: hovered ? 0.08 : 0.035,
+          pointerEvents: "none",
+          userSelect: "none",
+          transform: hovered ? "scale(1.1) rotate(-5deg)" : "scale(1) rotate(0deg)",
+          transition: "all 300ms ease",
+        }}
+      >
+        <span className="material-symbols-outlined text-[72px]">{icon}</span>
+      </div>
+
+      {/* Header Row: Left Icon Pod + Right Big Metric Value */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "10px",
+          position: "relative",
+          zIndex: 1,
+        }}
+      >
+        {/* Left: Clay Icon Pod */}
+        <div
+          style={{
+            width: "38px",
+            height: "38px",
+            borderRadius: "11px",
+            background: `linear-gradient(135deg, ${color}18 0%, ${color}08 100%)`,
+            display: "inline-flex",
+            alignItems: "center",
+            justifyContent: "center",
+            boxShadow: `inset 2px 2px 4px rgba(255,255,255,0.8), inset -2px -2px 4px ${color}20`,
+            border: `1px solid ${color}30`,
+            transform: hovered ? "scale(1.08) rotate(3deg)" : "scale(1) rotate(0deg)",
+            transition: "transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1)",
+          }}
+        >
+          <span
+            className="material-symbols-outlined text-[20px]"
+            style={{ color, display: "block", lineHeight: 1 }}
+          >
+            {icon}
+          </span>
+        </div>
+
+        {/* Right: Big Metric Value */}
+        <div
+          style={{
+            textAlign: "right",
+            fontSize: "1.45rem",
+            fontWeight: 800,
+            color,
+            fontFamily: "Outfit, sans-serif",
+            lineHeight: 1,
+            letterSpacing: "-0.02em",
+          }}
+        >
+          {value}
+        </div>
+      </div>
+
+      {/* Bottom Content: Metric Label + Trend & Subtext */}
+      <div style={{ position: "relative", zIndex: 1, marginTop: "auto" }}>
+        <div
+          style={{
+            fontSize: "0.82rem",
+            fontWeight: 700,
+            color: "#2b251e",
+            letterSpacing: "-0.01em",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          title={label}
+        >
+          {label}
+        </div>
+
+        {/* Subtext info with optional trend chip */}
+        <div
+          style={{
+            fontSize: "0.7rem",
+            color: "#73695b",
+            marginTop: "3px",
+            fontWeight: 500,
+            lineHeight: 1.3,
+            display: "flex",
+            alignItems: "center",
+            flexWrap: "nowrap",
+            gap: "4px",
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          title={sub}
+        >
+          {trend && (
+            <span
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                padding: "1px 5px",
+                borderRadius: "5px",
+                fontSize: "0.66rem",
+                fontWeight: 700,
+                background: trend.startsWith("↑") ? "#ecfdf5" : "#fef2f2",
+                color: trend.startsWith("↑") ? "#059669" : "#dc2626",
+                border: `1px solid ${trend.startsWith("↑") ? "#a7f3d0" : "#fecaca"}`,
+                flexShrink: 0,
+              }}
+            >
+              {trend}
+            </span>
+          )}
+          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {cleanSub}
+          </span>
+        </div>
+      </div>
     </div>
-    <div style={{ fontSize: "1.35rem", fontWeight: 800, color, fontFamily: "Outfit, sans-serif", lineHeight: 1.1 }}>{value}</div>
-    <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginTop: "4px" }}>{label}</div>
-    <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "2px" }}>{sub}</div>
-  </div>
-);
+  );
+};
 
 const SectionTitle = ({ title, sub }: { title: string; sub?: string }) => (
   <div style={{ margin: "20px 0 12px 0" }}>
@@ -146,11 +337,13 @@ const FileUploadButton = ({
   folder = "products",
   label = "Upload",
   accept = "image/*",
+  style,
 }: {
   onUploadSuccess: (url: string) => void;
   folder?: string;
   label?: string;
   accept?: string;
+  style?: React.CSSProperties;
 }) => {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -252,6 +445,8 @@ const FileUploadButton = ({
           cursor: uploading ? "not-allowed" : "pointer",
           whiteSpace: "nowrap",
           boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          flexShrink: 0,
+          ...style,
         }}
       >
         <span className="material-symbols-outlined text-[16px]">
@@ -265,7 +460,7 @@ const FileUploadButton = ({
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
-function DashboardTab() {
+function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   const [kpis, setKpis] = useState<any[]>([]);
   const [recentActivity, setRecentActivity] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -283,20 +478,74 @@ function DashboardTab() {
   }, []);
 
   const defaultKpis = [
-    { icon: "inventory_2", label: "Total Orders Today", value: "6", sub: "↑ 18% vs yesterday", color: "#941717" },
-    { icon: "payments", label: "Revenue Today", value: "₹449", sub: "Across 2 active stores", color: "#c28114" },
-    { icon: "storefront", label: "Active Stores", value: "2", sub: "Ranchi Kishore Ganj, Doranda", color: "#059669" },
-    { icon: "two_wheeler", label: "Active Riders", value: "4", sub: "2 out for delivery", color: "#7c3aed" },
-    { icon: "group", label: "Total Customers", value: "2,841", sub: "↑ 34 new today", color: "#0284c7" },
-    { icon: "star", label: "Avg Rating", value: "4.8 / 5", sub: "Based on 1,240 reviews", color: "#d97706" },
+    { icon: "inventory_2", label: "Total Orders Today", value: "6", sub: "↑ 18% vs yesterday", color: "#941717", tab: "orders" },
+    { icon: "payments", label: "Revenue Today", value: "₹449", sub: "Across 2 active stores", color: "#c28114", tab: "orders" },
+    { icon: "storefront", label: "Active Stores", value: "2", sub: "Ranchi Kishore Ganj, Doranda", color: "#059669", tab: "stores" },
+    { icon: "two_wheeler", label: "Active Riders", value: "4", sub: "2 out for delivery", color: "#7c3aed", tab: "riders" },
+    { icon: "group", label: "Total Customers", value: "2,841", sub: "↑ 34 new today", color: "#0284c7", tab: "customers" },
+    { icon: "restaurant", label: "Total Products", value: "24", sub: "Master meat & seafood catalog", color: "#d97706", tab: "products" },
   ];
 
-  const displayKpis = kpis.length > 0 ? kpis : defaultKpis;
+  const rawKpis = kpis.length > 0 ? kpis : defaultKpis;
+  // Explicitly remove "Avg Rating" if still returned from any remote backend cache
+  const displayKpis = rawKpis
+    .filter(k => k.label !== "Avg Rating" && k.icon !== "star")
+    .map(k => {
+      if (k.label === "Total Products" || k.tab === "products") {
+        return {
+          ...k,
+          icon: "restaurant",
+          label: "Total Products",
+          tab: "products",
+          color: "#d97706",
+          sub: k.sub || "Master meat & seafood catalog",
+        };
+      }
+      return k;
+    });
+
+  // Ensure Total Products card is always present if removed
+  if (!displayKpis.some(k => k.label === "Total Products" || k.tab === "products")) {
+    displayKpis.push({
+      icon: "restaurant",
+      label: "Total Products",
+      value: "24",
+      sub: "Master meat & seafood catalog",
+      color: "#d97706",
+      tab: "products",
+    });
+  }
+
+  // Fallback map if backend sends cards without explicit tab key
+  const labelToTab: Record<string, string> = {
+    "Total Orders Today": "orders",
+    "Revenue Today": "orders",
+    "Active Stores": "stores",
+    "Active Riders": "riders",
+    "Total Customers": "customers",
+    "Total Products": "products",
+  };
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "16px", marginBottom: "36px" }}>
-        {displayKpis.map(k => <KPICard key={k.label} {...k} />)}
+      {/* Responsive Grid: 6 cards in 1 row on wide screens, 3-3 on laptops, 2-2-2 on tablets */}
+      <div
+        className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
+        style={{
+          gap: "14px",
+          marginBottom: "32px",
+        }}
+      >
+        {displayKpis.map(k => {
+          const targetTab = k.tab || labelToTab[k.label];
+          return (
+            <KPICard
+              key={k.label}
+              {...k}
+              onClick={targetTab ? () => setActiveTab(targetTab) : undefined}
+            />
+          );
+        })}
       </div>
 
       {/* Recent activity */}
@@ -1340,7 +1589,7 @@ function ProductMediaManager({
         )}
 
         {/* Clean Add Photo Input Row */}
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
           <input
             type="text"
             placeholder="Paste image URL (e.g. https://...)"
@@ -1356,7 +1605,8 @@ function ProductMediaManager({
               }
             }}
             style={{
-              flex: 1,
+              flex: "1 1 180px",
+              minWidth: 0,
               padding: "8px 12px",
               borderRadius: "8px",
               border: imageInputError ? "1.5px solid #dc2626" : "1px solid #d1cbbf",
@@ -1365,36 +1615,38 @@ function ProductMediaManager({
               boxSizing: "border-box",
             }}
           />
-          <button
-            type="button"
-            disabled={!currentImageUrl.trim()}
-            onClick={handleAddImage}
-            style={{
-              background: currentImageUrl.trim() ? "#941717" : "#e5e7eb",
-              color: currentImageUrl.trim() ? "#fff" : "#9ca3af",
-              border: "none",
-              padding: "8px 14px",
-              borderRadius: "8px",
-              fontSize: "0.8rem",
-              fontWeight: 700,
-              cursor: currentImageUrl.trim() ? "pointer" : "not-allowed",
-              whiteSpace: "nowrap",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              transition: "all 150ms ease",
-            }}
-          >
-            + Add Photo
-          </button>
-          <FileUploadButton
-            folder="products"
-            label="Upload Photo"
-            onUploadSuccess={(url) => {
-              onImagesChange([...images, url]);
-              setImageUrl("");
-            }}
-          />
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
+            <button
+              type="button"
+              disabled={!currentImageUrl.trim()}
+              onClick={handleAddImage}
+              style={{
+                background: currentImageUrl.trim() ? "#941717" : "#e5e7eb",
+                color: currentImageUrl.trim() ? "#fff" : "#9ca3af",
+                border: "none",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                cursor: currentImageUrl.trim() ? "pointer" : "not-allowed",
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 150ms ease",
+              }}
+            >
+              + Add Photo
+            </button>
+            <FileUploadButton
+              folder="products"
+              label="Upload Photo"
+              onUploadSuccess={(url) => {
+                onImagesChange([...images, url]);
+                setImageUrl("");
+              }}
+            />
+          </div>
         </div>
         {currentImageUrl.trim() && (
           <div style={{ marginTop: "10px", padding: "8px 12px", background: "#fff", border: "1px solid #e2dcd4", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
@@ -1585,7 +1837,7 @@ function ProductMediaManager({
         )}
 
         {/* Clean Add Video Input Row */}
-        <div style={{ display: "flex", gap: "8px" }}>
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", alignItems: "center" }}>
           <input
             type="text"
             data-testid="video-url-input"
@@ -1602,7 +1854,8 @@ function ProductMediaManager({
               }
             }}
             style={{
-              flex: 1,
+              flex: "1 1 180px",
+              minWidth: 0,
               padding: "8px 12px",
               borderRadius: "8px",
               border: videoInputError ? "1.5px solid #dc2626" : "1px solid #cbd5e1",
@@ -1611,37 +1864,39 @@ function ProductMediaManager({
               boxSizing: "border-box",
             }}
           />
-          <button
-            type="button"
-            disabled={!currentVideoUrl.trim()}
-            onClick={handleAddVideo}
-            style={{
-              background: currentVideoUrl.trim() ? "#1e293b" : "#e5e7eb",
-              color: currentVideoUrl.trim() ? "#fff" : "#9ca3af",
-              border: "none",
-              padding: "8px 14px",
-              borderRadius: "8px",
-              fontSize: "0.8rem",
-              fontWeight: 700,
-              cursor: currentVideoUrl.trim() ? "pointer" : "not-allowed",
-              whiteSpace: "nowrap",
-              display: "flex",
-              alignItems: "center",
-              gap: "4px",
-              transition: "all 150ms ease",
-            }}
-          >
-            + Add Video
-          </button>
-          <FileUploadButton
-            folder="videos"
-            accept="video/*"
-            label="Upload Video"
-            onUploadSuccess={(url) => {
-              onVideoURLsChange([...videoURLs, url]);
-              setVideoUrl("");
-            }}
-          />
+          <div style={{ display: "flex", gap: "8px", alignItems: "center", flexShrink: 0 }}>
+            <button
+              type="button"
+              disabled={!currentVideoUrl.trim()}
+              onClick={handleAddVideo}
+              style={{
+                background: currentVideoUrl.trim() ? "#1e293b" : "#e5e7eb",
+                color: currentVideoUrl.trim() ? "#fff" : "#9ca3af",
+                border: "none",
+                padding: "8px 12px",
+                borderRadius: "8px",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                cursor: currentVideoUrl.trim() ? "pointer" : "not-allowed",
+                whiteSpace: "nowrap",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                transition: "all 150ms ease",
+              }}
+            >
+              + Add Video
+            </button>
+            <FileUploadButton
+              folder="videos"
+              accept="video/*"
+              label="Upload Video"
+              onUploadSuccess={(url) => {
+                onVideoURLsChange([...videoURLs, url]);
+                setVideoUrl("");
+              }}
+            />
+          </div>
         </div>
         {currentVideoUrl.trim() && (
           <div style={{ marginTop: "10px", padding: "8px 12px", background: "#fff", border: "1px solid #cbd5e1", borderRadius: "8px", display: "flex", alignItems: "center", gap: "10px", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
@@ -1722,6 +1977,9 @@ function ProductsTab() {
     pendingImageUrl: "",
     pendingVideoUrl: "",
     inStock: true,
+    seoTitle: "",
+    seoDescription: "",
+    seoKeywords: "",
   });
 
   // Edit product state
@@ -1743,6 +2001,9 @@ function ProductsTab() {
     pendingImageUrl: "",
     pendingVideoUrl: "",
     inStock: true,
+    seoTitle: "",
+    seoDescription: "",
+    seoKeywords: "",
   });
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
@@ -1819,6 +2080,9 @@ function ProductsTab() {
       pendingImageUrl: "",
       pendingVideoUrl: "",
       inStock: Boolean(p.inStock),
+      seoTitle: p.seoTitle || "",
+      seoDescription: p.seoDescription || "",
+      seoKeywords: Array.isArray(p.seoKeywords) ? p.seoKeywords.join(", ") : (p.seoKeywords || ""),
     });
   };
 
@@ -1856,10 +2120,6 @@ function ProductsTab() {
     const domVidVal = domVidInput?.value?.trim() || '';
     const rawVids = [...editProductForm.videoURLs, ...(pendingVid ? [pendingVid] : []), ...(domVidVal && domVidVal !== pendingVid ? [domVidVal] : [])];
     const cleanVideos = Array.from(new Set(rawVids.map(s => s.trim()).filter(Boolean)));
-    console.log('[handleSaveEdit] editProductForm.videoURLs:', editProductForm.videoURLs);
-    console.log('[handleSaveEdit] pendingVideoUrl:', pendingVid);
-    console.log('[handleSaveEdit] DOM input value:', domVidVal);
-    console.log('[handleSaveEdit] cleanVideos to be saved:', cleanVideos);
 
     setSubmittingEdit(true);
     try {
@@ -1882,6 +2142,9 @@ function ProductsTab() {
         images: uniqueImages,
         videoURLs: cleanVideos,
         inStock: editProductForm.inStock,
+        seoTitle: editProductForm.seoTitle?.trim() || "",
+        seoDescription: editProductForm.seoDescription?.trim() || "",
+        seoKeywords: editProductForm.seoKeywords?.trim() || "",
       });
 
       if (res.data?.success) {
@@ -1969,6 +2232,9 @@ function ProductsTab() {
         images: uniqueImages,
         videoURLs: cleanVideos,
         inStock: newProduct.inStock,
+        seoTitle: newProduct.seoTitle?.trim() || "",
+        seoDescription: newProduct.seoDescription?.trim() || "",
+        seoKeywords: newProduct.seoKeywords?.trim() || "",
       });
 
       if (res.data?.success) {
@@ -1994,6 +2260,9 @@ function ProductsTab() {
         pendingImageUrl: "",
         pendingVideoUrl: "",
         inStock: true,
+        seoTitle: "",
+        seoDescription: "",
+        seoKeywords: "",
       });
     } catch (err: any) {
       console.error("Failed to add product:", err);
@@ -2303,6 +2572,57 @@ function ProductsTab() {
                 />
               </div>
 
+              {/* Product SEO Settings (Optional) */}
+              <div style={{ background: "#fbf9f6", border: "1px solid #ede8e0", borderRadius: "10px", padding: "14px", marginTop: "2px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px", color: "#171410", fontSize: "0.85rem", fontWeight: 700 }}>
+                  <span className="material-symbols-outlined text-[18px]" style={{ color: "#941717" }}>travel_explore</span>
+                  <span>Search Engine Optimization (SEO)</span>
+                  <span style={{ fontSize: "0.72rem", color: "#73695b", fontWeight: 500, marginLeft: "auto" }}>Optional</span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#423b32", marginBottom: "3px" }}>
+                      SEO Meta Title
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={newProduct.name ? `${newProduct.name} — Fresh & Hygienic in Ranchi | TeFFe` : "e.g. Fresh Chicken Curry Cut in Ranchi | TeFFe"}
+                      value={newProduct.seoTitle}
+                      onChange={e => setNewProduct({ ...newProduct, seoTitle: e.target.value })}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    />
+                    <span style={{ fontSize: "0.7rem", color: "#73695b" }}>Leave blank to auto-generate default title from product name.</span>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#423b32", marginBottom: "3px" }}>
+                      SEO Meta Description
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder={newProduct.description ? `${newProduct.description.slice(0, 140)}... Order online with 90-min delivery in Ranchi.` : "Auto-generated from description & specs if left empty"}
+                      value={newProduct.seoDescription}
+                      onChange={e => setNewProduct({ ...newProduct, seoDescription: e.target.value })}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box", resize: "vertical" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#423b32", marginBottom: "3px" }}>
+                      SEO Keywords (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. fresh chicken, curry cut, buy chicken ranchi, halal chicken"
+                      value={newProduct.seoKeywords}
+                      onChange={e => setNewProduct({ ...newProduct, seoKeywords: e.target.value })}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
                 <input
                   type="checkbox"
@@ -2478,6 +2798,57 @@ function ProductsTab() {
                   onChange={e => setEditProductForm({ ...editProductForm, description: e.target.value })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box", resize: "vertical" }}
                 />
+              </div>
+
+              {/* Product SEO Settings (Optional) */}
+              <div style={{ background: "#fbf9f6", border: "1px solid #ede8e0", borderRadius: "10px", padding: "14px", marginTop: "2px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "10px", color: "#171410", fontSize: "0.85rem", fontWeight: 700 }}>
+                  <span className="material-symbols-outlined text-[18px]" style={{ color: "#941717" }}>travel_explore</span>
+                  <span>Search Engine Optimization (SEO)</span>
+                  <span style={{ fontSize: "0.72rem", color: "#73695b", fontWeight: 500, marginLeft: "auto" }}>Optional</span>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#423b32", marginBottom: "3px" }}>
+                      SEO Meta Title
+                    </label>
+                    <input
+                      type="text"
+                      placeholder={editProductForm.name ? `${editProductForm.name} — Fresh & Hygienic in Ranchi | TeFFe` : "e.g. Fresh Chicken Curry Cut in Ranchi | TeFFe"}
+                      value={editProductForm.seoTitle}
+                      onChange={e => setEditProductForm({ ...editProductForm, seoTitle: e.target.value })}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    />
+                    <span style={{ fontSize: "0.7rem", color: "#73695b" }}>Leave blank to auto-generate default title from product name.</span>
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#423b32", marginBottom: "3px" }}>
+                      SEO Meta Description
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder={editProductForm.description ? `${editProductForm.description.slice(0, 140)}... Order online with 90-min delivery in Ranchi.` : "Auto-generated from description & specs if left empty"}
+                      value={editProductForm.seoDescription}
+                      onChange={e => setEditProductForm({ ...editProductForm, seoDescription: e.target.value })}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box", resize: "vertical" }}
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#423b32", marginBottom: "3px" }}>
+                      SEO Keywords (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. fresh chicken, curry cut, buy chicken ranchi, halal chicken"
+                      value={editProductForm.seoKeywords}
+                      onChange={e => setEditProductForm({ ...editProductForm, seoKeywords: e.target.value })}
+                      style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
@@ -4892,6 +5263,1061 @@ function BannersTab() {
   );
 }
 
+function HomepageSeoTab() {
+  const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [activePreview, setActivePreview] = useState<"google" | "social">("google");
+
+  const defaultSettings = {
+    metaTitle: "Teffes — Fresh Meat, Chicken, Fish & Mutton in Ranchi",
+    metaDescription: "Order 100% fresh, hygienic, antibiotic-free Chicken, Tender Mutton, River Fish & Marinated Cuts in Ranchi. Cut fresh after your order with 0% cold storage. Delivered in 90 mins.",
+    metaKeywords: "fresh meat in Ranchi, fresh chicken delivery Ranchi, fresh fish Ranchi, mutton delivery Ranchi, teffes, Kishore Ganj meat shop",
+    websiteName: "TeFFe",
+    canonicalUrl: "https://teffes.com",
+    businessDescription: "Teffes is Ranchi's trusted fresh meat delivery platform offering farm-fresh chicken, tender goat mutton, fresh river fish, and ready-to-cook marinated items cut fresh after ordering.",
+    logoUrl: "/teffes-logo-white.png",
+    socialLinks: {
+      facebook: "https://facebook.com/teffes.official",
+      instagram: "https://instagram.com/teffes.official",
+      youtube: "https://youtube.com/@teffes",
+      twitter: "",
+      linkedin: "",
+    },
+    contactDetails: {
+      phone: "+91 91539 85949",
+      email: "care@teffes.com",
+      address: {
+        street: "Harmu Road, Kishore Ganj",
+        city: "Ranchi",
+        state: "Jharkhand",
+        postalCode: "834001",
+        country: "India",
+      },
+    },
+  };
+
+  const [formData, setFormData] = useState(defaultSettings);
+  const [savedData, setSavedData] = useState(defaultSettings);
+  const [logoLoadError, setLogoLoadError] = useState(false);
+
+  const isDirty = useMemo(() => {
+    return JSON.stringify(formData) !== JSON.stringify(savedData);
+  }, [formData, savedData]);
+
+  const fetchSeoSettings = async () => {
+    setLoading(true);
+    try {
+      let resData: any = null;
+      try {
+        const res = await api.get<{ success: boolean; settings: any }>(`/super-admin/seo?_t=${Date.now()}`);
+        resData = res.data;
+      } catch (primaryErr: any) {
+        if (
+          primaryErr.response?.status === 404 ||
+          primaryErr.response?.data?.message?.includes("not found") ||
+          primaryErr.code === "ERR_NETWORK"
+        ) {
+          try {
+            const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+            const localRes = await axios.get<{ success: boolean; settings: any }>(
+              `http://localhost:5000/api/super-admin/seo?_t=${Date.now()}`,
+              { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+            );
+            resData = localRes.data;
+          } catch (_) {
+            throw primaryErr;
+          }
+        } else {
+          throw primaryErr;
+        }
+      }
+
+      if (resData?.success && resData.settings) {
+        const s = resData.settings;
+        const normalized = {
+          metaTitle: s.metaTitle || defaultSettings.metaTitle,
+          metaDescription: s.metaDescription || defaultSettings.metaDescription,
+          metaKeywords: Array.isArray(s.metaKeywords) ? s.metaKeywords.join(", ") : (s.metaKeywords || ""),
+          websiteName: s.websiteName || defaultSettings.websiteName,
+          canonicalUrl: s.canonicalUrl || defaultSettings.canonicalUrl,
+          businessDescription: s.businessDescription || defaultSettings.businessDescription,
+          logoUrl: s.logoUrl || defaultSettings.logoUrl,
+          socialLinks: {
+            facebook: s.socialLinks?.facebook || "",
+            instagram: s.socialLinks?.instagram || "",
+            youtube: s.socialLinks?.youtube || "",
+            twitter: s.socialLinks?.twitter || "",
+            linkedin: s.socialLinks?.linkedin || "",
+          },
+          contactDetails: {
+            phone: s.contactDetails?.phone || defaultSettings.contactDetails.phone,
+            email: s.contactDetails?.email || defaultSettings.contactDetails.email,
+            address: {
+              street: s.contactDetails?.address?.street || defaultSettings.contactDetails.address.street,
+              city: s.contactDetails?.address?.city || defaultSettings.contactDetails.address.city,
+              state: s.contactDetails?.address?.state || defaultSettings.contactDetails.address.state,
+              postalCode: s.contactDetails?.address?.postalCode || defaultSettings.contactDetails.address.postalCode,
+              country: s.contactDetails?.address?.country || defaultSettings.contactDetails.address.country,
+            },
+          },
+        };
+        setFormData(normalized);
+        setSavedData(normalized);
+      }
+    } catch (err) {
+      console.warn("Failed to fetch SEO settings:", err);
+      toast.error("Could not load saved SEO settings. Showing fallback defaults.", "Notice");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSeoSettings();
+  }, []);
+
+  // Safeguard against accidentally closing or reloading with unsaved edits
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isDirty]);
+
+  const handleSave = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!formData.metaTitle.trim()) {
+      toast.error("Meta Title is required.", "Validation Error");
+      return;
+    }
+    if (!formData.metaDescription.trim()) {
+      toast.error("Meta Description is required.", "Validation Error");
+      return;
+    }
+    if (!formData.websiteName.trim()) {
+      toast.error("Website Name is required.", "Validation Error");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      let resData: any = null;
+      try {
+        const res = await api.put("/super-admin/seo", formData);
+        resData = res.data;
+      } catch (primaryErr: any) {
+        if (
+          primaryErr.response?.status === 404 ||
+          primaryErr.response?.data?.message?.includes("not found") ||
+          primaryErr.code === "ERR_NETWORK"
+        ) {
+          const token = typeof window !== "undefined" ? localStorage.getItem("accessToken") : null;
+          const localRes = await axios.put<{ success: boolean; settings: any }>(
+            "http://localhost:5000/api/super-admin/seo",
+            formData,
+            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+          );
+          resData = localRes.data;
+        } else {
+          throw primaryErr;
+        }
+      }
+
+      if (resData?.success) {
+        toast.success("Homepage SEO & brand settings updated successfully!", "Saved");
+        setSavedData(formData);
+      }
+    } catch (err: any) {
+      console.error("Failed to update SEO settings:", err);
+      toast.error(err.response?.data?.message || err.message || "Failed to save SEO settings", "Error");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDiscard = () => {
+    setFormData(savedData);
+    toast.info("Unsaved edits have been discarded.", "Changes Discarded");
+  };
+
+  if (loading) {
+    return (
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "40px", textAlign: "center" }}>
+        <span className="material-symbols-outlined text-[32px] animate-spin" style={{ color: "#941717", display: "inline-block" }}>
+          sync
+        </span>
+        <div style={{ marginTop: "12px", color: "#73695b", fontSize: "0.9rem", fontWeight: 600 }}>Loading SEO &amp; Brand metadata…</div>
+      </div>
+    );
+  }
+
+  const titleLen = formData.metaTitle.length;
+  const descLen = formData.metaDescription.length;
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {/* Top Banner with Action Controls & Unsaved Status */}
+      <div
+        style={{
+          background: "#fff",
+          border: isDirty ? "1px solid #f59e0b" : "1px solid #ede8e0",
+          borderRadius: "14px",
+          padding: "18px 22px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "14px",
+          boxShadow: isDirty ? "0 4px 14px rgba(245,158,11,0.12)" : "0 1px 4px rgba(0,0,0,0.02)",
+          transition: "all 200ms ease",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div
+            style={{
+              width: "42px",
+              height: "42px",
+              borderRadius: "10px",
+              background: isDirty ? "#fef3c7" : "#eff6ff",
+              color: isDirty ? "#b45309" : "#1d4ed8",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span className="material-symbols-outlined text-[24px]">
+              {isDirty ? "edit_note" : "travel_explore"}
+            </span>
+          </div>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "#171410" }}>
+                Homepage Search Engine Optimization (SEO)
+              </h2>
+              {isDirty ? (
+                <span
+                  style={{
+                    background: "#fef3c7",
+                    color: "#b45309",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid #fde68a",
+                  }}
+                >
+                  Unsaved Changes
+                </span>
+              ) : (
+                <span
+                  style={{
+                    background: "#ecfdf5",
+                    color: "#059669",
+                    fontSize: "0.72rem",
+                    fontWeight: 700,
+                    padding: "3px 8px",
+                    borderRadius: "6px",
+                    border: "1px solid #a7f3d0",
+                  }}
+                >
+                  Live &amp; Synced
+                </span>
+              )}
+            </div>
+            <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "#73695b" }}>
+              Configure search crawler meta tags, canonical URL, social Open Graph cards, and schema.org JSON-LD
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+          {isDirty && (
+            <button
+              type="button"
+              onClick={handleDiscard}
+              disabled={submitting}
+              style={{
+                background: "#f5f2eb",
+                border: "1px solid #d1cbbf",
+                borderRadius: "8px",
+                padding: "8px 14px",
+                color: "#423b32",
+                fontSize: "0.82rem",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Discard Changes
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => handleSave()}
+            disabled={submitting}
+            style={{
+              background: "#941717",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "9px 22px",
+              fontSize: "0.85rem",
+              fontWeight: 700,
+              cursor: submitting ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              boxShadow: "0 2px 8px rgba(148,23,23,0.3)",
+              opacity: submitting ? 0.7 : 1,
+            }}
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              {submitting ? "sync" : "save"}
+            </span>
+            <span>{submitting ? "Saving Changes…" : "Save Changes"}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Grid: Settings Form (Left) + Real-time SERP Preview (Right) */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: "24px", alignItems: "start" }}>
+
+        {/* LEFT COLUMN: Input Configuration Form */}
+        <form onSubmit={handleSave} noValidate style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+
+          {/* Card 1: Core Search Metadata */}
+          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>search</span>
+              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+                1. Core Search Engine Metadata
+              </h3>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              {/* Meta Title */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#423b32" }}>
+                    Meta Title *
+                  </label>
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      color: titleLen >= 45 && titleLen <= 65 ? "#059669" : titleLen > 65 ? "#dc2626" : "#73695b",
+                    }}
+                  >
+                    {titleLen} / 60 chars (recommended: 50-60)
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Teffes — Fresh Meat, Chicken, Fish & Mutton in Ranchi"
+                  value={formData.metaTitle}
+                  onChange={e => setFormData({ ...formData, metaTitle: e.target.value })}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    width: "100%",
+                    fontSize: "0.875rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                  Appears as the clickable headline link in Google and browser tab title.
+                </div>
+              </div>
+
+              {/* Meta Description */}
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#423b32" }}>
+                    Meta Description *
+                  </label>
+                  <span
+                    style={{
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      color: descLen >= 120 && descLen <= 165 ? "#059669" : descLen > 165 ? "#dc2626" : "#73695b",
+                    }}
+                  >
+                    {descLen} / 160 chars (recommended: 140-160)
+                  </span>
+                </div>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="Order 100% fresh, hygienic, antibiotic-free Chicken, Tender Mutton, River Fish in Ranchi..."
+                  value={formData.metaDescription}
+                  onChange={e => setFormData({ ...formData, metaDescription: e.target.value })}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    width: "100%",
+                    fontSize: "0.875rem",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                />
+                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                  Summary snippet displayed beneath your page title in search engine results.
+                </div>
+              </div>
+
+              {/* Meta Keywords */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                  Meta Keywords (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="fresh meat in Ranchi, chicken delivery, fish, mutton, teffes"
+                  value={formData.metaKeywords}
+                  onChange={e => setFormData({ ...formData, metaKeywords: e.target.value })}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    width: "100%",
+                    fontSize: "0.875rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                  Comma-separated keyword tags rendered as optional metadata tag.
+                </div>
+              </div>
+
+              {/* Canonical Homepage URL */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                  Canonical Homepage URL *
+                </label>
+                <input
+                  type="url"
+                  required
+                  placeholder="https://teffes.com"
+                  value={formData.canonicalUrl}
+                  onChange={e => setFormData({ ...formData, canonicalUrl: e.target.value })}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    width: "100%",
+                    fontSize: "0.875rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                  The authoritative canonical URL prevents duplicate content ranking penalties.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 2: Website Identity & Branding */}
+          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>badge</span>
+              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+                2. Website Identity &amp; Branding
+              </h3>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "14px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                    Website / Brand Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="TeFFe"
+                    value={formData.websiteName}
+                    onChange={e => setFormData({ ...formData, websiteName: e.target.value })}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1cbbf",
+                      width: "100%",
+                      fontSize: "0.875rem",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                </div>
+              </div>
+
+              {/* Logo URL with Upload Button */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                  Brand Logo URL
+                </label>
+                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                  <input
+                    type="text"
+                    placeholder="/teffes-logo-white.png or https://..."
+                    value={formData.logoUrl}
+                    onChange={e => setFormData({ ...formData, logoUrl: e.target.value })}
+                    style={{
+                      padding: "10px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #d1cbbf",
+                      flex: 1,
+                      fontSize: "0.875rem",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <FileUploadButton
+                    folder="branding"
+                    label="Upload Logo"
+                    onUploadSuccess={(url) => {
+                      setFormData({ ...formData, logoUrl: url });
+                      setLogoLoadError(false);
+                    }}
+                  />
+                </div>
+                {formData.logoUrl && (
+                  <div
+                    style={{
+                      marginTop: "10px",
+                      padding: "12px",
+                      background: "#faf8f5",
+                      border: "1px solid #ede8e0",
+                      borderRadius: "10px",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "10px",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#423b32", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <span className="material-symbols-outlined text-[16px]" style={{ color: "#941717" }}>visibility</span>
+                        Logo Live Preview
+                      </span>
+                      <div style={{ display: "flex", gap: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, logoUrl: "/teffes-logo-white.png" });
+                            setLogoLoadError(false);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#1d4ed8",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          Reset to Default
+                        </button>
+                        <span style={{ color: "#d1cbbf" }}>•</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setFormData({ ...formData, logoUrl: "" });
+                            setLogoLoadError(false);
+                          }}
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            color: "#dc2626",
+                            fontSize: "0.72rem",
+                            fontWeight: 600,
+                            cursor: "pointer",
+                            padding: 0,
+                          }}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                    </div>
+
+                    {logoLoadError ? (
+                      <div
+                        style={{
+                          padding: "10px 14px",
+                          background: "#fef2f2",
+                          border: "1px solid #fecaca",
+                          borderRadius: "8px",
+                          fontSize: "0.78rem",
+                          color: "#991b1b",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">broken_image</span>
+                        <span>Logo could not be loaded from this URL. If testing on localhost, ensure local backend is running or deploy to Render.</span>
+                      </div>
+                    ) : (
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                        {/* Dark background preview */}
+                        <div
+                          style={{
+                            background: "#0f172a",
+                            borderRadius: "8px",
+                            padding: "14px 18px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            minHeight: "65px",
+                            border: "1px solid #1e293b",
+                          }}
+                        >
+                          <img
+                            src={formData.logoUrl}
+                            alt="Logo on dark background"
+                            style={{ maxHeight: "36px", maxWidth: "100%", objectFit: "contain" }}
+                            onError={() => setLogoLoadError(true)}
+                          />
+                          <span style={{ fontSize: "0.68rem", color: "#94a3b8", marginTop: "6px" }}>Dark Nav Context</span>
+                        </div>
+
+                        {/* Light background preview */}
+                        <div
+                          style={{
+                            background: "#ffffff",
+                            borderRadius: "8px",
+                            padding: "14px 18px",
+                            display: "flex",
+                            flexDirection: "column",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            minHeight: "65px",
+                            border: "1px solid #e2e8f0",
+                          }}
+                        >
+                          <img
+                            src={formData.logoUrl}
+                            alt="Logo on light background"
+                            style={{ maxHeight: "36px", maxWidth: "100%", objectFit: "contain" }}
+                            onError={() => setLogoLoadError(true)}
+                          />
+                          <span style={{ fontSize: "0.68rem", color: "#64748b", marginTop: "6px" }}>Light Page Context</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Business Description */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                  Business Description (Schema.org Organization)
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Teffes is Ranchi's trusted fresh meat delivery platform offering farm-fresh chicken, tender goat mutton..."
+                  value={formData.businessDescription}
+                  onChange={e => setFormData({ ...formData, businessDescription: e.target.value })}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    width: "100%",
+                    fontSize: "0.875rem",
+                    boxSizing: "border-box",
+                    resize: "vertical",
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Social Profile URLs */}
+          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>share</span>
+              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+                3. Social Profile URLs (SameAs Schema)
+              </h3>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  Instagram URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://instagram.com/teffes.official"
+                  value={formData.socialLinks.instagram}
+                  onChange={e => setFormData({
+                    ...formData,
+                    socialLinks: { ...formData.socialLinks, instagram: e.target.value }
+                  })}
+                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  Facebook URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://facebook.com/teffes.official"
+                  value={formData.socialLinks.facebook}
+                  onChange={e => setFormData({
+                    ...formData,
+                    socialLinks: { ...formData.socialLinks, facebook: e.target.value }
+                  })}
+                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  YouTube Channel URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://youtube.com/@teffes"
+                  value={formData.socialLinks.youtube}
+                  onChange={e => setFormData({
+                    ...formData,
+                    socialLinks: { ...formData.socialLinks, youtube: e.target.value }
+                  })}
+                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                />
+              </div>
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  Twitter / X URL
+                </label>
+                <input
+                  type="url"
+                  placeholder="https://x.com/teffes"
+                  value={formData.socialLinks.twitter}
+                  onChange={e => setFormData({
+                    ...formData,
+                    socialLinks: { ...formData.socialLinks, twitter: e.target.value }
+                  })}
+                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Business Contact & Public Address */}
+          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>contact_support</span>
+              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+                4. Verified Business Contact &amp; Public Address
+              </h3>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                    Public Support Phone
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.contactDetails.phone}
+                    onChange={e => setFormData({
+                      ...formData,
+                      contactDetails: { ...formData.contactDetails, phone: e.target.value }
+                    })}
+                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                    Public Support Email
+                  </label>
+                  <input
+                    type="email"
+                    value={formData.contactDetails.email}
+                    onChange={e => setFormData({
+                      ...formData,
+                      contactDetails: { ...formData.contactDetails, email: e.target.value }
+                    })}
+                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  Street Address
+                </label>
+                <input
+                  type="text"
+                  value={formData.contactDetails.address.street}
+                  onChange={e => setFormData({
+                    ...formData,
+                    contactDetails: {
+                      ...formData.contactDetails,
+                      address: { ...formData.contactDetails.address, street: e.target.value }
+                    }
+                  })}
+                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                    City
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.contactDetails.address.city}
+                    onChange={e => setFormData({
+                      ...formData,
+                      contactDetails: {
+                        ...formData.contactDetails,
+                        address: { ...formData.contactDetails.address, city: e.target.value }
+                      }
+                    })}
+                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                    State
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.contactDetails.address.state}
+                    onChange={e => setFormData({
+                      ...formData,
+                      contactDetails: {
+                        ...formData.contactDetails,
+                        address: { ...formData.contactDetails.address, state: e.target.value }
+                      }
+                    })}
+                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                    Postal Code
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.contactDetails.address.postalCode}
+                    onChange={e => setFormData({
+                      ...formData,
+                      contactDetails: {
+                        ...formData.contactDetails,
+                        address: { ...formData.contactDetails.address, postalCode: e.target.value }
+                      }
+                    })}
+                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </form>
+
+        {/* RIGHT COLUMN: Live Previews */}
+        <div style={{ position: "sticky", top: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
+
+          {/* Preview Selector Header */}
+          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "16px 20px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                <span className="material-symbols-outlined text-[18px]" style={{ color: "#941717" }}>visibility</span>
+                <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#171410" }}>Live Search &amp; Social Preview</span>
+              </div>
+              <div style={{ display: "flex", background: "#f5f2eb", padding: "3px", borderRadius: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setActivePreview("google")}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: activePreview === "google" ? "#fff" : "transparent",
+                    color: activePreview === "google" ? "#941717" : "#73695b",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: activePreview === "google" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  Google SERP
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActivePreview("social")}
+                  style={{
+                    padding: "4px 10px",
+                    borderRadius: "6px",
+                    border: "none",
+                    background: activePreview === "social" ? "#fff" : "transparent",
+                    color: activePreview === "social" ? "#941717" : "#73695b",
+                    fontSize: "0.75rem",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                    boxShadow: activePreview === "social" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
+                  }}
+                >
+                  Open Graph
+                </button>
+              </div>
+            </div>
+
+            {/* Google SERP Card Preview */}
+            {activePreview === "google" && (
+              <div
+                style={{
+                  background: "#ffffff",
+                  border: "1px solid #dadce0",
+                  borderRadius: "10px",
+                  padding: "16px",
+                  fontFamily: "Arial, sans-serif",
+                }}
+              >
+                {/* Search Header Breadcrumb */}
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+                  <div
+                    style={{
+                      width: "24px",
+                      height: "24px",
+                      borderRadius: "50%",
+                      background: "#941717",
+                      color: "#fff",
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    T
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column" }}>
+                    <span style={{ fontSize: "14px", color: "#202124", lineHeight: 1.2, fontWeight: 500 }}>
+                      {formData.websiteName || "TeFFe"}
+                    </span>
+                    <span style={{ fontSize: "12px", color: "#4d5156", lineHeight: 1.2 }}>
+                      {formData.canonicalUrl || "https://teffes.com"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Blue Clickable Title */}
+                <h4
+                  style={{
+                    margin: "4px 0 6px 0",
+                    color: "#1a0dab",
+                    fontSize: "18px",
+                    lineHeight: 1.3,
+                    fontWeight: 400,
+                    textDecoration: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  {formData.metaTitle || "Teffes — Fresh Meat, Chicken, Fish & Mutton in Ranchi"}
+                </h4>
+
+                {/* Description Snippet */}
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "13px",
+                    color: "#4d5156",
+                    lineHeight: 1.5,
+                  }}
+                >
+                  {formData.metaDescription || "Order 100% fresh, hygienic, antibiotic-free Chicken, Tender Mutton, River Fish in Ranchi..."}
+                </p>
+              </div>
+            )}
+
+            {/* Social Card Preview */}
+            {activePreview === "social" && (
+              <div
+                style={{
+                  background: "#f9fafb",
+                  border: "1px solid #e5e7eb",
+                  borderRadius: "10px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "140px",
+                    background: "linear-gradient(135deg, #1a1210 0%, #941717 100%)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "20px",
+                  }}
+                >
+                  {formData.logoUrl ? (
+                    <img
+                      src={formData.logoUrl}
+                      alt="Brand"
+                      style={{ maxHeight: "60px", maxWidth: "80%", objectFit: "contain" }}
+                      onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <span style={{ color: "#fff", fontSize: "1.5rem", fontWeight: 800 }}>{formData.websiteName}</span>
+                  )}
+                </div>
+                <div style={{ padding: "14px" }}>
+                  <div style={{ fontSize: "11px", textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.5px", fontWeight: 700 }}>
+                    {new URL(formData.canonicalUrl || "https://teffes.com").hostname}
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827", margin: "4px 0" }}>
+                    {formData.metaTitle}
+                  </div>
+                  <div style={{ fontSize: "12px", color: "#4b5563", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                    {formData.metaDescription}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Quick Structured Data JSON-LD Verified Preview */}
+          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "16px 20px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
+              <span className="material-symbols-outlined text-[18px]" style={{ color: "#059669" }}>verified</span>
+              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#171410" }}>
+                Active JSON-LD Schema Types
+              </span>
+            </div>
+            <p style={{ margin: "0 0 10px 0", fontSize: "0.75rem", color: "#73695b" }}>
+              Generated automatically into server-rendered HTML for search engines:
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+              <div style={{ background: "#faf8f5", padding: "8px 12px", borderRadius: "6px", fontSize: "0.78rem", border: "1px solid #ede8e0" }}>
+                <span style={{ fontWeight: 700, color: "#941717" }}>schema.org/WebSite</span>
+                <span style={{ color: "#73695b", marginLeft: "6px" }}>→ {formData.canonicalUrl}</span>
+              </div>
+              <div style={{ background: "#faf8f5", padding: "8px 12px", borderRadius: "6px", fontSize: "0.78rem", border: "1px solid #ede8e0" }}>
+                <span style={{ fontWeight: 700, color: "#941717" }}>schema.org/Organization</span>
+                <span style={{ color: "#73695b", marginLeft: "6px" }}>→ {formData.websiteName} ({formData.contactDetails.address.city}, {formData.contactDetails.address.state})</span>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Super Admin Page ──────────────────────────────────────────────────────
 export default function SuperAdminPage() {
   const router = useRouter();
@@ -4936,7 +6362,7 @@ export default function SuperAdminPage() {
   if (!user) return null;
 
   const tabComponents: Record<string, React.ReactNode> = {
-    dashboard: <DashboardTab />,
+    dashboard: <DashboardTab setActiveTab={setActiveTab} />,
     stores: <StoresTab />,
     "store-admins": <StoreAdminsTab />,
     products: <ProductsTab />,
@@ -4946,6 +6372,7 @@ export default function SuperAdminPage() {
     customers: <CustomersTab />,
     coupons: <CouponsTab />,
     banners: <BannersTab />,
+    seo: <HomepageSeoTab />,
   };
 
   return (
@@ -5156,10 +6583,6 @@ export default function SuperAdminPage() {
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#059669", fontWeight: 700, display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span className="material-symbols-outlined text-[16px]">verified</span>
-                  <span>All Systems Normal</span>
-                </div>
                 <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "10px", padding: "8px 14px", fontSize: "0.8rem", color: "#73695b", display: "flex", alignItems: "center", gap: "6px" }}>
                   <span className="material-symbols-outlined text-[16px]">calendar_today</span>
                   <span>{new Date().toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}</span>
