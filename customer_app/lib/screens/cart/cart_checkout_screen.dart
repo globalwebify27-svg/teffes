@@ -33,7 +33,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   final TextEditingController _pickupInstructionController = TextEditingController();
   String _fulfillmentType = 'delivery'; // 'delivery' or 'pickup'
   String _selectedPaymentMethod = 'razorpay'; // 'razorpay', 'cod', 'wallet'
-  String _selectedSlot = '90 Mins Express Delivery';
+  String _selectedSlot = '90 Min Delivery'; // 'Express Delivery (60 min)', '90 Min Delivery', 'Custom Delivery'
+  String _selectedCustomSlot = '';
+  List<ProductModel> _crossSellItems = [];
+  bool _isLoadingCrossSell = false;
   bool _isPlacingOrder = false;
   int _selectedTip = 0;
   bool _showCustomTipInput = false;
@@ -43,6 +46,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   late RazorpayService _razorpayService;
   String? _pendingRazorpayOrderId;
   double _pendingRazorpayAmount = 0.0;
+  double _pendingExpressFee = 0.0;
   String _pendingShippingAddress = '';
   String _pendingDeliverySlot = '';
   String _pendingStoreId = 'S001';
@@ -55,6 +59,96 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   bool _showStorePickerInDelivery = false;
   bool _isLoadingStores = false;
 
+  final List<ProductModel> _defaultCrossSellItems = [
+    ProductModel(
+      id: 'cross-onion-1kg',
+      name: 'Fresh Onion',
+      price: 40.0,
+      originalPrice: 50.0,
+      image: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400&auto=format&fit=crop&q=80',
+      netWeight: '1 kg',
+      category: 'essentials',
+      categoryLabel: 'Essentials',
+      inStock: true,
+    ),
+    ProductModel(
+      id: 'cross-ginger-garlic-paste',
+      name: 'Ginger Garlic Paste',
+      price: 45.0,
+      originalPrice: 55.0,
+      image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80',
+      netWeight: '200g',
+      category: 'essentials',
+      categoryLabel: 'Essentials',
+      inStock: true,
+    ),
+    ProductModel(
+      id: 'cross-chicken-masala',
+      name: 'Chicken Masala',
+      price: 35.0,
+      originalPrice: 45.0,
+      image: 'https://images.unsplash.com/photo-1596797038530-2c107229654b?w=400&auto=format&fit=crop&q=80',
+      netWeight: '100g',
+      category: 'essentials',
+      categoryLabel: 'Essentials',
+      inStock: true,
+    ),
+  ];
+
+  List<Map<String, dynamic>> _getHourlySlots() {
+    final now = DateTime.now();
+    final currentHour = now.hour;
+    final all = [
+      {'start': 8, 'label': '08:00 AM - 09:00 AM'},
+      {'start': 9, 'label': '09:00 AM - 10:00 AM'},
+      {'start': 10, 'label': '10:00 AM - 11:00 AM'},
+      {'start': 11, 'label': '11:00 AM - 12:00 PM'},
+      {'start': 12, 'label': '12:00 PM - 01:00 PM'},
+      {'start': 13, 'label': '01:00 PM - 02:00 PM'},
+      {'start': 14, 'label': '02:00 PM - 03:00 PM'},
+      {'start': 15, 'label': '03:00 PM - 04:00 PM'},
+      {'start': 16, 'label': '04:00 PM - 05:00 PM'},
+      {'start': 17, 'label': '05:00 PM - 06:00 PM'},
+      {'start': 18, 'label': '06:00 PM - 07:00 PM'},
+      {'start': 19, 'label': '07:00 PM - 08:00 PM'},
+    ];
+
+    return all.map((s) {
+      final start = s['start'] as int;
+      final isPassed = start <= currentHour;
+      return {
+        'label': s['label'] as String,
+        'start': start,
+        'isPassed': isPassed,
+      };
+    }).toList();
+  }
+
+  Future<void> _fetchCrossSellItems() async {
+    setState(() => _isLoadingCrossSell = true);
+    try {
+      final res = await ApiClient().get('/cross-sell');
+      if (res.data != null && res.data['success'] == true && res.data['data'] is List) {
+        final list = (res.data['data'] as List)
+            .map((e) => ProductModel.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+        if (mounted && list.isNotEmpty) {
+          setState(() {
+            _crossSellItems = list;
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted && _crossSellItems.isEmpty) {
+        setState(() {
+          _crossSellItems = _defaultCrossSellItems;
+        });
+      }
+    } finally {
+      if (mounted) setState(() => _isLoadingCrossSell = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -64,10 +158,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       onExternalWallet: _onRazorpayWallet,
     );
     _initDefaultStores();
+    _crossSellItems = _defaultCrossSellItems;
+    final available = _getHourlySlots().where((s) => s['isPassed'] == false).toList();
+    _selectedCustomSlot = available.isNotEmpty ? (available.first['label'] as String) : 'Tomorrow: 08:00 AM - 09:00 AM';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<CartProvider>().fetchAvailableCoupons();
         _fetchStores();
+        _fetchCrossSellItems();
       }
     });
   }
@@ -76,8 +174,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     _stores = [
       const StoreModel(
         storeId: 'S001',
-        name: "TeFFe's — Kishore Ganj",
-        address: 'Plot 42, Main Road, Kishore Ganj, Ranchi, Jharkhand 834001',
+        name: "TeFFe's — Central Store",
+        address: 'Harmu Road, Ranchi, Jharkhand 834001',
         city: 'Ranchi',
         phone: '+91 9779687955',
         status: 'Active',
@@ -240,6 +338,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     required double amount,
     required String shippingAddress,
     required String deliverySlot,
+    double expressFee = 0.0,
     required bool isPickup,
     required String storeId,
     required String storeName,
@@ -249,6 +348,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     setState(() => _isPlacingOrder = true);
 
     _pendingRazorpayAmount = amount;
+    _pendingExpressFee = expressFee;
     _pendingShippingAddress = shippingAddress;
     _pendingDeliverySlot = deliverySlot;
     _pendingIsPickup = isPickup;
@@ -346,6 +446,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         'razorpayPaymentId': paymentId,
         'shippingAddress': _pendingShippingAddress.isNotEmpty ? _pendingShippingAddress : location.activeAddressString,
         'deliverySlot': _pendingIsPickup ? 'Store Pickup (Counter Takeaway)' : _pendingDeliverySlot,
+        'expressFee': _pendingExpressFee,
         'storeId': _pendingStoreId,
         'storeName': _pendingStoreName,
         'deliveryInstruction': _pendingInstruction,
@@ -797,8 +898,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     }
 
     final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
+    final expressFee = (!isPickup && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
     final effectiveTip = isPickup ? 0 : _selectedTip;
-    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
+    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
+    final resolvedDeliverySlot = isPickup
+        ? 'Store Pickup (Counter Takeaway)'
+        : _selectedSlot == 'Custom Delivery'
+            ? 'Custom Delivery: $_selectedCustomSlot'
+            : _selectedSlot;
 
     final selStore = _selectedStore;
     if (selStore != null && !selStore.isAvailable) {
@@ -812,10 +919,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       return;
     }
 
-    final storeName = selStore?.name ?? "TeFFe's — Kishore Ganj";
+    final storeName = selStore?.name ?? "TeFFe's Store";
     final storeId = selStore?.storeId ?? 'S001';
     final shippingAddress = isPickup
-        ? 'Store Pickup: ${selStore?.name ?? "TeFFe's Hub"}, ${selStore?.address ?? "Ranchi"}'
+        ? 'Store Pickup: ${selStore?.name ?? "Store Counter"}, ${selStore?.address ?? "Ranchi"}'
         : location.activeAddressString;
     final activeInstruction = isPickup ? _pickupInstructionController.text.trim() : _deliveryInstruction;
 
@@ -824,7 +931,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       await _processRazorpayPayment(
         amount: effectiveGrandTotal,
         shippingAddress: shippingAddress,
-        deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : _selectedSlot,
+        deliverySlot: resolvedDeliverySlot,
+        expressFee: expressFee,
         isPickup: isPickup,
         storeId: storeId,
         storeName: storeName,
@@ -901,7 +1009,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 : 'Cash on Delivery (COD)',
         'paymentStatus': _selectedPaymentMethod == 'wallet' ? 'Paid' : 'Pending',
         'shippingAddress': shippingAddress,
-        'deliverySlot': isPickup ? 'Store Pickup (Counter Takeaway)' : _selectedSlot,
+        'deliverySlot': resolvedDeliverySlot,
+        'expressFee': expressFee,
         'storeId': storeId,
         'storeName': storeName,
       };
@@ -991,7 +1100,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     final items = cart.items.values.toList();
     final isPickup = _fulfillmentType == 'pickup';
     final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
-    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + _selectedTip - cart.couponDiscount).clamp(0.0, double.infinity);
+    final expressFee = (!isPickup && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
+    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + _selectedTip - cart.couponDiscount).clamp(0.0, double.infinity);
 
     return Scaffold(
       backgroundColor: AppColors.surfacePorcelain,
@@ -1041,7 +1151,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                             onTap: () {
                               setState(() {
                                 _fulfillmentType = 'delivery';
-                                _selectedSlot = '90 Mins Express Delivery';
+                                _selectedSlot = '90 Min Delivery';
                                 _showStorePickerInDelivery = false;
                               });
                               _fetchStores();
@@ -1094,7 +1204,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                   Icon(Icons.storefront_rounded, size: 16, color: isPickup ? AppColors.primaryMaroon : AppColors.textSecondary),
                                   const SizedBox(width: 6),
                                   Text(
-                                    'Store Pickup (Free)',
+                                    'Store Pickup',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: isPickup ? FontWeight.w800 : FontWeight.w600,
@@ -1705,83 +1815,270 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       children: [
                         Text(isPickup ? 'Pickup Time Slot' : 'Delivery Slot', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _selectedSlot = isPickup ? 'Immediate Pickup (30 Mins)' : '90 Mins Express Delivery'),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                                  decoration: BoxDecoration(
-                                    color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
-                                    borderRadius: AppDimensions.roundedMd,
-                                    border: Border.all(
-                                      color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.borderHairline,
-                                    ),
-                                  ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.timer_outlined, size: 16, color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.textPrimary),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            isPickup ? 'Ready in 30 Mins' : 'Express 90 Mins',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 11.5,
-                                              color: (_selectedSlot.contains('30 Mins') || _selectedSlot.contains('Express')) ? AppColors.primaryMaroon : AppColors.textPrimary,
-                                            ),
-                                          ),
-                                        ],
+                        if (isPickup)
+                          Row(
+                            children: [
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _selectedSlot = 'Immediate Pickup (30 Mins)'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                    decoration: BoxDecoration(
+                                      color: _selectedSlot.contains('30 Mins') ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
+                                      borderRadius: AppDimensions.roundedMd,
+                                      border: Border.all(
+                                        color: _selectedSlot.contains('30 Mins') ? AppColors.primaryMaroon : AppColors.borderHairline,
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(isPickup ? 'Freshly packed' : 'Priority butchering', style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                                    ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(Icons.timer_outlined, size: 16, color: _selectedSlot.contains('30 Mins') ? AppColors.primaryMaroon : AppColors.textPrimary),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Ready in 30 Mins',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 11.5,
+                                                color: _selectedSlot.contains('30 Mins') ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const Text('Freshly packed', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: () => setState(() => _selectedSlot = isPickup ? 'Evening Pickup (5-8 PM)' : 'Evening Delivery (6-9 PM)'),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                                  decoration: BoxDecoration(
-                                    color: _selectedSlot.contains('Evening') ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
-                                    borderRadius: AppDimensions.roundedMd,
-                                    border: Border.all(
-                                      color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.borderHairline,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _selectedSlot = 'Evening Pickup (5-8 PM)'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                                    decoration: BoxDecoration(
+                                      color: _selectedSlot.contains('Evening') ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
+                                      borderRadius: AppDimensions.roundedMd,
+                                      border: Border.all(
+                                        color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Icon(Icons.schedule_rounded, size: 15, color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.textPrimary),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Evening (5-8 PM)',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 11.5,
+                                                color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const Text('Counter pickup', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                                      ],
                                     ),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Icon(Icons.schedule_rounded, size: 15, color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.textPrimary),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            isPickup ? 'Evening (5-8 PM)' : 'Evening (6-9 PM)',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.w800,
-                                              fontSize: 11.5,
-                                              color: _selectedSlot.contains('Evening') ? AppColors.primaryMaroon : AppColors.textPrimary,
-                                            ),
-                                          ),
-                                        ],
+                                ),
+                              ),
+                            ],
+                          )
+                        else ...[
+                          // 3 Options for Home Delivery
+                          Row(
+                            children: [
+                              // 1. Express Delivery (60 min) (+₹50)
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _selectedSlot = 'Express Delivery (60 min)'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 7),
+                                    decoration: BoxDecoration(
+                                      color: _selectedSlot.contains('60 min') ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
+                                      borderRadius: AppDimensions.roundedMd,
+                                      border: Border.all(
+                                        color: _selectedSlot.contains('60 min') ? AppColors.primaryMaroon : AppColors.borderHairline,
                                       ),
-                                      const SizedBox(height: 2),
-                                      const Text('Evening fresh cuts', style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                                    ],
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Express',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 11.5,
+                                                color: _selectedSlot.contains('60 min') ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.amber.shade100,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: const Text('+₹50', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w900, color: Colors.brown)),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text('60 Mins', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _selectedSlot.contains('60 min') ? AppColors.primaryMaroon : AppColors.textPrimary)),
+                                        const Text('Priority rush', style: TextStyle(fontSize: 9, color: AppColors.textMuted)),
+                                      ],
+                                    ),
                                   ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              // 2. 90 Min Delivery (Standard Free)
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _selectedSlot = '90 Min Delivery'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 7),
+                                    decoration: BoxDecoration(
+                                      color: (_selectedSlot.contains('90 Min') || _selectedSlot.contains('90 Mins')) ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
+                                      borderRadius: AppDimensions.roundedMd,
+                                      border: Border.all(
+                                        color: (_selectedSlot.contains('90 Min') || _selectedSlot.contains('90 Mins')) ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              '90 Min',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 11.5,
+                                                color: (_selectedSlot.contains('90 Min') || _selectedSlot.contains('90 Mins')) ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.green.shade50,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text('Free', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.green.shade800)),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text('Fresh Cut', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: (_selectedSlot.contains('90 Min') || _selectedSlot.contains('90 Mins')) ? AppColors.primaryMaroon : AppColors.textPrimary)),
+                                        const Text('Standard', style: TextStyle(fontSize: 9, color: AppColors.textMuted)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              // 3. Custom Delivery (8 AM - 8 PM Hourly)
+                              Expanded(
+                                child: GestureDetector(
+                                  onTap: () => setState(() => _selectedSlot = 'Custom Delivery'),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 7),
+                                    decoration: BoxDecoration(
+                                      color: _selectedSlot == 'Custom Delivery' ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
+                                      borderRadius: AppDimensions.roundedMd,
+                                      border: Border.all(
+                                        color: _selectedSlot == 'Custom Delivery' ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                      ),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          children: [
+                                            Text(
+                                              'Custom',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.w800,
+                                                fontSize: 11.5,
+                                                color: _selectedSlot == 'Custom Delivery' ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.shade50,
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text('Slot', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: Colors.blue.shade800)),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 3),
+                                        Text('Choose', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _selectedSlot == 'Custom Delivery' ? AppColors.primaryMaroon : AppColors.textPrimary)),
+                                        const Text('8 AM - 8 PM', style: TextStyle(fontSize: 9, color: AppColors.textMuted)),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Hourly Slot Dropdown when Custom is selected
+                          if (_selectedSlot == 'Custom Delivery') ...[
+                            const SizedBox(height: 10),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.surfaceSubtle,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.borderHairline),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  isExpanded: true,
+                                  value: _selectedCustomSlot.isNotEmpty ? _selectedCustomSlot : null,
+                                  hint: const Text('Select Time Slot (8 AM – 8 PM)', style: TextStyle(fontSize: 11.5)),
+                                  icon: const Icon(Icons.arrow_drop_down, color: AppColors.primaryMaroon),
+                                  items: _getHourlySlots().map((s) {
+                                    final label = s['label'] as String;
+                                    final isPassed = s['isPassed'] as bool;
+                                    return DropdownMenuItem<String>(
+                                      value: label,
+                                      enabled: !isPassed,
+                                      child: Text(
+                                        isPassed ? '$label — (Passed)' : label,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: isPassed ? FontWeight.normal : FontWeight.w600,
+                                          color: isPassed ? AppColors.textMuted : AppColors.textPrimary,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    if (val != null) {
+                                      setState(() => _selectedCustomSlot = val);
+                                    }
+                                  },
                                 ),
                               ),
                             ),
                           ],
-                        ),
+                        ],
                       ],
                     ),
                   ),
@@ -1875,6 +2172,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       ],
                     ),
                   ),
+
+                  // 3.2 Cross-Selling Addons Strip
+                  _buildCrossSellingSection(cart),
+                  const SizedBox(height: AppDimensions.spaceMd),
 
                   // 3.5 Tip & Instructions (Home Delivery vs Store Pickup)
                   if (!isPickup) ...[
@@ -2177,6 +2478,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                   : CurrencyFormatter.format(effectiveDeliveryFee),
                           isHighlight: effectiveDeliveryFee == 0,
                         ),
+                        if (expressFee > 0)
+                          _buildBillRow(
+                            'Express (60 Min) Priority Fee',
+                            '+ ${CurrencyFormatter.format(expressFee)}',
+                          ),
                         if (cart.couponDiscount > 0)
                           _buildBillRow(
                             'Coupon Discount (${cart.appliedCoupon ?? ''})',
@@ -2849,6 +3155,232 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCrossSellingSection(CartProvider cart) {
+    if (_crossSellItems.isEmpty) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: AppDimensions.roundedLg,
+        border: Border.all(color: AppColors.borderHairline),
+        boxShadow: AppDimensions.cardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.add_shopping_cart_rounded, size: 14, color: AppColors.primaryMaroon),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Frequently Added Together',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: const Text(
+                    'CHEF PICK',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w900,
+                      color: Color(0xFF92400E),
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 168,
+            child: ListView.separated(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              scrollDirection: Axis.horizontal,
+              itemCount: _crossSellItems.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 10),
+              itemBuilder: (context, index) {
+                final item = _crossSellItems[index];
+                final currentQty = cart.items[item.id]?.quantity ?? 0;
+
+                return Container(
+                  width: 130,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFAFAFA),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: currentQty > 0 ? AppColors.primaryMaroon.withOpacity(0.4) : AppColors.borderHairline,
+                      width: currentQty > 0 ? 1.2 : 1.0,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Thumbnail
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: CachedNetworkImage(
+                          imageUrl: item.image,
+                          width: double.infinity,
+                          height: 72,
+                          fit: BoxFit.cover,
+                          placeholder: (_, __) => Container(color: AppColors.surfaceSubtle),
+                          errorWidget: (_, __, ___) => Container(
+                            color: AppColors.surfaceSubtle,
+                            child: const Icon(Icons.image_not_supported_rounded, size: 20, color: AppColors.textMuted),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      // Product Name
+                      Text(
+                        item.name,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      // Weight / subtitle
+                      Text(
+                        item.netWeight.isNotEmpty ? item.netWeight : '1 unit',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                      ),
+                      const Spacer(),
+                      // Price & Action Button
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.center,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                CurrencyFormatter.format(item.price),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primaryMaroon,
+                                ),
+                              ),
+                              if (item.originalPrice != null && item.originalPrice! > item.price)
+                                Text(
+                                  CurrencyFormatter.format(item.originalPrice!),
+                                  style: const TextStyle(
+                                    fontSize: 9,
+                                    color: AppColors.textMuted,
+                                    decoration: TextDecoration.lineThrough,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (currentQty == 0)
+                            InkWell(
+                              onTap: () {
+                                cart.addToCart(
+                                  item,
+                                  weight: item.netWeight.isNotEmpty ? item.netWeight : '1 unit',
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryMaroon,
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  '+ ADD',
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ),
+                            )
+                          else
+                            Container(
+                              height: 26,
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryMaroon,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InkWell(
+                                    onTap: () => cart.decrement(item.id),
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                                      child: Icon(Icons.remove, size: 12, color: Colors.white),
+                                    ),
+                                  ),
+                                  Text(
+                                    '$currentQty',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w800,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  InkWell(
+                                    onTap: () => cart.increment(item.id),
+                                    child: const Padding(
+                                      padding: EdgeInsets.symmetric(horizontal: 5, vertical: 4),
+                                      child: Icon(Icons.add, size: 12, color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
         ],
       ),
     );

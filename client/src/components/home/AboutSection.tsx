@@ -90,7 +90,7 @@ export default function AboutSection() {
             {
               icon: "schedule",
               title: "90-Min Delivery",
-              desc: "Speedy delivery from Kishore Ganj Chowk across Ranchi city straight to your kitchen.",
+              desc: "Speedy delivery from our nearest store across Ranchi city straight to your kitchen.",
             },
           ].map((pillar) => (
             <div

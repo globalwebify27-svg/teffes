@@ -145,7 +145,7 @@ class SuperOfferCard extends StatelessWidget {
                             ),
                           ),
                           Text(
-                            'at checkout. ${offer.minOrder > 0 ? "Above ₹${offer.minOrder.toInt()}." : ""} Valid till ${offer.validTill}.',
+                            'at checkout. ${offer.minOrder > 0 ? "Above ₹${offer.minOrder.toInt()}." : ""} Valid till ${offer.humanValidTill}.',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.grey.shade600,

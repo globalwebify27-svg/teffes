@@ -18,6 +18,36 @@ class CouponModel {
   final bool isActive;
   final bool isSuperOffer;
 
+  /// Returns a clean human-readable date and time, e.g. "31 Dec 2026, 11:59 PM"
+  String get humanValidTill {
+    if (validTill.trim().isEmpty) return 'Active';
+    try {
+      final parsed = DateTime.parse(validTill.trim()).toLocal();
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      final day = parsed.day;
+      final month = months[parsed.month - 1];
+      final year = parsed.year;
+
+      int hour = parsed.hour;
+      final minute = parsed.minute.toString().padLeft(2, '0');
+      final period = hour >= 12 ? 'PM' : 'AM';
+      hour = hour % 12;
+      if (hour == 0) hour = 12;
+
+      // When ISO timestamp has midnight 00:00, show end of day 11:59 PM
+      if (parsed.hour == 0 && parsed.minute == 0) {
+        return '$day $month $year, 11:59 PM';
+      }
+
+      return '$day $month $year, $hour:$minute $period';
+    } catch (_) {
+      return validTill.split('T').first;
+    }
+  }
+
   const CouponModel({
     required this.id,
     required this.code,

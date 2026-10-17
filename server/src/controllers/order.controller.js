@@ -116,13 +116,18 @@ const createOrder = async (req, res, next) => {
       };
     }
 
+    const isExpressSlot = !isPickup && Boolean(
+      (deliverySlot && deliverySlot.toLowerCase().includes('60 min')) ||
+      (deliverySlot && deliverySlot.toLowerCase().includes('express (60'))
+    );
+    const expressFee = isExpressSlot ? 50 : (Number(req.body.expressFee) || 0);
     const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
     const tipAmount = Number(req.body.tip) || 0;
-    const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + tipAmount - verifiedDiscount);
+    const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + expressFee + tipAmount - verifiedDiscount);
     const finalAmount = amount !== undefined ? amount : (totalAmount !== undefined ? totalAmount : computedFinalAmount);
 
     let orderAddress = isPickup
-      ? 'Store Pickup: Kishore Ganj Hub, Harmu Road, Ranchi (Takeaway Counter)'
+      ? (shippingAddress || 'Store Pickup: Store Takeaway Counter, Ranchi')
       : (shippingAddress || 'Ranchi Delivery');
 
     if (!isPickup && addressId) {
@@ -158,8 +163,9 @@ const createOrder = async (req, res, next) => {
       items,
       amount: finalAmount,
       storeId: storeId || 'S001',
-      storeName: storeName || 'Kishore Ganj',
+      storeName: storeName || 'Central Store',
       deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
+      expressFee: expressFee,
       fulfillmentType: resolvedFulfillmentType,
       pickupMode: isPickup,
       prepTimeMinutes: prepMinutes,
@@ -231,7 +237,7 @@ const createOrder = async (req, res, next) => {
     // Dispatch FCM push notification to customer
     notificationService.sendToUser(user._id, {
       title: 'Order Placed Successfully',
-      body: `Your order #${newOrder.orderId} for ₹${newOrder.amount} has been received and sent to the butchery.`,
+      body: `Your order #${newOrder.orderId} for ₹${newOrder.amount} has been received and sent to the store.`,
       data: {
         notificationType: 'ORDER_STATUS',
         orderId: newOrder.orderId,

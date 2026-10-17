@@ -18,6 +18,7 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
   const [emergencyNotice, setEmergencyNotice] = useState("");
   const [pickupEnabled, setPickupEnabled] = useState(true);
   const [deliveryEnabled, setDeliveryEnabled] = useState(true);
+  const [storeName, setStoreName] = useState("Store Outlet");
 
   useEffect(() => {
     if (!isOpenModal) return;
@@ -26,6 +27,7 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
       .then((res) => {
         if (res.data.success && res.data.store) {
           const s = res.data.store;
+          if (s.name) setStoreName(s.name);
           setStoreOpen(s.isOpen !== false);
           setTimings(s.timings || "08:00 AM - 08:00 PM");
           setEmergencyNotice(s.emergencyNotice || "");
@@ -82,7 +84,7 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
             <span className="material-symbols-outlined text-primary text-[24px]">storefront</span>
             <div>
               <h3 className="font-bold text-gray-900 text-base">Store Operational Control</h3>
-              <p className="text-xs text-gray-500">Kishore Ganj Central Butchery Hub</p>
+              <p className="text-xs text-gray-500">{storeName}</p>
             </div>
           </div>
           <button
@@ -165,33 +167,42 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
             </div>
 
             {/* Channel Toggles */}
-            <div className="grid grid-cols-2 gap-3 pt-2 border-t border-gray-100">
-              <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <div className={`grid grid-cols-2 gap-3 pt-2 border-t border-gray-100 transition-opacity ${!storeOpen ? "opacity-45" : ""}`}>
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 transition-all ${!storeOpen ? "cursor-not-allowed bg-gray-50 text-gray-400" : "hover:bg-gray-50 cursor-pointer"}`}>
                 <input
                   type="checkbox"
-                  checked={deliveryEnabled}
+                  disabled={!storeOpen}
+                  checked={storeOpen && deliveryEnabled}
                   onChange={(e) => setDeliveryEnabled(e.target.checked)}
-                  className="rounded text-primary focus:ring-primary h-4 w-4"
+                  className="rounded text-primary focus:ring-primary h-4 w-4 disabled:cursor-not-allowed"
                 />
-                <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                <span className={`text-xs font-bold flex items-center gap-1 ${!storeOpen ? "text-gray-400" : "text-gray-700"}`}>
                   <span className="material-symbols-outlined text-[16px] text-primary">two_wheeler</span>
                   <span>Home Delivery</span>
                 </span>
               </label>
 
-              <label className="flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+              <label className={`flex items-center gap-2 p-2.5 rounded-lg border border-gray-200 transition-all ${!storeOpen ? "cursor-not-allowed bg-gray-50 text-gray-400" : "hover:bg-gray-50 cursor-pointer"}`}>
                 <input
                   type="checkbox"
-                  checked={pickupEnabled}
+                  disabled={!storeOpen}
+                  checked={storeOpen && pickupEnabled}
                   onChange={(e) => setPickupEnabled(e.target.checked)}
-                  className="rounded text-primary focus:ring-primary h-4 w-4"
+                  className="rounded text-primary focus:ring-primary h-4 w-4 disabled:cursor-not-allowed"
                 />
-                <span className="text-xs font-bold text-gray-700 flex items-center gap-1">
+                <span className={`text-xs font-bold flex items-center gap-1 ${!storeOpen ? "text-gray-400" : "text-gray-700"}`}>
                   <span className="material-symbols-outlined text-[16px] text-emerald-600">storefront</span>
                   <span>Store Pickup</span>
                 </span>
               </label>
             </div>
+
+            {!storeOpen && (
+              <div className="mt-2.5 px-3 py-2 bg-amber-50 border border-amber-200/80 rounded-xl flex items-center gap-2 text-[11px] text-amber-900 font-medium">
+                <span className="material-symbols-outlined text-[16px] text-amber-600 shrink-0">lock</span>
+                <span>Both fulfillment channels are automatically locked while store is marked offline.</span>
+              </div>
+            )}
           </div>
         )}
 

@@ -639,114 +639,7 @@ export default function DashboardPage() {
     );
   }
 
-  // Realistic mock butchery orders matching Zepto card style
-  const mockOrdersList = [
-    {
-      id: "TEF-948211",
-      status: "in-progress",
-      statusText: "Out for Delivery",
-      statusColor: "text-amber-700",
-      badgeBg: "bg-amber-50",
-      icon: "two_wheeler",
-      placedAt: "Today, 03:05 pm • Arriving in 14 min",
-      amount: 485,
-      deliveryOtp: "4821",
-      remainingTransitMinutes: 14,
-      targetDeliveryTime: new Date(Date.now() + 14 * 60 * 1000).toISOString(),
-      etaStage: "IN_TRANSIT",
-      rider: {
-        name: "Md. Imran Ansari",
-        phone: "+91 98351 22410",
-        vehicle: "Honda Activa (JH-01-BX-4921)",
-        rating: "4.9",
-        deliveriesCount: "840+",
-        bagTemp: "Fresh-Lock Insulated Box",
-        eta: "14 min",
-      },
-      items: [
-        {
-          name: "Fresh Chicken Curry Cut (1kg)",
-          img: "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80",
-        },
-        {
-          name: "Farm Fresh Brown Eggs (12 pcs)",
-          img: "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=200&q=80",
-        },
-      ],
-    },
-    {
-      id: "TEF-920145",
-      status: "delivered",
-      statusText: "Order delivered",
-      statusColor: "text-emerald-700",
-      badgeBg: "bg-emerald-50",
-      icon: "check_circle",
-      placedAt: "3rd Sep 2026, 12:57 pm",
-      amount: 202,
-      items: [
-        {
-          name: "Fresh Chicken Curry Cut (500g)",
-          img: "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80",
-        },
-        {
-          name: "Organic Farm Brown Eggs (6 pcs)",
-          img: "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=200&q=80",
-        },
-      ],
-    },
-    {
-      id: "TEF-881902",
-      status: "delivered",
-      statusText: "Order delivered",
-      statusColor: "text-emerald-700",
-      badgeBg: "bg-emerald-50",
-      icon: "check_circle",
-      placedAt: "8th Jun 2026, 03:12 pm",
-      amount: 74,
-      items: [
-        {
-          name: "Rohu Fish Steaks (500g)",
-          img: "https://images.unsplash.com/photo-1534482421-64566f976cfa?auto=format&fit=crop&w=200&q=80",
-        },
-      ],
-    },
-    {
-      id: "TEF-762190",
-      status: "delivered",
-      statusText: "Order delivered",
-      statusColor: "text-emerald-700",
-      badgeBg: "bg-emerald-50",
-      icon: "check_circle",
-      placedAt: "30th May 2026, 11:38 am",
-      amount: 573,
-      items: [
-        {
-          name: "Fresh Goat Mutton Curry Cut (1kg)",
-          img: "https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=200&q=80",
-        },
-        {
-          name: "Premium Basmati Rice (Gift)",
-          img: "https://images.unsplash.com/photo-1586201375761-83865001e31c?auto=format&fit=crop&w=200&q=80",
-        },
-      ],
-    },
-    {
-      id: "TEF-651239",
-      status: "cancelled",
-      statusText: "Order cancelled",
-      statusColor: "text-slate-500",
-      badgeBg: "bg-slate-100",
-      icon: "cancel",
-      placedAt: "26th May 2026, 04:35 pm",
-      amount: 120,
-      items: [
-        {
-          name: "Chicken Drumsticks (500g)",
-          img: "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=200&q=80",
-        },
-      ],
-    },
-  ];
+
 
   const mappedLiveOrders = liveOrders.map((o) => {
     const isOutForDelivery = o.status === "Out for Delivery";
@@ -824,7 +717,7 @@ export default function DashboardPage() {
     { title: "Feedback & Suggestions", desc: "Help us serve you better with your cut preferences and packing feedback." },
     { title: "Order / Products Related", desc: "Cut styles, custom meat portions, gross vs net weight assurance." },
     { title: "Gift Card & Teffes Cash", desc: "Redeeming wallet credits and promotional cashback." },
-    { title: "Freshness & 90-Min Guarantee", desc: "Our 100% fresh shop cuts and delivery dispatch from Kishore Ganj Chowk." },
+    { title: "Freshness & 90-Min Guarantee", desc: "Our 100% fresh shop cuts and fast delivery dispatch straight to your door." },
     { title: "Wallet Related", desc: "Instant refunds credited directly to Teffes Cash wallet." },
     { title: "Teffes shop Club", desc: "Exclusive monthly subscription with free express deliveries." },
     { title: "Referral Program", desc: "Invite Ranchi friends and get ₹100 off on your next fresh meat order." },
@@ -1153,7 +1046,7 @@ export default function DashboardPage() {
                       Need Immediate Help with Your Order?
                     </h4>
                     <p className="text-xs text-slate-body mt-0.5">
-                      Call our Ranchi butchery hub directly at <strong>+91 94311 00000</strong> (7 AM – 9 PM).
+                      Call our Ranchi store directly at <strong>+91 94311 00000</strong> (7 AM – 9 PM).
                     </p>
                   </div>
                 </div>
@@ -1213,7 +1106,7 @@ export default function DashboardPage() {
                       <span className="material-symbols-outlined text-[36px] text-gray-300 mb-2">location_off</span>
                       <h4 className="text-sm font-bold text-gray-800">No saved addresses yet</h4>
                       <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                        Add your home or office address in Ranchi for fast, 10-minute butchery delivery.
+                        Add your home or office address in Ranchi for fast, 10-minute delivery.
                       </p>
                     </div>
                   ) : (
@@ -1577,7 +1470,7 @@ export default function DashboardPage() {
                     Fresh Meat Exchange Within 60 Mins
                   </h2>
                   <p className="text-xs sm:text-sm text-white/90 mt-1 max-w-2xl leading-relaxed">
-                    At Teffes Farm and Foods LLP, we are committed to delivering healthy, fresh, and cleanly butchered meat. Due to perishable food safety standards, we do not offer refunds, but provide a 100% free exchange facility under eligible conditions.
+                    At Teffes Farm and Foods LLP, we are committed to delivering healthy, fresh, and cleanly cut meat. Due to perishable food safety standards, we do not offer refunds, but provide a 100% free exchange facility under eligible conditions.
                   </p>
                 </div>
 
@@ -1620,7 +1513,7 @@ export default function DashboardPage() {
                     <ul className="text-xs text-slate-600 space-y-1 list-disc pl-4 leading-relaxed">
                       <li>Incorrect cut or wrong item delivered</li>
                       <li>Quality defect, odor, or damaged packaging</li>
-                      <li>Weight mismatch beyond butchery tolerance</li>
+                      <li>Weight mismatch beyond cutting tolerance</li>
                     </ul>
                   </div>
 
@@ -1633,7 +1526,7 @@ export default function DashboardPage() {
                       4. Order Cancellation
                     </h3>
                     <p className="text-xs text-slate-600 leading-relaxed">
-                      Orders can be cancelled before cutting begins. Once our butcher starts custom dressing or bird dispatch, cancellations cannot be processed.
+                      Orders can be cancelled before cutting begins. Once our team starts custom preparation or dispatch, cancellations cannot be processed.
                     </p>
                   </div>
                 </div>
@@ -1740,17 +1633,17 @@ export default function DashboardPage() {
                 } else if (isOutForDelivery) {
                   badgeText = "Rider on the Road";
                   mainHeading = `Arriving in ${transitMins} min`;
-                  subHeading = `Dispatched fresh from ${trackingOrder.storeName || "Kishore Ganj Butchery Hub"}`;
+                  subHeading = `Dispatched fresh from ${trackingOrder.storeName || "our store"}`;
                   iconName = "two_wheeler";
                   bannerColor = "bg-sky-50 border-sky-200 text-sky-950";
                   iconColor = "bg-sky-500/20 text-sky-800";
                 } else if (status === "Cutting") {
-                  badgeText = "Live Butchery Station";
+                  badgeText = "Live Cutting Station";
                   mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
                       ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
                       : "soon"
                     }`;
-                  subHeading = "Master butcher slicing & packing your fresh cuts";
+                  subHeading = "Store team slicing & packing your fresh cuts";
                   iconName = "content_cut";
                 } else if (status === "Ready") {
                   badgeText = "Packed & Ready";
@@ -1812,7 +1705,7 @@ export default function DashboardPage() {
                 riderLat={liveRiderCoords?.lat || trackingOrder.rider?.lat || 23.3512}
                 riderLng={liveRiderCoords?.lng || trackingOrder.rider?.lng || 85.3154}
                 riderName={trackingOrder.rider?.name || "Md. Imran"}
-                storeName={trackingOrder.storeName || "Kishore Ganj Hub"}
+                storeName={trackingOrder.storeName || "Fulfillment Store"}
                 customerAddress={trackingOrder.customer?.address || "Your Kitchen"}
                 orderStatus={trackingOrder.status || "Out for Delivery"}
                 className="h-52 w-full rounded-2xl overflow-hidden shadow-inner"
@@ -1909,7 +1802,7 @@ export default function DashboardPage() {
                     </span>
                     <div>
                       <span className="font-bold text-gray-900 block">Order Confirmed</span>
-                      <span className="text-slate-500 text-[11px]">Verified by butchery manager</span>
+                      <span className="text-slate-500 text-[11px]">Verified by store manager</span>
                     </div>
                   </div>
 
@@ -1928,14 +1821,14 @@ export default function DashboardPage() {
                         </span>
                         <div>
                           <span className={`font-bold block ${isCutting ? "text-amber-900" : "text-gray-900"}`}>
-                            {isCutting ? "Master Butcher Cutting Meat" : "Fresh Meat Cut & Packed"}
+                            {isCutting ? "Fresh Meat Cutting in Progress" : "Fresh Meat Cut & Packed"}
                           </span>
                           <span className={`text-[11px] ${isCutting ? "text-amber-800" : "text-slate-500"}`}>
                             {isCutting
-                              ? "Clean cutting on sanitized butcher block in progress"
+                              ? "Clean cutting on sanitized cutting block in progress"
                               : isDone
-                                ? "Cleanly butchered upon order & sealed fresh"
-                                : "Next up: Butchery preparation"}
+                                ? "Cleanly cut upon order & sealed fresh"
+                                : "Next up: Order preparation"}
                           </span>
                         </div>
                       </div>
@@ -1966,7 +1859,7 @@ export default function DashboardPage() {
                                 : `Rider is on the way (arriving in ${trackingOrder.remainingTransitMinutes ?? 14} min)`)
                               : isDone
                                 ? "Dispatched & safely reached your address"
-                                : "Assigned to delivery fleet from Kishore Ganj"}
+                                : `Assigned to delivery fleet from ${trackingOrder.storeName || "our store"}`}
                           </span>
                         </div>
                       </div>
@@ -2302,7 +2195,7 @@ export default function DashboardPage() {
                     rows={3}
                     value={returnReasonInput}
                     onChange={(e) => setReturnReasonInput(e.target.value)}
-                    placeholder="Provide any additional details for our butcher team..."
+                    placeholder="Provide any additional details for our store team..."
                     className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary/20 outline-none text-xs text-gray-900 resize-none font-medium"
                   />
                 </div>

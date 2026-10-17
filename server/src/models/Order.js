@@ -52,7 +52,7 @@ const orderSchema = new mongoose.Schema(
     },
     storeName: {
       type: String,
-      default: 'Kishore Ganj',
+      default: 'Central Store',
     },
     rider: {
       riderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null, index: true },
@@ -89,6 +89,10 @@ const orderSchema = new mongoose.Schema(
     deliverySlot: {
       type: String,
       default: '90 Mins Express Delivery',
+    },
+    expressFee: {
+      type: Number,
+      default: 0,
     },
     fulfillmentType: {
       type: String,

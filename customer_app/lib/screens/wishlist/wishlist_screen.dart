@@ -145,7 +145,7 @@ class WishlistScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             const Text(
-              'Tap the heart icon on any butchery cut to save your favorite cuts for quick repeat orders.',
+              'Tap the heart icon on any item to save your favorite cuts for quick repeat orders.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 13.5,
@@ -171,7 +171,7 @@ class WishlistScreen extends StatelessWidget {
                   Icon(Icons.restaurant_menu_rounded, size: 18),
                   SizedBox(width: 8),
                   Text(
-                    'Explore Butchery Cuts',
+                    'Explore Fresh Cuts',
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w700,

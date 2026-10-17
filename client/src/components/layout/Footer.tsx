@@ -18,7 +18,7 @@ export default function Footer() {
   }, []);
 
   return (
-    <footer className="w-full bg-surface-container-low mt-space-3xl border-t border-gray-200/80">
+    <footer className="w-full bg-surface-container-low mt-6 sm:mt-8 border-t border-gray-200/80">
       {/* 3 Proof Points Strip */}
       <div className="w-full bg-surface-container py-space-lg border-b border-gray-200/60">
         <div className="w-full max-w-container-max mx-auto px-gutter-desktop grid grid-cols-1 md:grid-cols-3 gap-space-lg">
@@ -29,7 +29,7 @@ export default function Footer() {
             <div>
               <h4 className="font-headline-sm text-headline-sm text-on-surface font-bold">90 Mins Express Cut</h4>
               <p className="font-body-sm text-body-sm text-slate-body mt-0.5">
-                Butchered fresh after your order confirmation, never stored frozen.
+                Cut fresh after your order confirmation, never stored frozen.
               </p>
             </div>
           </div>
@@ -53,7 +53,7 @@ export default function Footer() {
             <div>
               <h4 className="font-headline-sm text-headline-sm text-on-surface font-bold">Never Frozen Promise</h4>
               <p className="font-body-sm text-body-sm text-slate-body mt-0.5">
-                100% Fresh butchery cuts straight from the block to your kitchen.
+                100% Fresh meat cuts straight from the counter to your kitchen.
               </p>
             </div>
           </div>
@@ -73,11 +73,11 @@ export default function Footer() {
           </Link>
 
           <p className="font-body-md text-body-md text-slate-body max-w-sm leading-relaxed">
-            Ranchi&apos;s premier artisanal butcher and hygienic meats storefront. Bringing antibiotic-free farm poultry,
+            Ranchi&apos;s premier fresh and hygienic meat store. Bringing antibiotic-free farm poultry,
             pasture-raised mutton, and pristine fresh catches with precision portioning right to your doorstep.
           </p>
 
-          <div className="flex items-center gap-space-xs pt-1">
+          <div className="flex items-center gap-space-xs mt-4 pt-1">
             <span className="inline-flex items-center font-label-badge text-label-badge uppercase text-tertiary bg-tertiary-fixed-dim/20 px-3 py-1 rounded-full font-bold border border-tertiary/20 whitespace-nowrap text-[11px]">
               FSSAI Central Reg: 21123004000192
             </span>
@@ -116,39 +116,59 @@ export default function Footer() {
           </ul>
         </div>
 
-        {/* Customer Care */}
+        {/* Policies & Legal */}
         <div className="space-y-space-sm">
-          <h5 className="font-headline-sm text-headline-sm text-on-surface font-bold">Customer Care</h5>
+          <h5 className="font-headline-sm text-headline-sm text-on-surface font-bold">Policies &amp; Legal</h5>
           <ul className="space-y-space-xs font-body-sm text-body-sm text-slate-body list-none p-0 m-0">
             <li>
-              <Link href="/offers" className="hover:text-primary transition-colors text-inherit">
-                Deals &amp; Value Packs
-              </Link>
-            </li>
-            <li>
-              <a href="#about-us" className="hover:text-primary transition-colors text-inherit">
-                Our Freshness Philosophy
-              </a>
-            </li>
-            <li>
-              <Link href="/return-and-exchange-policy" className="hover:text-primary transition-colors text-inherit">
-                Delivery &amp; Dispatch Policy
-              </Link>
-            </li>
-            <li>
-              <Link href="/return-and-exchange-policy" className="hover:text-primary transition-colors text-inherit">
-                60-Min Exchange Terms
-              </Link>
-            </li>
-            <li>
-              <a
-                href="https://wa.me/919779687955?text=Hello%20Teffes%2C%20I%20need%20help."
+              <Link
+                href="/terms-and-conditions"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="hover:text-primary transition-colors text-inherit font-semibold text-tertiary"
+                className="hover:text-blue-600 hover:underline transition-colors text-inherit"
               >
-                Help &amp; Order Support (WhatsApp)
-              </a>
+                Terms and Conditions
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/return-and-exchange-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-blue-600 hover:underline transition-colors text-inherit"
+              >
+                Exchange Policy
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/shipping-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-blue-600 hover:underline transition-colors text-inherit"
+              >
+                Shipping Policy
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/privacy-policy"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-blue-600 hover:underline transition-colors text-inherit"
+              >
+                Privacy Policy
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/disclaimer"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-blue-600 hover:underline transition-colors text-inherit"
+              >
+                Disclaimer
+              </Link>
             </li>
           </ul>
         </div>
@@ -157,7 +177,7 @@ export default function Footer() {
         <div className="space-y-space-sm">
           <h5 className="font-headline-sm text-headline-sm text-on-surface font-bold">Ranchi Hubs</h5>
           <p className="font-body-sm text-body-sm text-slate-body leading-snug">
-            Main Dispatch Hub: teffes.com , near Kishore Ganj chowk, harmu road, ranchi , Jharkhand, 834001
+            Main Dispatch Hub: Harmu Road, Ranchi, Jharkhand 834001
           </p>
           <p className="font-label-badge text-label-badge text-tertiary uppercase font-bold text-[10.5px]">
             90-Min Zones: {stores.length > 0 ? stores.map(s => s.name || s.city).join(", ") : "Loading zones..."}
@@ -187,10 +207,10 @@ export default function Footer() {
               {/* Google Pay (G Pay) */}
               <div className="h-6.5 w-8.5 bg-white rounded-md border border-gray-200/90 shadow-2xs flex items-center justify-center gap-0.5 shrink-0" title="Google Pay">
                 <svg viewBox="0 0 24 24" className="w-3 h-3">
-                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
-                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
-                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
-                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+                  <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z" />
+                  <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z" />
+                  <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.98 0 12s.45 3.82 1.25 5.42l4.03-3.15z" />
+                  <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z" />
                 </svg>
                 <span className="text-[9.5px] font-semibold text-gray-700 tracking-tight">Pay</span>
               </div>
@@ -198,8 +218,8 @@ export default function Footer() {
               {/* Cash on Delivery (COD) */}
               <div className="h-6.5 w-8.5 bg-white rounded-md border border-gray-200/90 shadow-2xs flex items-center justify-center shrink-0" title="Cash on Delivery">
                 <svg viewBox="0 0 36 20" className="h-3.5 w-6" fill="none">
-                  <rect x="1" y="1" width="34" height="18" rx="2" stroke="#16a34a" strokeWidth="1.5" fill="#f0fdf4"/>
-                  <circle cx="18" cy="10" r="5" stroke="#16a34a" strokeWidth="1" fill="#dcfce7"/>
+                  <rect x="1" y="1" width="34" height="18" rx="2" stroke="#16a34a" strokeWidth="1.5" fill="#f0fdf4" />
+                  <circle cx="18" cy="10" r="5" stroke="#16a34a" strokeWidth="1" fill="#dcfce7" />
                   <text x="18" y="12.5" textAnchor="middle" fill="#16a34a" fontSize="6.5" fontWeight="900" fontFamily="sans-serif">COD</text>
                 </svg>
               </div>
@@ -207,8 +227,8 @@ export default function Footer() {
               {/* Mastercard */}
               <div className="h-6.5 w-8.5 bg-white rounded-md border border-gray-200/90 shadow-2xs flex items-center justify-center shrink-0" title="Mastercard">
                 <svg viewBox="0 0 32 20" className="h-3 w-5">
-                  <circle cx="11" cy="10" r="8" fill="#EB001B"/>
-                  <circle cx="21" cy="10" r="8" fill="#F79E1B" fillOpacity="0.92"/>
+                  <circle cx="11" cy="10" r="8" fill="#EB001B" />
+                  <circle cx="21" cy="10" r="8" fill="#F79E1B" fillOpacity="0.92" />
                 </svg>
               </div>
 
@@ -247,10 +267,20 @@ export default function Footer() {
             </a>
           </p>
           <div className="flex items-center gap-space-md font-label-md text-label-md">
-            <Link href="/return-and-exchange-policy" className="hover:text-on-surface transition-colors text-inherit">
+            <Link
+              href="/privacy-policy"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-600 hover:underline transition-colors text-inherit"
+            >
               Privacy Policy
             </Link>
-            <Link href="/return-and-exchange-policy" className="hover:text-on-surface transition-colors text-inherit">
+            <Link
+              href="/terms-and-conditions"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-blue-600 hover:underline transition-colors text-inherit"
+            >
               Terms of Service
             </Link>
             <span className="text-tertiary font-bold">FSSAI Certified</span>

@@ -215,7 +215,7 @@ class ProductsProvider with ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error fetching products from server: $e');
-      _error = 'Unable to connect to butchery catalog server';
+      _error = 'Unable to connect to catalog server';
     } finally {
       _isLoading = false;
       notifyListeners();

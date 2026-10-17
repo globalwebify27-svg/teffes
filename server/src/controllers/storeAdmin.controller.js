@@ -85,7 +85,7 @@ const getDashboardOverview = async (req, res, next) => {
         value: `${activeRidersCount || 4}`,
         sub: '2 on delivery, 2 available',
         color: '#0284c7',
-        tab: 'slots',
+        tab: 'riders',
       },
     ];
 
@@ -186,9 +186,9 @@ const updateOrderStatus = async (req, res, next) => {
         Cancelled: 'Order Cancelled',
       };
       const bodies = {
-        Cutting: `Butcher is preparing your fresh cuts for order #${order.orderId}.`,
+        Cutting: `Our team is preparing your fresh cuts for order #${order.orderId}.`,
         Ready: order.fulfillmentType === 'pickup'
-          ? `Your order #${order.orderId} is packed and ready for takeaway at Kishore Ganj counter.`
+          ? `Your order #${order.orderId} is packed and ready for takeaway at the store counter.`
           : `Order #${order.orderId} is packed and awaiting rider dispatch.`,
         'Out for Delivery': `Your order #${order.orderId} is on the way to your address!`,
         Delivered: `Your order #${order.orderId} has been delivered. Thank you for choosing Teffe's!`,
@@ -395,12 +395,21 @@ const updateReturnStatus = async (req, res, next) => {
 
 /**
  * GET /api/store-admin/riders
- * Get riders for this store
+ * Get riders for this store (or all active fleet riders in Ranchi if not assigned specifically)
  */
 const getRiders = async (req, res, next) => {
   try {
     const storeId = req.user?.storeId || req.query.storeId || 'S001';
-    const riders = await User.find({ role: 'rider', storeId }).select('-password');
+    let riders = await User.find({
+      role: 'rider',
+      $or: [{ storeId }, { storeId: { $exists: false } }, { storeId: null }, { storeId: '' }],
+    }).select('-password');
+
+    // Fallback: If no rider has been tagged to this storeId yet, show all active riders in the city pool
+    if (riders.length === 0) {
+      riders = await User.find({ role: 'rider' }).select('-password');
+    }
+
     res.status(200).json({ success: true, count: riders.length, riders });
   } catch (error) {
     next(error);
@@ -524,7 +533,7 @@ const getStoreStatus = async (req, res, next) => {
     if (!store) {
       store = await Store.create({
         storeId,
-        name: 'Kishore Ganj Butchery',
+        name: 'Kishore Ganj Store',
         city: 'Ranchi',
         address: 'Harmu Road, Kishore Ganj, Ranchi, Jharkhand 834001',
         isOpen: true,

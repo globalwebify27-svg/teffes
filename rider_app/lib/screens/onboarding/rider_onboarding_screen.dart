@@ -361,7 +361,7 @@ class _RiderOnboardingScreenState extends State<RiderOnboardingScreen> {
 
           // Subtitle
           const Text(
-            "Join TeFFe's certified butchery courier fleet. Enjoy optimized cluster routes, smart thermal fresh boxes, and flexible shift hours.",
+            "Join TeFFe's certified delivery fleet. Enjoy optimized cluster routes, smart thermal fresh boxes, and flexible shift hours.",
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 12,
@@ -379,7 +379,7 @@ class _RiderOnboardingScreenState extends State<RiderOnboardingScreen> {
             iconColor: const Color(0xFFDC2626),
             iconBgColor: const Color(0xFFFEE2E2),
             title: "Hyper-Local Batch Routing",
-            subtitle: "Pick up multiple orders from 1 butchery hub within a tight 5km delivery radius.",
+            subtitle: "Pick up multiple orders from 1 store hub within a tight 5km delivery radius.",
           ),
           const SizedBox(height: 10),
           _buildFeatureCard(

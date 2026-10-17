@@ -9,6 +9,7 @@ import { isAuthenticated } from "@/lib/auth";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faHeart as faHeartSolid } from "@fortawesome/free-solid-svg-icons";
 import { faHeart as faHeartRegular } from "@fortawesome/free-regular-svg-icons";
+import ProductQuantityStepper from "@/components/products/ProductQuantityStepper";
 
 export default function ProductCard({ product }: { product: Product }) {
   const router = useRouter();
@@ -298,37 +299,16 @@ export default function ProductCard({ product }: { product: Product }) {
           </div>
 
           {/* Add to Cart / Quantity Controller */}
-          {quantity > 0 ? (
-            <div className="qty-control">
-              <button
-                type="button"
-                className="qty-btn"
-                onClick={() => updateQuantity(product.id, quantity - 1)}
-                aria-label={`Decrease ${product.name}`}
-              >
-                −
-              </button>
-              <span className="qty-val">{quantity}</span>
-              <button
-                type="button"
-                className="qty-btn"
-                onClick={() => updateQuantity(product.id, quantity + 1)}
-                aria-label={`Increase ${product.name}`}
-              >
-                +
-              </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-outline-red btn-sm btn-hover-fill"
-              onClick={handleAddToCart}
-              id={`add-btn-${product.id}`}
-              style={{ fontWeight: 700 }}
-            >
-              + ADD
-            </button>
-          )}
+          <div>
+            <ProductQuantityStepper
+              quantity={quantity}
+              addLabel="+ ADD"
+              compact
+              onAdd={handleAddToCart}
+              onIncrease={() => updateQuantity(product.id, quantity + 1)}
+              onDecrease={() => updateQuantity(product.id, quantity - 1)}
+            />
+          </div>
         </div>
       </div>
     </div>

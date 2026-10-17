@@ -1,11 +1,25 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useCart } from "@/lib/cart";
+import type { Product } from "@/lib/products";
 import { isAuthenticated, getStoredUser } from "@/lib/auth";
 import api from "@/lib/api";
 import { useLocation } from "@/context/LocationContext";
 import { toast } from "@/lib/toast";
+
+interface CrossSellItemData {
+  id: string;
+  name: string;
+  price: number;
+  originalPrice?: number;
+  image: string;
+  weight: string;
+  category?: string;
+  inStock?: boolean;
+}
+
+
 
 interface Address {
   _id: string;
@@ -56,6 +70,8 @@ export default function CartDrawer() {
     items,
     isOpen,
     closeCart,
+    addToCart,
+    getItemQuantity,
     updateQuantity,
     removeFromCart,
     clearCart,
@@ -87,13 +103,95 @@ export default function CartDrawer() {
   // Stores for fulfillment (both Delivery and Pickup)
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState<string>("");
-  const [showStorePickerInDelivery, setShowStorePickerInDelivery] = useState<boolean>(false);
   const [pickupNote, setPickupNote] = useState<string>("");
 
   // Navigation views: "cart" -> "payment" -> "success" | "address"
   const [view, setView] = useState<"cart" | "payment" | "success" | "address">("cart");
-  const [slot, setSlot] = useState<"express" | "evening">("express");
+  // 3 Delivery Slot options: Express 60-min (+₹50), 90 Min Standard, Custom Delivery (8 AM - 8 PM hourly)
+  const [slot, setSlot] = useState<"express60" | "standard90" | "custom">("standard90");
+  const [customSlotTime, setCustomSlotTime] = useState<string>("");
+  const [crossSellItems, setCrossSellItems] = useState<CrossSellItemData[]>([]);
+  const [isLoadingCrossSell, setIsLoadingCrossSell] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Hourly slots from 8 AM to 8 PM with past hours disabled
+  const hourlySlots = useMemo(() => {
+    const currentHour = new Date().getHours();
+    const allSlots = [
+      { start: 8, label: "08:00 AM - 09:00 AM" },
+      { start: 9, label: "09:00 AM - 10:00 AM" },
+      { start: 10, label: "10:00 AM - 11:00 AM" },
+      { start: 11, label: "11:00 AM - 12:00 PM" },
+      { start: 12, label: "12:00 PM - 01:00 PM" },
+      { start: 13, label: "01:00 PM - 02:00 PM" },
+      { start: 14, label: "02:00 PM - 03:00 PM" },
+      { start: 15, label: "03:00 PM - 04:00 PM" },
+      { start: 16, label: "04:00 PM - 05:00 PM" },
+      { start: 17, label: "05:00 PM - 06:00 PM" },
+      { start: 18, label: "06:00 PM - 07:00 PM" },
+      { start: 19, label: "07:00 PM - 08:00 PM" },
+    ];
+
+    return allSlots.map((s) => ({
+      ...s,
+      isPassed: s.start <= currentHour,
+    }));
+  }, []);
+
+  // Ensure an available custom slot is pre-selected
+  useEffect(() => {
+    if (!customSlotTime) {
+      const firstAvailable = hourlySlots.find((s) => !s.isPassed);
+      if (firstAvailable) {
+        setCustomSlotTime(firstAvailable.label);
+      } else {
+        setCustomSlotTime("Tomorrow: 08:00 AM - 09:00 AM");
+      }
+    }
+  }, [hourlySlots, customSlotTime]);
+
+  // Fetch cross-sell items from database on cart open
+  useEffect(() => {
+    if (isOpen) {
+      setIsLoadingCrossSell(true);
+      api.get<{ success: boolean; data: CrossSellItemData[] }>("/cross-sell")
+        .then((res) => {
+          if (res.data?.success && Array.isArray(res.data.data)) {
+            setCrossSellItems(res.data.data);
+          } else {
+            setCrossSellItems([]);
+          }
+        })
+        .catch(() => {
+          setCrossSellItems([]);
+        })
+        .finally(() => {
+          setIsLoadingCrossSell(false);
+        });
+    }
+  }, [isOpen]);
+
+  // Handler for cross-selling product addition
+  const handleAddCrossSell = (cs: CrossSellItemData) => {
+    const product: Product = {
+      id: cs.id,
+      name: cs.name,
+      category: cs.category || "Essentials",
+      categoryLabel: cs.category || "Essentials",
+      price: cs.price,
+      originalPrice: cs.originalPrice || cs.price,
+      image: cs.image,
+      netWeight: cs.weight || "1 unit",
+      inStock: cs.inStock !== false,
+      badge: "Add-on",
+      description: "Recipe essential add-on",
+      rating: 4.9,
+      ratingCount: 120,
+      images: [cs.image],
+    };
+    addToCart(product, cs.weight);
+    toast.success(`Added ${cs.name} to cart!`);
+  };
 
   // Addresses state
   const [addresses, setAddresses] = useState<Address[]>([]);
@@ -129,13 +227,18 @@ export default function CartDrawer() {
         // Auto-select nearest shop among filtered shop list (eligible stores are sorted by distance)
         const bestStore = res.data.suggestedStore || res.data.eligibleStores?.[0] || res.data.stores[0];
         if (bestStore) {
-          setSelectedStoreId((prev) => {
-            const isPrevStillEligible = res.data.eligibleStores?.some((s) => s.storeId === prev);
-            if (!prev || !isPrevStillEligible) {
-              return bestStore.storeId;
-            }
-            return prev;
-          });
+          if (fulfillmentType === "delivery") {
+            // For delivery: strictly auto-select nearest shop based on customer's address; user cannot change it
+            setSelectedStoreId(bestStore.storeId);
+          } else {
+            setSelectedStoreId((prev) => {
+              const isPrevStillEligible = res.data.eligibleStores?.some((s) => s.storeId === prev);
+              if (!prev || !isPrevStillEligible) {
+                return bestStore.storeId;
+              }
+              return prev;
+            });
+          }
         }
       }
     } catch (err) {
@@ -151,7 +254,6 @@ export default function CartDrawer() {
     } else {
       setView("cart");
       setShowAddAddressForm(false);
-      setShowStorePickerInDelivery(false);
     }
   }, [isOpen]);
 
@@ -159,7 +261,7 @@ export default function CartDrawer() {
     if (isOpen) {
       fetchAvailableStores();
     }
-  }, [fulfillmentType, items]);
+  }, [fulfillmentType, items, selectedAddressId]);
 
   // Tip Delivery Partner state (Zepto style)
   const [selectedTip, setSelectedTip] = useState<number>(0);
@@ -222,9 +324,17 @@ export default function CartDrawer() {
 
   const isPickup = fulfillmentType === "pickup";
   const effectiveDeliveryFee = isPickup ? 0 : deliveryFee;
+  const expressFee = (!isPickup && slot === "express60") ? 50 : 0;
   const effectiveTip = isPickup ? 0 : selectedTip;
   const discountAmount = couponDiscount;
-  const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + effectiveTip - discountAmount);
+  const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + expressFee + effectiveTip - discountAmount);
+  const resolvedDeliverySlot = isPickup
+    ? "Store Pickup"
+    : slot === "express60"
+      ? "Express Delivery (60 min)"
+      : slot === "custom"
+        ? `Custom Delivery: ${customSlotTime}`
+        : "90 Min Delivery";
 
   const selectedStore =
     stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
@@ -403,8 +513,8 @@ export default function CartDrawer() {
         addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
-        storeName: selectedStore?.name || "Kishore Ganj",
-        deliverySlot: fulfillmentType === "pickup" ? "Store Pickup" : slot === "express" ? "90 Mins Express Delivery" : "Evening Delivery (6-9 PM)",
+        deliverySlot: resolvedDeliverySlot,
+        expressFee: expressFee,
         paymentMethod: selectedPayment === "wallet" ? "wallet" : fulfillmentType === "pickup" ? "Pay at Store Counter" : "Cash on Delivery",
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
@@ -448,8 +558,9 @@ export default function CartDrawer() {
         addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
-        storeName: selectedStore?.name || "Kishore Ganj",
-        deliverySlot: fulfillmentType === "pickup" ? "Store Pickup" : slot === "express" ? "90 Mins Express Delivery" : "Evening Delivery (6-9 PM)",
+        storeName: selectedStore?.name || "Central Store",
+        deliverySlot: resolvedDeliverySlot,
+        expressFee: expressFee,
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
       };
@@ -637,10 +748,6 @@ export default function CartDrawer() {
                 >
                   <span className="material-symbols-outlined text-[18px]">storefront</span>
                   <span>Store Pickup</span>
-                  <span className={`text-[10px] uppercase font-black px-1.5 py-0.5 rounded-full ${fulfillmentType === "pickup" ? "bg-emerald-100 text-emerald-800" : "bg-emerald-50 text-emerald-700"
-                    }`}>
-                    FREE
-                  </span>
                 </button>
               </div>
             </div>
@@ -767,10 +874,10 @@ export default function CartDrawer() {
                                 }
                               }}
                               className={`p-3 rounded-2xl border transition-all text-left ${isOutOfStock
-                                  ? "border-gray-200 bg-gray-50/80 opacity-60 cursor-not-allowed"
-                                  : isSelected
-                                    ? "border-primary bg-crimson-soft shadow-xs ring-1 ring-primary/20 cursor-pointer"
-                                    : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60 cursor-pointer"
+                                ? "border-gray-200 bg-gray-50/80 opacity-60 cursor-not-allowed"
+                                : isSelected
+                                  ? "border-primary bg-crimson-soft shadow-xs ring-1 ring-primary/20 cursor-pointer"
+                                  : "border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/60 cursor-pointer"
                                 }`}
                             >
                               <div className="flex items-start gap-2.5">
@@ -845,25 +952,13 @@ export default function CartDrawer() {
                   {/* ─── TAB 1 CONTENT: DELIVERY SPEED SLOTS & FULFILLING STORE HUB ─── */}
                   {fulfillmentType === "delivery" && (
                     <div className="space-y-3">
-                      {/* Fulfilling Store Hub Card (Nearest Auto-Selected with Option to Change) */}
+                      {/* Fulfilling Store Hub Card (Nearest Auto-Selected; User cannot change it) */}
                       <div className="p-3 bg-white rounded-2xl border border-gray-200 shadow-xs space-y-2">
                         <div className="flex items-center justify-between">
                           <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px] flex items-center gap-1.5">
                             <span className="material-symbols-outlined text-primary text-[16px]">store</span>
                             <span>Fulfilling Hub</span>
                           </div>
-                          {stores.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => setShowStorePickerInDelivery(!showStorePickerInDelivery)}
-                              className="text-[11.5px] font-bold text-primary hover:underline flex items-center gap-0.5 cursor-pointer"
-                            >
-                              <span>{showStorePickerInDelivery ? "Hide Stores" : "Change Hub"}</span>
-                              <span className="material-symbols-outlined text-[15px]">
-                                {showStorePickerInDelivery ? "expand_less" : "expand_more"}
-                              </span>
-                            </button>
-                          )}
                         </div>
 
                         {/* Selected Store Summary */}
@@ -876,7 +971,7 @@ export default function CartDrawer() {
                                   {selectedStore.name}
                                 </span>
                                 <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-full shrink-0">
-                                  {selectedStore === stores[0] ? "Nearest • In Stock" : "In Stock"}
+                                  Nearest • In Stock
                                 </span>
                               </div>
                               <p className="text-[11px] text-slate-body truncate mt-0.5">{selectedStore.address}</p>
@@ -888,101 +983,120 @@ export default function CartDrawer() {
                             </div>
                           </div>
                         )}
-
-                        {/* Expandable Hub Selector */}
-                        {showStorePickerInDelivery && (
-                          <div className="space-y-1.5 pt-2 border-t border-gray-100">
-                            <div className="text-[11px] font-semibold text-slate-body mb-1">
-                              Select from available butchery stores with items in stock:
-                            </div>
-                            {stores.map((st, idx) => {
-                              const isSel = st.storeId === selectedStoreId;
-                              const isNearest = idx === 0;
-                              const isOutOfStock = st.isAvailable === false;
-
-                              return (
-                                <div
-                                  key={st.storeId}
-                                  onClick={() => {
-                                    if (!isOutOfStock) {
-                                      setSelectedStoreId(st.storeId);
-                                      setShowStorePickerInDelivery(false);
-                                    }
-                                  }}
-                                  className={`p-2.5 rounded-xl border transition-all text-left ${isOutOfStock
-                                      ? "border-gray-200 bg-gray-50 opacity-60 cursor-not-allowed"
-                                      : isSel
-                                        ? "border-primary bg-crimson-soft ring-1 ring-primary/20 cursor-pointer"
-                                        : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
-                                    }`}
-                                >
-                                  <div className="flex items-start justify-between gap-1.5">
-                                    <div className="flex-1 min-w-0">
-                                      <div className="flex items-center gap-1.5 flex-wrap">
-                                        <span className="font-bold text-on-surface text-[12.5px]">{st.name}</span>
-                                        {isNearest && (
-                                          <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100 px-1.5 py-0.2 rounded-full">
-                                            Nearest
-                                          </span>
-                                        )}
-                                        {isSel && (
-                                          <span className="text-[9.5px] font-bold text-primary bg-primary/10 px-1.5 py-0.2 rounded-full">
-                                            Selected
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="text-[11px] text-slate-body truncate mt-0.5">{st.address}</div>
-                                      <div className="flex items-center gap-2 mt-0.5 text-[10.5px]">
-                                        <span className="text-primary font-bold">{st.distance}</span>
-                                        <span>•</span>
-                                        <span className={isOutOfStock ? "text-red-600 font-bold" : "text-emerald-700 font-bold"}>
-                                          {isOutOfStock ? "Out of Stock" : "In Stock"}
-                                        </span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
                       </div>
 
-                      {/* Delivery Speed Slots */}
+                      {/* Delivery Speed Slots: 3 Options (Express 60 min, 90 min, Custom) */}
                       <div className="p-3 bg-slate-50 rounded-2xl border border-gray-200">
-                        <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px] mb-2">
-                          Select Delivery Speed (Ranchi Only)
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px]">
+                            Select Delivery Speed (Ranchi Only)
+                          </div>
                         </div>
-                        <div className="grid grid-cols-2 gap-2">
+
+                        {/* 3 Slot Buttons Grid */}
+                        <div className="grid grid-cols-3 gap-2">
+                          {/* 1. Express Delivery (60 min) */}
                           <button
                             type="button"
-                            onClick={() => setSlot("express")}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "express"
-                                ? "border-primary bg-crimson-soft shadow-xs"
-                                : "border-gray-200 bg-white hover:border-gray-300"
+                            onClick={() => setSlot("express60")}
+                            style={slot === "express60" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "express60"
+                              ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
+                              : "border-gray-200 bg-white hover:border-gray-300"
                               }`}
                           >
-                            <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
-                              <span className="material-symbols-outlined text-primary text-[16px]">timer</span>
-                              <span>90-Min Express</span>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold text-[12px] text-gray-900 leading-tight">Express</span>
+                              <span className="text-[9.5px] font-black bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">+₹50</span>
                             </div>
-                            <div className="font-body-sm text-slate-body text-[11px] mt-0.5">Cut &amp; delivered fresh</div>
+                            <div className="mt-1.5">
+                              <div className="text-[11px] font-bold text-[#91000a] leading-tight">60 Mins</div>
+                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">Priority Rush</div>
+                            </div>
                           </button>
+
+                          {/* 2. 90 Min Delivery */}
                           <button
                             type="button"
-                            onClick={() => setSlot("evening")}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all ${slot === "evening"
-                                ? "border-primary bg-crimson-soft shadow-xs"
-                                : "border-gray-200 bg-white hover:border-gray-300"
+                            onClick={() => setSlot("standard90")}
+                            style={slot === "standard90" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "standard90"
+                              ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
+                              : "border-gray-200 bg-white hover:border-gray-300"
                               }`}
                           >
-                            <div className="flex items-center gap-1 font-label-md font-bold text-on-surface text-[12.5px]">
-                              <span className="material-symbols-outlined text-primary text-[16px]">schedule</span>
-                              <span>Evening Slot</span>
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold text-[12px] text-gray-900 leading-tight">90 Min</span>
+                              <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
                             </div>
-                            <div className="font-body-sm text-slate-body text-[11px] mt-0.5">5:00 PM – 7:30 PM</div>
+                            <div className="mt-1.5">
+                              <div className="text-[11px] font-bold text-gray-900 leading-tight">Fresh Cut</div>
+                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">Standard</div>
+                            </div>
+                          </button>
+
+                          {/* 3. Custom Delivery */}
+                          <button
+                            type="button"
+                            onClick={() => setSlot("custom")}
+                            style={slot === "custom" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "custom"
+                              ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
+                              : "border-gray-200 bg-white hover:border-gray-300"
+                              }`}
+                          >
+                            <div className="flex items-center justify-between gap-1">
+                              <span className="font-bold text-[12px] text-gray-900 leading-tight">Custom</span>
+                              <span className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Slot</span>
+                            </div>
+                            <div className="mt-1.5">
+                              <div className="text-[11px] font-bold text-sky-900 leading-tight">Choose</div>
+                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">8 AM - 8 PM</div>
+                            </div>
                           </button>
                         </div>
+
+                        {/* Custom Delivery Dropdown when Custom is selected */}
+                        {slot === "custom" && (
+                          <div className="mt-3 pt-2.5 border-t border-gray-200/80">
+                            <label className="block text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                              <span>Select 1-Hour Time Slot (8:00 AM – 8:00 PM):</span>
+                              <span className="text-[10px] text-slate-400 font-normal">Past hours disabled</span>
+                            </label>
+                            <div className="relative">
+                              <select
+                                value={customSlotTime}
+                                onChange={(e) => setCustomSlotTime(e.target.value)}
+                                className="w-full py-2 pl-3 pr-8 text-[12px] font-semibold bg-white border border-gray-300 rounded-xl outline-none focus:border-primary text-gray-900 shadow-2xs cursor-pointer appearance-none"
+                              >
+                                {hourlySlots.map((s) => (
+                                  <option
+                                    key={s.label}
+                                    value={s.label}
+                                    disabled={s.isPassed}
+                                    className={s.isPassed ? "text-gray-400 bg-gray-50" : "text-gray-900 font-medium"}
+                                  >
+                                    {s.label} {s.isPassed ? "— (Passed)" : "• Available"}
+                                  </option>
+                                ))}
+                                {hourlySlots.every((s) => s.isPassed) && (
+                                  <option value="Tomorrow: 08:00 AM - 09:00 AM" className="text-emerald-700 font-bold">
+                                    Tomorrow: 08:00 AM - 09:00 AM
+                                  </option>
+                                )}
+                              </select>
+                              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 text-[18px]">
+                                expand_more
+                              </span>
+                            </div>
+                            {customSlotTime && (
+                              <p className="text-[10.5px] text-sky-700 font-medium mt-1 flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                <span>Order will be delivered during <strong>{customSlotTime}</strong></span>
+                              </p>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1064,6 +1178,105 @@ export default function CartDrawer() {
                     ))}
                   </div>
 
+                  {/* ─── CROSS-SELLING SECTION (Recipe Essentials & Add-ons) ─── */}
+                  <div className="bg-gradient-to-r from-amber-50/70 via-orange-50/30 to-amber-50/70 border border-amber-200/80 rounded-2xl p-3.5 shadow-2xs">
+                    <div className="flex items-center justify-between mb-2.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-amber-700 text-[18px]">shopping_basket</span>
+                        <span className="font-headline-sm font-extrabold text-on-surface text-[13px] tracking-tight">
+                          Add Cooking Essentials
+                        </span>
+                      </div>
+                      <span className="text-[10px] font-bold text-amber-900 bg-amber-100/90 px-2 py-0.5 rounded-full">
+                        Recipe Add-ons
+                      </span>
+                    </div>
+
+                    {isLoadingCrossSell ? (
+                      <div className="py-4 text-center text-xs text-slate-body flex items-center justify-center gap-2">
+                        <span className="inline-block w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
+                        <span>Loading cooking essentials…</span>
+                      </div>
+                    ) : crossSellItems && crossSellItems.length > 0 ? (
+                      /* Horizontal Compact Scroll Strip */
+                      <div className="flex gap-2.5 overflow-x-auto pb-1.5 pt-0.5 scrollbar-thin scrollbar-thumb-gray-200">
+                        {crossSellItems.map((cs) => {
+                          const qty = getItemQuantity(cs.id);
+                          return (
+                            <div
+                              key={cs.id}
+                              className="w-[124px] shrink-0 bg-white rounded-xl border border-gray-200/80 p-2 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all"
+                            >
+                              <div className="relative w-full h-[72px] rounded-lg overflow-hidden bg-gray-50 mb-1.5 border border-gray-100">
+                                <img
+                                  src={cs.image}
+                                  alt={cs.name}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                                {cs.weight && (
+                                  <span className="absolute bottom-1 left-1 bg-black/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.2 rounded">
+                                    {cs.weight}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="mb-2">
+                                <h5 className="font-bold text-gray-900 text-[11.5px] leading-tight line-clamp-1" title={cs.name}>
+                                  {cs.name}
+                                </h5>
+                                <div className="flex items-center gap-1.5 mt-0.5">
+                                  <span className="font-extrabold text-primary text-[12px]">₹{cs.price}</span>
+                                  {cs.originalPrice && cs.originalPrice > cs.price && (
+                                    <span className="line-through text-gray-400 text-[10px]">₹{cs.originalPrice}</span>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Action: + Add or Stepper */}
+                              {qty > 0 ? (
+                                <div className="flex items-center justify-between bg-primary text-white rounded-lg px-2 py-1 text-xs font-bold">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQuantity(cs.id, qty - 1)}
+                                    className="bg-transparent border-none text-white hover:text-gray-200 cursor-pointer font-black text-sm p-0 leading-none"
+                                    aria-label="Decrease quantity"
+                                  >
+                                    −
+                                  </button>
+                                  <span className="text-xs">{qty}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateQuantity(cs.id, qty + 1)}
+                                    className="bg-transparent border-none text-white hover:text-gray-200 cursor-pointer font-black text-sm p-0 leading-none"
+                                    aria-label="Increase quantity"
+                                  >
+                                    +
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleAddCrossSell(cs)}
+                                  className="w-full py-1 px-2 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white font-bold text-[11.5px] border border-primary/20 transition-all cursor-pointer flex items-center justify-center gap-1"
+                                >
+                                  <span>+</span>
+                                  <span>Add</span>
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="py-3 px-3 text-center bg-white/70 rounded-xl border border-dashed border-amber-200/80">
+                        <div className="flex items-center justify-center gap-1.5 text-amber-900/80 text-[12px] font-medium">
+                          <span className="material-symbols-outlined text-[16px] text-amber-700">inventory_2</span>
+                          <span>No add-on products available at the moment</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* ─── TIP DELIVERY PARTNER (Only in Delivery Flow) ─── */}
                   {fulfillmentType === "delivery" ? (
@@ -1269,8 +1482,8 @@ export default function CartDrawer() {
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${appliedCoupon
-                            ? "bg-emerald-100 text-emerald-700"
-                            : "bg-primary/10 text-primary"
+                          ? "bg-emerald-100 text-emerald-700"
+                          : "bg-primary/10 text-primary"
                           }`}>
                           <span className="material-symbols-outlined text-[18px]">
                             {appliedCoupon ? "check_circle" : "sell"}
@@ -1483,6 +1696,12 @@ export default function CartDrawer() {
                               <span className="text-[11px] bg-sky-100 text-sky-800 px-1.5 py-0.2 rounded">100% to partner</span>
                             </span>
                             <span>₹{selectedTip}</span>
+                          </div>
+                        )}
+                        {expressFee > 0 && (
+                          <div className="flex justify-between text-slate-body">
+                            <span>Express 60-Min Priority Delivery</span>
+                            <span>+₹{expressFee}</span>
                           </div>
                         )}
                       </>
@@ -1898,11 +2117,11 @@ export default function CartDrawer() {
             <p className="font-body-md text-slate-body max-w-xs leading-relaxed mb-6 text-[13.5px]">
               {orderSummary?.fulfillmentType === "pickup" ? (
                 <>
-                  Thank you! Our master butchers at <strong>{orderSummary?.storeName || "TeFFe's"}</strong> are cutting and packing your order.
+                  Thank you! Our team at <strong>{orderSummary?.storeName || "TeFFe's"}</strong> is cutting and packing your order.
                 </>
               ) : (
                 <>
-                  Thank you! Our master butchers at <strong>Kishore Ganj Chowk, Ranchi</strong> are cutting your order fresh right now.
+                  Thank you! Our store team is cutting your order fresh right now.
                 </>
               )}
             </p>
@@ -2076,8 +2295,8 @@ export default function CartDrawer() {
                           type="button"
                           onClick={() => setNewAddress({ ...newAddress, tag })}
                           className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all border cursor-pointer ${newAddress.tag === tag
-                              ? "bg-primary text-white border-primary shadow-xs"
-                              : "bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300"
+                            ? "bg-primary text-white border-primary shadow-xs"
+                            : "bg-gray-50 text-gray-700 border-gray-200 hover:border-gray-300"
                             }`}
                         >
                           {tag}
@@ -2211,8 +2430,8 @@ export default function CartDrawer() {
                           toast.success(`Delivering to ${addr.tag} (${addr.city})`, "Address Selected");
                         }}
                         className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-start gap-3 ${isSelected
-                            ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs"
-                            : "border-gray-200 bg-white hover:border-gray-300 hover:bg-slate-50/60"
+                          ? "border-primary bg-primary/5 ring-2 ring-primary/20 shadow-xs"
+                          : "border-gray-200 bg-white hover:border-gray-300 hover:bg-slate-50/60"
                           }`}
                       >
                         <div
@@ -2248,8 +2467,8 @@ export default function CartDrawer() {
                         <div className="pt-1 shrink-0">
                           <div
                             className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${isSelected
-                                ? "border-primary bg-primary text-white"
-                                : "border-gray-300 bg-white"
+                              ? "border-primary bg-primary text-white"
+                              : "border-gray-300 bg-white"
                               }`}
                           >
                             {isSelected && <span className="w-2 h-2 rounded-full bg-white"></span>}

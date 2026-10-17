@@ -33,6 +33,15 @@ router.use('/notifications', require('./notification.routes'));
 router.use('/location', require('./location.routes'));
 router.use('/upload', require('./upload.routes'));
 
+// Public SEO and metadata endpoint
+const { getPublicSeoSettings } = require('../controllers/seo.controller');
+router.get('/seo', getPublicSeoSettings);
+router.get('/settings/seo', getPublicSeoSettings);
+
+// Public Cart Cross-Selling endpoint
+const { getPublicCrossSellItems } = require('../controllers/crossSell.controller');
+router.get('/cross-sell', getPublicCrossSellItems);
+
 const { matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
 
 // Distance calculation between customer and store coordinates (in km)
@@ -157,6 +166,26 @@ const getAvailableStoresHandler = async (req, res, next) => {
 router.get('/stores/available', getAvailableStoresHandler);
 router.post('/stores/available', getAvailableStoresHandler);
 router.get('/stores', getAvailableStoresHandler);
+
+// Active Announcements & Emergency Notice Endpoint
+router.get('/announcements/active', async (req, res, next) => {
+  try {
+    const store = await Store.findOne({
+      status: 'Active',
+      emergencyNotice: { $exists: true, $ne: '' },
+    }).select('emergencyNotice name storeId isOpen timings').lean();
+
+    res.status(200).json({
+      success: true,
+      notice: store?.emergencyNotice || '',
+      storeName: store?.name || '',
+      isOpen: store?.isOpen !== false,
+      timings: store?.timings || '',
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 // Customer Orders & Tracking
 router.get('/orders/my-orders', protect, async (req, res, next) => {

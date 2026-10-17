@@ -48,6 +48,7 @@ class OrderModel {
   final String? paymentMethod;
   final String? paymentStatus;
   final String? storeName;
+  final String? storeAddress;
   final String fulfillmentType;
   final bool pickupMode;
   final String? deliveryOtp;
@@ -83,7 +84,8 @@ class OrderModel {
     this.storeLng,
     this.paymentMethod,
     this.paymentStatus,
-    this.storeName = 'Kishore Ganj Hub',
+    this.storeName = 'Central Store',
+    this.storeAddress,
     this.fulfillmentType = 'delivery',
     this.pickupMode = false,
     this.deliveryOtp,
@@ -136,7 +138,9 @@ class OrderModel {
       storeLng: sLng,
       paymentMethod: json['paymentMethod'] ?? (isPickup ? 'Pay at Store Counter' : 'COD'),
       paymentStatus: json['paymentStatus'] ?? 'Pending',
-      storeName: json['storeName'] ?? 'Kishore Ganj Hub',
+      storeName: json['storeName'] ?? 'Central Store',
+      storeAddress: json['storeAddress']?.toString() ??
+          (json['store'] is Map ? json['store']['address']?.toString() : null),
       fulfillmentType: isPickup ? 'pickup' : (json['fulfillmentType'] ?? 'delivery'),
       pickupMode: isPickup,
       deliveryOtp: json['deliveryOtp']?.toString(),

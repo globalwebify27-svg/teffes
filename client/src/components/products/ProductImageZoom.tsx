@@ -383,7 +383,7 @@ export default function ProductImageZoom({
             }}
           >
             <span className="material-symbols-outlined text-[13px] align-middle mr-1">zoom_in</span>
-            High-Res Butchery Zoom (2.8x)
+            High-Res Detail Zoom (2.8x)
           </div>
         </div>
       )}

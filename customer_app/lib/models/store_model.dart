@@ -41,8 +41,8 @@ class StoreModel {
 
     return StoreModel(
       storeId: (json['storeId'] ?? json['id'] ?? 'S00${index + 1}').toString(),
-      name: (json['name'] ?? "TeFFe's Butchery Hub").toString(),
-      address: (json['address'] ?? 'Kishore Ganj, Harmu Road, Ranchi').toString(),
+      name: (json['name'] ?? "TeFFe's Store Hub").toString(),
+      address: (json['address'] ?? 'Harmu Road, Ranchi').toString(),
       city: (json['city'] ?? 'Ranchi').toString(),
       phone: (json['phone'] ?? '').toString(),
       status: (json['status'] ?? 'Active').toString(),

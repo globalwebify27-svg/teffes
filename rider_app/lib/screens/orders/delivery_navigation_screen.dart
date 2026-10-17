@@ -438,7 +438,7 @@ class DeliveryNavigationScreen extends StatelessWidget {
                   SizedBox(width: 12),
                   Expanded(
                     child: Text(
-                      '100% Fresh butchery cuts guaranteed. Ensure delivery handover occurs promptly in insulated delivery box.',
+                      '100% Fresh meat cuts guaranteed. Ensure delivery handover occurs promptly in insulated delivery box.',
                       style: TextStyle(
                         fontSize: 12,
                         color: AppColors.textSecondary,

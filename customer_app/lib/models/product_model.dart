@@ -87,7 +87,7 @@ class ProductModel {
       image: json['image'] ?? (parsedImages.isNotEmpty ? parsedImages.first : ''),
       images: parsedImages,
       videoURLs: parsedVideos,
-      netWeight: json['netWeight'] ?? '500g',
+      netWeight: json['netWeight'] ?? json['weight'] ?? '1 unit',
       grossWeight: json['grossWeight'],
       category: json['category'] ?? 'chicken',
       categoryLabel: json['categoryLabel'] ?? (json['category'] != null ? '${json['category'][0].toUpperCase()}${json['category'].substring(1)}' : 'Chicken'),

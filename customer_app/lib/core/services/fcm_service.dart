@@ -28,7 +28,7 @@ class FcmService {
   static const AndroidNotificationChannel _channel = AndroidNotificationChannel(
     'teffes_customer_channel',
     "TeFFe's Order Alerts",
-    description: 'Real-time order confirmation, butchery prep, and delivery notifications',
+    description: 'Real-time order confirmation, order prep, and delivery notifications',
     importance: Importance.max,
     playSound: true,
     enableVibration: true,

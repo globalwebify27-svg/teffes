@@ -101,8 +101,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         position: LatLng(storeLat, storeLng),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         infoWindow: InfoWindow(
-          title: order.storeName ?? 'Kishore Ganj Hub',
-          snippet: 'Fulfillment & Butchery Hub',
+          title: order.storeName ?? 'Fulfillment Store',
+          snippet: 'Order Fulfillment & Store Hub',
         ),
       ),
     );
@@ -272,8 +272,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         'badge': 'DELIVERY COMPLETED',
         'title': isPickup ? 'Picked Up' : 'Delivered Fresh',
         'sub': isPickup
-            ? 'Collected from ${order.storeName ?? "Kishore Ganj Hub"}'
-            : 'Delivered fresh from ${order.storeName ?? "Kishore Ganj Hub"}',
+            ? 'Collected from ${order.storeName ?? "Store Counter"}'
+            : 'Delivered fresh from ${order.storeName ?? "our store"}',
       };
     }
 
@@ -282,20 +282,20 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         return {
           'badge': 'READY FOR PICKUP',
           'title': 'Ready at Counter',
-          'sub': 'Collect at: ${order.storeName ?? "Kishore Ganj Hub"} Counter',
+          'sub': 'Collect at: ${order.storeName != null ? "${order.storeName} Counter" : "Store Counter"}',
         };
       }
       if (status == 'Cutting') {
         return {
-          'badge': 'LIVE BUTCHERY STATION',
-          'title': 'Butcher Preparing Cuts',
-          'sub': 'Live butchery station: ${order.storeName ?? "Kishore Ganj Hub"}',
+          'badge': 'FRESH CUTTING STATION',
+          'title': 'Preparing Fresh Cuts',
+          'sub': 'Store cutting station: ${order.storeName ?? "Store Counter"}',
         };
       }
       return {
         'badge': 'ORDER RECEIVED',
         'title': 'Order Confirmed',
-        'sub': 'Verified for counter pickup at ${order.storeName ?? "Kishore Ganj Hub"}',
+        'sub': 'Verified for counter pickup at ${order.storeName ?? "Store Counter"}',
       };
     }
 
@@ -315,7 +315,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       return {
         'badge': 'RIDER ON THE ROAD',
         'title': 'Arriving in $transitMins min',
-        'sub': 'Dispatched fresh from ${order.storeName ?? "Kishore Ganj Hub"}',
+        'sub': 'Dispatched fresh from ${order.storeName ?? "our store"}',
       };
     }
 
@@ -337,9 +337,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
 
     if (status == 'Cutting') {
       return {
-        'badge': 'LIVE BUTCHERY STATION',
+        'badge': 'FRESH CUTTING STATION',
         'title': targetText,
-        'sub': 'Master butcher slicing & packing your fresh cuts',
+        'sub': 'Store team slicing & packing your fresh cuts',
       };
     } else if (status == 'Ready') {
       return {
@@ -352,7 +352,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     return {
       'badge': 'ORDER IN PREPARATION',
       'title': targetText,
-      'sub': 'Fresh butcher cuts in preparation',
+      'sub': 'Fresh cuts in preparation',
     };
   }
 
@@ -756,13 +756,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${order.storeName ?? "Kishore Ganj"} Takeaway Counter',
+                                  '${order.storeName != null ? "${order.storeName} Counter" : "Store Takeaway Counter"}',
                                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                                 ),
                                 const SizedBox(height: 2),
-                                const Text(
-                                  'Harmu Road, Kishore Ganj, Ranchi • Open till 09:00 PM',
-                                  style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                Text(
+                                  '${order.storeAddress ?? "Store Counter, Ranchi"} • Open till 09:00 PM',
+                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                                 ),
                               ],
                             ),
@@ -771,7 +771,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primaryMaroon),
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Calling Kishore Ganj Butchery Counter at +91 94311 88200...')),
+                                SnackBar(content: Text('Calling ${order.storeName ?? "Store Counter"} at +91 94311 88200...')),
                               );
                             },
                           ),
@@ -822,7 +822,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             icon: const Icon(Icons.chat_rounded, color: Color(0xFF25D366)),
                             onPressed: () {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Opening WhatsApp with Teffe\'s Butchery Delivery Agent...')),
+                                const SnackBar(content: Text('Opening WhatsApp with Teffe\'s Delivery Agent...')),
                               );
                             },
                           ),
@@ -846,7 +846,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          order.isPickup ? 'Store Takeaway Timeline' : 'Live Butchery Timeline',
+                          order.isPickup ? 'Store Takeaway Timeline' : 'Live Order Timeline',
                           style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
                         ),
                         Container(
@@ -866,22 +866,22 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                       stepNumber: 1,
                       title: 'Order Confirmed',
                       desc: order.isPickup
-                          ? 'Verified for counter pickup at ${order.storeName ?? "Kishore Ganj Hub"}'
-                          : 'Verified by butchery manager',
+                          ? 'Verified for counter pickup at ${order.storeName ?? "Store Counter"}'
+                          : 'Verified by store manager',
                       isCompleted: status != 'Pending',
                       isActive: status == 'Pending',
                       showLine: true,
                     ),
 
-                    // Step 2: Master Butcher Cutting Meat / Fresh Meat Cut & Packed
+                    // Step 2: Store Team Cutting Meat / Fresh Meat Cut & Packed
                     _buildDynamicTimelineStep(
                       stepNumber: 2,
-                      title: status == 'Cutting' ? 'Master Butcher Cutting Meat' : 'Fresh Meat Cut & Packed',
+                      title: status == 'Cutting' ? 'Store Team Cutting Meat' : 'Fresh Meat Cut & Packed',
                       desc: status == 'Cutting'
-                          ? 'Clean cutting on sanitized butcher block in progress'
+                          ? 'Clean cutting on sanitized cutting block in progress'
                           : ['Ready', 'Out for Delivery', 'Delivered'].contains(status)
-                              ? 'Cleanly butchered upon order & sealed fresh'
-                              : 'Next up: Butchery preparation',
+                              ? 'Cleanly cut upon order & sealed fresh'
+                              : 'Next up: Order preparation',
                       isCompleted: ['Ready', 'Out for Delivery', 'Delivered'].contains(status),
                       isActive: status == 'Cutting',
                       showLine: true,
@@ -896,7 +896,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                 ? 'Your fresh cuts are packed and waiting at the takeaway counter!'
                                 : status == 'Delivered'
                                     ? 'Order picked up from store counter'
-                                    : 'Awaiting butcher completion',
+                                    : 'Awaiting cutting completion',
                             isCompleted: status == 'Delivered',
                             isActive: status == 'Ready',
                             showLine: true,
@@ -910,7 +910,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                     : 'Rider is on the way (arriving in ${order.remainingTransitMinutes ?? 12} min)')
                                 : status == 'Delivered'
                                     ? 'Dispatched & safely reached your address'
-                                    : 'Assigned to delivery fleet from ${order.storeName ?? "Kishore Ganj"}',
+                                    : 'Assigned to delivery fleet from ${order.storeName ?? "our store"}',
                             isCompleted: status == 'Delivered',
                             isActive: status == 'Out for Delivery',
                             showLine: true,
@@ -923,7 +923,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                       desc: status == 'Delivered'
                           ? (order.isPickup ? 'Collected fresh at store counter' : 'Handed over fresh & verified')
                           : order.isPickup
-                              ? 'Show Order #${order.orderId} at the butchery counter'
+                              ? 'Show Order #${order.orderId} at the store counter'
                               : 'Temperature-controlled doorstep delivery',
                       isCompleted: status == 'Delivered',
                       isActive: false,

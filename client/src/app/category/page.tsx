@@ -16,6 +16,7 @@ import {
   faStore,
 } from "@fortawesome/free-solid-svg-icons";
 import { ProductGridSkeleton } from "@/components/common/Skeletons";
+import ProductQuantityStepper from "@/components/products/ProductQuantityStepper";
 
 type SortOption = "featured" | "price-asc" | "price-desc" | "name-asc" | "name-desc";
 
@@ -114,7 +115,7 @@ function CategoryContent() {
         key: selectedCategory,
         label: selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1),
         icon: "restaurant",
-        desc: "Fresh daily butcher cuts",
+        desc: "Fresh daily meat cuts",
       }
     );
   }, [tabs, selectedCategory]);
@@ -164,7 +165,7 @@ function CategoryContent() {
                   90-Min Express Delivery
                 </span>
                 <span className="text-[11px] text-slate-500 font-medium">
-                  Dispatched from Kishore Ganj Hub
+                  Dispatched from Nearest Store
                 </span>
               </div>
             </div>
@@ -306,18 +307,16 @@ function CategoryContent() {
                     </div>
 
                     {/* Meta */}
+                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                      <span>Net: {item.netWeight}</span>
+                      <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.cutType || "Standard Cut"}</span>
+                    </div>
                     <h3 className="font-headline-sm font-bold text-[14px] text-gray-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
                       {item.name}
                     </h3>
-                    <div className="font-body-sm text-slate-body text-[11.5px] mt-0.5 flex items-center gap-1.5">
-                      <span>{item.netWeight}</span>
-                      {item.cutType && (
-                        <>
-                          <span>•</span>
-                          <span className="truncate">{item.cutType}</span>
-                        </>
-                      )}
-                    </div>
+                    <p className="font-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">
+                      {item.description || (item.cutType ? `Artisanal ${item.cutType}` : "Fresh cut to order")}
+                    </p>
                   </div>
 
                   {/* Pricing & Add to Cart */}
@@ -341,37 +340,15 @@ function CategoryContent() {
                     </div>
 
                     {/* Quantity Stepper or + ADD Button */}
-                    <div onClick={(e) => e.stopPropagation()}>
-                      {qty === 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => addToCart(item)}
-                          className="px-4 py-1.5 rounded-full font-label-badge font-bold text-xs shadow-xs transition-all cursor-pointer flex items-center gap-1 btn-hover-fill"
-                        >
-                          <span>+</span>
-                          <span>ADD</span>
-                        </button>
-                      ) : (
-                        <div className="flex items-center bg-gray-100/90 rounded-full px-1 py-0.5 border border-gray-200">
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.id, qty - 1)}
-                            className="w-6 h-6 rounded-full bg-white text-gray-800 hover:bg-primary hover:text-white flex items-center justify-center font-bold text-xs border-none cursor-pointer shadow-2xs"
-                          >
-                            −
-                          </button>
-                          <span className="px-2 font-extrabold text-xs text-gray-900 min-w-[18px] text-center">
-                            {qty}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => updateQuantity(item.id, qty + 1)}
-                            className="w-6 h-6 rounded-full bg-white text-gray-800 hover:bg-primary hover:text-white flex items-center justify-center font-bold text-xs border-none cursor-pointer shadow-2xs"
-                          >
-                            +
-                          </button>
-                        </div>
-                      )}
+                    <div>
+                      <ProductQuantityStepper
+                        quantity={qty}
+                        addLabel="+ ADD"
+                        compact
+                        onAdd={() => addToCart(item)}
+                        onIncrease={() => updateQuantity(item.id, qty + 1)}
+                        onDecrease={() => updateQuantity(item.id, qty - 1)}
+                      />
                     </div>
                   </div>
                 </div>

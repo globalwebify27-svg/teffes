@@ -158,7 +158,7 @@ class LocationPickerModal extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Fresh artisanal butchery delivered to your door',
+                      'Fresh meat & poultry delivered to your door',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: AppColors.textSecondary,
                             fontSize: 12,

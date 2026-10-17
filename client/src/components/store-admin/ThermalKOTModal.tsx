@@ -34,6 +34,8 @@ interface ThermalOrder {
   };
   items?: OrderItem[];
   itemSummary?: string;
+  storeName?: string;
+  storeAddress?: string;
 }
 
 interface ThermalKOTModalProps {
@@ -168,8 +170,8 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               {/* Receipt Header */}
               <div className="text-center pb-2 border-b border-dashed border-black">
                 <div className="font-black text-sm tracking-wider uppercase">TEFFE&apos;S FRESH</div>
-                <div className="text-[10px] font-bold text-gray-800">PREMIUM BUTCHERY & FARM FRESH</div>
-                <div className="text-[9px] mt-0.5">Harmu Road, Kishore Ganj, Ranchi</div>
+                <div className="text-[10px] font-bold text-gray-800">PREMIUM QUALITY & FARM FRESH</div>
+                <div className="text-[9px] mt-0.5">{order.storeAddress || "Harmu Road, Ranchi"}</div>
                 <div className="text-[9px]">Ph: +91 91555 88200 · teffes.in</div>
                 <div className="mt-1.5 inline-block border border-black px-2 py-0.5 font-black text-[11px] tracking-wide">
                   {isPickup ? "STORE PICKUP KOT" : "HOME DELIVERY KOT"}
@@ -198,15 +200,15 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                 <div>Ph: {order.customer?.phone || "—"}</div>
                 <div className="text-gray-800 break-words">
                   {isPickup
-                    ? "Collection at Store Counter (Kishore Ganj)"
+                    ? `Collection at Store Counter (${order.storeName || "Store"})`
                     : `Addr: ${order.customer?.address || "Ranchi"}`}
                 </div>
               </div>
 
-              {/* Butcher Prep / Cutting Items List */}
+              {/* Prep / Cutting Items List */}
               <div className="py-2 border-b border-dashed border-black">
                 <div className="font-black text-[10.5px] uppercase mb-1">
-                  BUTCHERY CUTTING SPECIFICATION:
+                  CUSTOM CUTTING SPECIFICATION:
                 </div>
                 <div className="border-b border-black pb-1 mb-1.5 flex justify-between font-bold text-[9.5px]">
                   <span>ITEM / CUT SPEC</span>

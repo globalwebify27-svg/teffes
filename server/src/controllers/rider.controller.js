@@ -25,8 +25,8 @@ const getDashboard = async (req, res, next) => {
 
     const storeAdminName = storeAdmin?.name || store?.admin || 'Store Admin';
     const storeAdminPhone = storeAdmin?.phone || store?.phone || '+91 9779687955';
-    const storeName = store?.name || rider.storeName || "TeFFe's — Kishore Ganj";
-    const storeAddress = store?.address || 'Plot 42, Main Road, Kishore Ganj, Ranchi';
+    const storeName = store?.name || rider.storeName || "TeFFe's Store";
+    const storeAddress = store?.address || 'Harmu Road, Ranchi';
 
     const startOfToday = new Date();
     startOfToday.setHours(0, 0, 0, 0);
@@ -542,8 +542,8 @@ const getDispatchSupport = async (req, res, next) => {
 
     const storeAdminName = storeAdmin?.name || store?.admin || 'Store Admin';
     const storeAdminPhone = storeAdmin?.phone || store?.phone || '+91 9779687955';
-    const storeName = store?.name || rider.storeName || "TeFFe's — Kishore Ganj";
-    const storeAddress = store?.address || 'Plot 42, Main Road, Kishore Ganj, Ranchi';
+    const storeName = store?.name || rider.storeName || "TeFFe's Store";
+    const storeAddress = store?.address || 'Harmu Road, Ranchi';
 
     res.status(200).json({
       success: true,
