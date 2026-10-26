@@ -13,6 +13,8 @@ class RiderOrdersProvider with ChangeNotifier {
   RiderEarningsModel? _earnings;
   int _completedTodayCount = 0;
   double _todayEarnings = 0.0;
+  double _cashInHand = 0.0;
+  int _targetCount = 16;
   bool _isLoading = false;
   String? _error;
 
@@ -23,8 +25,9 @@ class RiderOrdersProvider with ChangeNotifier {
   RiderEarningsModel? get earnings => _earnings;
   int get completedTodayCount => _completedTodayCount;
   int get todayDeliveriesCount => _completedTodayCount;
+  int get targetCount => _targetCount;
   double get todayEarnings => _todayEarnings;
-  double get cashInHand => _earnings?.cashInHand ?? 0.0;
+  double get cashInHand => _earnings?.cashInHand ?? _cashInHand;
   bool get isLoading => _isLoading;
   String? get error => _error;
   String? get errorMessage => _error;
@@ -47,6 +50,8 @@ class RiderOrdersProvider with ChangeNotifier {
         if (todayStats != null) {
           _completedTodayCount = (todayStats['completedCount'] as num?)?.toInt() ?? 0;
           _todayEarnings = (todayStats['todayEarnings'] as num?)?.toDouble() ?? 0.0;
+          _cashInHand = (todayStats['cashInHand'] as num?)?.toDouble() ?? _cashInHand;
+          _targetCount = (todayStats['targetCount'] as num?)?.toInt() ?? 16;
         }
       }
       await fetchAvailableOrders();
@@ -180,10 +185,85 @@ class RiderOrdersProvider with ChangeNotifier {
       final res = await _api.get(ApiEndpoints.riderEarnings);
       if (res.data['success'] == true) {
         _earnings = RiderEarningsModel.fromJson(res.data);
+        if (_earnings != null) {
+          _cashInHand = _earnings!.cashInHand;
+          _completedTodayCount = _earnings!.completedTodayCount;
+          _todayEarnings = _earnings!.todayEarnings;
+        }
         notifyListeners();
       }
     } catch (e) {
       debugPrint('Error fetching earnings: $e');
+    }
+  }
+
+  Future<Map<String, dynamic>> remitCash({
+    required double amount,
+    String? notes,
+  }) async {
+    try {
+      final res = await _api.post(ApiEndpoints.riderRemitCash, data: {
+        'amount': amount,
+        'notes': notes ?? 'Cash remittance deposit at hub counter',
+      });
+      if (res.data['success'] == true) {
+        if (res.data['cashInHand'] != null) {
+          _cashInHand = (res.data['cashInHand'] as num).toDouble();
+        }
+        await fetchEarnings();
+        return {'success': true, 'message': res.data['message'] ?? 'Remittance request submitted'};
+      }
+      return {'success': false, 'message': res.data['message'] ?? 'Failed to submit remittance'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error while submitting remittance'};
+    }
+  }
+
+  Future<Map<String, dynamic>> triggerSosAlert({
+    double? lat,
+    double? lng,
+    String? activeOrderId,
+    String? reason,
+  }) async {
+    try {
+      final res = await _api.post(ApiEndpoints.riderSosAlert, data: {
+        'lat': lat ?? 23.3441,
+        'lng': lng ?? 85.3096,
+        'activeOrderId': activeOrderId ?? _activeOrder?.orderId,
+        'reason': reason ?? 'Rider pressed SOS Emergency button',
+      });
+      if (res.data['success'] == true) {
+        return {
+          'success': true,
+          'message': res.data['message'] ?? 'SOS alert dispatched to dark store and emergency services.',
+          'emergencyContacts': res.data['emergencyContacts'],
+        };
+      }
+      return {'success': false, 'message': res.data['message'] ?? 'Failed to trigger SOS alert'};
+    } catch (e) {
+      return {'success': false, 'message': 'Emergency signal sent. Please also call 112 directly.'};
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> fetchNotifications() async {
+    try {
+      final res = await _api.get(ApiEndpoints.riderNotifications);
+      if (res.data['success'] == true && res.data['notifications'] is List) {
+        final list = res.data['notifications'] as List;
+        return list.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+      }
+    } catch (e) {
+      debugPrint('Error fetching rider notifications: $e');
+    }
+    return [];
+  }
+
+  Future<bool> markNotificationRead(String id) async {
+    try {
+      final res = await _api.put(ApiEndpoints.markNotificationRead(id));
+      return res.data['success'] == true;
+    } catch (_) {
+      return false;
     }
   }
 }

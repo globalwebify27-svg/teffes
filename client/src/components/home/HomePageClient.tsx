@@ -428,7 +428,7 @@ export default function HomePageClient() {
               </span>
             </div>
             <h2 className="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
-              Trending &amp; Best Sellers
+              Best Sellers &amp; Trending
             </h2>
           </div>
           <span className="inline-flex items-center gap-1 font-label-badge text-label-badge bg-crimson-soft text-primary px-3.5 py-1.5 rounded-full font-bold self-start sm:self-auto border border-primary/20 whitespace-nowrap text-[11px]">
@@ -442,90 +442,90 @@ export default function HomePageClient() {
           <ProductGridSkeleton count={5} columns="grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-          {trendingProducts.map((item) => {
-            const qty = getItemQuantity(item.id);
-            const isJustAdded = addedItem === item.id;
-            const wishlisted = isInWishlist(item.id);
-            const origPrice = item.originalPrice || item.price || 0;
-            const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
+            {trendingProducts.map((item) => {
+              const qty = getItemQuantity(item.id);
+              const isJustAdded = addedItem === item.id;
+              const wishlisted = isInWishlist(item.id);
+              const origPrice = item.originalPrice || item.price || 0;
+              const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
 
-            return (
-              <article
-                key={item.id}
-                onClick={() => router.push(`/product/${item.id}`)}
-                className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
-              >
-                <div>
-                  <div className="relative w-full aspect-square overflow-hidden bg-surface-container">
-                    <img
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      src={item.image}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
-                      }}
-                    />
+              return (
+                <article
+                  key={item.id}
+                  onClick={() => router.push(`/product/${item.id}`)}
+                  className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
+                >
+                  <div>
+                    <div className="relative w-full aspect-square overflow-hidden bg-surface-container">
+                      <img
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        src={item.image}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
+                        }}
+                      />
 
-                    {/* Top Right: Wishlist Heart Icon Button */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleWishlist(item.id);
-                      }}
-                      className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
-                        }`}
-                      aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                      title={wishlisted ? "Loved" : "Add to wishlist"}
-                    >
-                      <span
-                        className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                      {/* Top Right: Wishlist Heart Icon Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleWishlist(item.id);
+                        }}
+                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                          }`}
+                        aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                        title={wishlisted ? "Loved" : "Add to wishlist"}
                       >
-                        favorite
-                      </span>
-                    </button>
-                  </div>
-
-                  <div className="p-3.5 sm:p-4">
-                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                      <span>Net: {item.netWeight}</span>
-                      <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.badge || "Standard Cut"}</span>
+                        <span
+                          className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                        >
+                          favorite
+                        </span>
+                      </button>
                     </div>
-                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold line-clamp-1 group-hover:text-primary transition-colors text-[14.5px]">
-                      {item.name}
-                    </h3>
-                    <p className="font-body-sm text-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">{item.description}</p>
-                  </div>
-                </div>
 
-                <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
-                      ₹{item.price}
-                    </span>
-                    {origPrice > item.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
-                        ₹{origPrice}
+                    <div className="p-3.5 sm:p-4">
+                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                        <span>Net: {item.netWeight}</span>
+                        <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.badge || "Standard Cut"}</span>
+                      </div>
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold line-clamp-1 group-hover:text-primary transition-colors text-[14.5px]">
+                        {item.name}
+                      </h3>
+                      <p className="font-body-sm text-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">{item.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
+                        ₹{item.price}
                       </span>
-                    )}
-                  </div>
+                      {origPrice > item.price && (
+                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
+                          ₹{origPrice}
+                        </span>
+                      )}
+                    </div>
 
-                  <ProductQuantityStepper
-                    quantity={qty}
-                    isJustAdded={isJustAdded}
-                    addLabel="+ ADD"
-                    compact
-                    onAdd={() => handleAdd(item)}
-                    onIncrease={() => updateQuantity(item.id, qty + 1)}
-                    onDecrease={() => updateQuantity(item.id, qty - 1)}
-                  />
-                </div>
-              </article>
-            );
-          })}
-        </div>
-      )}
+                    <ProductQuantityStepper
+                      quantity={qty}
+                      isJustAdded={isJustAdded}
+                      addLabel="+ ADD"
+                      compact
+                      onAdd={() => handleAdd(item)}
+                      onIncrease={() => updateQuantity(item.id, qty + 1)}
+                      onDecrease={() => updateQuantity(item.id, qty - 1)}
+                    />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </section>
 
       {/* ─── 5. Section Divider / Fresh Meat Mid Banner ────────────────────────── */}
@@ -560,25 +560,16 @@ export default function HomePageClient() {
 
       {/* ─── 6. Farm Fresh Chicken Cuts Grid ────────────────────────────────────────── */}
       <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-3xl" id="chicken-section">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-space-lg">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[22px]">restaurant</span>
-              <span className="font-label-badge text-label-badge uppercase tracking-wider text-primary font-bold">
-                Hand Cut Precision
-              </span>
-            </div>
-            <h2 className="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
-              Farm Fresh Chicken Cuts
-            </h2>
-          </div>
-          <div className="flex items-center gap-2 text-on-surface-variant font-label-md text-label-md font-semibold">
-            <span className="bg-surface-card px-3.5 py-1.5 rounded-full shadow-xs text-on-surface border border-gray-200">
-              Curry Cuts
+        <div className="mb-space-lg">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-primary text-[22px]">restaurant</span>
+            <span className="font-label-badge text-label-badge uppercase tracking-wider text-primary font-bold">
+              Hand Cut Precision
             </span>
-            <span className="bg-surface-container-low px-3.5 py-1.5 rounded-full text-slate-body">Boneless</span>
-            <span className="bg-surface-container-low px-3.5 py-1.5 rounded-full text-slate-body">Speciality</span>
           </div>
+          <h2 className="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
+            Farm Fresh Chicken Cuts
+          </h2>
         </div>
 
         {/* 7 Chicken Items + 1 Custom Cuts Showcase */}
@@ -586,116 +577,116 @@ export default function HomePageClient() {
           <ProductGridSkeleton count={4} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" />
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {chickenProducts.map((item) => {
-            const qty = getItemQuantity(item.id);
-            const isJustAdded = addedItem === item.id;
-            const wishlisted = isInWishlist(item.id);
-            const origPrice = item.originalPrice || item.price || 0;
-            const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
+            {chickenProducts.map((item) => {
+              const qty = getItemQuantity(item.id);
+              const isJustAdded = addedItem === item.id;
+              const wishlisted = isInWishlist(item.id);
+              const origPrice = item.originalPrice || item.price || 0;
+              const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
 
-            return (
-              <article
-                key={item.id}
-                onClick={() => router.push(`/product/${item.id}`)}
-                className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
-              >
-                <div>
-                  <div className="relative w-full aspect-square overflow-hidden bg-surface-container">
-                    <img
-                      alt={item.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      src={item.image}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
-                      }}
-                    />
+              return (
+                <article
+                  key={item.id}
+                  onClick={() => router.push(`/product/${item.id}`)}
+                  className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
+                >
+                  <div>
+                    <div className="relative w-full aspect-square overflow-hidden bg-surface-container">
+                      <img
+                        alt={item.name}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        src={item.image}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
+                        }}
+                      />
 
-                    {/* Top Right: Wishlist Heart */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleWishlist(item.id);
-                      }}
-                      className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
-                        }`}
-                      aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                      title={wishlisted ? "Loved" : "Add to wishlist"}
-                    >
-                      <span
-                        className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                      {/* Top Right: Wishlist Heart */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          toggleWishlist(item.id);
+                        }}
+                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                          }`}
+                        aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                        title={wishlisted ? "Loved" : "Add to wishlist"}
                       >
-                        favorite
-                      </span>
-                    </button>
-                  </div>
-
-                  <div className="p-4">
-                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                      <span>Net: {item.netWeight}</span>
-                      <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || "Standard Cut"}</span>
+                        <span
+                          className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                        >
+                          favorite
+                        </span>
+                      </button>
                     </div>
-                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
-                      {item.name}
-                    </h3>
-                    <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">{item.description}</p>
-                  </div>
-                </div>
 
-                <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
-                      ₹{item.price}
-                    </span>
-                    {origPrice > item.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
-                        ₹{origPrice}
+                    <div className="p-4">
+                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                        <span>Net: {item.netWeight}</span>
+                        <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || "Standard Cut"}</span>
+                      </div>
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
+                        {item.name}
+                      </h3>
+                      <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">{item.description}</p>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                    <div className="flex items-baseline gap-1.5 flex-wrap">
+                      <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
+                        ₹{item.price}
                       </span>
-                    )}
+                      {origPrice > item.price && (
+                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
+                          ₹{origPrice}
+                        </span>
+                      )}
+                    </div>
+
+                    <ProductQuantityStepper
+                      quantity={qty}
+                      isJustAdded={isJustAdded}
+                      addLabel="+ ADD"
+                      compact
+                      onAdd={() => handleAdd(item)}
+                      onIncrease={() => updateQuantity(item.id, qty + 1)}
+                      onDecrease={() => updateQuantity(item.id, qty - 1)}
+                    />
                   </div>
+                </article>
+              );
+            })}
 
-                  <ProductQuantityStepper
-                    quantity={qty}
-                    isJustAdded={isJustAdded}
-                    addLabel="+ ADD"
-                    compact
-                    onAdd={() => handleAdd(item)}
-                    onIncrease={() => updateQuantity(item.id, qty + 1)}
-                    onDecrease={() => updateQuantity(item.id, qty - 1)}
-                  />
-                </div>
-              </article>
-            );
-          })}
-
-          {/* Chicken Category Showcase Card */}
-          <div className="bg-surface-container-low rounded-2xl p-5 flex flex-col justify-between border border-gray-200/50">
-            <div>
-              <span className="material-symbols-outlined text-primary text-[36px]">inventory_2</span>
-              <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-2 text-[1.2rem]">
-                Custom Cuts Available
-              </h3>
-              <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
-                Need special thin slices, kathi roll juliennes, or biryani 4-piece cuts? Add instructions on checkout
-                and our team will hand-cut to your exact spec.
-              </p>
-            </div>
-
-            <div className="pt-4">
-              <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
-                <span className="w-2 h-2 rounded-full bg-tertiary"></span> RO-Water Washed Before Packing
+            {/* Chicken Category Showcase Card */}
+            <div className="bg-surface-container-low rounded-2xl p-5 flex flex-col justify-between border border-gray-200/50">
+              <div>
+                <span className="material-symbols-outlined text-primary text-[36px]">inventory_2</span>
+                <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-2 text-[1.2rem]">
+                  Custom Cuts Available
+                </h3>
+                <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
+                  Need special thin slices, kathi roll juliennes, or biryani 4-piece cuts? Add instructions on checkout
+                  and our team will hand-cut to your exact spec.
+                </p>
               </div>
-              <Link
-                className="w-full py-2.5 rounded-full bg-primary text-on-primary font-label-md text-label-md text-center block hover:bg-primary-container transition-colors shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
-                href="/category?type=chicken"
-              >
-                View All Chicken Cuts ({liveProducts.filter(p => p.category === 'chicken').length})
-              </Link>
+
+              <div className="pt-4">
+                <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
+                  <span className="w-2 h-2 rounded-full bg-tertiary"></span> RO-Water Washed Before Packing
+                </div>
+                <Link
+                  className="w-full py-2.5 rounded-full bg-primary text-on-primary font-label-md text-label-md text-center block hover:bg-primary-container transition-colors shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
+                  href="/category?type=chicken"
+                >
+                  View All Chicken Cuts ({liveProducts.filter(p => p.category === 'chicken').length})
+                </Link>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
       </section>
 
       {/* ─── 7. Premium Country Mutton Section ─────────────────────────────────── */}
@@ -723,6 +714,121 @@ export default function HomePageClient() {
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {muttonProducts.map((product) => {
+                const qty = getItemQuantity(product.id);
+                const isJustAdded = addedItem === product.id;
+                const wishlisted = isInWishlist(product.id);
+                const discountText = product.originalPrice && product.originalPrice > product.price
+                  ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
+                  : ((product as any).discount || "");
+
+                return (
+                  <article
+                    key={product.id}
+                    onClick={() => router.push(`/product/${product.id}`)}
+                    className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
+                  >
+                    <div>
+                      <div className="relative w-full aspect-[16/10] overflow-hidden bg-surface-container">
+                        <img
+                          alt={product.name}
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          src={product.image || (product.images && product.images[0]) || "/images/mutton.png"}
+                          onError={(e) => {
+                            e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/p3pU05nL.webp";
+                          }}
+                        />
+
+                        {/* Top Left: Tag */}
+                        {/* Top Right: Wishlist Heart */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            toggleWishlist(product.id);
+                          }}
+                          className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                            }`}
+                          aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+                          title={wishlisted ? "Loved" : "Add to wishlist"}
+                        >
+                          <span
+                            className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                          >
+                            favorite
+                          </span>
+                        </button>
+                      </div>
+
+                      <div className="p-4">
+                        <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                          <span>{product.netWeight || "Net Wt: Fresh Cut"}</span>
+                          <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Serves 3-4"}</span>
+                        </div>
+                        <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[15px]">
+                          {product.name}
+                        </h3>
+                        <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
+                          {product.description || "Fresh country mutton cut fresh after your order."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
+                      <div className="flex items-baseline gap-1.5 flex-wrap">
+                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
+                          ₹{product.price}
+                        </span>
+                        {product.originalPrice && product.originalPrice > product.price && (
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
+                            ₹{product.originalPrice}
+                          </span>
+                        )}
+                      </div>
+
+                      <ProductQuantityStepper
+                        quantity={qty}
+                        isJustAdded={isJustAdded}
+                        addLabel="+ ADD"
+                        compact
+                        onAdd={() => handleAdd(product)}
+                        onIncrease={() => updateQuantity(product.id, qty + 1)}
+                        onDecrease={() => updateQuantity(product.id, qty - 1)}
+                      />
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ─── 8. Fresh Catch & River Fish Section ───────────────────────────────── */}
+      <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-3xl" id="fish-section">
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-space-lg">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-[22px]">water</span>
+              <span className="font-label-badge text-label-badge uppercase tracking-wider text-primary font-bold">
+                Daily Freshwater Catch
+              </span>
+            </div>
+            <h2 className="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
+              Fresh Catch &amp; River Fish
+            </h2>
+          </div>
+          <div className="flex items-center gap-2 text-slate-body font-body-sm text-body-sm">
+            <span className="material-symbols-outlined text-tertiary text-[18px]">check_circle</span>
+            <span>Descaled &amp; gutted with clean potable water</span>
+          </div>
+        </div>
+
+        {isLoadingProducts && liveProducts.length === 0 ? (
+          <ProductGridSkeleton count={3} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {fishProducts.map((product) => {
               const qty = getItemQuantity(product.id);
               const isJustAdded = addedItem === product.id;
               const wishlisted = isInWishlist(product.id);
@@ -734,20 +840,19 @@ export default function HomePageClient() {
                 <article
                   key={product.id}
                   onClick={() => router.push(`/product/${product.id}`)}
-                  className="bg-surface-container-lowest rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
+                  className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
                 >
                   <div>
-                    <div className="relative w-full aspect-[16/10] overflow-hidden bg-surface-container">
+                    <div className="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
                       <img
                         alt={product.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                        src={product.image || (product.images && product.images[0]) || "/images/mutton.png"}
+                        src={product.image || (product.images && product.images[0]) || "/images/fish.png"}
                         onError={(e) => {
-                          e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/p3pU05nL.webp";
+                          e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/4e3AEjkv.webp";
                         }}
                       />
 
-                      {/* Top Left: Tag */}
                       {/* Top Right: Wishlist Heart */}
                       <button
                         type="button"
@@ -771,14 +876,14 @@ export default function HomePageClient() {
 
                     <div className="p-4">
                       <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                        <span>{product.netWeight || "Net Wt: Fresh Cut"}</span>
-                        <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Serves 3-4"}</span>
+                        <span>{product.netWeight || "Net Wt: 1000g"}</span>
+                        <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Bengali Cut"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[15px]">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
                         {product.name}
                       </h3>
                       <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
-                        {product.description || "Fresh country mutton cut fresh after your order."}
+                        {product.description || "Fresh water fish locally sourced and procured."}
                       </p>
                     </div>
                   </div>
@@ -808,156 +913,42 @@ export default function HomePageClient() {
                 </article>
               );
             })}
+
+            {/* Fish Hygiene & Delivery Card */}
+            <div className="bg-surface-card rounded-2xl p-5 sm:p-6 flex flex-col justify-between shadow-sm border border-gray-100">
+              <div>
+                <div className="w-12 h-12 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary mb-space-md">
+                  <span className="material-symbols-outlined text-[28px]">set_meal</span>
+                </div>
+                <h3 className="font-headline-md text-headline-md text-on-surface font-bold text-[1.25rem]">
+                  Pristine Catch Guarantee
+                </h3>
+                <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[13px]">
+                  All fish is procured fresh each sunrise from sweet-water sources. Knife masters descale, clean
+                  cavities, and rinse with pure filtered water so your kitchen remains odor-free.
+                </p>
+                <div className="mt-4 space-y-2">
+                  <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[12.5px]">
+                    <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
+                    <span>Zero formalin, zero artificial colorants</span>
+                  </div>
+                  <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[12.5px]">
+                    <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
+                    <span>Packed in food-grade fresh-seal trays</span>
+                  </div>
+                </div>
+              </div>
+              <div className="pt-5">
+                <a
+                  className="inline-flex items-center gap-1.5 text-primary font-label-md text-label-md hover:underline font-bold text-decoration-none cursor-pointer"
+                  href="#about-us"
+                >
+                  Learn About Our Daily Catch Source <span className="material-symbols-outlined text-[16px]">east</span>
+                </a>
+              </div>
+            </div>
           </div>
         )}
-        </div>
-      </section>
-
-      {/* ─── 8. Fresh Catch & River Fish Section ───────────────────────────────── */}
-      <section className="w-full max-w-container-max mx-auto px-gutter-desktop mt-space-3xl" id="fish-section">
-        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2 mb-space-lg">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-primary text-[22px]">water</span>
-              <span className="font-label-badge text-label-badge uppercase tracking-wider text-primary font-bold">
-                Daily Freshwater Catch
-              </span>
-            </div>
-            <h2 className="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
-              Fresh Catch &amp; River Fish
-            </h2>
-          </div>
-          <div className="flex items-center gap-2 text-slate-body font-body-sm text-body-sm">
-            <span className="material-symbols-outlined text-tertiary text-[18px]">check_circle</span>
-            <span>Descaled &amp; gutted with clean potable water</span>
-          </div>
-        </div>
-
-        {isLoadingProducts && liveProducts.length === 0 ? (
-          <ProductGridSkeleton count={3} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {fishProducts.map((product) => {
-            const qty = getItemQuantity(product.id);
-            const isJustAdded = addedItem === product.id;
-            const wishlisted = isInWishlist(product.id);
-            const discountText = product.originalPrice && product.originalPrice > product.price
-              ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
-              : ((product as any).discount || "");
-
-            return (
-              <article
-                key={product.id}
-                onClick={() => router.push(`/product/${product.id}`)}
-                className="bg-surface-card rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-all flex flex-col justify-between group border border-gray-100 relative cursor-pointer"
-              >
-                <div>
-                  <div className="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
-                    <img
-                      alt={product.name}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      src={product.image || (product.images && product.images[0]) || "/images/fish.png"}
-                      onError={(e) => {
-                        e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/4e3AEjkv.webp";
-                      }}
-                    />
-
-                    {/* Top Right: Wishlist Heart */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        toggleWishlist(product.id);
-                      }}
-                      className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
-                        }`}
-                      aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
-                      title={wishlisted ? "Loved" : "Add to wishlist"}
-                    >
-                      <span
-                        className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
-                      >
-                        favorite
-                      </span>
-                    </button>
-                  </div>
-
-                  <div className="p-4">
-                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
-                      <span>{product.netWeight || "Net Wt: 1000g"}</span>
-                      <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Bengali Cut"}</span>
-                    </div>
-                    <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
-                      {product.name}
-                    </h3>
-                    <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
-                      {product.description || "Fresh water fish locally sourced and procured."}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
-                      ₹{product.price}
-                    </span>
-                    {product.originalPrice && product.originalPrice > product.price && (
-                      <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
-                        ₹{product.originalPrice}
-                      </span>
-                    )}
-                  </div>
-
-                  <ProductQuantityStepper
-                    quantity={qty}
-                    isJustAdded={isJustAdded}
-                    addLabel="+ ADD"
-                    compact
-                    onAdd={() => handleAdd(product)}
-                    onIncrease={() => updateQuantity(product.id, qty + 1)}
-                    onDecrease={() => updateQuantity(product.id, qty - 1)}
-                  />
-                </div>
-              </article>
-            );
-          })}
-
-          {/* Fish Hygiene & Delivery Card */}
-          <div className="bg-surface-card rounded-2xl p-5 sm:p-6 flex flex-col justify-between shadow-sm border border-gray-100">
-            <div>
-              <div className="w-12 h-12 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary mb-space-md">
-                <span className="material-symbols-outlined text-[28px]">set_meal</span>
-              </div>
-              <h3 className="font-headline-md text-headline-md text-on-surface font-bold text-[1.25rem]">
-                Pristine Catch Guarantee
-              </h3>
-              <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[13px]">
-                All fish is procured fresh each sunrise from sweet-water sources. Knife masters descale, clean
-                cavities, and rinse with pure filtered water so your kitchen remains odor-free.
-              </p>
-              <div className="mt-4 space-y-2">
-                <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[12.5px]">
-                  <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
-                  <span>Zero formalin, zero artificial colorants</span>
-                </div>
-                <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[12.5px]">
-                  <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
-                  <span>Packed in food-grade fresh-seal trays</span>
-                </div>
-              </div>
-            </div>
-            <div className="pt-5">
-              <a
-                className="inline-flex items-center gap-1.5 text-primary font-label-md text-label-md hover:underline font-bold text-decoration-none cursor-pointer"
-                href="#about-us"
-              >
-                Learn About Our Daily Catch Source <span className="material-symbols-outlined text-[16px]">east</span>
-              </a>
-            </div>
-          </div>
-        </div>
-      )}
       </section>
 
       {/* ─── 9. Marinated Cuts Section ─────────────────────────────────── */}

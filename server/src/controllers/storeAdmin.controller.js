@@ -1,11 +1,14 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
 const Inventory = require('../models/Inventory');
+const InventoryHistory = require('../models/InventoryHistory');
 const DeliverySlot = require('../models/DeliverySlot');
 const ReturnRequest = require('../models/ReturnRequest');
 const User = require('../models/User');
 const Store = require('../models/Store');
+const Remittance = require('../models/Remittance');
 const notificationService = require('../services/notificationService');
+const inventoryService = require('../services/inventoryService');
 const { emitOrderStatusUpdate } = require('../socket');
 
 /**
@@ -151,10 +154,31 @@ const updateOrderStatus = async (req, res, next) => {
     const wasDelivered = order.status === 'Delivered';
     order.status = status;
 
+    // If advancing order to Cutting or beyond and inventory wasn't deducted yet, validate and deduct from Fresh Inventory
+    if (['Cutting', 'Ready', 'Out for Delivery', 'Delivered'].includes(status) && !order.isInventoryDeducted) {
+      const deduction = await inventoryService.validateAndDeductInventory(order.storeId, order.items, order.orderId, {
+        userId: req.user?._id,
+        name: req.user?.name || 'Store Admin',
+        role: req.user?.role || 'storeadmin',
+        email: req.user?.email || '',
+      });
+      if (!deduction.success) {
+        return res.status(400).json({
+          success: false,
+          message: deduction.message || 'Cannot advance order: insufficient Fresh Inventory.',
+        });
+      }
+      order.isInventoryDeducted = true;
+    }
+
     // If order was cancelled and inventory was deducted, restore inventory to store
     if (status === 'Cancelled' && order.isInventoryDeducted && !order.isInventoryRestocked) {
-      const { restoreOrderInventory } = require('../services/inventoryService');
-      await restoreOrderInventory(order).catch((err) => console.error('[StoreAdmin] Inventory restore error:', err.message));
+      await inventoryService.restoreOrderInventory(order, {
+        userId: req.user?._id,
+        name: req.user?.name || 'Store Admin',
+        role: req.user?.role || 'storeadmin',
+        email: req.user?.email || '',
+      }).catch((err) => console.error('[StoreAdmin] Inventory restore error:', err.message));
     }
 
     await order.save();
@@ -236,14 +260,34 @@ const getInventory = async (req, res, next) => {
 
 /**
  * PATCH /api/store-admin/inventory/:id
- * Update stock kg or minimum threshold
+ * Update stock kg, defreeze stock, or minimum threshold with audit history
  */
 const updateInventoryItem = async (req, res, next) => {
   try {
+    const storeId = req.user?.storeId || req.query.storeId || 'S001';
     const { id } = req.params;
-    const { stock, min } = req.body;
+    const { stock, defreezeStock, min, classification, operation, quantity, reason } = req.body;
+
+    if (classification || operation || quantity !== undefined) {
+      const result = await inventoryService.adjustStockItem({
+        storeId,
+        itemId: id,
+        classification: classification || 'fresh',
+        operation: operation || 'set',
+        quantity: quantity !== undefined ? quantity : stock,
+        min,
+        reason,
+        user: req.user,
+      });
+
+      if (!result.success) {
+        return res.status(400).json(result);
+      }
+      return res.status(200).json(result);
+    }
 
     const item = await Inventory.findOne({
+      storeId,
       $or: [{ itemId: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }],
     });
 
@@ -251,20 +295,179 @@ const updateInventoryItem = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Inventory item not found' });
     }
 
-    if (stock !== undefined) item.stock = stock;
-    if (min !== undefined) item.min = min;
+    const prevStock = item.stock;
+    if (stock !== undefined) item.stock = Math.max(0, Number(stock));
+    if (defreezeStock !== undefined) item.defreezeStock = Math.max(0, Number(defreezeStock));
+    if (min !== undefined) item.min = Math.max(0, Number(min));
     item.lastRestocked = `Today ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
     await item.save();
 
+    if (stock !== undefined && stock !== prevStock) {
+      try {
+        await InventoryHistory.create({
+          storeId: item.storeId,
+          itemId: item.itemId,
+          productName: item.item,
+          category: item.category || '',
+          classification: 'fresh',
+          actionType: 'set_stock',
+          quantity: Math.abs(item.stock - prevStock),
+          unit: item.unit || 'kg',
+          previousQuantity: prevStock,
+          resultingQuantity: item.stock,
+          sourceClassification: 'fresh',
+          destinationClassification: null,
+          reason: reason || 'Manual stock update',
+          actor: req.user ? {
+            userId: req.user._id,
+            name: req.user.name || 'Store Admin',
+            role: req.user.role || 'storeadmin',
+            email: req.user.email || '',
+          } : { name: 'Store Admin', role: 'storeadmin' },
+        });
+      } catch (histErr) {
+        console.warn('[StoreAdmin] History log error:', histErr.message);
+      }
+    }
+
     try {
       const { emitInventoryUpdate } = require('../socket');
-      emitInventoryUpdate(item.storeId, item);
+      emitInventoryUpdate(item.storeId, [item]);
     } catch (socketErr) {
       console.warn('[StoreAdmin] Inventory socket emission warning:', socketErr.message);
     }
 
     res.status(200).json({ success: true, item });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/store-admin/inventory/transfer
+ * Move De-Freeze stock to Fresh Inventory
+ */
+const transferDefreezeStock = async (req, res, next) => {
+  try {
+    const storeId = req.user?.storeId || req.body.storeId || 'S001';
+    const { itemId, quantity, notes } = req.body;
+
+    if (!itemId) {
+      return res.status(400).json({ success: false, message: 'Item ID is required.' });
+    }
+
+    const result = await inventoryService.transferDefreezeToFresh({
+      storeId,
+      itemId,
+      quantity,
+      user: req.user,
+      notes,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/store-admin/inventory/waste
+ * Record Damaged, Spoiled, Expired, or Wasted stock
+ */
+const recordInventoryWaste = async (req, res, next) => {
+  try {
+    const storeId = req.user?.storeId || req.body.storeId || 'S001';
+    const { itemId, sourceClassification, quantity, reason, notes } = req.body;
+
+    if (!itemId) {
+      return res.status(400).json({ success: false, message: 'Item ID is required.' });
+    }
+
+    const result = await inventoryService.recordDamageWaste({
+      storeId,
+      itemId,
+      sourceClassification: sourceClassification || 'fresh',
+      quantity,
+      reason,
+      notes,
+      user: req.user,
+    });
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/store-admin/inventory/history
+ * List audit history entries for stock movements and deductions
+ */
+const getInventoryHistory = async (req, res, next) => {
+  try {
+    const storeId = req.user?.storeId || req.query.storeId || 'S001';
+    const { itemId, actionType, classification, search, page = 1, limit = 50 } = req.query;
+
+    const query = { storeId };
+
+    if (itemId) {
+      query.itemId = itemId;
+    }
+
+    if (actionType && actionType !== 'all') {
+      query.actionType = actionType;
+    }
+
+    if (classification && classification !== 'all') {
+      query.$or = [
+        { classification },
+        { sourceClassification: classification },
+        { destinationClassification: classification },
+      ];
+    }
+
+    if (search && search.trim()) {
+      const s = search.trim();
+      const regex = new RegExp(s, 'i');
+      query.$and = [
+        ...(query.$and || []),
+        {
+          $or: [
+            { productName: regex },
+            { reason: regex },
+            { notes: regex },
+            { orderId: regex },
+          ],
+        },
+      ];
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [total, history] = await Promise.all([
+      InventoryHistory.countDocuments(query),
+      InventoryHistory.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum),
+    ]);
+
+    res.status(200).json({
+      success: true,
+      total,
+      page: pageNum,
+      totalPages: Math.ceil(total / limitNum),
+      count: history.length,
+      history,
+    });
   } catch (error) {
     next(error);
   }
@@ -403,14 +606,50 @@ const getRiders = async (req, res, next) => {
     let riders = await User.find({
       role: 'rider',
       $or: [{ storeId }, { storeId: { $exists: false } }, { storeId: null }, { storeId: '' }],
-    }).select('-password');
+    }).select('-password').lean();
 
     // Fallback: If no rider has been tagged to this storeId yet, show all active riders in the city pool
     if (riders.length === 0) {
-      riders = await User.find({ role: 'rider' }).select('-password');
+      riders = await User.find({ role: 'rider' }).select('-password').lean();
     }
 
-    res.status(200).json({ success: true, count: riders.length, riders });
+    // Live verification: Check active "Out for Delivery" orders to guarantee 100% real-time status
+    const activeOrders = await Order.find({
+      status: 'Out for Delivery',
+    }).select('rider status');
+
+    const activeRiderIdentifiers = new Set();
+    activeOrders.forEach((o) => {
+      if (o.rider?.riderId) activeRiderIdentifiers.add(o.rider.riderId.toString());
+      if (o.rider?.phone) activeRiderIdentifiers.add(o.rider.phone.replace(/\D/g, ''));
+      if (o.rider?.name) activeRiderIdentifiers.add(o.rider.name.trim().toLowerCase());
+    });
+
+    const updatedRiders = await Promise.all(
+      riders.map(async (r) => {
+        const idStr = r._id ? r._id.toString() : '';
+        const phoneStr = (r.phone || '').replace(/\D/g, '');
+        const nameStr = (r.name || '').trim().toLowerCase();
+
+        const isOnDelivery =
+          activeRiderIdentifiers.has(idStr) ||
+          (phoneStr && activeRiderIdentifiers.has(phoneStr)) ||
+          (nameStr && activeRiderIdentifiers.has(nameStr));
+
+        if (isOnDelivery && r.riderStatus !== 'On Delivery') {
+          // Sync DB record so rider profile and mobile app are also in sync
+          await User.updateOne({ _id: r._id }, { riderStatus: 'On Delivery' });
+          return { ...r, riderStatus: 'On Delivery' };
+        } else if (!isOnDelivery && r.riderStatus === 'On Delivery') {
+          // If no active orders exist, free the rider back to Available (unless Offline)
+          await User.updateOne({ _id: r._id }, { riderStatus: 'Available' });
+          return { ...r, riderStatus: 'Available' };
+        }
+        return r;
+      })
+    );
+
+    res.status(200).json({ success: true, count: updatedRiders.length, riders: updatedRiders });
   } catch (error) {
     next(error);
   }
@@ -564,12 +803,123 @@ const updateStoreStatus = async (req, res, next) => {
     if (typeof pickupEnabled === 'boolean') updateData.pickupEnabled = pickupEnabled;
     if (typeof deliveryEnabled === 'boolean') updateData.deliveryEnabled = deliveryEnabled;
 
+    // Support Store Admin delivery fees & thresholds
+    if (req.body.freeDeliveryThreshold !== undefined && !isNaN(Number(req.body.freeDeliveryThreshold))) {
+      updateData.freeDeliveryThreshold = Math.max(0, Number(req.body.freeDeliveryThreshold));
+    }
+    if (req.body.standardDeliveryFee !== undefined && !isNaN(Number(req.body.standardDeliveryFee))) {
+      updateData.standardDeliveryFee = Math.max(0, Number(req.body.standardDeliveryFee));
+    }
+    if (req.body.expressDeliveryFee !== undefined && !isNaN(Number(req.body.expressDeliveryFee))) {
+      updateData.expressDeliveryFee = Math.max(0, Number(req.body.expressDeliveryFee));
+    }
+    if (typeof req.body.expressDeliveryEnabled === 'boolean') {
+      updateData.expressDeliveryEnabled = req.body.expressDeliveryEnabled;
+    }
+    if (typeof req.body.rainSurgeEnabled === 'boolean') {
+      updateData.rainSurgeEnabled = req.body.rainSurgeEnabled;
+    }
+    if (req.body.rainSurgeFee !== undefined && !isNaN(Number(req.body.rainSurgeFee))) {
+      updateData.rainSurgeFee = Math.max(0, Number(req.body.rainSurgeFee));
+    }
+    if (req.body.freeGiftThreshold !== undefined && !isNaN(Number(req.body.freeGiftThreshold))) {
+      updateData.freeGiftThreshold = Math.max(0, Number(req.body.freeGiftThreshold));
+    }
+    if (typeof req.body.freeGiftName === 'string') {
+      updateData.freeGiftName = req.body.freeGiftName.trim();
+    }
+    if (req.body.deliveryRadiusKm !== undefined && !isNaN(Number(req.body.deliveryRadiusKm))) {
+      updateData.deliveryRadiusKm = Math.max(1, Number(req.body.deliveryRadiusKm));
+    }
+    if (req.body.defaultRiderDailyTarget !== undefined && !isNaN(Number(req.body.defaultRiderDailyTarget))) {
+      updateData.defaultRiderDailyTarget = Math.max(1, Number(req.body.defaultRiderDailyTarget));
+    }
+
+    // Support updating rider payout & surge incentive settings
+    if (req.body.riderPayoutSettings && typeof req.body.riderPayoutSettings === 'object') {
+      const { baseDeliveryPay, distanceIncentive, peakHourSurge } = req.body.riderPayoutSettings;
+      if (baseDeliveryPay !== undefined && !isNaN(Number(baseDeliveryPay))) {
+        updateData['riderPayoutSettings.baseDeliveryPay'] = Math.max(0, Number(baseDeliveryPay));
+      }
+      if (distanceIncentive !== undefined && !isNaN(Number(distanceIncentive))) {
+        updateData['riderPayoutSettings.distanceIncentive'] = Math.max(0, Number(distanceIncentive));
+      }
+      if (peakHourSurge !== undefined && !isNaN(Number(peakHourSurge))) {
+        updateData['riderPayoutSettings.peakHourSurge'] = Math.max(0, Number(peakHourSurge));
+      }
+    } else {
+      if (req.body.baseDeliveryPay !== undefined && !isNaN(Number(req.body.baseDeliveryPay))) {
+        updateData['riderPayoutSettings.baseDeliveryPay'] = Math.max(0, Number(req.body.baseDeliveryPay));
+      }
+      if (req.body.distanceIncentive !== undefined && !isNaN(Number(req.body.distanceIncentive))) {
+        updateData['riderPayoutSettings.distanceIncentive'] = Math.max(0, Number(req.body.distanceIncentive));
+      }
+      if (req.body.peakHourSurge !== undefined && !isNaN(Number(req.body.peakHourSurge))) {
+        updateData['riderPayoutSettings.peakHourSurge'] = Math.max(0, Number(req.body.peakHourSurge));
+      }
+    }
+
     const store = await Store.findOneAndUpdate(
       { storeId },
       { $set: updateData },
       { new: true, upsert: true }
     );
     res.status(200).json({ success: true, store });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/store-admin/remittances
+ * List all cash remittance requests for this dark store
+ */
+const getStoreRemittances = async (req, res, next) => {
+  try {
+    const storeId = req.user?.storeId || req.query.storeId || 'S001';
+    const remittances = await Remittance.find({ storeId }).sort({ createdAt: -1 });
+    res.status(200).json({ success: true, count: remittances.length, remittances });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/store-admin/remittances/:id/confirm
+ * Store admin confirms physical cash deposit received from rider
+ */
+const confirmRemittance = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const remittance = await Remittance.findOne({
+      $or: [{ remittanceId: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }],
+    });
+
+    if (!remittance) {
+      return res.status(404).json({ success: false, message: 'Remittance record not found' });
+    }
+
+    remittance.status = 'Confirmed';
+    remittance.confirmedBy = req.user._id;
+    remittance.confirmedByName = req.user.name || 'Store Admin';
+    remittance.confirmedAt = new Date();
+    await remittance.save();
+
+    // Also notify rider via RiderNotification
+    const RiderNotification = require('../models/RiderNotification');
+    await RiderNotification.create({
+      riderId: remittance.riderId,
+      title: 'Cash Remittance Confirmed',
+      body: `Hub closing counter confirmed deposit of ₹${remittance.amount.toFixed(2)} (${remittance.remittanceId}).`,
+      type: 'HUB_ALERT',
+      data: { remittanceId: remittance.remittanceId },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: `Cash remittance of ₹${remittance.amount.toFixed(2)} confirmed successfully.`,
+      remittance,
+    });
   } catch (error) {
     next(error);
   }
@@ -582,6 +932,9 @@ module.exports = {
   delayPrepTime,
   getInventory,
   updateInventoryItem,
+  transferDefreezeStock,
+  recordInventoryWaste,
+  getInventoryHistory,
   getStoreCustomers,
   getDeliverySlots,
   updateDeliverySlot,
@@ -591,4 +944,6 @@ module.exports = {
   assignRiderToOrder,
   getStoreStatus,
   updateStoreStatus,
+  getStoreRemittances,
+  confirmRemittance,
 };

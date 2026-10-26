@@ -66,6 +66,71 @@ const storeSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    riderPayoutSettings: {
+      baseDeliveryPay: {
+        type: Number,
+        default: 65,
+        min: 0,
+      },
+      distanceIncentive: {
+        type: Number,
+        default: 15,
+        min: 0,
+      },
+      peakHourSurge: {
+        type: Number,
+        default: 20,
+        min: 0,
+      },
+    },
+    // Store Admin Managed Customer Fees & Operational Controls
+    freeDeliveryThreshold: {
+      type: Number,
+      default: 399,
+      min: 0,
+    },
+    standardDeliveryFee: {
+      type: Number,
+      default: 40,
+      min: 0,
+    },
+    expressDeliveryFee: {
+      type: Number,
+      default: 50,
+      min: 0,
+    },
+    expressDeliveryEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    rainSurgeEnabled: {
+      type: Boolean,
+      default: false,
+    },
+    rainSurgeFee: {
+      type: Number,
+      default: 15,
+      min: 0,
+    },
+    freeGiftThreshold: {
+      type: Number,
+      default: 499,
+      min: 0,
+    },
+    freeGiftName: {
+      type: String,
+      default: 'Free Biryani Rice (500g)',
+    },
+    deliveryRadiusKm: {
+      type: Number,
+      default: 5,
+      min: 1,
+    },
+    defaultRiderDailyTarget: {
+      type: Number,
+      default: 16,
+      min: 1,
+    },
     location: {
       type: {
         type: String,

@@ -63,6 +63,15 @@ interface StoreOption {
   isAvailable?: boolean;
   stockStatus?: string;
   outOfStockItems?: string[];
+  freeDeliveryThreshold?: number;
+  standardDeliveryFee?: number;
+  expressDeliveryFee?: number;
+  expressDeliveryEnabled?: boolean;
+  rainSurgeEnabled?: boolean;
+  rainSurgeFee?: number;
+  freeGiftThreshold?: number;
+  freeGiftName?: string;
+  deliveryRadiusKm?: number;
 }
 
 export default function CartDrawer() {
@@ -323,11 +332,27 @@ export default function CartDrawer() {
   if (!isOpen) return null;
 
   const isPickup = fulfillmentType === "pickup";
-  const effectiveDeliveryFee = isPickup ? 0 : deliveryFee;
-  const expressFee = (!isPickup && slot === "express60") ? 50 : 0;
+  const selectedStore =
+    stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
+
+  // Dynamic store-configurable delivery fees, thresholds, express fee, and rain surge
+  const storeFreeDeliveryThreshold = selectedStore?.freeDeliveryThreshold ?? freeDeliveryThreshold;
+  const storeStandardDeliveryFee = selectedStore?.standardDeliveryFee ?? 40;
+  const storeExpressDeliveryFee = selectedStore?.expressDeliveryFee ?? 50;
+  const storeExpressEnabled = selectedStore?.expressDeliveryEnabled !== false;
+  const storeRainSurgeEnabled = selectedStore?.rainSurgeEnabled === true;
+  const storeRainSurgeFee = storeRainSurgeEnabled ? (selectedStore?.rainSurgeFee ?? 15) : 0;
+  const storeFreeGiftThreshold = selectedStore?.freeGiftThreshold ?? freeRiceThreshold;
+  const storeFreeGiftName = selectedStore?.freeGiftName || "Free Biryani Rice (500g)";
+  const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 5;
+
+  const isFreeDelivery = subtotal >= storeFreeDeliveryThreshold;
+  const effectiveDeliveryFee = isPickup ? 0 : (isFreeDelivery ? 0 : storeStandardDeliveryFee);
+  const expressFee = (!isPickup && slot === "express60" && storeExpressEnabled) ? storeExpressDeliveryFee : 0;
+  const rainSurgeFee = (!isPickup && storeRainSurgeEnabled) ? storeRainSurgeFee : 0;
   const effectiveTip = isPickup ? 0 : selectedTip;
   const discountAmount = couponDiscount;
-  const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + expressFee + effectiveTip - discountAmount);
+  const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + expressFee + rainSurgeFee + effectiveTip - discountAmount);
   const resolvedDeliverySlot = isPickup
     ? "Store Pickup"
     : slot === "express60"
@@ -336,10 +361,8 @@ export default function CartDrawer() {
         ? `Custom Delivery: ${customSlotTime}`
         : "90 Min Delivery";
 
-  const selectedStore =
-    stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
-
-  const amountForFreeDelivery = Math.max(0, freeDeliveryThreshold - subtotal);
+  const amountForFreeDelivery = Math.max(0, storeFreeDeliveryThreshold - subtotal);
+  const amountForFreeGift = Math.max(0, storeFreeGiftThreshold - subtotal);
 
   // Tip handler
   const handleSelectTip = (amount: number) => {
@@ -791,7 +814,7 @@ export default function CartDrawer() {
                           {activeAddress.line1}{activeAddress.line2 ? `, ${activeAddress.line2}` : ""}, {activeAddress.city}
                         </p>
                         <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5 truncate">
-                          {activeAddress.pincode ? `Pincode: ${activeAddress.pincode} • 5km Delivery Radius` : "5km Delivery Radius"}
+                          {activeAddress.pincode ? `Pincode: ${activeAddress.pincode} • ${storeDeliveryRadiusKm}km Delivery Radius` : `${storeDeliveryRadiusKm}km Delivery Radius`}
                         </p>
                       </div>
                     </div>
@@ -987,6 +1010,17 @@ export default function CartDrawer() {
 
                       {/* Delivery Speed Slots: 3 Options (Express 60 min, 90 min, Custom) */}
                       <div className="p-3 bg-slate-50 rounded-2xl border border-gray-200">
+                        {/* Live Bad Weather / Rain Surge Alert if enabled by Store Admin */}
+                        {storeRainSurgeEnabled && (
+                          <div className="mb-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-center justify-between text-[11px] text-amber-950 font-semibold shadow-xs">
+                            <span className="flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[16px] text-amber-600">rainy</span>
+                              <span>Bad Weather / Rain Surge Active in your area</span>
+                            </span>
+                            <span className="font-extrabold text-amber-900">+₹{storeRainSurgeFee}</span>
+                          </div>
+                        )}
+
                         <div className="flex items-center justify-between mb-2">
                           <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px]">
                             Select Delivery Speed (Ranchi Only)
@@ -998,20 +1032,28 @@ export default function CartDrawer() {
                           {/* 1. Express Delivery (60 min) */}
                           <button
                             type="button"
-                            onClick={() => setSlot("express60")}
-                            style={slot === "express60" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "express60"
-                              ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
-                              : "border-gray-200 bg-white hover:border-gray-300"
+                            disabled={!storeExpressEnabled}
+                            onClick={() => storeExpressEnabled && setSlot("express60")}
+                            style={slot === "express60" && storeExpressEnabled ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${!storeExpressEnabled
+                              ? "border-gray-200 bg-gray-100/70 opacity-60 cursor-not-allowed"
+                              : slot === "express60"
+                                ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
+                                : "border-gray-200 bg-white hover:border-gray-300"
                               }`}
+                            title={!storeExpressEnabled ? "Express 60-min delivery temporarily paused by store hub (Kitchen Busy)" : undefined}
                           >
                             <div className="flex items-center justify-between gap-1">
                               <span className="font-bold text-[12px] text-gray-900 leading-tight">Express</span>
-                              <span className="text-[9.5px] font-black bg-amber-100 text-amber-900 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">+₹50</span>
+                              <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${storeExpressEnabled ? "bg-amber-100 text-amber-900" : "bg-gray-200 text-gray-600"}`}>
+                                {storeExpressEnabled ? `+₹${storeExpressDeliveryFee}` : "Paused"}
+                              </span>
                             </div>
                             <div className="mt-1.5">
                               <div className="text-[11px] font-bold text-[#91000a] leading-tight">60 Mins</div>
-                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">Priority Rush</div>
+                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">
+                                {storeExpressEnabled ? "Priority Rush" : "Kitchen Backlog"}
+                              </div>
                             </div>
                           </button>
 
@@ -1047,7 +1089,7 @@ export default function CartDrawer() {
                           >
                             <div className="flex items-center justify-between gap-1">
                               <span className="font-bold text-[12px] text-gray-900 leading-tight">Custom</span>
-                              <span className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Slot</span>
+                              <span className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
                             </div>
                             <div className="mt-1.5">
                               <div className="text-[11px] font-bold text-sky-900 leading-tight">Choose</div>
@@ -1207,18 +1249,13 @@ export default function CartDrawer() {
                               key={cs.id}
                               className="w-[124px] shrink-0 bg-white rounded-xl border border-gray-200/80 p-2 flex flex-col justify-between shadow-2xs hover:shadow-xs transition-all"
                             >
-                              <div className="relative w-full h-[72px] rounded-lg overflow-hidden bg-gray-50 mb-1.5 border border-gray-100">
+                              <div className="relative w-full h-[72px] rounded-lg overflow-hidden bg-white mb-1.5 border border-gray-100 flex items-center justify-center p-1">
                                 <img
                                   src={cs.image}
                                   alt={cs.name}
-                                  className="w-full h-full object-cover"
+                                  className="w-full h-full object-contain"
                                   loading="lazy"
                                 />
-                                {cs.weight && (
-                                  <span className="absolute bottom-1 left-1 bg-black/70 backdrop-blur-xs text-white text-[9px] font-bold px-1.5 py-0.2 rounded">
-                                    {cs.weight}
-                                  </span>
-                                )}
                               </div>
 
                               <div className="mb-2">
@@ -1233,35 +1270,25 @@ export default function CartDrawer() {
                                 </div>
                               </div>
 
-                              {/* Action: + Add or Stepper */}
+                              {/* Action: + Add or Disabled Added Button */}
                               {qty > 0 ? (
-                                <div className="flex items-center justify-between bg-primary text-white rounded-lg px-2 py-1 text-xs font-bold">
-                                  <button
-                                    type="button"
-                                    onClick={() => updateQuantity(cs.id, qty - 1)}
-                                    className="bg-transparent border-none text-white hover:text-gray-200 cursor-pointer font-black text-sm p-0 leading-none"
-                                    aria-label="Decrease quantity"
-                                  >
-                                    −
-                                  </button>
-                                  <span className="text-xs">{qty}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => updateQuantity(cs.id, qty + 1)}
-                                    className="bg-transparent border-none text-white hover:text-gray-200 cursor-pointer font-black text-sm p-0 leading-none"
-                                    aria-label="Increase quantity"
-                                  >
-                                    +
-                                  </button>
-                                </div>
+                                <button
+                                  type="button"
+                                  disabled
+                                  className="w-full py-1 px-2 rounded-lg font-bold text-[11.5px] cursor-not-allowed flex items-center justify-center gap-1 bg-gray-100 text-gray-500 border border-gray-200 select-none shadow-2xs opacity-90"
+                                  title="Item already in cart. Manage quantity in the cart list above."
+                                >
+                                  <span className="material-symbols-outlined text-[13px] text-emerald-600 font-bold">check</span>
+                                  <span className="tracking-wide text-gray-600">Added</span>
+                                </button>
                               ) : (
                                 <button
                                   type="button"
                                   onClick={() => handleAddCrossSell(cs)}
-                                  className="w-full py-1 px-2 rounded-lg bg-primary/10 hover:bg-primary text-primary hover:text-white font-bold text-[11.5px] border border-primary/20 transition-all cursor-pointer flex items-center justify-center gap-1"
+                                  className="btn-hover-fill w-full py-1 px-2 rounded-lg font-bold text-[11.5px] cursor-pointer flex items-center justify-center gap-1 shadow-xs active:scale-[0.98] select-none touch-manipulation transition-all"
                                 >
-                                  <span>+</span>
-                                  <span>Add</span>
+                                  <span className="material-symbols-outlined text-[13px]">add_shopping_cart</span>
+                                  <span className="tracking-wide">+ ADD</span>
                                 </button>
                               )}
                             </div>
@@ -1663,6 +1690,28 @@ export default function CartDrawer() {
                   </div>
                 </div>
 
+                {/* ─── FREE GIFT REWARD TIER BANNER ─── */}
+                <div className="px-5 pt-2 pb-0 shrink-0">
+                  <div className="px-3.5 py-2 bg-gradient-to-r from-amber-50/90 via-orange-50/80 to-amber-50/90 border border-amber-200/80 rounded-xl flex items-center justify-between gap-2 shadow-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0">featured_seasonal_and_gifts</span>
+                      <div className="min-w-0">
+                        <div className="text-[11.5px] font-extrabold text-amber-950 truncate">
+                          {amountForFreeGift <= 0
+                            ? `Unlocked: ${storeFreeGiftName}!`
+                            : `Add ₹${amountForFreeGift} more for ${storeFreeGiftName}`}
+                        </div>
+                        <div className="text-[10px] text-amber-700 font-medium">
+                          {amountForFreeGift <= 0 ? "Complimentary gift unlocked with your order" : `Free reward on carts ≥ ₹${storeFreeGiftThreshold}`}
+                        </div>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${amountForFreeGift <= 0 ? "bg-emerald-600 text-white" : "bg-amber-200/80 text-amber-900"}`}>
+                      {amountForFreeGift <= 0 ? "FREE" : `₹${amountForFreeGift} to unlock`}
+                    </span>
+                  </div>
+                </div>
+
                 {/* ─── BILL SUMMARY & CTA ────────────────────────────────────────── */}
                 <div className="border-t border-gray-200 px-5 py-4 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.03)] shrink-0">
                   <div className="flex flex-col gap-1.5 mb-3 font-body-sm text-[13px]">
@@ -1677,14 +1726,14 @@ export default function CartDrawer() {
                         <div className="flex justify-between text-slate-body">
                           <span>Delivery Fee</span>
                           <span>
-                            {deliveryFee === 0 ? (
+                            {effectiveDeliveryFee === 0 ? (
                               <strong className="text-tertiary">FREE</strong>
                             ) : (
-                              `₹${deliveryFee}`
+                              `₹${effectiveDeliveryFee}`
                             )}
                           </span>
                         </div>
-                        {deliveryFee > 0 && (
+                        {effectiveDeliveryFee > 0 && (
                           <div className="text-[11.5px] text-primary font-medium">
                             Add ₹{amountForFreeDelivery} more for FREE delivery
                           </div>
@@ -1702,6 +1751,15 @@ export default function CartDrawer() {
                           <div className="flex justify-between text-slate-body">
                             <span>Express 60-Min Priority Delivery</span>
                             <span>+₹{expressFee}</span>
+                          </div>
+                        )}
+                        {rainSurgeFee > 0 && (
+                          <div className="flex justify-between items-center text-amber-900 bg-amber-50/80 px-2 py-1 rounded font-semibold text-xs border border-amber-200/60">
+                            <span className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[15px] text-amber-700">rainy</span>
+                              <span>Bad Weather / Rain Surge</span>
+                            </span>
+                            <span>+₹{rainSurgeFee}</span>
                           </div>
                         )}
                       </>

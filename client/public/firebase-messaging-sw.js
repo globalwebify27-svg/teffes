@@ -4,12 +4,12 @@ importScripts("https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 
 // Initialize Firebase inside Service Worker
 firebase.initializeApp({
-  apiKey: "AIzaSyAjgEsRyjgfJ5Y5VPhA85JIgS55BycIBf8",
-  authDomain: "teffe-development.firebaseapp.com",
-  projectId: "teffe-development",
-  storageBucket: "teffe-development.firebasestorage.app",
-  messagingSenderId: "634799767426",
-  appId: "1:634799767426:web:34005b318342e1a1ae599b",
+  apiKey: "AIzaSyBBdxXGS7vOEYuvnXklCHTZgB7xwsrK46M",
+  authDomain: "teffes-app.firebaseapp.com",
+  projectId: "teffes-app",
+  storageBucket: "teffes-app.firebasestorage.app",
+  messagingSenderId: "616507977462",
+  appId: "1:616507977462:web:e426a3d2c54a9ec221c6d7",
 });
 
 const messaging = firebase.messaging();

@@ -366,18 +366,28 @@ class RiderProfileScreen extends StatelessWidget {
                               ),
                             ),
                             const SizedBox(width: 8),
-                            const Row(
+                            Row(
                               children: [
-                                Icon(Icons.star_rounded, size: 16, color: AppColors.ratingStar),
-                                SizedBox(width: 2),
+                                const Icon(Icons.star_rounded, size: 16, color: AppColors.ratingStar),
+                                const SizedBox(width: 2),
                                 Text(
-                                  '4.9',
-                                  style: TextStyle(
+                                  (rider?.rating ?? 5.0).toStringAsFixed(1),
+                                  style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.textPrimary,
                                   ),
                                 ),
+                                if ((rider?.ratingCount ?? 0) > 0) ...[
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '(${rider!.ratingCount})',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ],
@@ -414,19 +424,21 @@ class RiderProfileScreen extends StatelessWidget {
                   _buildProfileRow(
                     icon: Icons.two_wheeler_rounded,
                     title: 'Vehicle Registration',
-                    value: rider?.vehicleNumber ?? 'JH01-EC-4821 (Honda Activa)',
+                    value: '${rider?.vehicleNumber ?? "JH-01-BK-4920"} (${rider?.vehicleType ?? "Bike"})',
                   ),
                   const Divider(color: AppColors.borderHairline, height: 16),
                   _buildProfileRow(
                     icon: Icons.storefront_rounded,
                     title: 'Assigned Dark Store Hub',
-                    value: rider?.assignedStore ?? 'Store S001 - Kanke Road, Ranchi',
+                    value: rider?.assignedStore ?? 'Store S001 - Ranchi Central Hub',
                   ),
                   const Divider(color: AppColors.borderHairline, height: 16),
                   _buildProfileRow(
                     icon: Icons.verified_user_rounded,
                     title: 'Food Safety Training',
-                    value: 'Certified (FSSAI Cold-Chain Valid)',
+                    value: rider?.foodSafetyCertified == true
+                        ? 'Certified (${rider?.fssaiCertNumber ?? "FSSAI Cold-Chain Valid"})'
+                        : 'Training Certification Pending',
                   ),
                 ],
               ),

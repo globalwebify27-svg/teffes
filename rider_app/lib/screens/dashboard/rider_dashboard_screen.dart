@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher_string.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -41,7 +42,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
           ],
         ),
         content: const Text(
-          'Do you need immediate emergency assistance? This will notify Ranchi Dark Store Dispatch Manager and Emergency Services (112) with your live GPS location.',
+          'Do you need immediate emergency assistance? This will dispatch a high-priority alert with your coordinates to Ranchi Dark Store Dispatch & local emergency services.',
           style: TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
@@ -50,22 +51,84 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('SOS Alert sent to Ranchi Dispatch & Police Services.'),
-                  backgroundColor: AppColors.error,
-                ),
-              );
+              final result = await context.read<RiderOrdersProvider>().triggerSosAlert();
+              if (context.mounted) {
+                _showSosTriggeredSheet(context, result);
+              }
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.error,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Trigger SOS'),
+            child: const Text('Trigger SOS Alert'),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showSosTriggeredSheet(BuildContext context, Map<String, dynamic> result) {
+    final contacts = result['emergencyContacts'] as Map<String, dynamic>?;
+    final policeNumber = contacts?['policeAmbulance'] ?? '112';
+    final dispatchNumber = contacts?['dispatchManager'] ?? '+919779687955';
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (bctx) => Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.error_outline_rounded, color: AppColors.error, size: 28),
+                SizedBox(width: 10),
+                Text(
+                  'SOS Alert Dispatched',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: AppColors.error),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+              result['message'] ?? 'Emergency signal active. Dark store management notified.',
+              style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 18),
+            ElevatedButton.icon(
+              onPressed: () => launchUrlString('tel:$policeNumber'),
+              icon: const Icon(Icons.local_police_rounded, color: Colors.white),
+              label: Text('Call Emergency Police ($policeNumber)'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.error,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
+            ),
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => launchUrlString('tel:$dispatchNumber'),
+              icon: const Icon(Icons.headset_mic_rounded, color: AppColors.primaryMaroon),
+              label: const Text('Call Store Dispatch Hub'),
+              style: OutlinedButton.styleFrom(
+                side: const BorderSide(color: AppColors.primaryMaroon),
+                foregroundColor: AppColors.primaryMaroon,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.of(bctx).pop(),
+              child: const Text('Dismiss'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -128,7 +191,9 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                                   borderRadius: BorderRadius.circular(4),
                                 ),
                                 child: Text(
-                                  rider?.vehicleNumber ?? 'JH01-EC-4821',
+                                  rider?.vehicleNumber != null
+                                      ? '${rider!.vehicleNumber} (${rider.vehicleType})'
+                                      : 'JH-01-BK-4920 (Bike)',
                                   style: const TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.w700,
@@ -143,12 +208,27 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                             children: [
                               const Icon(Icons.storefront_rounded, size: 13, color: AppColors.textMuted),
                               const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  rider?.assignedStore ?? 'Ranchi Central Hub (S001)',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.textSecondary,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              const Icon(Icons.star_rounded, size: 14, color: AppColors.ratingStar),
+                              const SizedBox(width: 2),
                               Text(
-                                rider?.assignedStore ?? 'Ranchi Central Hub (S001)',
+                                (rider?.rating ?? 5.0).toStringAsFixed(1),
                                 style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textSecondary,
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textPrimary,
                                 ),
                               ),
                             ],
@@ -467,7 +547,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                         icon: Icons.check_circle_rounded,
                         iconColor: AppColors.primaryMaroon,
                         label: 'Completed',
-                        value: '${orders.todayDeliveriesCount}',
+                        value: '${orders.todayDeliveriesCount}/${orders.targetCount}',
                       ),
                     ),
                     const SizedBox(width: 10),

@@ -130,6 +130,16 @@ const getAvailableStoresHandler = async (req, res, next) => {
 
       evaluatedStores.push({
         ...store,
+        freeDeliveryThreshold: store.freeDeliveryThreshold ?? 399,
+        standardDeliveryFee: store.standardDeliveryFee ?? 40,
+        expressDeliveryFee: store.expressDeliveryFee ?? 50,
+        expressDeliveryEnabled: store.expressDeliveryEnabled !== false,
+        rainSurgeEnabled: store.rainSurgeEnabled === true,
+        rainSurgeFee: store.rainSurgeFee ?? 15,
+        freeGiftThreshold: store.freeGiftThreshold ?? 499,
+        freeGiftName: store.freeGiftName || 'Free Biryani Rice (500g)',
+        deliveryRadiusKm: store.deliveryRadiusKm ?? 5,
+        defaultRiderDailyTarget: store.defaultRiderDailyTarget ?? 16,
         distanceKm: distKm,
         distance: `${distKm} km away`,
         isAvailable,

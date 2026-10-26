@@ -47,6 +47,11 @@ const productSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    isRecommended: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     image: {
       type: String,
       required: true,

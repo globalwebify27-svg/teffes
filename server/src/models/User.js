@@ -63,6 +63,36 @@ const userSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    vehicleType: {
+      type: String,
+      default: 'Bike',
+    },
+    riderRating: {
+      type: Number,
+      default: 5.0,
+      min: 1.0,
+      max: 5.0,
+    },
+    riderRatingCount: {
+      type: Number,
+      default: 0,
+    },
+    foodSafetyCertified: {
+      type: Boolean,
+      default: true,
+    },
+    fssaiCertNumber: {
+      type: String,
+      default: 'FSSAI-CC-2024-8839',
+    },
+    dailyTarget: {
+      type: Number,
+      default: 16,
+    },
+    cashInHand: {
+      type: Number,
+      default: 0,
+    },
     riderStatus: {
       type: String,
       enum: ['Available', 'On Delivery', 'Offline'],

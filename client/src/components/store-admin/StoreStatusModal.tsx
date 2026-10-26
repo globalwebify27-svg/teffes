@@ -19,6 +19,21 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
   const [pickupEnabled, setPickupEnabled] = useState(true);
   const [deliveryEnabled, setDeliveryEnabled] = useState(true);
   const [storeName, setStoreName] = useState("Store Outlet");
+  const [baseDeliveryPay, setBaseDeliveryPay] = useState<number>(65);
+  const [distanceIncentive, setDistanceIncentive] = useState<number>(15);
+  const [peakHourSurge, setPeakHourSurge] = useState<number>(20);
+
+  // Customer Delivery Fees & Operational Controls
+  const [freeDeliveryThreshold, setFreeDeliveryThreshold] = useState<number>(399);
+  const [standardDeliveryFee, setStandardDeliveryFee] = useState<number>(40);
+  const [expressDeliveryFee, setExpressDeliveryFee] = useState<number>(50);
+  const [expressDeliveryEnabled, setExpressDeliveryEnabled] = useState<boolean>(true);
+  const [rainSurgeEnabled, setRainSurgeEnabled] = useState<boolean>(false);
+  const [rainSurgeFee, setRainSurgeFee] = useState<number>(15);
+  const [freeGiftThreshold, setFreeGiftThreshold] = useState<number>(499);
+  const [freeGiftName, setFreeGiftName] = useState<string>("Free Biryani Rice (500g)");
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState<number>(5);
+  const [defaultRiderDailyTarget, setDefaultRiderDailyTarget] = useState<number>(16);
 
   useEffect(() => {
     if (!isOpenModal) return;
@@ -33,6 +48,23 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
           setEmergencyNotice(s.emergencyNotice || "");
           setPickupEnabled(s.pickupEnabled !== false);
           setDeliveryEnabled(s.deliveryEnabled !== false);
+
+          if (typeof s.freeDeliveryThreshold === "number") setFreeDeliveryThreshold(s.freeDeliveryThreshold);
+          if (typeof s.standardDeliveryFee === "number") setStandardDeliveryFee(s.standardDeliveryFee);
+          if (typeof s.expressDeliveryFee === "number") setExpressDeliveryFee(s.expressDeliveryFee);
+          if (typeof s.expressDeliveryEnabled === "boolean") setExpressDeliveryEnabled(s.expressDeliveryEnabled);
+          if (typeof s.rainSurgeEnabled === "boolean") setRainSurgeEnabled(s.rainSurgeEnabled);
+          if (typeof s.rainSurgeFee === "number") setRainSurgeFee(s.rainSurgeFee);
+          if (typeof s.freeGiftThreshold === "number") setFreeGiftThreshold(s.freeGiftThreshold);
+          if (s.freeGiftName) setFreeGiftName(s.freeGiftName);
+          if (typeof s.deliveryRadiusKm === "number") setDeliveryRadiusKm(s.deliveryRadiusKm);
+          if (typeof s.defaultRiderDailyTarget === "number") setDefaultRiderDailyTarget(s.defaultRiderDailyTarget);
+
+          if (s.riderPayoutSettings) {
+            if (typeof s.riderPayoutSettings.baseDeliveryPay === "number") setBaseDeliveryPay(s.riderPayoutSettings.baseDeliveryPay);
+            if (typeof s.riderPayoutSettings.distanceIncentive === "number") setDistanceIncentive(s.riderPayoutSettings.distanceIncentive);
+            if (typeof s.riderPayoutSettings.peakHourSurge === "number") setPeakHourSurge(s.riderPayoutSettings.peakHourSurge);
+          }
         }
       })
       .catch((err) => {
@@ -52,12 +84,27 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
         emergencyNotice,
         pickupEnabled,
         deliveryEnabled,
+        freeDeliveryThreshold: Number(freeDeliveryThreshold),
+        standardDeliveryFee: Number(standardDeliveryFee),
+        expressDeliveryFee: Number(expressDeliveryFee),
+        expressDeliveryEnabled,
+        rainSurgeEnabled,
+        rainSurgeFee: Number(rainSurgeFee),
+        freeGiftThreshold: Number(freeGiftThreshold),
+        freeGiftName,
+        deliveryRadiusKm: Number(deliveryRadiusKm),
+        defaultRiderDailyTarget: Number(defaultRiderDailyTarget),
+        riderPayoutSettings: {
+          baseDeliveryPay: Number(baseDeliveryPay),
+          distanceIncentive: Number(distanceIncentive),
+          peakHourSurge: Number(peakHourSurge),
+        },
       });
 
       if (res.data.success) {
         toast.success(
-          storeOpen ? "Store is now LIVE and accepting orders" : "Store is now PAUSED (Taking orders disabled)",
-          "Store Status Updated"
+          "Store operational controls & delivery pricing saved successfully.",
+          "Settings Updated"
         );
         if (onStatusChange) onStatusChange(res.data.store);
         onClose();
@@ -75,11 +122,11 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
       onClick={onClose}
     >
       <div
-        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden"
+        className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/70">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/70 shrink-0">
           <div className="flex items-center gap-2.5">
             <span className="material-symbols-outlined text-primary text-[24px]">storefront</span>
             <div>
@@ -99,13 +146,16 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
         {loading ? (
           <div className="p-8 text-center text-sm text-gray-500">Loading store settings…</div>
         ) : (
-          <div className="p-6 space-y-5">
+          <div className="p-6 space-y-5 overflow-y-auto flex-1">
             {/* Live Store Status Switch */}
-            <div className={`p-4 rounded-xl border transition-all ${storeOpen ? "bg-emerald-50/80 border-emerald-200" : "bg-rose-50/80 border-rose-200"}`}>
+            <div className={`p-4 rounded-xl border transition-all ${storeOpen ? "bg-red-50/70 border-red-200" : "bg-gray-50 border-gray-200"}`}>
               <div className="flex items-center justify-between">
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full animate-pulse ${storeOpen ? "bg-emerald-500" : "bg-rose-500"}`} />
+                    <span
+                      className="w-3 h-3 rounded-full animate-pulse"
+                      style={{ backgroundColor: storeOpen ? "#941717" : "#9ca3af" }}
+                    />
                     <span className="font-extrabold text-sm text-gray-900">
                       {storeOpen ? "STORE ONLINE (Accepting Orders)" : "STORE PAUSED (Emergency Halt)"}
                     </span>
@@ -117,15 +167,43 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
                   </p>
                 </div>
 
-                <label className="relative inline-flex items-center cursor-pointer ml-3">
-                  <input
-                    type="checkbox"
-                    checked={storeOpen}
-                    onChange={(e) => setStoreOpen(e.target.checked)}
-                    className="sr-only peer"
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={storeOpen}
+                  onClick={() => setStoreOpen(!storeOpen)}
+                  style={{
+                    width: "48px",
+                    height: "26px",
+                    borderRadius: "9999px",
+                    backgroundColor: storeOpen ? "#941717" : "#cbd5e1",
+                    transition: "all 200ms ease",
+                    position: "relative",
+                    cursor: "pointer",
+                    border: "none",
+                    padding: 0,
+                    outline: "none",
+                    flexShrink: 0,
+                    boxShadow: storeOpen ? "0 2px 6px rgba(148, 23, 23, 0.35)" : "none",
+                  }}
+                  title={storeOpen ? "Click to Pause Store" : "Click to Open Store"}
+                >
+                  <span
+                    style={{
+                      width: "20px",
+                      height: "20px",
+                      borderRadius: "9999px",
+                      backgroundColor: "#ffffff",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                      position: "absolute",
+                      top: "3px",
+                      left: "3px",
+                      transform: storeOpen ? "translateX(22px)" : "translateX(0px)",
+                      transition: "transform 200ms ease",
+                      display: "block",
+                    }}
                   />
-                  <div className="w-12 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
-                </label>
+                </button>
               </div>
             </div>
 
@@ -174,7 +252,8 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
                   disabled={!storeOpen}
                   checked={storeOpen && deliveryEnabled}
                   onChange={(e) => setDeliveryEnabled(e.target.checked)}
-                  className="rounded text-primary focus:ring-primary h-4 w-4 disabled:cursor-not-allowed"
+                  style={{ accentColor: "#941717" }}
+                  className="rounded h-4 w-4 disabled:cursor-not-allowed cursor-pointer"
                 />
                 <span className={`text-xs font-bold flex items-center gap-1 ${!storeOpen ? "text-gray-400" : "text-gray-700"}`}>
                   <span className="material-symbols-outlined text-[16px] text-primary">two_wheeler</span>
@@ -188,10 +267,11 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
                   disabled={!storeOpen}
                   checked={storeOpen && pickupEnabled}
                   onChange={(e) => setPickupEnabled(e.target.checked)}
-                  className="rounded text-primary focus:ring-primary h-4 w-4 disabled:cursor-not-allowed"
+                  style={{ accentColor: "#941717" }}
+                  className="rounded h-4 w-4 disabled:cursor-not-allowed cursor-pointer"
                 />
                 <span className={`text-xs font-bold flex items-center gap-1 ${!storeOpen ? "text-gray-400" : "text-gray-700"}`}>
-                  <span className="material-symbols-outlined text-[16px] text-emerald-600">storefront</span>
+                  <span className="material-symbols-outlined text-[16px] text-primary">storefront</span>
                   <span>Store Pickup</span>
                 </span>
               </label>
@@ -203,6 +283,314 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
                 <span>Both fulfillment channels are automatically locked while store is marked offline.</span>
               </div>
             )}
+
+            {/* ─── 1. CUSTOMER DELIVERY FEES & RADIUS ─── */}
+            <div className="pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Customer Delivery Fees & Radius
+                </label>
+                <span className="text-[10px] text-primary font-bold bg-red-50 px-2 py-0.5 rounded-full border border-red-200">
+                  Customer Checkout
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 mb-2.5">
+                Fees and order thresholds shown on website and mobile checkout.
+              </p>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200">
+                  <span className="text-[10px] font-bold text-gray-500 block uppercase">Standard Fee</span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-2 top-1.5 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={standardDeliveryFee}
+                      onChange={(e) => setStandardDeliveryFee(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-5 pr-1 py-1 text-sm font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                  <span className="text-[9.5px] text-gray-400 block mt-1">If below threshold</span>
+                </div>
+
+                <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200">
+                  <span className="text-[10px] font-bold text-gray-500 block uppercase">Free Delivery Min</span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-2 top-1.5 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={freeDeliveryThreshold}
+                      onChange={(e) => setFreeDeliveryThreshold(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-5 pr-1 py-1 text-sm font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                  <span className="text-[9.5px] text-gray-400 block mt-1">Free if cart ≥ this</span>
+                </div>
+
+                <div className="p-2.5 bg-gray-50 rounded-xl border border-gray-200">
+                  <span className="text-[10px] font-bold text-gray-500 block uppercase">Delivery Radius</span>
+                  <div className="relative mt-1">
+                    <input
+                      type="number"
+                      min={1}
+                      max={25}
+                      value={deliveryRadiusKm}
+                      onChange={(e) => setDeliveryRadiusKm(Math.max(1, Number(e.target.value)))}
+                      className="w-full px-2 py-1 text-sm font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                  <span className="text-[9.5px] text-gray-400 block mt-1">Kilometers (Km)</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── 2. EXPRESS 60-MIN RUSH DELIVERY ─── */}
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[17px] text-amber-700">bolt</span>
+                    <span className="font-bold text-xs text-gray-900">Express 60-Min Delivery Slot</span>
+                  </div>
+                  <p className="text-[10.5px] text-gray-500 mt-0.5">
+                    Enable priority quick dispatch slot on checkout drawer
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={expressDeliveryEnabled}
+                  onClick={() => setExpressDeliveryEnabled(!expressDeliveryEnabled)}
+                  style={{
+                    width: "44px",
+                    height: "24px",
+                    borderRadius: "9999px",
+                    backgroundColor: expressDeliveryEnabled ? "#941717" : "#cbd5e1",
+                    transition: "all 200ms ease",
+                    position: "relative",
+                    cursor: "pointer",
+                    border: "none",
+                    padding: 0,
+                    outline: "none",
+                    flexShrink: 0,
+                    boxShadow: expressDeliveryEnabled ? "0 2px 6px rgba(148, 23, 23, 0.35)" : "none",
+                  }}
+                  title={expressDeliveryEnabled ? "Express Delivery Enabled (Maroon)" : "Express Delivery Disabled (Gray)"}
+                >
+                  <span
+                    style={{
+                      width: "18px",
+                      height: "18px",
+                      borderRadius: "9999px",
+                      backgroundColor: "#ffffff",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                      position: "absolute",
+                      top: "3px",
+                      left: "3px",
+                      transform: expressDeliveryEnabled ? "translateX(20px)" : "translateX(0px)",
+                      transition: "transform 200ms ease",
+                      display: "block",
+                    }}
+                  />
+                </button>
+              </div>
+
+              {expressDeliveryEnabled && (
+                <div className="mt-2 pt-2 border-t border-gray-200/60 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-gray-600">Express Surcharge Amount:</span>
+                  <div className="relative w-28">
+                    <span className="absolute left-2.5 top-1.5 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={expressDeliveryFee}
+                      onChange={(e) => setExpressDeliveryFee(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-6 pr-2 py-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ─── 3. BAD WEATHER / RAIN SURGE FEE TOGGLE ─── */}
+            <div className={`p-3 rounded-xl border transition-all ${rainSurgeEnabled ? "bg-red-50/70 border-red-200" : "bg-gray-50 border-gray-200"}`}>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[17px] text-amber-700">rainy</span>
+                    <span className="font-bold text-xs text-gray-900">Rain / High Demand Surge</span>
+                  </div>
+                  <p className="text-[10.5px] text-gray-500 mt-0.5">
+                    Activate during bad weather to offset higher rider delivery costs
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={rainSurgeEnabled}
+                  onClick={() => setRainSurgeEnabled(!rainSurgeEnabled)}
+                  style={{
+                    width: "44px",
+                    height: "24px",
+                    borderRadius: "9999px",
+                    backgroundColor: rainSurgeEnabled ? "#941717" : "#cbd5e1",
+                    transition: "all 200ms ease",
+                    position: "relative",
+                    cursor: "pointer",
+                    border: "none",
+                    padding: 0,
+                    outline: "none",
+                    flexShrink: 0,
+                    boxShadow: rainSurgeEnabled ? "0 2px 6px rgba(148, 23, 23, 0.35)" : "none",
+                  }}
+                  title={rainSurgeEnabled ? "Rain Surge Active (Maroon)" : "Rain Surge Disabled (Gray)"}
+                >
+                  <span
+                    style={{
+                      width: "18px",
+                      height: "18px",
+                      borderRadius: "9999px",
+                      backgroundColor: "#ffffff",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                      position: "absolute",
+                      top: "3px",
+                      left: "3px",
+                      transform: rainSurgeEnabled ? "translateX(20px)" : "translateX(0px)",
+                      transition: "transform 200ms ease",
+                      display: "block",
+                    }}
+                  />
+                </button>
+              </div>
+
+              {rainSurgeEnabled && (
+                <div className="mt-2 pt-2 border-t border-amber-200 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-amber-900">Customer Rain Surge Fee:</span>
+                  <div className="relative w-28">
+                    <span className="absolute left-2.5 top-1.5 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={rainSurgeFee}
+                      onChange={(e) => setRainSurgeFee(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-6 pr-2 py-1 text-xs font-bold border border-amber-300 rounded-lg bg-white focus:outline-none focus:border-amber-600 text-gray-900"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* ─── 4. FREE GIFT PROMOTION TIER ─── */}
+            <div className="p-3 bg-gray-50 rounded-xl border border-gray-200">
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-[17px] text-emerald-700">featured_seasonal_and_gifts</span>
+                  <span className="font-bold text-xs text-gray-900">Promotional Free Gift Tier</span>
+                </div>
+                <span className="text-[9.5px] text-emerald-800 bg-emerald-100/70 px-2 py-0.5 rounded font-bold">Cart Reward</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2 mt-1">
+                <div>
+                  <span className="text-[10px] font-bold text-gray-500 block uppercase">Min Cart Value</span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-2 top-1.5 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={freeGiftThreshold}
+                      onChange={(e) => setFreeGiftThreshold(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-5 pr-1 py-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-bold text-gray-500 block uppercase">Gift Item Name</span>
+                  <input
+                    type="text"
+                    value={freeGiftName}
+                    onChange={(e) => setFreeGiftName(e.target.value)}
+                    placeholder="e.g. Free Biryani Rice (500g)"
+                    className="w-full px-2 py-1 mt-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* ─── 5. RIDER DELIVERY COMPENSATION & DAILY TARGET ─── */}
+            <div className="pt-3 border-t border-gray-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  Rider Payout Rates & Daily Target
+                </label>
+                <span className="text-[10px] text-emerald-700 font-bold bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Rider Partner Pay
+                </span>
+              </div>
+              <p className="text-[11px] text-gray-500 mb-2.5">
+                Earnings per completed delivery calculated live in rider app.
+              </p>
+
+              <div className="grid grid-cols-4 gap-2">
+                <div className="p-2 bg-gray-50 rounded-xl border border-gray-200">
+                  <span className="text-[9.5px] font-bold text-gray-500 block uppercase">Base Pay</span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-1.5 top-1 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={baseDeliveryPay}
+                      onChange={(e) => setBaseDeliveryPay(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-4 pr-1 py-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2 bg-gray-50 rounded-xl border border-gray-200">
+                  <span className="text-[9.5px] font-bold text-gray-500 block uppercase">Fuel Dist.</span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-1.5 top-1 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={distanceIncentive}
+                      onChange={(e) => setDistanceIncentive(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-4 pr-1 py-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2 bg-gray-50 rounded-xl border border-gray-200">
+                  <span className="text-[9.5px] font-bold text-gray-500 block uppercase">Peak Surge</span>
+                  <div className="relative mt-1">
+                    <span className="absolute left-1.5 top-1 text-xs font-bold text-gray-400">₹</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={peakHourSurge}
+                      onChange={(e) => setPeakHourSurge(Math.max(0, Number(e.target.value)))}
+                      className="w-full pl-4 pr-1 py-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-2 bg-gray-50 rounded-xl border border-gray-200">
+                  <span className="text-[9.5px] font-bold text-gray-500 block uppercase">Daily Target</span>
+                  <div className="relative mt-1">
+                    <input
+                      type="number"
+                      min={1}
+                      value={defaultRiderDailyTarget}
+                      onChange={(e) => setDefaultRiderDailyTarget(Math.max(1, Number(e.target.value)))}
+                      className="w-full px-1.5 py-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         )}
 

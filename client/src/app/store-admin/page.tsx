@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
+import axios from "axios";
 import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
 import type { User } from "@/lib/auth";
@@ -276,6 +277,132 @@ const OrderStatusPipeline = ({ status }: { status: string }) => {
         </React.Fragment>
       ))}
     </div>
+  );
+};
+
+const FileUploadButton = ({
+  onUploadSuccess,
+  folder = "cross-sell",
+  label = "Upload Image",
+  accept = "image/*",
+  style,
+}: {
+  onUploadSuccess: (url: string) => void;
+  folder?: string;
+  label?: string;
+  accept?: string;
+  style?: React.CSSProperties;
+}) => {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("folder", folder);
+
+    try {
+      let finalUrl = "";
+
+      // 1. Primary: Try standard API endpoint which stores to Firebase Storage via storageService
+      try {
+        const res = await api.post<{ success: boolean; url: string }>("/upload", formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        if (res.data?.success && res.data.url) {
+          finalUrl = res.data.url;
+        }
+      } catch (primaryErr: any) {
+        // Fallback 1: Local backend fallback if remote is not reachable
+        if (
+          primaryErr.response?.status === 404 ||
+          primaryErr.response?.data?.message?.includes("not found") ||
+          primaryErr.code === "ERR_NETWORK"
+        ) {
+          try {
+            const localRes = await axios.post<{ success: boolean; url: string }>("http://localhost:5000/api/upload", formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+            });
+            if (localRes.data?.success && localRes.data.url) {
+              finalUrl = localRes.data.url;
+            }
+          } catch (localErr: any) {
+            console.warn("[Upload] Local backend fallback failed, attempting direct Firebase Storage...", localErr);
+          }
+        }
+
+        // Fallback 2: Direct browser upload to Firebase Storage
+        if (!finalUrl) {
+          try {
+            const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+            const { firebaseApp } = await import("@/lib/firebase");
+            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+            const storageRef = ref(getStorage(firebaseApp), `${folder}/${Date.now()}-${safeName}`);
+            const snapshot = await uploadBytes(storageRef, file);
+            finalUrl = await getDownloadURL(snapshot.ref);
+          } catch (fbErr: any) {
+            console.warn("[Upload] Direct Firebase Storage upload failed:", fbErr);
+          }
+        }
+
+        if (!finalUrl) {
+          throw primaryErr;
+        }
+      }
+
+      if (finalUrl) {
+        onUploadSuccess(finalUrl);
+        toast.success("Image uploaded to Firebase Storage successfully!", "Upload Complete");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || err.message || "Upload failed. Please try again.", "Upload Error");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  return (
+    <>
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileChange}
+        accept={accept}
+        style={{ display: "none" }}
+      />
+      <button
+        type="button"
+        disabled={uploading}
+        onClick={() => fileInputRef.current?.click()}
+        style={{
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "6px",
+          background: "#941717",
+          border: "none",
+          borderRadius: "8px",
+          padding: "7px 14px",
+          fontSize: "0.8rem",
+          fontWeight: 700,
+          color: "#fff",
+          cursor: uploading ? "not-allowed" : "pointer",
+          whiteSpace: "nowrap",
+          boxShadow: "0 2px 6px rgba(148, 23, 23, 0.2)",
+          flexShrink: 0,
+          ...style,
+        }}
+      >
+        <span className="material-symbols-outlined text-[16px]">
+          {uploading ? "sync" : "cloud_upload"}
+        </span>
+        <span>{uploading ? "Uploading to Firebase..." : label}</span>
+      </button>
+    </>
   );
 };
 
@@ -840,7 +967,6 @@ function CrossSellTab() {
     name: "",
     price: "",
     originalPrice: "",
-    weight: "",
     image: "",
     inStock: true,
     isActive: true,
@@ -870,7 +996,6 @@ function CrossSellTab() {
       name: "",
       price: "",
       originalPrice: "",
-      weight: "1 unit",
       image: "",
       inStock: true,
       isActive: true,
@@ -884,7 +1009,6 @@ function CrossSellTab() {
       name: item.name || "",
       price: item.price !== undefined ? String(item.price) : "",
       originalPrice: item.originalPrice !== undefined ? String(item.originalPrice) : "",
-      weight: item.weight || "1 unit",
       image: item.image || "",
       inStock: item.inStock !== false,
       isActive: item.isActive !== false,
@@ -903,33 +1027,27 @@ function CrossSellTab() {
       return;
     }
     if (!formData.image.trim()) {
-      toast.warning("Please provide a product image URL.", "Validation Error");
+      toast.warning("Please upload or provide a product image.", "Validation Error");
       return;
     }
 
     setSaving(true);
     try {
+      const payload = {
+        name: formData.name.trim(),
+        price: Number(formData.price),
+        originalPrice: Number(formData.originalPrice) || 0,
+        weight: "",
+        image: formData.image.trim(),
+        inStock: formData.inStock,
+        isActive: formData.isActive,
+      };
+
       if (editingItem) {
-        await api.put(`/store-admin/cross-sell/${editingItem.id || editingItem._id}`, {
-          name: formData.name.trim(),
-          price: Number(formData.price),
-          originalPrice: Number(formData.originalPrice) || 0,
-          weight: formData.weight.trim(),
-          image: formData.image.trim(),
-          inStock: formData.inStock,
-          isActive: formData.isActive,
-        });
+        await api.put(`/store-admin/cross-sell/${editingItem.id || editingItem._id}`, payload);
         toast.success("Cross-sell item updated successfully!", "Updated");
       } else {
-        await api.post("/store-admin/cross-sell", {
-          name: formData.name.trim(),
-          price: Number(formData.price),
-          originalPrice: Number(formData.originalPrice) || 0,
-          weight: formData.weight.trim(),
-          image: formData.image.trim(),
-          inStock: formData.inStock,
-          isActive: formData.isActive,
-        });
+        await api.post("/store-admin/cross-sell", payload);
         toast.success("New cross-sell item added successfully!", "Created");
       }
       setIsModalOpen(false);
@@ -1068,14 +1186,18 @@ function CrossSellTab() {
                     height: "74px",
                     borderRadius: "12px",
                     overflow: "hidden",
-                    background: "#f4f1ec",
+                    background: "#ffffff",
                     border: "1px solid #e5ded4",
                     flexShrink: 0,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    padding: "4px",
                   }}>
                     <img
                       src={item.image}
                       alt={item.name}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      style={{ width: "100%", height: "100%", objectFit: "contain" }}
                       onError={(e) => {
                         (e.target as any).src = "https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400";
                       }}
@@ -1111,9 +1233,11 @@ function CrossSellTab() {
                     <h4 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#171410", margin: "0 0 3px 0", lineHeight: 1.3 }}>
                       {item.name}
                     </h4>
-                    <div style={{ fontSize: "0.78rem", color: "#73695b", fontWeight: 500 }}>
-                      Unit / Weight: <strong style={{ color: "#2b251e" }}>{item.weight || "1 unit"}</strong>
-                    </div>
+                    {item.weight ? (
+                      <div style={{ fontSize: "0.78rem", color: "#73695b", fontWeight: 500 }}>
+                        Unit / Weight: <strong style={{ color: "#2b251e" }}>{item.weight}</strong>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 
@@ -1298,28 +1422,6 @@ function CrossSellTab() {
                   />
                 </div>
 
-                {/* Weight / Unit */}
-                <div>
-                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#2b251e", marginBottom: "4px" }}>
-                    Weight / Quantity Unit *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 1 kg, 200g, 100g, 1 pack"
-                    value={formData.weight}
-                    onChange={(e) => setFormData({ ...formData, weight: e.target.value })}
-                    style={{
-                      width: "100%",
-                      padding: "9px 12px",
-                      borderRadius: "10px",
-                      border: "1px solid #d6cec5",
-                      fontSize: "0.85rem",
-                      outline: "none",
-                    }}
-                  />
-                </div>
-
                 {/* Prices: Selling Price & MRP */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
                   <div>
@@ -1368,15 +1470,30 @@ function CrossSellTab() {
                   </div>
                 </div>
 
-                {/* Image URL */}
+                {/* Product Image with Firebase Storage Upload */}
                 <div>
-                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#2b251e", marginBottom: "4px" }}>
-                    Image URL *
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <label style={{ fontSize: "0.78rem", fontWeight: 700, color: "#2b251e" }}>
+                      Product Image *
+                    </label>
+                    <span style={{ fontSize: "0.72rem", color: "#8a8175" }}>Saves to Firebase Storage</span>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "10px", alignItems: "center", marginBottom: "8px", flexWrap: "wrap" }}>
+                    <FileUploadButton
+                      folder="cross-sell"
+                      label="Upload Image (Firebase)"
+                      onUploadSuccess={(url) => {
+                        setFormData((prev) => ({ ...prev, image: url }));
+                      }}
+                    />
+                    <span style={{ fontSize: "0.76rem", color: "#73695b" }}>or enter direct image URL below:</span>
+                  </div>
+
                   <input
                     type="url"
                     required
-                    placeholder="https://..."
+                    placeholder="https://firebasestorage.googleapis.com/... or image link"
                     value={formData.image}
                     onChange={(e) => setFormData({ ...formData, image: e.target.value })}
                     style={{
@@ -1388,15 +1505,47 @@ function CrossSellTab() {
                       outline: "none",
                     }}
                   />
+
                   {formData.image && (
-                    <div style={{ marginTop: "8px", display: "flex", alignItems: "center", gap: "10px" }}>
-                      <span style={{ fontSize: "0.72rem", color: "#73695b" }}>Preview:</span>
-                      <img
-                        src={formData.image}
-                        alt="Preview"
-                        style={{ width: "36px", height: "36px", borderRadius: "8px", objectFit: "cover", border: "1px solid #ddd" }}
-                        onError={(e) => { (e.target as any).style.display = "none"; }}
-                      />
+                    <div style={{
+                      marginTop: "10px",
+                      padding: "8px 12px",
+                      background: "#fbf9f6",
+                      borderRadius: "10px",
+                      border: "1px solid #ede8e0",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}>
+                      <div style={{ width: "44px", height: "44px", borderRadius: "8px", overflow: "hidden", background: "#f0ece4", flexShrink: 0, border: "1px solid #e0d8ce" }}>
+                        <img
+                          src={formData.image}
+                          alt="Preview"
+                          style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                          onError={(e) => { (e.target as any).style.display = "none"; }}
+                        />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: "0.76rem", fontWeight: 700, color: "#171410" }}>Live Image Preview</div>
+                        <div style={{ fontSize: "0.7rem", color: "#73695b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {formData.image}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setFormData({ ...formData, image: "" })}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#941717",
+                          cursor: "pointer",
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          padding: "4px 8px",
+                        }}
+                      >
+                        Remove
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1479,7 +1628,16 @@ function CrossSellTab() {
 function InventoryTab() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeFilter, setActiveFilter] = useState<"all" | "fresh" | "defreeze" | "waste" | "history">("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
+  // History state
+  const [historyList, setHistoryList] = useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyActionFilter, setHistoryActionFilter] = useState("all");
+  const [historySearch, setHistorySearch] = useState("");
+
+  // Fetch Inventory List
   const fetchInventory = () => {
     setLoading(true);
     api.get<{ success: boolean; inventory: any[] }>("/store-admin/inventory")
@@ -1492,11 +1650,28 @@ function InventoryTab() {
       .finally(() => setLoading(false));
   };
 
+  // Fetch Movement History
+  const fetchHistory = () => {
+    setHistoryLoading(true);
+    const params = new URLSearchParams();
+    if (historyActionFilter !== "all") params.append("actionType", historyActionFilter);
+    if (historySearch.trim()) params.append("search", historySearch.trim());
+    api.get<{ success: boolean; history: any[] }>(`/store-admin/inventory/history?${params.toString()}`)
+      .then(res => {
+        if (res.data.success) {
+          setHistoryList(res.data.history || []);
+        }
+      })
+      .catch(err => console.warn("Failed to fetch inventory history:", err))
+      .finally(() => setHistoryLoading(false));
+  };
+
   useEffect(() => {
     fetchInventory();
     const socket = getSocket();
     const handleInventoryUpdated = () => {
       fetchInventory();
+      if (activeFilter === "history") fetchHistory();
     };
     socket.on("inventory:updated", handleInventoryUpdated);
     return () => {
@@ -1504,238 +1679,1174 @@ function InventoryTab() {
     };
   }, []);
 
-  const [showStockModal, setShowStockModal] = useState(false);
-  const [selectedItem, setSelectedItem] = useState<any | null>(null);
-  const [operation, setOperation] = useState<"add" | "reduce" | "set">("add");
-  const [quantity, setQuantity] = useState<string>("");
-  const [minAlert, setMinAlert] = useState<string>("");
-  const [submitting, setSubmitting] = useState(false);
-
-  // Compute calculated projected stock
-  const currentStock = selectedItem ? Number(selectedItem.stock || 0) : 0;
-  const inputQty = parseFloat(quantity) || 0;
-  let projectedStock = currentStock;
-  if (operation === "add") {
-    projectedStock = currentStock + inputQty;
-  } else if (operation === "reduce") {
-    projectedStock = Math.max(0, currentStock - inputQty);
-  } else if (operation === "set") {
-    projectedStock = Math.max(0, inputQty);
-  }
-
-  const handleUpdateStock = async () => {
-    if (!selectedItem) return;
-    if (operation !== "set" && quantity !== "" && inputQty <= 0) {
-      toast.warning("Please enter a valid quantity", "Invalid Input");
-      return;
+  useEffect(() => {
+    if (activeFilter === "history") {
+      fetchHistory();
     }
-    setSubmitting(true);
+  }, [activeFilter, historyActionFilter]);
+
+  // ─── MODAL 1: MOVE DE-FREEZE TO FRESH ──────────────────────────────────────────
+  const [moveModalItem, setMoveModalItem] = useState<any | null>(null);
+  const [moveQty, setMoveQty] = useState("");
+  const [moveNotes, setMoveNotes] = useState("");
+  const [submittingMove, setSubmittingMove] = useState(false);
+
+  const availableDefreeze = moveModalItem ? Number(moveModalItem.defreezeStock || 0) : 0;
+  const currentFresh = moveModalItem ? Number(moveModalItem.stock || 0) : 0;
+  const parsedMoveQty = parseFloat(moveQty) || 0;
+  const isMoveValid = parsedMoveQty > 0 && parsedMoveQty <= availableDefreeze;
+
+  const handleExecuteMove = async () => {
+    if (!moveModalItem || !isMoveValid) return;
+    setSubmittingMove(true);
     try {
-      const id = selectedItem.itemId || selectedItem.id;
-      const payload: any = {};
-      if (quantity !== "" || operation === "set") {
-        payload.stock = projectedStock;
+      const res = await api.post("/store-admin/inventory/transfer", {
+        itemId: moveModalItem.itemId || moveModalItem.id,
+        quantity: parsedMoveQty,
+        notes: moveNotes.trim(),
+      });
+      if (res.data?.success) {
+        toast.success(res.data.message || `Moved ${parsedMoveQty} ${moveModalItem.unit} to Fresh Inventory`, "Stock Transferred");
+        setMoveModalItem(null);
+        setMoveQty("");
+        setMoveNotes("");
+        fetchInventory();
       }
-      const parsedMin = minAlert.trim() === "" ? 0 : parseFloat(minAlert);
-      if (!isNaN(parsedMin)) {
-        payload.min = Math.max(0, parsedMin);
-      }
-      await api.patch(`/store-admin/inventory/${id}`, payload);
-      toast.success("Inventory updated successfully", "Stock Updated");
-      fetchInventory();
-      setShowStockModal(false);
-      setSelectedItem(null);
-      setQuantity("");
-    } catch (err) {
-      toast.error("Failed to update inventory", "Inventory Error");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to transfer De-Freeze stock", "Transfer Failed");
     } finally {
-      setSubmitting(false);
+      setSubmittingMove(false);
     }
   };
 
+  // ─── MODAL 2: RECORD DAMAGE / WASTE ───────────────────────────────────────────
+  const [wasteModalItem, setWasteModalItem] = useState<any | null>(null);
+  const [wasteSource, setWasteSource] = useState<"fresh" | "defreeze">("fresh");
+  const [wasteReason, setWasteReason] = useState("Damaged");
+  const [wasteQty, setWasteQty] = useState("");
+  const [wasteNotes, setWasteNotes] = useState("");
+  const [submittingWaste, setSubmittingWaste] = useState(false);
+
+  const availableForWaste = wasteModalItem
+    ? (wasteSource === "fresh" ? Number(wasteModalItem.stock || 0) : Number(wasteModalItem.defreezeStock || 0))
+    : 0;
+  const parsedWasteQty = parseFloat(wasteQty) || 0;
+  const isWasteValid = parsedWasteQty > 0 && parsedWasteQty <= availableForWaste;
+
+  const handleExecuteWaste = async () => {
+    if (!wasteModalItem || !isWasteValid) return;
+    setSubmittingWaste(true);
+    try {
+      const res = await api.post("/store-admin/inventory/waste", {
+        itemId: wasteModalItem.itemId || wasteModalItem.id,
+        sourceClassification: wasteSource,
+        quantity: parsedWasteQty,
+        reason: wasteReason,
+        notes: wasteNotes.trim(),
+      });
+      if (res.data?.success) {
+        toast.success(res.data.message || `Recorded ${parsedWasteQty} ${wasteModalItem.unit} as waste`, "Waste Recorded");
+        setWasteModalItem(null);
+        setWasteQty("");
+        setWasteNotes("");
+        fetchInventory();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to record waste", "Waste Error");
+    } finally {
+      setSubmittingWaste(false);
+    }
+  };
+
+  // ─── MODAL 3: ADJUST STOCK (ADD / REDUCE / SET) ──────────────────────────────
+  const [adjustModalItem, setAdjustModalItem] = useState<any | null>(null);
+  const [adjustClass, setAdjustClass] = useState<"fresh" | "defreeze">("fresh");
+  const [adjustOp, setAdjustOp] = useState<"add" | "reduce" | "set">("add");
+  const [adjustQty, setAdjustQty] = useState("");
+  const [adjustMin, setAdjustMin] = useState("");
+  const [adjustReason, setAdjustReason] = useState("");
+  const [submittingAdjust, setSubmittingAdjust] = useState(false);
+
+  const currentAdjustBase = adjustModalItem
+    ? (adjustClass === "fresh" ? Number(adjustModalItem.stock || 0) : Number(adjustModalItem.defreezeStock || 0))
+    : 0;
+  const parsedAdjustQty = parseFloat(adjustQty) || 0;
+
+  let projectedAdjustResult = currentAdjustBase;
+  if (adjustOp === "add") projectedAdjustResult = Math.round((currentAdjustBase + parsedAdjustQty) * 1000) / 1000;
+  else if (adjustOp === "reduce") projectedAdjustResult = Math.max(0, Math.round((currentAdjustBase - parsedAdjustQty) * 1000) / 1000);
+  else if (adjustOp === "set") projectedAdjustResult = Math.max(0, parsedAdjustQty);
+
+  const handleExecuteAdjust = async () => {
+    if (!adjustModalItem) return;
+    if (adjustOp !== "set" && parsedAdjustQty <= 0) {
+      toast.warning("Please enter a valid positive quantity", "Invalid Input");
+      return;
+    }
+    setSubmittingAdjust(true);
+    try {
+      const id = adjustModalItem.itemId || adjustModalItem.id;
+      const res = await api.patch(`/store-admin/inventory/${id}`, {
+        classification: adjustClass,
+        operation: adjustOp,
+        quantity: parsedAdjustQty,
+        min: adjustClass === "fresh" ? adjustMin : undefined,
+        reason: adjustReason.trim(),
+      });
+      if (res.data?.success) {
+        toast.success("Inventory stock adjusted successfully", "Stock Updated");
+        setAdjustModalItem(null);
+        setAdjustQty("");
+        setAdjustReason("");
+        fetchInventory();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to adjust stock", "Adjustment Error");
+    } finally {
+      setSubmittingAdjust(false);
+    }
+  };
+
+  // ─── Filtered Items ───────────────────────────────────────────────────────────
+  const filteredItems = items.filter(item => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      const matchName = item.item?.toLowerCase().includes(q);
+      const matchCat = item.category?.toLowerCase().includes(q);
+      const matchId = (item.itemId || item.id)?.toLowerCase().includes(q);
+      if (!matchName && !matchCat && !matchId) return false;
+    }
+    if (activeFilter === "fresh") return true;
+    if (activeFilter === "defreeze") return (item.defreezeStock || 0) > 0;
+    if (activeFilter === "waste") return (item.wasteStock || 0) > 0;
+    return true;
+  });
+
+  // KPI aggregates
+  const totalFreshStock = items.reduce((sum, i) => sum + (Number(i.stock) || 0), 0);
+  const totalDefreezeStock = items.reduce((sum, i) => sum + (Number(i.defreezeStock) || 0), 0);
+  const totalWasteStock = items.reduce((sum, i) => sum + (Number(i.wasteStock) || 0), 0);
+  const lowStockCount = items.filter(i => {
+    const min = Number(i.min) || 0;
+    return min > 0 && Number(i.stock || 0) <= min && Number(i.stock || 0) > 0;
+  }).length;
+
   return (
-    <div>
-      {loading ? (
-        <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading live inventory…</div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: "14px" }}>
-          {items.map(item => {
-            const minThreshold = item.min !== undefined && item.min !== null ? Number(item.min) : 0;
-            const hasMinAlert = minThreshold > 0;
-            const isOutOfStock = item.stock <= 0;
-            const isLow = hasMinAlert && item.stock <= minThreshold;
-            const displayStatus = isOutOfStock ? "Out of Stock" : isLow ? "Low Stock" : "In Stock";
+    <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+      {/* ─── Top Metrics Bar ────────────────────────────────────────────────────── */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "12px" }}>
+        <div style={{
+          background: "#fff",
+          borderRadius: "14px",
+          padding: "14px 18px",
+          border: "1.5px solid #ede8e0",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#059669", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Fresh Inventory (Saleable)
+            </span>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: "#059669" }}>eco</span>
+          </div>
+          <div style={{ fontSize: "1.65rem", fontWeight: 900, color: "#171410", fontFamily: "Outfit, sans-serif" }}>
+            {Math.round(totalFreshStock * 10) / 10} <span style={{ fontSize: "0.85rem", color: "#73695b", fontWeight: 600 }}>units/kg</span>
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "#73695b", marginTop: "3px" }}>
+            Available for customer orders
+          </div>
+        </div>
+
+        <div style={{
+          background: "#fff",
+          borderRadius: "14px",
+          padding: "14px 18px",
+          border: "1.5px solid #ede8e0",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              De-Freeze Pool (Cold Storage)
+            </span>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: "#2563eb" }}>ac_unit</span>
+          </div>
+          <div style={{ fontSize: "1.65rem", fontWeight: 900, color: "#171410", fontFamily: "Outfit, sans-serif" }}>
+            {Math.round(totalDefreezeStock * 10) / 10} <span style={{ fontSize: "0.85rem", color: "#73695b", fontWeight: 600 }}>units/kg</span>
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "#73695b", marginTop: "3px" }}>
+            Replenishment stock ready to move
+          </div>
+        </div>
+
+        <div style={{
+          background: "#fff",
+          borderRadius: "14px",
+          padding: "14px 18px",
+          border: "1.5px solid #ede8e0",
+          boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#dc2626", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Damage &amp; Waste Logged
+            </span>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: "#dc2626" }}>delete_sweep</span>
+          </div>
+          <div style={{ fontSize: "1.65rem", fontWeight: 900, color: "#171410", fontFamily: "Outfit, sans-serif" }}>
+            {Math.round(totalWasteStock * 10) / 10} <span style={{ fontSize: "0.85rem", color: "#73695b", fontWeight: 600 }}>units/kg</span>
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "#73695b", marginTop: "3px" }}>
+            Non-saleable audit records
+          </div>
+        </div>
+
+        <div style={{
+          background: lowStockCount > 0 ? "#fef3c7" : "#fff",
+          borderRadius: "14px",
+          padding: "14px 18px",
+          border: `1.5px solid ${lowStockCount > 0 ? "#fde68a" : "#ede8e0"}`,
+          boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: lowStockCount > 0 ? "#b45309" : "#73695b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Low Stock Warnings
+            </span>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: lowStockCount > 0 ? "#d97706" : "#73695b" }}>warning</span>
+          </div>
+          <div style={{ fontSize: "1.65rem", fontWeight: 900, color: lowStockCount > 0 ? "#b45309" : "#171410", fontFamily: "Outfit, sans-serif" }}>
+            {lowStockCount} <span style={{ fontSize: "0.85rem", color: lowStockCount > 0 ? "#b45309" : "#73695b", fontWeight: 600 }}>products</span>
+          </div>
+          <div style={{ fontSize: "0.74rem", color: lowStockCount > 0 ? "#b45309" : "#73695b", marginTop: "3px" }}>
+            {lowStockCount > 0 ? "Replenish from De-Freeze soon" : "All products healthy"}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Filter Tabs & Search Bar ────────────────────────────────────────────── */}
+      <div style={{
+        background: "#fff",
+        borderRadius: "14px",
+        padding: "14px 16px",
+        border: "1px solid #ede8e0",
+        display: "flex",
+        flexWrap: "wrap",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "12px",
+      }}>
+        {/* Navigation Tabs */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {[
+            { key: "all", label: "All Items", icon: "inventory_2", count: items.length },
+            { key: "fresh", label: "Fresh Stock", icon: "eco" },
+            { key: "defreeze", label: "De-Freeze Pool", icon: "ac_unit" },
+            { key: "waste", label: "Damage & Waste", icon: "delete_sweep" },
+            { key: "history", label: "Movement History", icon: "history" },
+          ].map(t => {
+            const isActive = activeFilter === t.key;
             return (
-              <div
-                key={item.itemId || item.id}
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => setActiveFilter(t.key as any)}
                 style={{
-                  background: "#fff",
-                  border: `1px solid ${isOutOfStock ? "#fecaca" : isLow ? "#fef3c7" : "#ede8e0"}`,
-                  borderRadius: "14px",
-                  padding: "16px",
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
-                  height: "100%",
-                  boxSizing: "border-box",
-                  boxShadow: isLow ? "0 2px 8px rgba(217, 119, 6, 0.08)" : "0 2px 8px rgba(0,0,0,0.03)",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  padding: "8px 14px",
+                  borderRadius: "10px",
+                  border: isActive ? "1.5px solid #941717" : "1px solid #ede8e0",
+                  background: isActive ? "#941717" : "#faf8f5",
+                  color: isActive ? "#fff" : "#423b32",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  transition: "all 180ms ease",
                 }}
               >
-                <div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "10px" }}>
-                    <div style={{ minWidth: 0, flex: 1 }}>
-                      <div
-                        title={item.item}
-                        style={{
-                          fontWeight: 700,
-                          color: "#171410",
-                          fontSize: "0.95rem",
-                          lineHeight: "1.3",
-                          minHeight: "2.6em",
-                          display: "-webkit-box",
-                          WebkitLineClamp: 2,
-                          WebkitBoxOrient: "vertical",
-                          overflow: "hidden",
-                        }}
-                      >
-                        {item.item}
-                      </div>
-                      <div
-                        title={item.category}
-                        style={{
-                          color: "#73695b",
-                          fontSize: "0.74rem",
-                          marginTop: "3px",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        Category: {item.category}
-                      </div>
-                    </div>
-                    <div style={{ flexShrink: 0, marginLeft: "4px" }}>
-                      <Badge
-                        label={displayStatus}
-                        color={isOutOfStock ? "#dc2626" : isLow ? "#d97706" : "#059669"}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ paddingTop: "4px" }}>
-                    <div style={{ fontSize: "1.55rem", fontWeight: 900, color: isLow ? "#d97706" : "#059669", fontFamily: "Outfit, sans-serif", lineHeight: 1.1 }}>
-                      {item.stock} <span style={{ fontSize: "0.85rem", fontWeight: 600, color: "#73695b" }}>{item.unit}</span>
-                    </div>
-                    <div
-                      title={hasMinAlert ? `Min Alert: ${minThreshold} ${item.unit} · ${item.lastRestocked}` : `Min Alert: Not set · ${item.lastRestocked}`}
-                      style={{
-                        fontSize: "0.72rem",
-                        color: "#73695b",
-                        marginTop: "5px",
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
-                    >
-                      {hasMinAlert ? `Min Alert: ${minThreshold} ${item.unit}` : "Min Alert: Not set"} · {item.lastRestocked}
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setSelectedItem(item);
-                    setOperation("add");
-                    setQuantity("");
-                    setMinAlert(hasMinAlert ? String(minThreshold) : "");
-                    setShowStockModal(true);
-                  }}
-                  style={{
-                    marginTop: "14px",
-                    background: isLow ? "#d97706" : "#941717",
-                    border: "none",
-                    borderRadius: "8px",
-                    padding: "8px 10px",
-                    color: "#fff",
-                    fontSize: "0.82rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                    width: "100%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                    whiteSpace: "nowrap",
-                    flexShrink: 0,
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: "16px" }}>inventory_2</span>
-                  <span>Adjust Stock (+ / - / Set)</span>
-                </button>
-              </div>
+                <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
+                <span>{t.label}</span>
+                {t.count !== undefined && (
+                  <span style={{
+                    background: isActive ? "rgba(255,255,255,0.25)" : "#ede8e0",
+                    color: isActive ? "#fff" : "#73695b",
+                    padding: "1px 6px",
+                    borderRadius: "10px",
+                    fontSize: "0.72rem",
+                  }}>
+                    {t.count}
+                  </span>
+                )}
+              </button>
             );
           })}
         </div>
+
+        {/* Search Field */}
+        <div style={{ position: "relative", minWidth: "240px", flex: 1, maxWidth: "340px" }}>
+          <span className="material-symbols-outlined" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#a89f91", fontSize: "18px" }}>
+            search
+          </span>
+          <input
+            type="text"
+            placeholder={activeFilter === "history" ? "Search history, order #, reason…" : "Search product name or category…"}
+            value={activeFilter === "history" ? historySearch : searchQuery}
+            onChange={e => {
+              if (activeFilter === "history") setHistorySearch(e.target.value);
+              else setSearchQuery(e.target.value);
+            }}
+            onKeyDown={e => {
+              if (e.key === "Enter" && activeFilter === "history") fetchHistory();
+            }}
+            style={{
+              padding: "8px 12px 8px 34px",
+              borderRadius: "8px",
+              border: "1px solid #d1cbbf",
+              width: "100%",
+              fontSize: "0.85rem",
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+      </div>
+
+      {/* ─── BODY CONTENT: CARDS GRID OR HISTORY VIEW ────────────────────────────── */}
+      {activeFilter === "history" ? (
+        /* ─── AUDIT HISTORY VIEW ─── */
+        <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "hidden", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #ede8e0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
+            <div>
+              <h4 style={{ margin: 0, fontSize: "1rem", fontWeight: 800, color: "#171410" }}>Inventory Audit &amp; Movement Ledger</h4>
+              <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "#73695b" }}>Append-only log of order deductions, transfers, waste, and stock updates</p>
+            </div>
+            <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+              <select
+                value={historyActionFilter}
+                onChange={e => setHistoryActionFilter(e.target.value)}
+                style={{ padding: "6px 10px", borderRadius: "8px", border: "1px solid #d1cbbf", fontSize: "0.8rem", background: "#fff", fontWeight: 600 }}
+              >
+                <option value="all">All Action Types</option>
+                <option value="transfer_defreeze_to_fresh">Transfers (De-Freeze → Fresh)</option>
+                <option value="order_deduction">Customer Order Deductions</option>
+                <option value="record_waste">Damage &amp; Waste Records</option>
+                <option value="add_stock">Stock Received (Add)</option>
+                <option value="reduce_stock">Stock Reduced</option>
+                <option value="set_stock">Stock Set Exact</option>
+                <option value="order_restock">Order Restocks (Cancellations)</option>
+              </select>
+              <button
+                type="button"
+                onClick={fetchHistory}
+                disabled={historyLoading}
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  padding: "6px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #ede8e0",
+                  background: "#faf8f5",
+                  fontSize: "0.8rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                <span className="material-symbols-outlined text-[16px]">refresh</span>
+                Refresh
+              </button>
+            </div>
+          </div>
+
+          {historyLoading ? (
+            <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading audit history…</div>
+          ) : historyList.length === 0 ? (
+            <div style={{ padding: "50px", textAlign: "center", color: "#73695b" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "36px", color: "#a89f91", marginBottom: "8px" }}>history_toggle_off</span>
+              <div style={{ fontWeight: 700, color: "#171410" }}>No stock movement records found</div>
+              <div style={{ fontSize: "0.8rem", color: "#a89f91", marginTop: "4px" }}>
+                Transfers, orders, adjustments, and waste records will appear here.
+              </div>
+            </div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", textAlign: "left" }}>
+                <thead>
+                  <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0", color: "#423b32", fontWeight: 700 }}>
+                    <th style={{ padding: "10px 14px" }}>Timestamp</th>
+                    <th style={{ padding: "10px 14px" }}>Product &amp; Category</th>
+                    <th style={{ padding: "10px 14px" }}>Action</th>
+                    <th style={{ padding: "10px 14px" }}>Quantity</th>
+                    <th style={{ padding: "10px 14px" }}>Stock Balance</th>
+                    <th style={{ padding: "10px 14px" }}>Details / Reason</th>
+                    <th style={{ padding: "10px 14px" }}>Actor</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyList.map(h => {
+                    const actionBadge = (() => {
+                      switch (h.actionType) {
+                        case "transfer_defreeze_to_fresh":
+                          return <Badge label="De-Freeze → Fresh" color="#2563eb" />;
+                        case "order_deduction":
+                          return <Badge label="Order Deduction" color="#d97706" />;
+                        case "record_waste":
+                          return <Badge label="Damage / Waste" color="#dc2626" />;
+                        case "add_stock":
+                          return <Badge label="Stock Added" color="#059669" />;
+                        case "reduce_stock":
+                          return <Badge label="Stock Reduced" color="#ea580c" />;
+                        case "set_stock":
+                          return <Badge label="Stock Reconciled" color="#7c3aed" />;
+                        case "order_restock":
+                          return <Badge label="Order Restocked" color="#059669" />;
+                        default:
+                          return <Badge label={h.actionType || "Updated"} color="#73695b" />;
+                      }
+                    })();
+
+                    const isDeduction = h.actionType === "order_deduction" || h.actionType === "record_waste" || h.actionType === "reduce_stock";
+
+                    return (
+                      <tr key={h._id} style={{ borderBottom: "1px solid #ede8e0" }}>
+                        <td style={{ padding: "10px 14px", color: "#73695b", whiteSpace: "nowrap" }}>
+                          {new Date(h.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}{" "}
+                          <span style={{ fontSize: "0.74rem", color: "#a89f91" }}>
+                            {new Date(h.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        </td>
+                        <td style={{ padding: "10px 14px" }}>
+                          <div style={{ fontWeight: 700, color: "#171410" }}>{h.productName}</div>
+                          <div style={{ fontSize: "0.72rem", color: "#73695b" }}>{h.category || h.itemId}</div>
+                        </td>
+                        <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>{actionBadge}</td>
+                        <td style={{ padding: "10px 14px", fontWeight: 800, color: isDeduction ? "#dc2626" : "#059669", whiteSpace: "nowrap" }}>
+                          {isDeduction ? `-${h.quantity}` : `+${h.quantity}`} {h.unit}
+                        </td>
+                        <td style={{ padding: "10px 14px", color: "#73695b", whiteSpace: "nowrap" }}>
+                          {h.previousQuantity !== null && h.resultingQuantity !== null ? (
+                            <span>{h.previousQuantity} → <strong>{h.resultingQuantity}</strong> {h.unit}</span>
+                          ) : "—"}
+                        </td>
+                        <td style={{ padding: "10px 14px", color: "#423b32", maxWidth: "260px" }}>
+                          <div>{h.reason || "—"}</div>
+                          {h.orderId && (
+                            <div style={{ fontSize: "0.72rem", color: "#941717", fontWeight: 700 }}>
+                              Order #{h.orderId}
+                            </div>
+                          )}
+                          {h.notes && (
+                            <div style={{ fontSize: "0.72rem", color: "#73695b", fontStyle: "italic" }}>
+                              {h.notes}
+                            </div>
+                          )}
+                        </td>
+                        <td style={{ padding: "10px 14px", color: "#73695b", whiteSpace: "nowrap" }}>
+                          <div style={{ fontWeight: 600, color: "#171410" }}>{h.actor?.name || "System"}</div>
+                          <div style={{ fontSize: "0.7rem", color: "#a89f91", textTransform: "capitalize" }}>{h.actor?.role || "system"}</div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      ) : (
+        /* ─── CARDS GRID VIEW ─── */
+        <div>
+          {loading ? (
+            <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading live inventory…</div>
+          ) : filteredItems.length === 0 ? (
+            <div style={{ padding: "50px", textAlign: "center", background: "#fff", borderRadius: "14px", border: "1px solid #ede8e0" }}>
+              <span className="material-symbols-outlined" style={{ fontSize: "36px", color: "#a89f91", marginBottom: "8px" }}>search_off</span>
+              <div style={{ fontWeight: 700, color: "#171410" }}>No inventory items found</div>
+              <div style={{ fontSize: "0.8rem", color: "#a89f91", marginTop: "4px" }}>
+                Try adjusting your search query or switching tabs.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "16px" }}>
+              {filteredItems.map(item => {
+                const freshStock = Number(item.stock || 0);
+                const defreezeStock = Number(item.defreezeStock || 0);
+                const wasteStock = Number(item.wasteStock || 0);
+                const minThreshold = Number(item.min) || 0;
+                const isOutOfStock = freshStock <= 0;
+                const isLow = minThreshold > 0 && freshStock <= minThreshold && freshStock > 0;
+                const displayStatus = isOutOfStock ? "Out of Stock" : isLow ? "Low Stock" : "In Stock";
+
+                return (
+                  <div
+                    key={item.itemId || item.id}
+                    style={{
+                      background: "#fff",
+                      border: `1.5px solid ${isOutOfStock ? "#fecaca" : isLow ? "#fef3c7" : "#ede8e0"}`,
+                      borderRadius: "14px",
+                      padding: "16px",
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      boxShadow: isLow ? "0 4px 12px rgba(217, 119, 6, 0.08)" : "0 2px 8px rgba(0,0,0,0.03)",
+                      transition: "transform 180ms ease, box-shadow 180ms ease",
+                    }}
+                  >
+                    {/* Card Header */}
+                    <div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "8px", marginBottom: "12px" }}>
+                        <div style={{ minWidth: 0, flex: 1 }}>
+                          <div
+                            title={item.item}
+                            style={{
+                              fontWeight: 800,
+                              color: "#171410",
+                              fontSize: "1rem",
+                              lineHeight: "1.3",
+                              minHeight: "2.6em",
+                              display: "-webkit-box",
+                              WebkitLineClamp: 2,
+                              WebkitBoxOrient: "vertical",
+                              overflow: "hidden",
+                            }}
+                          >
+                            {item.item}
+                          </div>
+                          <div style={{ color: "#73695b", fontSize: "0.74rem", marginTop: "3px" }}>
+                            Category: {item.category}
+                          </div>
+                        </div>
+                        <Badge
+                          label={displayStatus}
+                          color={isOutOfStock ? "#dc2626" : isLow ? "#d97706" : "#059669"}
+                        />
+                      </div>
+
+                      {/* 3-Way Classification Stock Dashboard */}
+                      <div style={{
+                        background: "#faf8f5",
+                        border: "1px solid #ede8e0",
+                        borderRadius: "10px",
+                        padding: "10px 12px",
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr 1fr",
+                        gap: "6px",
+                        textAlign: "center",
+                      }}>
+                        {/* Fresh */}
+                        <div style={{ borderRight: "1px solid #ede8e0", paddingRight: "4px" }}>
+                          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#059669", textTransform: "uppercase" }}>Fresh</div>
+                          <div style={{ fontSize: "1.25rem", fontWeight: 900, color: isLow ? "#d97706" : isOutOfStock ? "#dc2626" : "#059669", fontFamily: "Outfit, sans-serif" }}>
+                            {freshStock}
+                          </div>
+                          <div style={{ fontSize: "0.68rem", color: "#73695b" }}>{item.unit}</div>
+                        </div>
+
+                        {/* De-Freeze */}
+                        <div style={{ borderRight: "1px solid #ede8e0", paddingRight: "4px" }}>
+                          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#2563eb", textTransform: "uppercase" }}>De-Freeze</div>
+                          <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "#2563eb", fontFamily: "Outfit, sans-serif" }}>
+                            {defreezeStock}
+                          </div>
+                          <div style={{ fontSize: "0.68rem", color: "#73695b" }}>{item.unit}</div>
+                        </div>
+
+                        {/* Waste */}
+                        <div>
+                          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#dc2626", textTransform: "uppercase" }}>Waste</div>
+                          <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "#dc2626", fontFamily: "Outfit, sans-serif" }}>
+                            {wasteStock}
+                          </div>
+                          <div style={{ fontSize: "0.68rem", color: "#73695b" }}>{item.unit}</div>
+                        </div>
+                      </div>
+
+                      {/* Alert Info (Only shown if configured) */}
+                      {minThreshold > 0 && (
+                        <div style={{ fontSize: "0.72rem", color: isLow ? "#b45309" : "#73695b", marginTop: "8px", fontWeight: 600 }}>
+                          Low Stock Alert: ≤ {minThreshold} {item.unit}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Card Actions Button Toolbar */}
+                    <div style={{ marginTop: "16px", display: "flex", flexDirection: "column", gap: "8px" }}>
+                      {/* Primary Quick Action: Move De-Freeze to Fresh */}
+                      <button
+                        type="button"
+                        disabled={defreezeStock <= 0}
+                        onClick={() => {
+                          if (defreezeStock <= 0) return;
+                          setMoveModalItem(item);
+                          setMoveQty("");
+                          setMoveNotes("");
+                        }}
+                        style={{
+                          background: defreezeStock > 0 ? "#941717" : "#f5f2eb",
+                          color: defreezeStock > 0 ? "#fff" : "#a89f91",
+                          border: defreezeStock > 0 ? "none" : "1px solid #ede8e0",
+                          borderRadius: "8px",
+                          padding: "8px 12px",
+                          fontSize: "0.82rem",
+                          fontWeight: 700,
+                          cursor: defreezeStock > 0 ? "pointer" : "not-allowed",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "6px",
+                          width: "100%",
+                          boxShadow: defreezeStock > 0 ? "0 2px 6px rgba(148, 23, 23, 0.2)" : "none",
+                          opacity: defreezeStock > 0 ? 1 : 0.65,
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">sync_alt</span>
+                        <span>{defreezeStock > 0 ? `Move De-Freeze to Fresh (${defreezeStock} ${item.unit})` : `De-Freeze Pool Empty (0 ${item.unit})`}</span>
+                      </button>
+
+                      {/* Secondary Actions Row: Record Waste & Adjust Stock */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setWasteModalItem(item);
+                            setWasteSource(freshStock > 0 ? "fresh" : "defreeze");
+                            setWasteQty("");
+                            setWasteReason("Damaged");
+                            setWasteNotes("");
+                          }}
+                          style={{
+                            background: "#fff",
+                            color: "#dc2626",
+                            border: "1px solid #fca5a5",
+                            borderRadius: "8px",
+                            padding: "6px 8px",
+                            fontSize: "0.76rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">delete_sweep</span>
+                          <span>Record Waste</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setAdjustModalItem(item);
+                            setAdjustClass("fresh");
+                            setAdjustOp("add");
+                            setAdjustQty("");
+                            setAdjustMin(minThreshold > 0 ? String(minThreshold) : "");
+                            setAdjustReason("");
+                          }}
+                          style={{
+                            background: "#faf8f5",
+                            color: "#423b32",
+                            border: "1px solid #d1cbbf",
+                            borderRadius: "8px",
+                            padding: "6px 8px",
+                            fontSize: "0.76rem",
+                            fontWeight: 700,
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: "4px",
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[15px]">tune</span>
+                          <span>Adjust Stock</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       )}
 
-      {/* ─── STOCK ADJUSTMENT MODAL (ADD / REDUCE / SET EXACT) ─── */}
-      {showStockModal && selectedItem && (
+      {/* ─── MODAL 1: MOVE DE-FREEZE TO FRESH ────────────────────────────────────── */}
+      {moveModalItem && (
         <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
-          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)", display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)",
+          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
         }}>
-          <div style={{ background: "#fff", padding: "28px", borderRadius: "16px", width: "100%", maxWidth: "480px", boxShadow: "0 10px 30px rgba(0,0,0,0.15)", maxHeight: "90vh", overflowY: "auto" }}>
-            {/* Header */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "18px" }}>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", width: "100%", maxWidth: "460px", boxShadow: "0 10px 30px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410" }}>Adjust Stock Level</h3>
-                <div style={{ fontSize: "0.9rem", color: "#941717", fontWeight: 700, marginTop: "3px" }}>
-                  {selectedItem.item} ({selectedItem.category})
+                <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#171410" }}>Move De-Freeze to Fresh</h3>
+                <div style={{ fontSize: "0.85rem", color: "#941717", fontWeight: 700, marginTop: "2px" }}>
+                  {moveModalItem.item} ({moveModalItem.category})
                 </div>
               </div>
               <button
-                onClick={() => { setShowStockModal(false); setSelectedItem(null); }}
-                style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}
+                type="button"
+                onClick={() => setMoveModalItem(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}
               >
                 <span className="material-symbols-outlined text-[20px]">close</span>
               </button>
             </div>
 
-            {/* Current Balance Banner */}
+            {/* Current Balances Visual */}
             <div style={{
+              display: "grid",
+              gridTemplateColumns: "1fr auto 1fr",
+              alignItems: "center",
+              gap: "8px",
               background: "#faf8f5",
               border: "1px solid #ede8e0",
-              borderRadius: "10px",
-              padding: "12px 16px",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "20px",
+              borderRadius: "12px",
+              padding: "12px",
+              marginBottom: "16px",
+              textAlign: "center",
             }}>
-              <span style={{ fontSize: "0.85rem", color: "#73695b", fontWeight: 600 }}>Current Live Stock:</span>
-              <span style={{ fontSize: "1.25rem", fontWeight: 900, color: "#171410", fontFamily: "Outfit, sans-serif" }}>
-                {currentStock} {selectedItem.unit}
-              </span>
+              <div>
+                <div style={{ fontSize: "0.72rem", color: "#2563eb", fontWeight: 700, textTransform: "uppercase" }}>De-Freeze Available</div>
+                <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "#171410", fontFamily: "Outfit, sans-serif" }}>
+                  {availableDefreeze} {moveModalItem.unit}
+                </div>
+              </div>
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>arrow_forward</span>
+              <div>
+                <div style={{ fontSize: "0.72rem", color: "#059669", fontWeight: 700, textTransform: "uppercase" }}>Current Fresh</div>
+                <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "#171410", fontFamily: "Outfit, sans-serif" }}>
+                  {currentFresh} {moveModalItem.unit}
+                </div>
+              </div>
             </div>
 
-            {/* Operation Mode Selector Tabs */}
-            <div style={{ marginBottom: "18px" }}>
-              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>Select Action:</label>
+            {/* Quick Chips */}
+            <div style={{ marginBottom: "12px" }}>
+              <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "#73695b", marginBottom: "6px" }}>
+                Quick select transfer amount:
+              </label>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {[5, 10, 20, 50].filter(val => val <= availableDefreeze).map(val => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => setMoveQty(String(val))}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "16px",
+                      border: "1px solid #d1cbbf",
+                      background: moveQty === String(val) ? "#423b32" : "#fff",
+                      color: moveQty === String(val) ? "#fff" : "#423b32",
+                      fontSize: "0.76rem",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                    }}
+                  >
+                    +{val} {moveModalItem.unit}
+                  </button>
+                ))}
+                {availableDefreeze > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setMoveQty(String(availableDefreeze))}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: "16px",
+                      border: "1px solid #2563eb",
+                      background: moveQty === String(availableDefreeze) ? "#2563eb" : "#eff6ff",
+                      color: moveQty === String(availableDefreeze) ? "#fff" : "#2563eb",
+                      fontSize: "0.76rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    All ({availableDefreeze} {moveModalItem.unit})
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Quantity Input */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                Quantity to Move to Fresh ({moveModalItem.unit}) *
+              </label>
+              <input
+                type="number"
+                min="0.1"
+                max={availableDefreeze}
+                step="0.5"
+                placeholder="e.g. 10"
+                value={moveQty}
+                onChange={e => setMoveQty(e.target.value)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: `1.5px solid ${parsedMoveQty > availableDefreeze ? "#dc2626" : "#d1cbbf"}`,
+                  width: "100%",
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  boxSizing: "border-box",
+                }}
+              />
+              {parsedMoveQty > availableDefreeze && (
+                <div style={{ color: "#dc2626", fontSize: "0.74rem", marginTop: "4px", fontWeight: 600 }}>
+                  Cannot exceed available De-Freeze stock ({availableDefreeze} {moveModalItem.unit}).
+                </div>
+              )}
+            </div>
+
+            {/* Optional Notes */}
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                Reason / Batch Notes (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="e.g. Thawed for morning butchery counter rush"
+                value={moveNotes}
+                onChange={e => setMoveNotes(e.target.value)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1cbbf",
+                  width: "100%",
+                  fontSize: "0.82rem",
+                  boxSizing: "border-box",
+                }}
+              />
+            </div>
+
+            {/* Projected Summary Confirmation Preview */}
+            <div style={{
+              background: isMoveValid ? "#ecfdf5" : "#faf8f5",
+              border: `1px solid ${isMoveValid ? "#a7f3d0" : "#ede8e0"}`,
+              borderRadius: "10px",
+              padding: "12px",
+              marginBottom: "18px",
+            }}>
+              <div style={{ fontSize: "0.76rem", fontWeight: 700, color: isMoveValid ? "#065f46" : "#73695b", marginBottom: "4px" }}>
+                Confirmation Summary:
+              </div>
+              <div style={{ fontSize: "0.82rem", color: "#171410", lineHeight: "1.4" }}>
+                De-Freeze Stock: <strong>{availableDefreeze}</strong> → <strong>{Math.max(0, Math.round((availableDefreeze - parsedMoveQty) * 1000) / 1000)} {moveModalItem.unit}</strong><br />
+                Fresh Stock (Saleable): <strong>{currentFresh}</strong> → <strong>{Math.round((currentFresh + parsedMoveQty) * 1000) / 1000} {moveModalItem.unit}</strong>
+              </div>
+              <div style={{ fontSize: "0.7rem", color: "#059669", marginTop: "4px", fontWeight: 600 }}>
+                ✓ Total combined physical stock remains unchanged ({availableDefreeze + currentFresh} {moveModalItem.unit}).
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setMoveModalItem(null)}
+                disabled={submittingMove}
+                style={{ padding: "8px 16px", borderRadius: "8px" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleExecuteMove}
+                disabled={submittingMove || !isMoveValid}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  background: isMoveValid ? "#941717" : "#a89f91",
+                  borderColor: isMoveValid ? "#941717" : "#a89f91",
+                  fontWeight: 700,
+                }}
+              >
+                {submittingMove ? "Moving…" : `Confirm Move (${parsedMoveQty || 0} ${moveModalItem.unit})`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 2: RECORD DAMAGE / WASTE ──────────────────────────────────────── */}
+      {wasteModalItem && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)",
+          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", width: "100%", maxWidth: "460px", boxShadow: "0 10px 30px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#dc2626" }}>Record Damaged / Wasted Stock</h3>
+                <div style={{ fontSize: "0.85rem", color: "#423b32", fontWeight: 700, marginTop: "2px" }}>
+                  {wasteModalItem.item} ({wasteModalItem.category})
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWasteModalItem(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Select Source Classification */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                Select Source Inventory:
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setWasteSource("fresh")}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: wasteSource === "fresh" ? "2px solid #059669" : "1px solid #d1cbbf",
+                    background: wasteSource === "fresh" ? "#ecfdf5" : "#fff",
+                    color: wasteSource === "fresh" ? "#065f46" : "#423b32",
+                    fontWeight: 700,
+                    fontSize: "0.78rem",
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  <div>Fresh Inventory</div>
+                  <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "2px" }}>
+                    Available: {wasteModalItem.stock || 0} {wasteModalItem.unit}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setWasteSource("defreeze")}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: wasteSource === "defreeze" ? "2px solid #2563eb" : "1px solid #d1cbbf",
+                    background: wasteSource === "defreeze" ? "#eff6ff" : "#fff",
+                    color: wasteSource === "defreeze" ? "#1e40af" : "#423b32",
+                    fontWeight: 700,
+                    fontSize: "0.78rem",
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  <div>De-Freeze Pool</div>
+                  <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "2px" }}>
+                    Available: {wasteModalItem.defreezeStock || 0} {wasteModalItem.unit}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Reason Dropdown */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                Reason for Waste *
+              </label>
+              <select
+                value={wasteReason}
+                onChange={e => setWasteReason(e.target.value)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1cbbf",
+                  width: "100%",
+                  fontSize: "0.85rem",
+                  background: "#fff",
+                  boxSizing: "border-box",
+                }}
+              >
+                <option value="Damaged">Damaged Cut</option>
+                <option value="Spoiled">Spoiled / Discolored</option>
+                <option value="Expired">Expired / Shelf Life Exceeded</option>
+                <option value="Handling Loss">Handling / Trimming Loss</option>
+                <option value="Other">Other Operational Loss</option>
+              </select>
+            </div>
+
+            {/* Quantity Input */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                Wasted Quantity ({wasteModalItem.unit}) *
+              </label>
+              <input
+                type="number"
+                min="0.1"
+                max={availableForWaste}
+                step="0.5"
+                placeholder="e.g. 2"
+                value={wasteQty}
+                onChange={e => setWasteQty(e.target.value)}
+                style={{
+                  padding: "10px 12px",
+                  borderRadius: "8px",
+                  border: `1.5px solid ${parsedWasteQty > availableForWaste ? "#dc2626" : "#d1cbbf"}`,
+                  width: "100%",
+                  fontSize: "1rem",
+                  fontWeight: 700,
+                  boxSizing: "border-box",
+                }}
+              />
+              {parsedWasteQty > availableForWaste && (
+                <div style={{ color: "#dc2626", fontSize: "0.74rem", marginTop: "4px", fontWeight: 600 }}>
+                  Quantity exceeds available {wasteSource === "fresh" ? "Fresh" : "De-Freeze"} stock ({availableForWaste} {wasteModalItem.unit}).
+                </div>
+              )}
+            </div>
+
+            {/* Optional Notes */}
+            <div style={{ marginBottom: "16px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                Notes / Audit Explanation
+              </label>
+              <textarea
+                rows={2}
+                placeholder="e.g. Broken bone in cutting process, discarded during morning inspection"
+                value={wasteNotes}
+                onChange={e => setWasteNotes(e.target.value)}
+                style={{
+                  padding: "8px 12px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1cbbf",
+                  width: "100%",
+                  fontSize: "0.82rem",
+                  boxSizing: "border-box",
+                  resize: "vertical",
+                }}
+              />
+            </div>
+
+            {/* Waste Warning Banner */}
+            <div style={{
+              background: "#fef2f2",
+              border: "1px solid #fecaca",
+              borderRadius: "10px",
+              padding: "10px 12px",
+              marginBottom: "18px",
+              fontSize: "0.75rem",
+              color: "#991b1b",
+              lineHeight: "1.4",
+            }}>
+              <strong>Warning:</strong> This will deduct {parsedWasteQty || 0} {wasteModalItem.unit} directly from saleable {wasteSource === "fresh" ? "Fresh" : "De-Freeze"} stock and permanently record it in the store waste audit ledger.
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setWasteModalItem(null)}
+                disabled={submittingWaste}
+                style={{ padding: "8px 16px", borderRadius: "8px" }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleExecuteWaste}
+                disabled={submittingWaste || !isWasteValid}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  background: isWasteValid ? "#dc2626" : "#a89f91",
+                  borderColor: isWasteValid ? "#dc2626" : "#a89f91",
+                  fontWeight: 700,
+                }}
+              >
+                {submittingWaste ? "Saving…" : "Confirm Waste Record"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL 3: ADJUST STOCK (ADD / REDUCE / SET) ────────────────────────── */}
+      {adjustModalItem && (
+        <div style={{
+          position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", backdropFilter: "blur(3px)",
+          display: "flex", justifyContent: "center", alignItems: "center", zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{ background: "#fff", padding: "24px", borderRadius: "16px", width: "100%", maxWidth: "480px", boxShadow: "0 10px 30px rgba(0,0,0,0.2)", maxHeight: "90vh", overflowY: "auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "16px" }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: "1.2rem", fontWeight: 800, color: "#171410" }}>Adjust Stock Level</h3>
+                <div style={{ fontSize: "0.85rem", color: "#941717", fontWeight: 700, marginTop: "2px" }}>
+                  {adjustModalItem.item} ({adjustModalItem.category})
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAdjustModalItem(null)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Target Classification Selector */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                Target Inventory:
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
+                <button
+                  type="button"
+                  onClick={() => setAdjustClass("fresh")}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: adjustClass === "fresh" ? "2px solid #059669" : "1px solid #d1cbbf",
+                    background: adjustClass === "fresh" ? "#ecfdf5" : "#fff",
+                    color: adjustClass === "fresh" ? "#065f46" : "#423b32",
+                    fontWeight: 700,
+                    fontSize: "0.78rem",
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  Fresh Stock (Saleable): {adjustModalItem.stock || 0} {adjustModalItem.unit}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAdjustClass("defreeze")}
+                  style={{
+                    padding: "8px 10px",
+                    borderRadius: "8px",
+                    border: adjustClass === "defreeze" ? "2px solid #2563eb" : "1px solid #d1cbbf",
+                    background: adjustClass === "defreeze" ? "#eff6ff" : "#fff",
+                    color: adjustClass === "defreeze" ? "#1e40af" : "#423b32",
+                    fontWeight: 700,
+                    fontSize: "0.78rem",
+                    cursor: "pointer",
+                    textAlign: "center",
+                  }}
+                >
+                  De-Freeze Pool: {adjustModalItem.defreezeStock || 0} {adjustModalItem.unit}
+                </button>
+              </div>
+            </div>
+
+            {/* Action Operation Selector */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                Adjustment Action:
+              </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px" }}>
                 <button
                   type="button"
-                  onClick={() => setOperation("add")}
+                  onClick={() => setAdjustOp("add")}
                   style={{
-                    padding: "10px 8px",
+                    padding: "8px",
                     borderRadius: "8px",
-                    border: operation === "add" ? "2px solid #059669" : "1px solid #d1cbbf",
-                    background: operation === "add" ? "#ecfdf5" : "#fff",
-                    color: operation === "add" ? "#059669" : "#423b32",
+                    border: adjustOp === "add" ? "2px solid #059669" : "1px solid #d1cbbf",
+                    background: adjustOp === "add" ? "#ecfdf5" : "#fff",
+                    color: adjustOp === "add" ? "#059669" : "#423b32",
                     fontWeight: 700,
-                    fontSize: "0.82rem",
+                    fontSize: "0.8rem",
                     cursor: "pointer",
-                    textAlign: "center",
                     display: "inline-flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -1747,34 +2858,32 @@ function InventoryTab() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOperation("reduce")}
+                  onClick={() => setAdjustOp("reduce")}
                   style={{
-                    padding: "10px 8px",
+                    padding: "8px",
                     borderRadius: "8px",
-                    border: operation === "reduce" ? "2px solid #dc2626" : "1px solid #d1cbbf",
-                    background: operation === "reduce" ? "#fef2f2" : "#fff",
-                    color: operation === "reduce" ? "#dc2626" : "#423b32",
+                    border: adjustOp === "reduce" ? "2px solid #dc2626" : "1px solid #d1cbbf",
+                    background: adjustOp === "reduce" ? "#fef2f2" : "#fff",
+                    color: adjustOp === "reduce" ? "#dc2626" : "#423b32",
                     fontWeight: 700,
-                    fontSize: "0.82rem",
+                    fontSize: "0.8rem",
                     cursor: "pointer",
-                    textAlign: "center",
                   }}
                 >
                   Reduce Stock
                 </button>
                 <button
                   type="button"
-                  onClick={() => setOperation("set")}
+                  onClick={() => setAdjustOp("set")}
                   style={{
-                    padding: "10px 8px",
+                    padding: "8px",
                     borderRadius: "8px",
-                    border: operation === "set" ? "2px solid #2563eb" : "1px solid #d1cbbf",
-                    background: operation === "set" ? "#eff6ff" : "#fff",
-                    color: operation === "set" ? "#2563eb" : "#423b32",
+                    border: adjustOp === "set" ? "2px solid #2563eb" : "1px solid #d1cbbf",
+                    background: adjustOp === "set" ? "#eff6ff" : "#fff",
+                    color: adjustOp === "set" ? "#2563eb" : "#423b32",
                     fontWeight: 700,
-                    fontSize: "0.82rem",
+                    fontSize: "0.8rem",
                     cursor: "pointer",
-                    textAlign: "center",
                   }}
                 >
                   Set Exact
@@ -1782,50 +2891,50 @@ function InventoryTab() {
               </div>
             </div>
 
-            {/* Quick Increment/Decrement Chips */}
-            {operation !== "set" && (
-              <div style={{ marginBottom: "16px" }}>
+            {/* Quick Amount Chips */}
+            {adjustOp !== "set" && (
+              <div style={{ marginBottom: "14px" }}>
                 <label style={{ display: "block", fontSize: "0.75rem", fontWeight: 700, color: "#73695b", marginBottom: "6px" }}>
-                  Quick select amount ({selectedItem.unit}):
+                  Quick select amount ({adjustModalItem.unit}):
                 </label>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  {(operation === "add" ? [5, 10, 25, 50] : [2, 5, 10, 20]).map(val => (
+                <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                  {(adjustOp === "add" ? [5, 10, 25, 50] : [2, 5, 10, 20]).map(val => (
                     <button
                       key={val}
                       type="button"
-                      onClick={() => setQuantity(String(val))}
+                      onClick={() => setAdjustQty(String(val))}
                       style={{
-                        padding: "5px 12px",
-                        borderRadius: "20px",
+                        padding: "4px 10px",
+                        borderRadius: "16px",
                         border: "1px solid #d1cbbf",
-                        background: quantity === String(val) ? "#423b32" : "#fff",
-                        color: quantity === String(val) ? "#fff" : "#423b32",
-                        fontSize: "0.8rem",
+                        background: adjustQty === String(val) ? "#423b32" : "#fff",
+                        color: adjustQty === String(val) ? "#fff" : "#423b32",
+                        fontSize: "0.76rem",
                         fontWeight: 600,
                         cursor: "pointer",
                       }}
                     >
-                      {operation === "add" ? `+${val}` : `-${val}`} {selectedItem.unit}
+                      {adjustOp === "add" ? `+${val}` : `-${val}`} {adjustModalItem.unit}
                     </button>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Quantity Input Field */}
-            <div style={{ marginBottom: "16px" }}>
+            {/* Quantity Input */}
+            <div style={{ marginBottom: "14px" }}>
               <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
-                {operation === "add" && `Quantity to Add (${selectedItem.unit}) *`}
-                {operation === "reduce" && `Quantity to Deduct (${selectedItem.unit}) *`}
-                {operation === "set" && `New Total Stock (${selectedItem.unit}) *`}
+                {adjustOp === "add" && `Quantity to Add (${adjustModalItem.unit}) *`}
+                {adjustOp === "reduce" && `Quantity to Deduct (${adjustModalItem.unit}) *`}
+                {adjustOp === "set" && `New Total Stock (${adjustModalItem.unit}) *`}
               </label>
               <input
                 type="number"
                 min="0"
                 step="0.5"
-                placeholder={operation === "set" ? `e.g. ${currentStock}` : "Enter quantity (e.g. 10)"}
-                value={quantity}
-                onChange={e => setQuantity(e.target.value)}
+                placeholder={adjustOp === "set" ? `e.g. ${currentAdjustBase}` : "Enter quantity (e.g. 10)"}
+                value={adjustQty}
+                onChange={e => setAdjustQty(e.target.value)}
                 style={{
                   padding: "10px 12px",
                   borderRadius: "8px",
@@ -1836,85 +2945,78 @@ function InventoryTab() {
                   boxSizing: "border-box",
                 }}
               />
-              {operation === "reduce" && inputQty > currentStock && (
-                <div style={{ color: "#dc2626", fontSize: "0.75rem", marginTop: "4px", fontWeight: 600 }}>
-                  Deducting more than current stock ({currentStock} {selectedItem.unit}). Balance will drop to 0.
-                </div>
-              )}
             </div>
 
-            {/* Projected Stock Calculation Preview */}
-            <div style={{
-              background: operation === "add" ? "#f0fdf4" : operation === "reduce" ? "#fff5f5" : "#f0f9ff",
-              border: `1px solid ${operation === "add" ? "#bbf7d0" : operation === "reduce" ? "#fecaca" : "#bae6fd"}`,
-              borderRadius: "10px",
-              padding: "12px 16px",
-              marginBottom: "18px",
-            }}>
-              <div style={{ fontSize: "0.78rem", color: "#73695b", marginBottom: "4px", fontWeight: 600 }}>Projected Result:</div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: "0.9rem", color: "#423b32" }}>
-                  {currentStock} {selectedItem.unit}{" "}
-                  {operation === "add" && `+ ${inputQty} ${selectedItem.unit}`}
-                  {operation === "reduce" && `- ${inputQty} ${selectedItem.unit}`}
-                  {operation === "set" && `-> New Balance`}
-                </span>
-                <span style={{
-                  fontSize: "1.2rem",
-                  fontWeight: 900,
-                  color: ((parseFloat(minAlert) || 0) > 0 && projectedStock <= (parseFloat(minAlert) || 0)) ? "#d97706" : "#059669",
-                  fontFamily: "Outfit, sans-serif"
-                }}>
-                  = {projectedStock} {selectedItem.unit}
-                </span>
-              </div>
-            </div>
-
-            {/* Min Alert Threshold Configuration (Add, Edit, or Remove) */}
-            <div style={{ marginBottom: "24px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#423b32" }}>
-                  Min Stock Alert Threshold ({selectedItem.unit}):
-                </label>
-                {minAlert !== "" && (
-                  <button
-                    type="button"
-                    onClick={() => setMinAlert("")}
-                    style={{
-                      background: "none",
-                      border: "none",
-                      color: "#dc2626",
-                      fontSize: "0.74rem",
-                      fontWeight: 700,
-                      cursor: "pointer",
-                      padding: 0,
-                    }}
-                  >
-                    ✕ Remove Alert
-                  </button>
-                )}
-              </div>
+            {/* Reason Field */}
+            <div style={{ marginBottom: "14px" }}>
+              <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                Reason for Adjustment
+              </label>
               <input
-                type="number"
-                min="0"
-                step="1"
-                placeholder="e.g. 15 (leave blank or 0 to turn off alert)"
-                value={minAlert}
-                onChange={e => setMinAlert(e.target.value)}
+                type="text"
+                placeholder="e.g. Morning vendor shipment received, Physical inventory audit"
+                value={adjustReason}
+                onChange={e => setAdjustReason(e.target.value)}
                 style={{
-                  padding: "10px 12px",
+                  padding: "8px 12px",
                   borderRadius: "8px",
                   border: "1px solid #d1cbbf",
                   width: "100%",
-                  fontSize: "0.95rem",
-                  fontWeight: 600,
+                  fontSize: "0.82rem",
                   boxSizing: "border-box",
                 }}
               />
-              <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "4px", lineHeight: "1.3" }}>
-                {minAlert && parseFloat(minAlert) > 0
-                  ? `Triggers "Low Stock" warning and turns button amber when stock reaches ≤ ${minAlert} ${selectedItem.unit}.`
-                  : `Alert disabled — no low stock warnings will be triggered for this item.`}
+            </div>
+
+            {/* Min Alert Threshold (Fresh Only) */}
+            {adjustClass === "fresh" && (
+              <div style={{ marginBottom: "16px" }}>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                  Min Stock Alert Threshold ({adjustModalItem.unit})
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="e.g. 15 (leave empty or 0 to disable)"
+                  value={adjustMin}
+                  onChange={e => setAdjustMin(e.target.value)}
+                  style={{
+                    padding: "8px 12px",
+                    borderRadius: "8px",
+                    border: "1px solid #d1cbbf",
+                    width: "100%",
+                    fontSize: "0.82rem",
+                    boxSizing: "border-box",
+                  }}
+                />
+              </div>
+            )}
+
+            {/* Projected Result Box */}
+            <div style={{
+              background: "#faf8f5",
+              border: "1px solid #ede8e0",
+              borderRadius: "10px",
+              padding: "12px",
+              marginBottom: "18px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}>
+              <div>
+                <div style={{ fontSize: "0.74rem", color: "#73695b" }}>Current: {currentAdjustBase} {adjustModalItem.unit}</div>
+                <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#171410" }}>
+                  {adjustOp === "add" && `+ ${parsedAdjustQty} ${adjustModalItem.unit}`}
+                  {adjustOp === "reduce" && `- ${parsedAdjustQty} ${adjustModalItem.unit}`}
+                  {adjustOp === "set" && `Reconciled`}
+                </div>
+              </div>
+              <div style={{ textAlign: "right" }}>
+                <div style={{ fontSize: "0.74rem", color: "#73695b" }}>Projected Result:</div>
+                <div style={{ fontSize: "1.3rem", fontWeight: 900, color: "#059669", fontFamily: "Outfit, sans-serif" }}>
+                  {projectedAdjustResult} {adjustModalItem.unit}
+                </div>
               </div>
             </div>
 
@@ -1923,34 +3025,26 @@ function InventoryTab() {
               <button
                 type="button"
                 className="btn"
-                onClick={() => { setShowStockModal(false); setSelectedItem(null); }}
-                disabled={submitting}
-                style={{ padding: "9px 18px", borderRadius: "8px" }}
+                onClick={() => setAdjustModalItem(null)}
+                disabled={submittingAdjust}
+                style={{ padding: "8px 16px", borderRadius: "8px" }}
               >
                 Cancel
               </button>
               <button
                 type="button"
                 className="btn btn-primary"
-                onClick={handleUpdateStock}
-                disabled={submitting}
+                onClick={handleExecuteAdjust}
+                disabled={submittingAdjust}
                 style={{
-                  padding: "9px 22px",
+                  padding: "8px 20px",
                   borderRadius: "8px",
-                  background: operation === "reduce" ? "#dc2626" : operation === "set" ? "#2563eb" : "#059669",
-                  borderColor: operation === "reduce" ? "#dc2626" : operation === "set" ? "#2563eb" : "#059669",
+                  background: adjustOp === "reduce" ? "#dc2626" : adjustOp === "set" ? "#2563eb" : "#059669",
+                  borderColor: adjustOp === "reduce" ? "#dc2626" : adjustOp === "set" ? "#2563eb" : "#059669",
                   fontWeight: 700,
                 }}
               >
-                {submitting
-                  ? "Saving…"
-                  : quantity !== ""
-                    ? operation === "add"
-                      ? `Add ${inputQty} ${selectedItem.unit}`
-                      : operation === "reduce"
-                        ? `Deduct ${inputQty} ${selectedItem.unit}`
-                        : `Set to ${inputQty} ${selectedItem.unit}`
-                    : "Save Changes"}
+                {submittingAdjust ? "Saving…" : "Save Adjustment"}
               </button>
             </div>
           </div>
@@ -2017,17 +3111,43 @@ function RidersTab() {
   const [selectedRiderId, setSelectedRiderId] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Dynamic Rider Compensation Rates & Daily Target
+  const [baseDeliveryPay, setBaseDeliveryPay] = useState<number>(65);
+  const [distanceIncentive, setDistanceIncentive] = useState<number>(15);
+  const [peakHourSurge, setPeakHourSurge] = useState<number>(20);
+  const [defaultRiderDailyTarget, setDefaultRiderDailyTarget] = useState<number>(16);
+  const [savingPayout, setSavingPayout] = useState(false);
+  const [showRatesModal, setShowRatesModal] = useState(false);
+  const [draftRates, setDraftRates] = useState({
+    baseDeliveryPay: 65,
+    distanceIncentive: 15,
+    peakHourSurge: 20,
+    defaultRiderDailyTarget: 16,
+  });
+
+  const isRatesDirty =
+    draftRates.baseDeliveryPay !== baseDeliveryPay ||
+    draftRates.distanceIncentive !== distanceIncentive ||
+    draftRates.peakHourSurge !== peakHourSurge ||
+    draftRates.defaultRiderDailyTarget !== defaultRiderDailyTarget;
+
+  // Cash Remittances
+  const [remittances, setRemittances] = useState<any[]>([]);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [ridersRes, ordersRes] = await Promise.all([
+      const [ridersRes, ordersRes, storeRes, remittancesRes] = await Promise.all([
         api.get<{ success: boolean; riders: any[] }>("/store-admin/riders"),
-        api.get<{ success: boolean; orders: any[] }>("/store-admin/orders?status=all")
+        api.get<{ success: boolean; orders: any[] }>("/store-admin/orders?status=all"),
+        api.get<{ success: boolean; store: any }>("/store-admin/store-status"),
+        api.get<{ success: boolean; remittances: any[] }>("/store-admin/remittances").catch(() => ({ data: { success: false, remittances: [] } }))
       ]);
-      if (ridersRes.data.success) setRiders(ridersRes.data.riders || []);
+      let relevantOrders: any[] = [];
       if (ordersRes.data.success) {
         // Filter only Ready and Out for Delivery orders that require home delivery (exclude store takeaway)
-        const relevantOrders = (ordersRes.data.orders || []).filter((o: any) => {
+        relevantOrders = (ordersRes.data.orders || []).filter((o: any) => {
           const isPickup =
             o.fulfillmentType === "pickup" ||
             o.pickupMode === true ||
@@ -2036,6 +3156,38 @@ function RidersTab() {
           return (o.status === "Ready" || o.status === "Out for Delivery") && !isPickup;
         });
         setReadyOrders(relevantOrders);
+      }
+      if (ridersRes.data.success) {
+        const outForDeliveryRiderNames = new Set(
+          relevantOrders
+            .filter((o: any) => o.status === "Out for Delivery")
+            .map((o: any) => o.rider?.name?.trim().toLowerCase())
+            .filter(Boolean)
+        );
+
+        const syncedRiders = (ridersRes.data.riders || []).map((r: any) => {
+          const isBusy = outForDeliveryRiderNames.has(r.name?.trim().toLowerCase());
+          if (isBusy && r.riderStatus !== "On Delivery") {
+            return { ...r, riderStatus: "On Delivery" };
+          }
+          return r;
+        });
+        setRiders(syncedRiders);
+      }
+      if (storeRes.data?.success && storeRes.data?.store) {
+        const s = storeRes.data.store;
+        if (s.riderPayoutSettings) {
+          const ps = s.riderPayoutSettings;
+          if (typeof ps.baseDeliveryPay === "number") setBaseDeliveryPay(ps.baseDeliveryPay);
+          if (typeof ps.distanceIncentive === "number") setDistanceIncentive(ps.distanceIncentive);
+          if (typeof ps.peakHourSurge === "number") setPeakHourSurge(ps.peakHourSurge);
+        }
+        if (typeof s.defaultRiderDailyTarget === "number") {
+          setDefaultRiderDailyTarget(s.defaultRiderDailyTarget);
+        }
+      }
+      if (remittancesRes.data?.success && Array.isArray(remittancesRes.data.remittances)) {
+        setRemittances(remittancesRes.data.remittances);
       }
     } catch (err) {
       console.warn("Failed to fetch dispatch data:", err);
@@ -2047,6 +3199,58 @@ function RidersTab() {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const handleOpenRatesModal = () => {
+    setDraftRates({
+      baseDeliveryPay,
+      distanceIncentive,
+      peakHourSurge,
+      defaultRiderDailyTarget,
+    });
+    setShowRatesModal(true);
+  };
+
+  const handleSavePayoutSettings = async () => {
+    if (!isRatesDirty) return;
+    setSavingPayout(true);
+    try {
+      const res = await api.patch<{ success: boolean; store: any }>("/store-admin/store-status", {
+        defaultRiderDailyTarget: Number(draftRates.defaultRiderDailyTarget),
+        riderPayoutSettings: {
+          baseDeliveryPay: Number(draftRates.baseDeliveryPay),
+          distanceIncentive: Number(draftRates.distanceIncentive),
+          peakHourSurge: Number(draftRates.peakHourSurge),
+        },
+      });
+      if (res.data.success) {
+        setBaseDeliveryPay(draftRates.baseDeliveryPay);
+        setDistanceIncentive(draftRates.distanceIncentive);
+        setPeakHourSurge(draftRates.peakHourSurge);
+        setDefaultRiderDailyTarget(draftRates.defaultRiderDailyTarget);
+        setShowRatesModal(false);
+        toast.success("Rider payout rates & daily target saved. Rider app calculations updated immediately.", "Payout Rates Updated");
+      }
+    } catch (err) {
+      toast.error("Failed to update rider payout rates", "Save Error");
+    } finally {
+      setSavingPayout(false);
+    }
+  };
+
+  const handleConfirmRemittance = async (remittanceId: string) => {
+    setConfirmingId(remittanceId);
+    try {
+      const res = await api.patch<{ success: boolean; message: string }>(`/store-admin/remittances/${remittanceId}/confirm`);
+      if (res.data.success) {
+        toast.success(res.data.message || "Remittance cash confirmed successfully", "Deposit Confirmed");
+        fetchData();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to confirm remittance", "Remittance Error");
+    } finally {
+      setConfirmingId(null);
+    }
+  };
 
   const handleAssignRider = async () => {
     if (!selectedOrder || !selectedRiderId) return;
@@ -2071,6 +3275,195 @@ function RidersTab() {
 
   return (
     <div>
+      {/* ─── RIDER PAYOUT & SURGE INCENTIVE MANAGEMENT (DAILY CONFIGURABLE) ─── */}
+      <div style={{
+        background: "#fff",
+        border: "1px solid #ede8e0",
+        borderRadius: "16px",
+        padding: "20px 24px",
+        marginBottom: "24px",
+        boxShadow: "0 2px 8px rgba(0,0,0,0.03)"
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span className="material-symbols-outlined text-[22px]" style={{ color: "#941717" }}>payments</span>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>
+                Rider Payout & Delivery Incentive Rates
+              </h3>
+              <span style={{ fontSize: "0.72rem", background: "#ecfdf5", color: "#059669", fontWeight: 800, padding: "2px 8px", borderRadius: "99px", border: "1px solid #a7f3d0" }}>
+                Active & Live Configurable
+              </span>
+            </div>
+            <p style={{ fontSize: "0.8rem", color: "#73695b", margin: "4px 0 0 0" }}>
+              Store admin can increase or decrease these delivery compensations any day. Changes reflect live on rider dashboard & trip payouts.
+            </p>
+          </div>
+          <button
+            onClick={handleOpenRatesModal}
+            style={{
+              background: "#941717",
+              color: "#fff",
+              border: "none",
+              borderRadius: "10px",
+              padding: "9px 18px",
+              fontWeight: 700,
+              cursor: "pointer",
+              fontSize: "0.85rem",
+              display: "flex",
+              alignItems: "center",
+              gap: "6px",
+              boxShadow: "0 2px 6px rgba(148,23,23,0.25)",
+              transition: "transform 0.15s ease, background 0.15s ease"
+            }}
+          >
+            <span className="material-symbols-outlined text-[18px]">tune</span>
+            <span>Edit Rates</span>
+          </button>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
+          {/* Card 1: Base Pay */}
+          <div style={{ background: "#faf8f5", border: "1px solid #ede8e0", borderRadius: "12px", padding: "16px" }}>
+            <span style={{ fontSize: "0.73rem", fontWeight: 800, color: "#73695b", textTransform: "uppercase", display: "block", letterSpacing: "0.5px" }}>
+              Per Delivery Base Pay
+            </span>
+            <div style={{ fontSize: "1.85rem", fontWeight: 900, color: "#171410", marginTop: "4px", lineHeight: 1.1 }}>
+              ₹{baseDeliveryPay}
+            </div>
+            <span style={{ fontSize: "0.73rem", color: "#8a7f72", marginTop: "8px", display: "block" }}>
+              Paid to rider for every completed delivery trip
+            </span>
+          </div>
+
+          {/* Card 2: Distance Incentive */}
+          <div style={{ background: "#faf8f5", border: "1px solid #ede8e0", borderRadius: "12px", padding: "16px" }}>
+            <span style={{ fontSize: "0.73rem", fontWeight: 800, color: "#73695b", textTransform: "uppercase", display: "block", letterSpacing: "0.5px" }}>
+              Distance / Fuel Incentive
+            </span>
+            <div style={{ fontSize: "1.85rem", fontWeight: 900, color: "#171410", marginTop: "4px", lineHeight: 1.1 }}>
+              ₹{distanceIncentive}
+            </div>
+            <span style={{ fontSize: "0.73rem", color: "#8a7f72", marginTop: "8px", display: "block" }}>
+              Extra fuel/distance incentive added per completed delivery
+            </span>
+          </div>
+
+          {/* Card 3: Peak Hour Surge */}
+          <div style={{ background: "#faf8f5", border: "1px solid #ede8e0", borderRadius: "12px", padding: "16px" }}>
+            <span style={{ fontSize: "0.73rem", fontWeight: 800, color: "#73695b", textTransform: "uppercase", display: "block", letterSpacing: "0.5px" }}>
+              Peak Hour Surge Bonus
+            </span>
+            <div style={{ fontSize: "1.85rem", fontWeight: 900, color: "#171410", marginTop: "4px", lineHeight: 1.1 }}>
+              ₹{peakHourSurge}
+            </div>
+            <span style={{ fontSize: "0.73rem", color: "#8a7f72", marginTop: "8px", display: "block" }}>
+              Added for deliveries during rush hours (12 PM–2 PM & 7 PM–8 PM)
+            </span>
+          </div>
+
+          {/* Card 4: Daily Target */}
+          <div style={{ background: "#faf8f5", border: "1px solid #ede8e0", borderRadius: "12px", padding: "16px" }}>
+            <span style={{ fontSize: "0.73rem", fontWeight: 800, color: "#73695b", textTransform: "uppercase", display: "block", letterSpacing: "0.5px" }}>
+              Hub Rider Daily Target
+            </span>
+            <div style={{ fontSize: "1.85rem", fontWeight: 900, color: "#171410", marginTop: "4px", lineHeight: 1.1 }}>
+              {defaultRiderDailyTarget} <span style={{ fontSize: "0.95rem", color: "#73695b", fontWeight: 700 }}>Trips</span>
+            </div>
+            <span style={{ fontSize: "0.73rem", color: "#8a7f72", marginTop: "8px", display: "block" }}>
+              Default daily orders target set for active hub riders
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* ─── CASH REMITTANCE APPROVALS (HUB DEPOSIT) ─── */}
+      {remittances.length > 0 && (
+        <div style={{
+          background: "#fff",
+          border: "1px solid #ede8e0",
+          borderRadius: "16px",
+          padding: "20px 24px",
+          marginBottom: "24px"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+            <div>
+              <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>
+                Cash Remittance Counter (COD Deposits)
+              </h3>
+              <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>
+                Physical cash deposits submitted by riders at the hub closing counter
+              </p>
+            </div>
+            {remittances.filter(r => r.status === "Pending").length > 0 && (
+              <span style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#b45309", fontSize: "0.75rem", fontWeight: 800, padding: "3px 10px", borderRadius: "99px" }}>
+                {remittances.filter(r => r.status === "Pending").length} Awaiting Confirmation
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+            {remittances.slice(0, 10).map((rem) => (
+              <div key={rem._id || rem.remittanceId} style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                padding: "12px 16px",
+                background: "#faf8f5",
+                borderRadius: "10px",
+                border: "1px solid #ede8e0",
+                flexWrap: "wrap",
+                gap: "8px"
+              }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontWeight: 800, color: "#171410", fontSize: "0.95rem" }}>
+                      {rem.riderName || "Rider Partner"} ({rem.riderPhone})
+                    </span>
+                    <Badge
+                      label={rem.status}
+                      color={rem.status === "Confirmed" ? "#059669" : "#d97706"}
+                    />
+                  </div>
+                  <div style={{ fontSize: "0.75rem", color: "#73695b", marginTop: "2px" }}>
+                    Ref: #{rem.remittanceId} · {new Date(rem.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    {rem.confirmedByName && ` · Confirmed by ${rem.confirmedByName}`}
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                  <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "#059669" }}>
+                    ₹{Number(rem.amount).toFixed(2)}
+                  </span>
+                  {rem.status === "Pending" && (
+                    <button
+                      onClick={() => handleConfirmRemittance(rem.remittanceId || rem._id)}
+                      disabled={confirmingId === (rem.remittanceId || rem._id)}
+                      style={{
+                        background: "#059669",
+                        color: "#fff",
+                        border: "none",
+                        borderRadius: "8px",
+                        padding: "7px 14px",
+                        fontSize: "0.8rem",
+                        fontWeight: 700,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                      <span>{confirmingId === (rem.remittanceId || rem._id) ? "Confirming…" : "Accept Cash"}</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ─── RIDERS POOL ─── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", marginTop: "12px" }}>
         <div>
@@ -2215,6 +3608,275 @@ function RidersTab() {
                 }}
               >
                 {submitting ? "Assigning…" : "Dispatch Order"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ─── EDIT RIDER PAYOUT & INCENTIVES MODAL ─── */}
+      {showRatesModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)",
+          display: "flex", justifyContent: "center", alignItems: "center",
+          zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "20px",
+            width: "100%",
+            maxWidth: "520px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            overflow: "hidden"
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: "20px 24px",
+              borderBottom: "1px solid #ede8e0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "#faf8f5"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{
+                  width: "38px",
+                  height: "38px",
+                  borderRadius: "10px",
+                  background: "#fdf2f2",
+                  border: "1px solid #fecaca",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}>
+                  <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>tune</span>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "#171410" }}>
+                    Configure Rider Payout & Incentives
+                  </h3>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "0.75rem", color: "#73695b" }}>
+                    Set daily rates for delivery trips, fuel incentive, peak surge & targets
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowRatesModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#8a7f72",
+                  padding: "6px",
+                  borderRadius: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Field 1: Base Pay */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Per Delivery Base Pay</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: ₹{baseDeliveryPay}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
+                  <span style={{ position: "absolute", left: "14px", fontWeight: 800, color: "#171410", fontSize: "1.1rem" }}>₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draftRates.baseDeliveryPay}
+                    onChange={(e) => setDraftRates({ ...draftRates, baseDeliveryPay: Math.max(0, Number(e.target.value)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px 10px 32px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Fixed payout credited to rider for every completed delivery run
+                </span>
+              </div>
+
+              {/* Field 2: Distance Incentive */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Distance / Fuel Incentive</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: ₹{distanceIncentive}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
+                  <span style={{ position: "absolute", left: "14px", fontWeight: 800, color: "#171410", fontSize: "1.1rem" }}>₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draftRates.distanceIncentive}
+                    onChange={(e) => setDraftRates({ ...draftRates, distanceIncentive: Math.max(0, Number(e.target.value)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px 10px 32px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Additional fuel allowance added per completed delivery
+                </span>
+              </div>
+
+              {/* Field 3: Peak Hour Surge */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Peak Hour Surge Bonus</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: ₹{peakHourSurge}</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", position: "relative" }}>
+                  <span style={{ position: "absolute", left: "14px", fontWeight: 800, color: "#171410", fontSize: "1.1rem" }}>₹</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={draftRates.peakHourSurge}
+                    onChange={(e) => setDraftRates({ ...draftRates, peakHourSurge: Math.max(0, Number(e.target.value)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px 10px 32px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Added for rush hour deliveries (12 PM–2 PM & 7 PM–8 PM)
+                </span>
+              </div>
+
+              {/* Field 4: Hub Daily Target */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Hub Rider Daily Target</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: {defaultRiderDailyTarget} Trips</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    min={1}
+                    value={draftRates.defaultRiderDailyTarget}
+                    onChange={(e) => setDraftRates({ ...draftRates, defaultRiderDailyTarget: Math.max(1, Number(e.target.value)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "#73695b", fontSize: "0.9rem", paddingRight: "4px" }}>Trips</span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Default daily completed trips target shown in rider mobile app
+                </span>
+              </div>
+
+              {/* Status pill: Dirty or unchanged */}
+              <div style={{
+                padding: "10px 14px",
+                borderRadius: "10px",
+                background: isRatesDirty ? "#ecfdf5" : "#faf8f5",
+                border: isRatesDirty ? "1px solid #a7f3d0" : "1px solid #ede8e0",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "0.78rem",
+                color: isRatesDirty ? "#065f46" : "#73695b",
+                fontWeight: 600
+              }}>
+                <span className="material-symbols-outlined text-[18px]">
+                  {isRatesDirty ? "check_circle" : "info"}
+                </span>
+                <span>
+                  {isRatesDirty
+                    ? "Changes detected. Click 'Save New Rates' to apply immediately to all riders."
+                    : "No changes made yet. Edit any field above to enable saving."}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: "16px 24px",
+              background: "#faf8f5",
+              borderTop: "1px solid #ede8e0",
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "10px"
+            }}>
+              <button
+                type="button"
+                disabled={savingPayout}
+                onClick={() => setShowRatesModal(false)}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: "10px",
+                  background: "#fff",
+                  border: "1px solid #ede8e0",
+                  color: "#423b32",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!isRatesDirty || savingPayout}
+                onClick={handleSavePayoutSettings}
+                style={{
+                  padding: "9px 20px",
+                  borderRadius: "10px",
+                  background: !isRatesDirty || savingPayout ? "#e5e7eb" : "#941717",
+                  color: !isRatesDirty || savingPayout ? "#9ca3af" : "#fff",
+                  border: "none",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: !isRatesDirty || savingPayout ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: !isRatesDirty || savingPayout ? "none" : "0 2px 6px rgba(148,23,23,0.25)",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">save</span>
+                <span>{savingPayout ? "Saving…" : "Save New Rates"}</span>
               </button>
             </div>
           </div>

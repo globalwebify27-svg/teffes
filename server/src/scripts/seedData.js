@@ -1630,7 +1630,7 @@ const users = [
     phone: '+919876543211',
     role: 'rider',
     vehicleNumber: 'JH01-EC-4821',
-    riderStatus: 'Available',
+    riderStatus: 'On Delivery',
     isVerified: true,
     isActive: true,
   },
