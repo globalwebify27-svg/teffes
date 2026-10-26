@@ -346,8 +346,40 @@ const deleteStoreAdmin = async (req, res, next) => {
  */
 const getRiders = async (req, res, next) => {
   try {
-    const riders = await User.find({ role: 'rider' }).select('-password');
-    res.status(200).json({ success: true, count: riders.length, riders });
+    const riders = await User.find({ role: 'rider' }).select('-password').lean();
+
+    // Live verification: Check active "Out for Delivery" orders to guarantee 100% real-time status
+    const activeOrders = await Order.find({ status: 'Out for Delivery' }).select('rider status');
+    const activeRiderIdentifiers = new Set();
+    activeOrders.forEach((o) => {
+      if (o.rider?.riderId) activeRiderIdentifiers.add(o.rider.riderId.toString());
+      if (o.rider?.phone) activeRiderIdentifiers.add(o.rider.phone.replace(/\D/g, ''));
+      if (o.rider?.name) activeRiderIdentifiers.add(o.rider.name.trim().toLowerCase());
+    });
+
+    const updatedRiders = await Promise.all(
+      riders.map(async (r) => {
+        const idStr = r._id ? r._id.toString() : '';
+        const phoneStr = (r.phone || '').replace(/\D/g, '');
+        const nameStr = (r.name || '').trim().toLowerCase();
+
+        const isOnDelivery =
+          activeRiderIdentifiers.has(idStr) ||
+          (phoneStr && activeRiderIdentifiers.has(phoneStr)) ||
+          (nameStr && activeRiderIdentifiers.has(nameStr));
+
+        if (isOnDelivery && r.riderStatus !== 'On Delivery') {
+          await User.updateOne({ _id: r._id }, { riderStatus: 'On Delivery' });
+          return { ...r, riderStatus: 'On Delivery' };
+        } else if (!isOnDelivery && r.riderStatus === 'On Delivery') {
+          await User.updateOne({ _id: r._id }, { riderStatus: 'Available' });
+          return { ...r, riderStatus: 'Available' };
+        }
+        return r;
+      })
+    );
+
+    res.status(200).json({ success: true, count: updatedRiders.length, riders: updatedRiders });
   } catch (error) {
     next(error);
   }

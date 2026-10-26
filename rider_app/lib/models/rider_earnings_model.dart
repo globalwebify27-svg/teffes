@@ -55,9 +55,9 @@ class RiderEarningsModel {
     required this.completedTodayCount,
     required this.completedWeeklyCount,
     this.cashInHand = 0.0,
-    this.basePay = 520.0,
-    this.distanceIncentive = 110.0,
-    this.peakSurge = 50.0,
+    this.basePay = 0.0,
+    this.distanceIncentive = 0.0,
+    this.peakSurge = 0.0,
     this.tips = 0.0,
     required this.recentEarnings,
   });
@@ -71,15 +71,18 @@ class RiderEarningsModel {
           .toList();
     }
     final today = (json['todayEarnings'] as num?)?.toDouble() ?? 0.0;
+    final todayCount = (json['completedTodayCount'] as num?)?.toInt() ?? (json['completedCount'] as num?)?.toInt() ?? 0;
+    final weeklyCount = (json['completedWeeklyCount'] as num?)?.toInt() ?? todayCount;
+
     return RiderEarningsModel(
       todayEarnings: today,
-      weeklyEarnings: (json['weeklyEarnings'] as num?)?.toDouble() ?? (today * 4.2),
-      completedTodayCount: (json['completedTodayCount'] as num?)?.toInt() ?? (json['completedCount'] as num?)?.toInt() ?? 0,
-      completedWeeklyCount: (json['completedWeeklyCount'] as num?)?.toInt() ?? 12,
+      weeklyEarnings: (json['weeklyEarnings'] as num?)?.toDouble() ?? today,
+      completedTodayCount: todayCount,
+      completedWeeklyCount: weeklyCount,
       cashInHand: (json['cashInHand'] as num?)?.toDouble() ?? (json['cashCollected'] as num?)?.toDouble() ?? 0.0,
-      basePay: (json['basePay'] as num?)?.toDouble() ?? (today > 0 ? (today * 0.75) : 520.0),
-      distanceIncentive: today > 0 ? (today * 0.15) : 110.0,
-      peakSurge: today > 0 ? (today * 0.10) : 50.0,
+      basePay: (json['basePay'] as num?)?.toDouble() ?? (todayCount * 65.0),
+      distanceIncentive: (json['distanceIncentive'] as num?)?.toDouble() ?? 0.0,
+      peakSurge: (json['peakSurge'] as num?)?.toDouble() ?? 0.0,
       tips: (json['tips'] as num?)?.toDouble() ?? (json['todayTips'] as num?)?.toDouble() ?? 0.0,
       recentEarnings: items,
     );

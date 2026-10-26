@@ -86,6 +86,20 @@ const orderSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+    riderRating: {
+      type: Number,
+      min: 1,
+      max: 5,
+      default: null,
+    },
+    riderRatingFeedback: {
+      type: String,
+      default: null,
+    },
+    riderRatedAt: {
+      type: Date,
+      default: null,
+    },
     deliverySlot: {
       type: String,
       default: '90 Mins Express Delivery',

@@ -281,6 +281,7 @@ async function reverseGeocode(lat, lng) {
 
 /**
  * Google Places Autocomplete: search query -> list of predicted locations.
+ * Uses modern Places API (New) as primary, with fallback to legacy.
  */
 async function placesAutocomplete(query, location = null) {
   if (!query || query.trim().length === 0) {
@@ -290,6 +291,57 @@ async function placesAutocomplete(query, location = null) {
   const apiKey = getApiKey();
 
   if (apiKey && !apiKey.includes('placeholder') && !apiKey.includes('your_')) {
+    // 1. Try modern Google Places API (New)
+    try {
+      const payload = {
+        input: query,
+        includedRegionCodes: ['in'],
+        languageCode: 'en',
+      };
+      if (location && location.lat && location.lng) {
+        payload.locationBias = {
+          circle: {
+            center: { latitude: Number(location.lat), longitude: Number(location.lng) },
+            radius: 50000.0,
+          },
+        };
+      }
+
+      const resNew = await fetch('https://places.googleapis.com/v1/places:autocomplete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': apiKey,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (resNew.ok) {
+        const dataNew = await resNew.json();
+        if (Array.isArray(dataNew.suggestions) && dataNew.suggestions.length > 0) {
+          const predictions = dataNew.suggestions
+            .map((s) => {
+              const pred = s.placePrediction || {};
+              const placeId = pred.placeId || (pred.place ? pred.place.replace('places/', '') : '');
+              return {
+                placeId,
+                description: pred.text?.text || '',
+                mainText: pred.structuredFormat?.mainText?.text || pred.text?.text || '',
+                secondaryText: pred.structuredFormat?.secondaryText?.text || '',
+              };
+            })
+            .filter((p) => Boolean(p.placeId));
+
+          if (predictions.length > 0) {
+            return { success: true, predictions, provider: 'google' };
+          }
+        }
+      }
+    } catch (errNew) {
+      console.warn('[Places API New] Request warning:', errNew.message);
+    }
+
+    // 2. Fallback to Legacy Places API
     try {
       let url = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(
         query
@@ -313,7 +365,7 @@ async function placesAutocomplete(query, location = null) {
         }
       }
     } catch (err) {
-      console.warn('[Google Places] Autocomplete request failed:', err.message);
+      console.warn('[Google Places Legacy] Autocomplete request failed:', err.message);
     }
   }
 
@@ -330,11 +382,40 @@ async function placesAutocomplete(query, location = null) {
 
 /**
  * Google Place Details: gets exact lat/lng coordinates and address for a placeId.
+ * Uses modern Places API (New) as primary, with fallback to legacy.
  */
 async function getPlaceDetails(placeId) {
   const apiKey = getApiKey();
 
   if (apiKey && !apiKey.includes('placeholder') && !apiKey.includes('your_')) {
+    // 1. Try modern Places API (New) details endpoint
+    try {
+      const cleanPlaceId = placeId.startsWith('places/') ? placeId.replace('places/', '') : placeId;
+      const resNew = await fetch(`https://places.googleapis.com/v1/places/${encodeURIComponent(cleanPlaceId)}`, {
+        headers: {
+          'X-Goog-Api-Key': apiKey,
+          'X-Goog-FieldMask': 'id,displayName,formattedAddress,location',
+        },
+      });
+
+      if (resNew.ok) {
+        const dataNew = await resNew.json();
+        if (dataNew && dataNew.location) {
+          return {
+            success: true,
+            name: dataNew.displayName?.text || dataNew.formattedAddress?.split(',')[0] || 'Selected Place',
+            formattedAddress: dataNew.formattedAddress,
+            latitude: dataNew.location.latitude,
+            longitude: dataNew.location.longitude,
+            provider: 'google',
+          };
+        }
+      }
+    } catch (errNew) {
+      console.warn('[Places API New Details] Request warning:', errNew.message);
+    }
+
+    // 2. Fallback to Legacy Place Details
     try {
       const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(
         placeId
@@ -356,7 +437,7 @@ async function getPlaceDetails(placeId) {
         }
       }
     } catch (err) {
-      console.warn('[Google Place Details] Request failed:', err.message);
+      console.warn('[Google Place Details Legacy] Request failed:', err.message);
     }
   }
 

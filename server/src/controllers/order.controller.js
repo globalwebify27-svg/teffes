@@ -185,7 +185,12 @@ const createOrder = async (req, res, next) => {
     });
 
     // ─── Backend Atomic Stock Validation & Inventory Deduction ───
-    const deductionResult = await validateAndDeductInventory(newOrder.storeId, items);
+    const deductionResult = await validateAndDeductInventory(newOrder.storeId, items, newOrder.orderId, {
+      userId: user._id,
+      name: user.name || 'Valued Customer',
+      role: user.role || 'customer',
+      email: user.email || '',
+    });
     if (!deductionResult.success) {
       if (couponDocToRollback) {
         await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
@@ -411,6 +416,67 @@ const verifyPayment = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/orders/:orderId/rate-rider
+ * Customer rates the delivery partner after order is delivered
+ */
+const rateRider = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    const { rating, feedback } = req.body;
+
+    const numRating = Number(rating);
+    if (!numRating || numRating < 1 || numRating > 5) {
+      return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5 stars' });
+    }
+
+    const order = await Order.findOne({
+      $or: [{ orderId }, { _id: orderId?.match(/^[0-9a-fA-F]{24}$/) ? orderId : null }],
+    });
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (order.status !== 'Delivered') {
+      return res.status(400).json({ success: false, message: 'You can only rate the rider after the order is delivered' });
+    }
+
+    order.riderRating = numRating;
+    order.riderRatingFeedback = feedback || '';
+    order.riderRatedAt = new Date();
+    await order.save();
+
+    // Update rider's overall rating if riderId exists
+    if (order.rider?.riderId) {
+      const riderUser = await User.findById(order.rider.riderId);
+      if (riderUser) {
+        // Calculate dynamic average from all rated orders for this rider
+        const allRatedOrders = await Order.find({
+          'rider.riderId': riderUser._id,
+          riderRating: { $ne: null, $gte: 1 },
+        });
+
+        const totalStars = allRatedOrders.reduce((sum, o) => sum + (o.riderRating || 0), 0);
+        const count = allRatedOrders.length;
+        const avg = count > 0 ? parseFloat((totalStars / count).toFixed(1)) : 5.0;
+
+        riderUser.riderRating = avg;
+        riderUser.riderRatingCount = count;
+        await riderUser.save();
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Thank you! Your feedback for the delivery partner has been recorded.',
+      order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createOrder,
   getUserOrders,
@@ -418,4 +484,5 @@ module.exports = {
   getMyOrders,
   requestReturn,
   verifyPayment,
+  rateRider,
 };

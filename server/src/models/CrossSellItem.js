@@ -29,7 +29,7 @@ const crossSellItemSchema = new mongoose.Schema(
     },
     weight: {
       type: String,
-      default: '1 unit',
+      default: '',
       trim: true,
     },
     category: {

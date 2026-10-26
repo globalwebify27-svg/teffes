@@ -91,6 +91,12 @@ export default function DashboardPage() {
   const [isSubmittingReturn, setIsSubmittingReturn] = useState(false);
   const [returnFeedback, setReturnFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
+  // Rider Rating Modal states
+  const [ratingModalOrder, setRatingModalOrder] = useState<any | null>(null);
+  const [riderRatingValue, setRiderRatingValue] = useState<number>(5);
+  const [riderRatingFeedback, setRiderRatingFeedback] = useState<string>("");
+  const [isSubmittingRating, setIsSubmittingRating] = useState<boolean>(false);
+
   // Edit address state
   const [editingAddress, setEditingAddress] = useState<DashboardAddress | null>(null);
 
@@ -592,6 +598,54 @@ export default function DashboardPage() {
     }
   };
 
+  const handleOpenRatingModal = (order: any) => {
+    setRatingModalOrder(order);
+    setRiderRatingValue(5);
+    setRiderRatingFeedback("");
+  };
+
+  const handleCloseRatingModal = () => {
+    setRatingModalOrder(null);
+    setRiderRatingValue(5);
+    setRiderRatingFeedback("");
+    setIsSubmittingRating(false);
+  };
+
+  const handleSubmitRiderRating = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!ratingModalOrder) return;
+    setIsSubmittingRating(true);
+    try {
+      const orderId = ratingModalOrder.id || ratingModalOrder.orderId;
+      const res = await api.post(`/orders/${orderId}/rate-rider`, {
+        rating: riderRatingValue,
+        feedback: riderRatingFeedback.trim(),
+      });
+      if (res.data.success) {
+        toast.success(res.data.message || "Thank you for rating your delivery partner!");
+        setLiveOrders((prev) =>
+          prev.map((o) => {
+            const currentId = o.orderId || o.id;
+            if (currentId === orderId) {
+              return {
+                ...o,
+                riderRating: riderRatingValue,
+                riderRatingFeedback: riderRatingFeedback.trim(),
+                riderRatedAt: new Date().toISOString(),
+              };
+            }
+            return o;
+          })
+        );
+        handleCloseRatingModal();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to submit rating. Please try again.");
+    } finally {
+      setIsSubmittingRating(false);
+    }
+  };
+
   const handleSaveEditedAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAddress || !editingAddress.address.trim()) return;
@@ -981,20 +1035,37 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     ) : (
-                      <div className="flex w-full border-t border-gray-100">
+                      <div className="flex w-full border-t border-gray-100 divide-x divide-gray-100">
                         {order.status === "delivered" && order.rawOrder?.returnStatus === "Not Requested" && (
                           <button
                             type="button"
                             onClick={() => handleOpenReturnModal(order.id)}
-                            className="flex-1 py-3 text-center font-headline-sm font-bold text-gray-700 hover:bg-gray-50 text-[13.5px] cursor-pointer bg-white transition-colors border-r border-gray-100 border-y-0 border-l-0"
+                            className="flex-1 py-3 text-center font-headline-sm font-bold text-gray-700 hover:bg-gray-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none"
                           >
                             Return/Exchange
                           </button>
                         )}
                         {order.rawOrder?.returnStatus && order.rawOrder?.returnStatus !== "Not Requested" && (
-                          <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-600 text-[13.5px] bg-amber-50/30 border-r border-gray-100 border-y-0 border-l-0">
+                          <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-600 text-[13.5px] bg-amber-50/30">
                             Return {order.rawOrder?.returnStatus}
                           </div>
+                        )}
+                        {order.status === "delivered" && (
+                          order.rawOrder?.riderRating ? (
+                            <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 text-[13px] bg-amber-50/40 flex items-center justify-center gap-1">
+                              <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
+                              <span>Rated {order.rawOrder.riderRating}★</span>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenRatingModal(order)}
+                              className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 hover:bg-amber-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none flex items-center justify-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
+                              <span>Rate Rider</span>
+                            </button>
+                          )
                         )}
                         <button
                           type="button"
@@ -2263,6 +2334,160 @@ export default function DashboardPage() {
                   {isDeletingAccount ? "Deleting..." : "Yes, Delete"}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── RIDER RATING MODAL ─────────────────────────────────────── */}
+      {ratingModalOrder && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !isSubmittingRating) handleCloseRatingModal();
+          }}
+        >
+          <div className="bg-white rounded-3xl w-full max-w-md overflow-hidden shadow-2xl animate-fade-in-up border border-gray-100">
+            <div className="p-6">
+              <div className="flex items-center justify-between pb-4 border-b border-gray-100">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-amber-500/10 flex items-center justify-center text-amber-600">
+                    <span className="material-symbols-outlined text-[24px]">two_wheeler</span>
+                  </div>
+                  <div>
+                    <h3 className="font-headline-sm font-extrabold text-gray-900 text-base">
+                      Rate Delivery Partner
+                    </h3>
+                    <p className="text-xs text-slate-500 font-medium">
+                      Order #{ratingModalOrder.id || ratingModalOrder.orderId}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCloseRatingModal}
+                  disabled={isSubmittingRating}
+                  className="w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-400 hover:text-gray-600 border-none cursor-pointer bg-transparent transition-colors"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleSubmitRiderRating} className="mt-5 space-y-4">
+                {/* Rider Info Card */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                      {(ratingModalOrder.rider?.name || "Rider").charAt(0)}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-gray-900">
+                        {ratingModalOrder.rider?.name || "Delivery Partner"}
+                      </p>
+                      <p className="text-[11px] text-slate-500">
+                        {ratingModalOrder.rider?.vehicle || "Ranchi Fleet Partner"}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                    Delivered
+                  </span>
+                </div>
+
+                {/* Interactive Star Rating */}
+                <div className="text-center py-2">
+                  <p className="text-xs font-semibold text-slate-600 mb-2">How was your delivery experience?</p>
+                  <div className="flex items-center justify-center gap-2">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <button
+                        key={star}
+                        type="button"
+                        onClick={() => setRiderRatingValue(star)}
+                        className="p-1 hover:scale-125 transition-all bg-transparent border-none cursor-pointer"
+                        title={`${star} Star`}
+                      >
+                        <span
+                          className={`material-symbols-outlined text-[34px] ${
+                            star <= riderRatingValue ? "text-amber-400 fill-amber-400" : "text-gray-200"
+                          }`}
+                          style={{
+                            fontVariationSettings: star <= riderRatingValue ? "'FILL' 1" : "'FILL' 0",
+                          }}
+                        >
+                          star
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs font-bold text-amber-700 mt-1">
+                    {riderRatingValue === 5 && "Excellent (5 Stars)"}
+                    {riderRatingValue === 4 && "Very Good (4 Stars)"}
+                    {riderRatingValue === 3 && "Average (3 Stars)"}
+                    {riderRatingValue === 2 && "Poor (2 Stars)"}
+                    {riderRatingValue === 1 && "Very Poor (1 Star)"}
+                  </p>
+                </div>
+
+                {/* Quick Feedback Tags */}
+                <div>
+                  <p className="text-xs font-semibold text-slate-600 mb-1.5">Quick Highlights (Optional)</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {["On Time Delivery", "Polite & Professional", "Handled Meat Fresh", "Followed Directions", "Mask & Hygiene Valid"].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          if (riderRatingFeedback.includes(tag)) {
+                            setRiderRatingFeedback((prev) => prev.replace(tag, "").replace(/,\s*,/, ",").trim());
+                          } else {
+                            setRiderRatingFeedback((prev) => (prev ? `${prev}, ${tag}` : tag));
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                          riderRatingFeedback.includes(tag)
+                            ? "bg-amber-100 text-amber-900 border-amber-300 font-bold"
+                            : "bg-white text-slate-600 border-gray-200 hover:border-gray-300"
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Feedback Comment Box */}
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Write a note for the rider (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={riderRatingFeedback}
+                    onChange={(e) => setRiderRatingFeedback(e.target.value)}
+                    placeholder="Tell us what you liked or how we can improve..."
+                    className="w-full p-2.5 text-xs bg-slate-50 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary resize-none"
+                  />
+                </div>
+
+                {/* Modal Buttons */}
+                <div className="pt-2 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={handleCloseRatingModal}
+                    disabled={isSubmittingRating}
+                    className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs rounded-xl transition-colors cursor-pointer border-none"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmittingRating}
+                    className="flex-1 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-60 text-white font-bold text-xs rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer border-none flex items-center justify-center gap-1.5"
+                  >
+                    {isSubmittingRating ? "Submitting..." : "Submit Rating"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </div>

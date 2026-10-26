@@ -47,5 +47,10 @@ class ApiEndpoints {
   static const String riderEarnings = '/rider/earnings';
   static const String riderOrders = '/rider/orders';
   static const String riderDispatchSupport = '/rider/dispatch-support';
+  static const String riderRemitCash = '/rider/remit-cash';
+  static const String riderRemittanceHistory = '/rider/remittance-history';
+  static const String riderSosAlert = '/rider/sos-alert';
+  static const String riderNotifications = '/rider/notifications';
+  static String markNotificationRead(String id) => '/rider/notifications/$id/read';
   static String orderDetails(String id) => '/orders/$id';
 }

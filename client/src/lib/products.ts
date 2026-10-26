@@ -9,6 +9,7 @@ export interface Product {
   serves?: string;
   badge?: string;
   isBestseller?: boolean;
+  isRecommended?: boolean;
   image: string;
   images?: string[];
   videoURLs?: string[];

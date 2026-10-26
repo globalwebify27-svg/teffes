@@ -129,7 +129,7 @@ export default function AdminLoginForm() {
 
   return (
     <>
-      <form onSubmit={handleSubmit} noValidate id="admin-login-form">
+      <form onSubmit={handleSubmit} noValidate id="admin-login-form" suppressHydrationWarning>
         {/* Email */}
         <div className="form-group mb-4">
           <label htmlFor="admin-email" className="form-label">
@@ -164,6 +164,7 @@ export default function AdminLoginForm() {
               id="forgot-password-trigger"
               onClick={openForgotModal}
               className="text-[12px] font-bold text-primary hover:underline bg-transparent border-none cursor-pointer p-0 transition-colors"
+              suppressHydrationWarning
             >
               Forgot Password?
             </button>
@@ -188,6 +189,7 @@ export default function AdminLoginForm() {
               aria-label="Toggle password visibility"
               onClick={() => setShowPassword((v) => !v)}
               className="absolute right-3.5 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-1 flex items-center"
+              suppressHydrationWarning
             >
               <span className="material-symbols-outlined text-[20px]">
                 {showPassword ? "visibility_off" : "visibility"}
@@ -214,7 +216,7 @@ export default function AdminLoginForm() {
           <div className="flex justify-between items-center">
             <span>Super Admin:</span>
             <code className="bg-white px-1.5 py-0.5 rounded border border-gray-200 text-primary font-bold">
-              pananrocks18@gmail.com
+              superadmin@teffes.com
             </code>
           </div>
           <div className="flex justify-between items-center">
@@ -230,6 +232,7 @@ export default function AdminLoginForm() {
           type="submit"
           className="w-full py-3.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-extrabold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2"
           disabled={loading || !canSubmit}
+          suppressHydrationWarning
         >
           {loading ? (
             <span>Signing in…</span>
@@ -269,7 +272,7 @@ export default function AdminLoginForm() {
             <div className="p-6">
               {/* STEP 1: Enter Email */}
               {forgotStep === "email" && (
-                <form onSubmit={handleSendResetCode} className="space-y-4">
+                <form onSubmit={handleSendResetCode} className="space-y-4" suppressHydrationWarning>
                   <p className="text-[13px] text-slate-body leading-relaxed m-0">
                     Enter your registered <strong>Super Admin email address</strong>. We will send a secure 6-digit verification code to your inbox.
                   </p>
@@ -284,6 +287,7 @@ export default function AdminLoginForm() {
                       onChange={(e) => setForgotEmail(e.target.value)}
                       required
                       autoFocus
+                      suppressHydrationWarning
                     />
                   </div>
 
@@ -306,6 +310,7 @@ export default function AdminLoginForm() {
                       type="submit"
                       disabled={forgotLoading || !forgotEmail.trim()}
                       className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[13px] shadow-sm transition-all border-none cursor-pointer flex items-center justify-center gap-1.5"
+                      suppressHydrationWarning
                     >
                       {forgotLoading ? (
                         <span>Sending Code…</span>
@@ -322,7 +327,7 @@ export default function AdminLoginForm() {
 
               {/* STEP 2: Enter OTP & New Password */}
               {forgotStep === "otp" && (
-                <form onSubmit={handleResetPassword} className="space-y-4">
+                <form onSubmit={handleResetPassword} className="space-y-4" suppressHydrationWarning>
                   <div className="p-3 bg-blue-50 border border-blue-200/80 rounded-xl text-blue-800 text-[12px] flex items-start gap-2">
                     <span className="material-symbols-outlined text-[18px] text-blue-600 shrink-0 mt-0.5">mark_email_read</span>
                     <div>
@@ -341,6 +346,7 @@ export default function AdminLoginForm() {
                       onChange={(e) => setForgotOtp(e.target.value.replace(/\D/g, ""))}
                       required
                       autoFocus
+                      suppressHydrationWarning
                     />
                   </div>
 
@@ -355,11 +361,13 @@ export default function AdminLoginForm() {
                         onChange={(e) => setForgotNewPassword(e.target.value)}
                         required
                         minLength={8}
+                        suppressHydrationWarning
                       />
                       <button
                         type="button"
                         onClick={() => setShowForgotNewPassword((v) => !v)}
                         className="absolute right-3.5 text-slate-400 hover:text-slate-600 bg-transparent border-none cursor-pointer p-1 flex items-center"
+                        suppressHydrationWarning
                       >
                         <span className="material-symbols-outlined text-[18px]">
                           {showForgotNewPassword ? "visibility_off" : "visibility"}
@@ -378,6 +386,7 @@ export default function AdminLoginForm() {
                       onChange={(e) => setForgotConfirmPassword(e.target.value)}
                       required
                       minLength={8}
+                      suppressHydrationWarning
                     />
                   </div>
 

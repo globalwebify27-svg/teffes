@@ -7,6 +7,9 @@ const {
   delayPrepTime,
   getInventory,
   updateInventoryItem,
+  transferDefreezeStock,
+  recordInventoryWaste,
+  getInventoryHistory,
   getStoreCustomers,
   getDeliverySlots,
   updateDeliverySlot,
@@ -16,6 +19,8 @@ const {
   assignRiderToOrder,
   getStoreStatus,
   updateStoreStatus,
+  getStoreRemittances,
+  confirmRemittance,
 } = require('../controllers/storeAdmin.controller');
 
 const router = Router();
@@ -39,6 +44,9 @@ router.patch('/orders/:id/assign-rider', assignRiderToOrder);
 // 3. Inventory
 router.get('/inventory', getInventory);
 router.patch('/inventory/:id', updateInventoryItem);
+router.post('/inventory/transfer', transferDefreezeStock);
+router.post('/inventory/waste', recordInventoryWaste);
+router.get('/inventory/history', getInventoryHistory);
 
 // 4. Customers
 router.get('/customers', getStoreCustomers);
@@ -51,8 +59,10 @@ router.patch('/slots/:id', updateDeliverySlot);
 router.get('/returns', getReturnRequests);
 router.patch('/returns/:id/status', updateReturnStatus);
 
-// 7. Riders
+// 7. Riders & Fleet Remittances
 router.get('/riders', getRiders);
+router.get('/remittances', getStoreRemittances);
+router.patch('/remittances/:id/confirm', confirmRemittance);
 
 // 8. Cross-Selling Items Management
 const {

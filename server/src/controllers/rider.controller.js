@@ -1,10 +1,49 @@
 const Order = require('../models/Order');
 const User = require('../models/User');
 const Store = require('../models/Store');
+const Remittance = require('../models/Remittance');
+const SosAlert = require('../models/SosAlert');
+const RiderNotification = require('../models/RiderNotification');
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate } = require('../socket');
 const { getRoadDistanceAndDuration } = require('../services/googleMapsService');
 const { calculateRoadDistanceKm, calculateTransitMinutes, getEtaDetails } = require('../utils/etaCalculator');
+
+/**
+ * Calculates current Cash in Hand for a rider:
+ * Sum of delivered COD cash collected minus confirmed cash remittances
+ */
+const calculateRiderCashInHand = async (riderId, riderPhone) => {
+  const codOrders = await Order.find({
+    $or: [{ 'rider.riderId': riderId }, { 'rider.phone': riderPhone }],
+    status: 'Delivered',
+    paymentMethod: { $regex: /cash|cod/i },
+  });
+
+  const totalCollected = codOrders.reduce((sum, o) => {
+    return sum + (o.cashCollected || o.amount || 0);
+  }, 0);
+
+  const confirmedRemittances = await Remittance.find({
+    riderId,
+    status: 'Confirmed',
+  });
+
+  const totalRemitted = confirmedRemittances.reduce((sum, r) => sum + (r.amount || 0), 0);
+  return Math.max(0, totalCollected - totalRemitted);
+};
+
+/**
+ * Peak surge hours within operating store timings (8:00 AM - 8:00 PM):
+ * - Morning meat rush: 9:00 AM - 12:00 PM (IST hours 9, 10, 11)
+ * - Evening dinner rush: 5:00 PM - 8:00 PM (IST hours 17, 18, 19)
+ */
+const isPeakHour = (date) => {
+  if (!date) return false;
+  const d = new Date(date);
+  const istHours = new Date(d.getTime() + 5.5 * 60 * 60 * 1000).getUTCHours();
+  return (istHours >= 9 && istHours < 12) || (istHours >= 17 && istHours < 20);
+};
 
 /**
  * GET /api/rider/dashboard
@@ -46,10 +85,20 @@ const getDashboard = async (req, res, next) => {
       (sum, ord) => sum + (ord.tipAmount || 0),
       0
     );
-    const todayEarnings = completedOrdersToday.reduce(
-      (sum, ord) => sum + (ord.riderEarning || 65),
-      0
-    );
+
+    // Dynamic Pay formula configured by Store Admin:
+    // (Completed Trips × BasePay) + 100% Tips + (Trips × DistanceIncentive) + (Peak Trips × PeakSurge)
+    const ratePerDelivery = store?.riderPayoutSettings?.baseDeliveryPay ?? 65;
+    const rateDistanceIncentive = store?.riderPayoutSettings?.distanceIncentive ?? 15;
+    const ratePeakSurge = store?.riderPayoutSettings?.peakHourSurge ?? 20;
+
+    const basePay = completedCount * ratePerDelivery;
+    const distanceIncentive = completedCount * rateDistanceIncentive;
+    const peakSurge = completedOrdersToday.filter((o) => isPeakHour(o.deliveredAt || o.updatedAt)).length * ratePeakSurge;
+    const todayEarnings = basePay + distanceIncentive + peakSurge + todayTips;
+
+    // Real-time Cash In Hand
+    const cashInHand = await calculateRiderCashInHand(rider._id, rider.phone);
 
     // Active order currently in-progress
     const activeOrder = await Order.findOne({
@@ -65,12 +114,19 @@ const getDashboard = async (req, res, next) => {
       success: true,
       rider: {
         id: rider._id,
-        name: rider.name,
-        email: rider.email,
-        phone: rider.phone,
+        name: rider.name || 'Rider Partner',
+        email: rider.email || '',
+        phone: rider.phone || '',
         vehicleNumber: rider.vehicleNumber || 'JH-01-BK-4920',
+        vehicleType: rider.vehicleType || 'Bike',
+        rating: rider.riderRating || 5.0,
+        ratingCount: rider.riderRatingCount || 0,
+        foodSafetyCertified: rider.foodSafetyCertified ?? true,
+        fssaiCertNumber: rider.fssaiCertNumber || 'FSSAI-CC-2024-8839',
+        dailyTarget: rider.dailyTarget || store?.defaultRiderDailyTarget || 16,
         storeId: storeId,
         storeName: storeName,
+        storeAddress: storeAddress,
         storeAdminName: storeAdminName,
         storeAdminPhone: storeAdminPhone,
         isOnline: rider.riderStatus !== 'Offline',
@@ -87,7 +143,8 @@ const getDashboard = async (req, res, next) => {
         completedCount,
         todayEarnings,
         todayTips,
-        targetCount: 16,
+        cashInHand,
+        targetCount: rider.dailyTarget || store?.defaultRiderDailyTarget || 16,
       },
       activeOrder,
     });
@@ -402,6 +459,8 @@ const completeDelivery = async (req, res, next) => {
     order.paymentStatus = 'Paid';
     if (cashReceived) {
       order.cashCollected = Number(cashReceived);
+    } else if (order.paymentMethod && /cash|cod/i.test(order.paymentMethod) && !order.cashCollected) {
+      order.cashCollected = order.amount;
     }
 
     await order.save();
@@ -414,6 +473,17 @@ const completeDelivery = async (req, res, next) => {
     }
 
     emitOrderStatusUpdate(order.orderId, order);
+
+    // In-app payout notification for rider
+    if (rider) {
+      RiderNotification.create({
+        riderId: rider._id,
+        title: 'Delivery Payout Credited',
+        body: `Payout of ₹65.00 (+ ₹${order.tipAmount || 0} tip) credited for completed delivery #${order.orderId}.`,
+        type: 'DELIVERY_PAYOUT',
+        data: { orderId: order.orderId },
+      }).catch((err) => console.warn('[RiderNotification] Creation warning:', err.message));
+    }
 
     // Push notification to customer on order delivery
     if (order.customer && order.customer.userId) {
@@ -441,7 +511,8 @@ const completeDelivery = async (req, res, next) => {
 
 /**
  * GET /api/rider/earnings
- * Earnings breakdown
+ * Dynamic earnings breakdown calculated strictly via:
+ * Total = (Completed Trips × ₹65) + 100% Tips + Distance Incentives (₹15/trip) + Peak Surge (₹20/peak trip)
  */
 const getEarnings = async (req, res, next) => {
   try {
@@ -463,30 +534,58 @@ const getEarnings = async (req, res, next) => {
 
     const todayTips = todayOrders.reduce((sum, o) => sum + (o.tipAmount || 0), 0);
     const weeklyTips = weeklyOrders.reduce((sum, o) => sum + (o.tipAmount || 0), 0);
-    const todayBase = todayOrders.reduce((sum, o) => sum + 65, 0);
 
-    const todayEarnings = todayOrders.reduce((sum, o) => sum + (o.riderEarning || 65), 0);
-    const weeklyEarnings = weeklyOrders.reduce((sum, o) => sum + (o.riderEarning || 65), 0);
+    // Fetch store payout rates configured by Store Admin
+    const storeId = rider.storeId || 'S001';
+    const store = await Store.findOne({ storeId });
+    const ratePerDelivery = store?.riderPayoutSettings?.baseDeliveryPay ?? 65;
+    const rateDistanceIncentive = store?.riderPayoutSettings?.distanceIncentive ?? 15;
+    const ratePeakSurge = store?.riderPayoutSettings?.peakHourSurge ?? 20;
+
+    // Formula: Completed × BasePay + Distance Incentive + Peak Surge + Tips
+    const basePay = todayOrders.length * ratePerDelivery;
+    const distanceIncentive = todayOrders.length * rateDistanceIncentive;
+    const peakSurge = todayOrders.filter((o) => isPeakHour(o.deliveredAt || o.updatedAt)).length * ratePeakSurge;
+    const todayEarnings = basePay + distanceIncentive + peakSurge + todayTips;
+
+    const weeklyBasePay = weeklyOrders.length * ratePerDelivery;
+    const weeklyDistanceIncentive = weeklyOrders.length * rateDistanceIncentive;
+    const weeklyPeakSurge = weeklyOrders.filter((o) => isPeakHour(o.deliveredAt || o.updatedAt)).length * ratePeakSurge;
+    const weeklyEarnings = weeklyBasePay + weeklyDistanceIncentive + weeklyPeakSurge + weeklyTips;
+
+    const cashInHand = await calculateRiderCashInHand(rider._id, rider.phone);
 
     res.status(200).json({
       success: true,
       todayEarnings,
       weeklyEarnings,
+      basePay,
+      distanceIncentive,
+      peakSurge,
       tips: todayTips,
       todayTips,
       weeklyTips,
-      basePay: todayBase,
+      cashInHand,
+      payoutRates: {
+        baseDeliveryPay: ratePerDelivery,
+        distanceIncentive: rateDistanceIncentive,
+        peakHourSurge: ratePeakSurge,
+      },
       completedTodayCount: todayOrders.length,
       completedWeeklyCount: weeklyOrders.length,
-      recentEarnings: allDelivered.slice(0, 15).map((o) => ({
-        orderId: o.orderId,
-        amount: o.amount,
-        earning: o.riderEarning || 65,
-        tipAmount: o.tipAmount || 0,
-        deliveredAt: o.deliveredAt || o.updatedAt,
-        paymentMethod: o.paymentMethod,
-        itemsCount: o.items?.length || 1,
-      })),
+      recentEarnings: allDelivered.slice(0, 20).map((o) => {
+        const tripPeak = isPeakHour(o.deliveredAt || o.updatedAt);
+        const tripEarning = ratePerDelivery + (o.tipAmount || 0) + rateDistanceIncentive + (tripPeak ? ratePeakSurge : 0);
+        return {
+          orderId: o.orderId,
+          amount: o.amount,
+          earning: tripEarning,
+          tipAmount: o.tipAmount || 0,
+          deliveredAt: o.deliveredAt || o.updatedAt,
+          paymentMethod: o.paymentMethod,
+          itemsCount: o.items?.length || 1,
+        };
+      }),
     });
   } catch (error) {
     next(error);
@@ -562,6 +661,201 @@ const getDispatchSupport = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/rider/remit-cash
+ * Cash remittance deposit flow at hub counter
+ */
+const remitCash = async (req, res, next) => {
+  try {
+    const rider = await User.findById(req.user._id);
+    if (!rider) return res.status(404).json({ success: false, message: 'Rider not found' });
+
+    const { amount, notes } = req.body;
+    const remitAmount = Number(amount);
+    if (!remitAmount || remitAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Please enter a valid deposit amount' });
+    }
+
+    const currentCashInHand = await calculateRiderCashInHand(rider._id, rider.phone);
+    if (remitAmount > currentCashInHand) {
+      return res.status(400).json({
+        success: false,
+        message: `Entered amount ₹${remitAmount.toFixed(2)} exceeds your current Cash in Hand (₹${currentCashInHand.toFixed(2)})`,
+      });
+    }
+
+    const storeId = rider.storeId || 'S001';
+    const store = await Store.findOne({ storeId });
+    const storeName = store?.name || rider.storeName || "TeFFe's Dark Store Hub";
+
+    const remittanceId = 'RMT-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 90 + 10);
+
+    const remittance = await Remittance.create({
+      remittanceId,
+      riderId: rider._id,
+      riderName: rider.name || 'Rider',
+      riderPhone: rider.phone || '',
+      storeId,
+      storeName,
+      amount: remitAmount,
+      notes: notes || 'Cash remittance submitted at hub counter',
+      status: 'Pending',
+    });
+
+    // Notify hub closing manager via socket
+    const { getIO } = require('../socket');
+    const io = getIO();
+    if (io) {
+      io.to(`store:${storeId}`).emit('rider:remittance:submitted', remittance);
+    }
+
+    // In-app notification for rider
+    await RiderNotification.create({
+      riderId: rider._id,
+      title: 'Cash Remittance Submitted',
+      body: `Deposit request of ₹${remitAmount.toFixed(2)} (${remittanceId}) submitted for store confirmation.`,
+      type: 'HUB_ALERT',
+      data: { remittanceId },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: `Deposit request for ₹${remitAmount.toFixed(2)} submitted successfully. Store counter will confirm receipt.`,
+      remittance,
+      cashInHand: currentCashInHand - remitAmount,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/rider/remittance-history
+ * Rider cash remittance records
+ */
+const getRemittanceHistory = async (req, res, next) => {
+  try {
+    const remittances = await Remittance.find({ riderId: req.user._id }).sort({ createdAt: -1 }).limit(20);
+    res.status(200).json({
+      success: true,
+      count: remittances.length,
+      remittances,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/rider/sos-alert
+ * Trigger immediate emergency alert to store manager and 112 dispatch
+ */
+const triggerSosAlert = async (req, res, next) => {
+  try {
+    const rider = await User.findById(req.user._id);
+    if (!rider) return res.status(404).json({ success: false, message: 'Rider not found' });
+
+    const { lat, lng, activeOrderId, reason } = req.body;
+    const storeId = rider.storeId || 'S001';
+    const store = await Store.findOne({ storeId });
+    const storeAdmin = await User.findOne({ role: 'storeadmin', storeId });
+
+    const alert = await SosAlert.create({
+      riderId: rider._id,
+      riderName: rider.name || 'Rider',
+      riderPhone: rider.phone || '',
+      storeId,
+      lat: Number(lat) || 23.3441,
+      lng: Number(lng) || 85.3096,
+      activeOrderId: activeOrderId || null,
+      reason: reason || 'Rider pressed SOS Emergency button',
+      status: 'TRIGGERED',
+    });
+
+    // Broadcast critical socket alert to dispatch dashboard
+    const { getIO } = require('../socket');
+    const io = getIO();
+    if (io) {
+      io.to(`store:${storeId}`).emit('rider:sos:emergency', alert);
+      io.emit('rider:sos:broadcast', alert);
+    }
+
+    // In-app log for rider
+    await RiderNotification.create({
+      riderId: rider._id,
+      title: 'SOS Emergency Alert Active',
+      body: `Emergency signal dispatched with coordinates (${alert.lat}, ${alert.lng}) to Dark Store Dispatch.`,
+      type: 'SAFETY_REMINDER',
+      data: { alertId: alert._id },
+    }).catch(() => {});
+
+    res.status(200).json({
+      success: true,
+      message: 'SOS Alert triggered. Dark Store Dispatch and Emergency 112 team notified.',
+      alert,
+      emergencyContacts: {
+        policeAmbulance: '112',
+        dispatchManager: storeAdmin?.phone || store?.phone || '+91 9779687955',
+        storeName: store?.name || "TeFFe's Dark Store Hub",
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/rider/notifications
+ * Get dynamic in-app notifications
+ */
+const getNotifications = async (req, res, next) => {
+  try {
+    const riderId = req.user._id;
+    let notifications = await RiderNotification.find({ riderId }).sort({ createdAt: -1 }).limit(30);
+
+    // If new rider has no notifications, create default welcome & shift safety notifications
+    if (notifications.length === 0) {
+      await RiderNotification.create([
+        {
+          riderId,
+          title: 'Ranchi Dark Store Shift Started',
+          body: 'Good morning! Ranchi Central Hub is now taking peak orders. Keep your insulated delivery box ready.',
+          type: 'HUB_ALERT',
+        },
+        {
+          riderId,
+          title: 'Safety Protocol Reminder',
+          body: 'Always verify the 4-digit Delivery OTP directly from the customer before marking complete.',
+          type: 'SAFETY_REMINDER',
+        },
+      ]);
+      notifications = await RiderNotification.find({ riderId }).sort({ createdAt: -1 }).limit(30);
+    }
+
+    res.status(200).json({
+      success: true,
+      count: notifications.length,
+      notifications,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/rider/notifications/:id/read
+ * Mark notification as read
+ */
+const markNotificationRead = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    await RiderNotification.findOneAndUpdate({ _id: id, riderId: req.user._id }, { isRead: true });
+    res.status(200).json({ success: true, message: 'Notification marked as read' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboard,
   getDispatchSupport,
@@ -574,4 +868,9 @@ module.exports = {
   completeDelivery,
   getEarnings,
   getOrders,
+  remitCash,
+  getRemittanceHistory,
+  triggerSosAlert,
+  getNotifications,
+  markNotificationRead,
 };

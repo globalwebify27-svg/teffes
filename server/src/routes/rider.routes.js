@@ -11,6 +11,11 @@ const {
   completeDelivery,
   getEarnings,
   getOrders,
+  remitCash,
+  getRemittanceHistory,
+  triggerSosAlert,
+  getNotifications,
+  markNotificationRead,
 } = require('../controllers/rider.controller');
 const { protect } = require('../middlewares/auth');
 
@@ -30,5 +35,16 @@ router.post('/location', updateLocation);
 router.post('/orders/:id/complete-delivery', completeDelivery);
 router.get('/earnings', getEarnings);
 router.get('/orders', getOrders);
+
+// Hub cash remittance
+router.post('/remit-cash', remitCash);
+router.get('/remittance-history', getRemittanceHistory);
+
+// Emergency SOS alert
+router.post('/sos-alert', triggerSosAlert);
+
+// In-app notifications
+router.get('/notifications', getNotifications);
+router.put('/notifications/:id/read', markNotificationRead);
 
 module.exports = router;

@@ -272,6 +272,13 @@ const createProduct = async (req, res, next) => {
       data.seoKeywords = data.seoKeywords.map(k => String(k).trim()).filter(Boolean);
     }
 
+    if (typeof data.isBestseller !== 'undefined') {
+      data.isBestseller = data.isBestseller === true || data.isBestseller === 'true';
+    }
+    if (typeof data.isRecommended !== 'undefined') {
+      data.isRecommended = data.isRecommended === true || data.isRecommended === 'true';
+    }
+
     const product = await Product.create(data);
     res.status(201).json({ success: true, product });
   } catch (error) {
@@ -325,6 +332,13 @@ const updateProduct = async (req, res, next) => {
       updates.seoKeywords = updates.seoKeywords.split(',').map(k => k.trim()).filter(Boolean);
     } else if (Array.isArray(updates.seoKeywords)) {
       updates.seoKeywords = updates.seoKeywords.map(k => String(k).trim()).filter(Boolean);
+    }
+
+    if (typeof updates.isBestseller !== 'undefined') {
+      updates.isBestseller = updates.isBestseller === true || updates.isBestseller === 'true';
+    }
+    if (typeof updates.isRecommended !== 'undefined') {
+      updates.isRecommended = updates.isRecommended === true || updates.isRecommended === 'true';
     }
 
     const product = await Product.findOneAndUpdate(

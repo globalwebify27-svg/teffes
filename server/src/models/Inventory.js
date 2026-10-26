@@ -20,6 +20,17 @@ const inventorySchema = new mongoose.Schema(
       type: Number,
       required: true,
       default: 0,
+      min: 0,
+    },
+    defreezeStock: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    wasteStock: {
+      type: Number,
+      default: 0,
+      min: 0,
     },
     min: {
       type: Number,

@@ -148,14 +148,11 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                       ),
                     ),
                     OutlinedButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Please deposit cash at Ranchi Hub closing counter at shift end.'),
-                            backgroundColor: AppColors.deliveryAmber,
-                          ),
-                        );
-                      },
+                      onPressed: () => _showRemitCashDialog(
+                        context,
+                        earnings?.cashInHand ?? ordersProvider.cashInHand,
+                        ordersProvider,
+                      ),
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: AppColors.deliveryAmber),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
@@ -190,11 +187,11 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                 ),
                 child: Column(
                   children: [
-                    _buildBreakdownRow('Base Delivery Pay', CurrencyFormatter.format(earnings?.basePay ?? 520.0)),
+                    _buildBreakdownRow('Base Delivery Pay', CurrencyFormatter.format(earnings?.basePay ?? 0.0)),
                     const Divider(color: AppColors.borderHairline, height: 16),
-                    _buildBreakdownRow('Distance / Fuel Incentive', CurrencyFormatter.format(earnings?.distanceIncentive ?? 110.0)),
+                    _buildBreakdownRow('Distance / Fuel Incentive', CurrencyFormatter.format(earnings?.distanceIncentive ?? 0.0)),
                     const Divider(color: AppColors.borderHairline, height: 16),
-                    _buildBreakdownRow('Peak Hours Meat Surge', CurrencyFormatter.format(earnings?.peakSurge ?? 50.0)),
+                    _buildBreakdownRow('Peak Hours Meat Surge', CurrencyFormatter.format(earnings?.peakSurge ?? 0.0)),
                     const Divider(color: AppColors.borderHairline, height: 16),
                     _buildBreakdownRow('Customer Tips', CurrencyFormatter.format(earnings?.tips ?? 0.0)),
                   ],
@@ -245,13 +242,25 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                               ),
                             ],
                           ),
-                          Text(
-                            '+ ${CurrencyFormatter.format(p.amount)}',
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.dutyOnline,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              Text(
+                                '+ ${CurrencyFormatter.format(p.earning)}',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.dutyOnline,
+                                ),
+                              ),
+                              Text(
+                                '${p.itemsCount} item(s) • ${p.paymentMethod}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
@@ -308,6 +317,189 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
           style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w700),
         ),
       ],
+    );
+  }
+
+  void _showRemitCashDialog(
+    BuildContext context,
+    double cashInHand,
+    RiderOrdersProvider provider,
+  ) {
+    if (cashInHand <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No cash in hand to remit. All COD collections are currently settled!'),
+          backgroundColor: AppColors.dutyOnline,
+        ),
+      );
+      return;
+    }
+
+    final amountController = TextEditingController(text: cashInHand.toStringAsFixed(0));
+    final notesController = TextEditingController(text: 'Shift end closing cash deposit');
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 24,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.account_balance_wallet_rounded, color: AppColors.deliveryAmber, size: 24),
+                          SizedBox(width: 8),
+                          Text(
+                            'Remit Cash at Hub',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, color: AppColors.textMuted),
+                        onPressed: isSubmitting ? null : () => Navigator.of(ctx).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Hand over collected COD cash to Dark Store Closing Manager.',
+                    style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: AppColors.deliveryAmber.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.deliveryAmber.withOpacity(0.3)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Available Cash in Hand:',
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                        ),
+                        Text(
+                          CurrencyFormatter.format(cashInHand),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.deliveryAmber,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: amountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: InputDecoration(
+                      labelText: 'Remit Amount (₹)',
+                      labelStyle: const TextStyle(fontSize: 13),
+                      prefixIcon: const Icon(Icons.currency_rupee_rounded, size: 20),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: notesController,
+                    decoration: InputDecoration(
+                      labelText: 'Handover Notes / Counter No.',
+                      labelStyle: const TextStyle(fontSize: 13),
+                      prefixIcon: const Icon(Icons.notes_rounded, size: 20),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  ElevatedButton(
+                    onPressed: isSubmitting
+                        ? null
+                        : () async {
+                            final parsed = double.tryParse(amountController.text.trim());
+                            if (parsed == null || parsed <= 0) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Please enter a valid deposit amount'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                              return;
+                            }
+                            if (parsed > cashInHand) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Amount cannot exceed current cash in hand (₹${cashInHand.toStringAsFixed(2)})'),
+                                  backgroundColor: AppColors.error,
+                                ),
+                              );
+                              return;
+                            }
+
+                            setSheetState(() => isSubmitting = true);
+                            final result = await provider.remitCash(
+                              amount: parsed,
+                              notes: notesController.text.trim(),
+                            );
+                            if (context.mounted) {
+                              Navigator.of(ctx).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(result['message'] ?? 'Remittance submitted'),
+                                  backgroundColor: result['success'] == true ? AppColors.dutyOnline : AppColors.error,
+                                ),
+                              );
+                            }
+                          },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryMaroon,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    ),
+                    child: isSubmitting
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text(
+                            'Confirm & Submit Deposit',
+                            style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

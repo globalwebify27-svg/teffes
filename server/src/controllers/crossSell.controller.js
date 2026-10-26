@@ -36,7 +36,7 @@ const createCrossSellItem = async (req, res, next) => {
       price: Number(price),
       originalPrice: Number(originalPrice) || 0,
       image,
-      weight: weight || '1 unit',
+      weight: weight || '',
       category: category || 'Essentials',
       inStock: inStock !== undefined ? inStock : true,
       isActive: isActive !== undefined ? isActive : true,

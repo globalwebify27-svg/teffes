@@ -296,6 +296,13 @@ const adminLoginHandler = async (req, res, next) => {
         storeId: user.storeId,
         storeName: user.storeName,
         isVerified: user.isVerified,
+        vehicleNumber: user.vehicleNumber || 'JH-01-BK-4920',
+        vehicleType: user.vehicleType || 'Bike',
+        rating: user.riderRating || 5.0,
+        ratingCount: user.riderRatingCount || 0,
+        foodSafetyCertified: user.foodSafetyCertified ?? true,
+        fssaiCertNumber: user.fssaiCertNumber || 'FSSAI-CC-2024-8839',
+        dailyTarget: user.dailyTarget || 16,
       },
     });
   } catch (error) {

@@ -1977,6 +1977,8 @@ function ProductsTab() {
     pendingImageUrl: "",
     pendingVideoUrl: "",
     inStock: true,
+    isBestseller: false,
+    isRecommended: false,
     seoTitle: "",
     seoDescription: "",
     seoKeywords: "",
@@ -2001,6 +2003,8 @@ function ProductsTab() {
     pendingImageUrl: "",
     pendingVideoUrl: "",
     inStock: true,
+    isBestseller: false,
+    isRecommended: false,
     seoTitle: "",
     seoDescription: "",
     seoKeywords: "",
@@ -2080,6 +2084,8 @@ function ProductsTab() {
       pendingImageUrl: "",
       pendingVideoUrl: "",
       inStock: Boolean(p.inStock),
+      isBestseller: Boolean(p.isBestseller),
+      isRecommended: Boolean(p.isRecommended || (p.badge && p.badge.toLowerCase().includes("recommend"))),
       seoTitle: p.seoTitle || "",
       seoDescription: p.seoDescription || "",
       seoKeywords: Array.isArray(p.seoKeywords) ? p.seoKeywords.join(", ") : (p.seoKeywords || ""),
@@ -2142,6 +2148,8 @@ function ProductsTab() {
         images: uniqueImages,
         videoURLs: cleanVideos,
         inStock: editProductForm.inStock,
+        isBestseller: editProductForm.isBestseller,
+        isRecommended: editProductForm.isRecommended,
         seoTitle: editProductForm.seoTitle?.trim() || "",
         seoDescription: editProductForm.seoDescription?.trim() || "",
         seoKeywords: editProductForm.seoKeywords?.trim() || "",
@@ -2153,10 +2161,15 @@ function ProductsTab() {
           ...editingProduct,
           name: editProductForm.name.trim(),
           price: Number(editProductForm.price),
+          pieces: editProductForm.pieces.trim(),
+          serves: editProductForm.serves.trim(),
+          badge: editProductForm.badge.trim(),
           image: uniqueImages[0],
           images: uniqueImages,
           videoURLs: cleanVideos,
           inStock: editProductForm.inStock,
+          isBestseller: editProductForm.isBestseller,
+          isRecommended: editProductForm.isRecommended,
         };
         // Update product in table state immediately
         setProducts(prev => prev.map(item => {
@@ -2232,6 +2245,8 @@ function ProductsTab() {
         images: uniqueImages,
         videoURLs: cleanVideos,
         inStock: newProduct.inStock,
+        isBestseller: newProduct.isBestseller,
+        isRecommended: newProduct.isRecommended,
         seoTitle: newProduct.seoTitle?.trim() || "",
         seoDescription: newProduct.seoDescription?.trim() || "",
         seoKeywords: newProduct.seoKeywords?.trim() || "",
@@ -2260,6 +2275,8 @@ function ProductsTab() {
         pendingImageUrl: "",
         pendingVideoUrl: "",
         inStock: true,
+        isBestseller: false,
+        isRecommended: false,
         seoTitle: "",
         seoDescription: "",
         seoKeywords: "",
@@ -2365,14 +2382,33 @@ function ProductsTab() {
                     </div>
                   </td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{p.categoryLabel || p.category}</td>
-                  <td style={{ padding: "14px 16px", color: "#73695b" }}>{p.netWeight}</td>
+                  <td style={{ padding: "14px 16px", color: "#73695b" }}>
+                    <div>{p.netWeight}</div>
+                    {p.pieces ? (
+                      <div style={{ fontSize: "0.75rem", color: "#a89f91", marginTop: "2px" }}>
+                        {p.pieces.toLowerCase().startsWith("piece") ? p.pieces : `Pieces: ${p.pieces}`}
+                      </div>
+                    ) : p.serves ? (
+                      <div style={{ fontSize: "0.75rem", color: "#a89f91", marginTop: "2px" }}>
+                        {p.serves.toLowerCase().startsWith("serve") ? p.serves : `Serves: ${p.serves}`}
+                      </div>
+                    ) : null}
+                  </td>
                   <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>
                     ₹{p.price}
                     {p.originalPrice > p.price && (
                       <span style={{ fontSize: "0.75rem", textDecoration: "line-through", color: "#a89f91", marginLeft: "5px" }}>₹{p.originalPrice}</span>
                     )}
                   </td>
-                  <td style={{ padding: "14px 16px" }}>{p.badge ? <Badge label={p.badge} color="#d97706" /> : "—"}</td>
+                  <td style={{ padding: "14px 16px" }}>
+                    {p.badge ? (
+                      <Badge label={p.badge} color={p.badge.toLowerCase().includes("recommend") ? "#059669" : "#d97706"} />
+                    ) : p.isRecommended ? (
+                      <Badge label="Recommended" color="#059669" />
+                    ) : (
+                      "—"
+                    )}
+                  </td>
                   <td style={{ padding: "14px 16px" }}><Badge label={p.inStock ? "In Stock" : "Out of Stock"} color={p.inStock ? "#059669" : "#d97706"} /></td>
                   <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
                     <div className="product-action-group" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
@@ -2532,6 +2568,29 @@ function ProductsTab() {
                 </div>
               </div>
 
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Serving (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 3-4 People"
+                    value={newProduct.serves}
+                    onChange={e => setNewProduct({ ...newProduct, serves: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>No. of Pieces (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 20-25 Pieces"
+                    value={newProduct.pieces}
+                    onChange={e => setNewProduct({ ...newProduct, pieces: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
               {/* Product Media: Photos and Videos */}
               <ProductMediaManager
                 images={[newProduct.image, ...newProduct.images].filter(Boolean)}
@@ -2623,17 +2682,54 @@ function ProductsTab() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-                <input
-                  type="checkbox"
-                  id="prodInStock"
-                  checked={newProduct.inStock}
-                  onChange={e => setNewProduct({ ...newProduct, inStock: e.target.checked })}
-                  style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
-                />
-                <label htmlFor="prodInStock" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
-                  Available in stock immediately
-                </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="checkbox"
+                    id="prodInStock"
+                    checked={newProduct.inStock}
+                    onChange={e => setNewProduct({ ...newProduct, inStock: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <label htmlFor="prodInStock" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                    Available in stock immediately
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="checkbox"
+                    id="prodIsBestseller"
+                    checked={newProduct.isBestseller}
+                    onChange={e => setNewProduct({ ...newProduct, isBestseller: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <label htmlFor="prodIsBestseller" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                    Mark as Bestseller/Trending
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="checkbox"
+                    id="prodIsRecommended"
+                    checked={newProduct.isRecommended}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setNewProduct(prev => ({
+                        ...prev,
+                        isRecommended: checked,
+                        badge: checked
+                          ? (prev.badge && !prev.badge.toLowerCase().includes("recommend") ? prev.badge : "Recommended")
+                          : (prev.badge.toLowerCase() === "recommended" ? "" : prev.badge)
+                      }));
+                    }}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <label htmlFor="prodIsRecommended" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                    Mark as Recommended
+                  </label>
+                </div>
               </div>
 
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
@@ -2760,6 +2856,29 @@ function ProductsTab() {
                 </div>
               </div>
 
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Serving (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 3-4 People"
+                    value={editProductForm.serves}
+                    onChange={e => setEditProductForm({ ...editProductForm, serves: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>No. of Pieces (Optional)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 20-25 Pieces"
+                    value={editProductForm.pieces}
+                    onChange={e => setEditProductForm({ ...editProductForm, pieces: e.target.value })}
+                    style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.85rem", boxSizing: "border-box" }}
+                  />
+                </div>
+              </div>
+
               {/* Product Media: Photos and Videos */}
               <ProductMediaManager
                 images={[editProductForm.image, ...editProductForm.images].filter(Boolean)}
@@ -2851,17 +2970,54 @@ function ProductsTab() {
                 </div>
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginTop: "4px" }}>
-                <input
-                  type="checkbox"
-                  id="editProdInStock"
-                  checked={editProductForm.inStock}
-                  onChange={e => setEditProductForm({ ...editProductForm, inStock: e.target.checked })}
-                  style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
-                />
-                <label htmlFor="editProdInStock" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
-                  Available in stock
-                </label>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="checkbox"
+                    id="editProdInStock"
+                    checked={editProductForm.inStock}
+                    onChange={e => setEditProductForm({ ...editProductForm, inStock: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <label htmlFor="editProdInStock" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                    Available in stock
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="checkbox"
+                    id="editProdIsBestseller"
+                    checked={editProductForm.isBestseller}
+                    onChange={e => setEditProductForm({ ...editProductForm, isBestseller: e.target.checked })}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <label htmlFor="editProdIsBestseller" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                    Mark as Bestseller/Trending
+                  </label>
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="checkbox"
+                    id="editProdIsRecommended"
+                    checked={editProductForm.isRecommended}
+                    onChange={e => {
+                      const checked = e.target.checked;
+                      setEditProductForm(prev => ({
+                        ...prev,
+                        isRecommended: checked,
+                        badge: checked
+                          ? (prev.badge && !prev.badge.toLowerCase().includes("recommend") ? prev.badge : "Recommended")
+                          : (prev.badge.toLowerCase() === "recommended" ? "" : prev.badge)
+                      }));
+                    }}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                  />
+                  <label htmlFor="editProdIsRecommended" style={{ fontSize: "0.85rem", fontWeight: 600, color: "#423b32", cursor: "pointer" }}>
+                    Mark as Recommended
+                  </label>
+                </div>
               </div>
 
               <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end", marginTop: "14px" }}>
