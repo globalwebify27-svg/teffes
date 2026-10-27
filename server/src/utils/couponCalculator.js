@@ -99,11 +99,12 @@ const validateCouponEligibility = async (coupon, orderAmount, user = null) => {
     if (!user || !user._id) {
       return { isValid: false, error: 'This coupon is valid only for your first order. Please login to apply.' };
     }
+    const userFirstOrderConditions = [{ 'customer.userId': user._id }];
+    if (user.phone) {
+      userFirstOrderConditions.push({ 'customer.phone': user.phone });
+    }
     const completedOrders = await Order.countDocuments({
-      $or: [
-        { 'customer.userId': user._id },
-        { 'customer.phone': user.phone },
-      ],
+      $or: userFirstOrderConditions,
       status: { $ne: 'Cancelled' },
     });
     if (completedOrders > 0) {
@@ -113,14 +114,13 @@ const validateCouponEligibility = async (coupon, orderAmount, user = null) => {
 
   // 7. Single use per customer check
   if (user && user._id) {
+    const userOrConditions = [{ 'customer.userId': user._id }];
+    if (user.phone) {
+      userOrConditions.push({ 'customer.phone': user.phone });
+    }
     const previousOrderWithCoupon = await Order.findOne({
       $and: [
-        {
-          $or: [
-            { 'customer.userId': user._id },
-            { 'customer.phone': user.phone },
-          ],
-        },
+        { $or: userOrConditions },
         {
           $or: [
             { couponCode: coupon.code },

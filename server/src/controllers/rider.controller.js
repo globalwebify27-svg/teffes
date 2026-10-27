@@ -14,8 +14,13 @@ const { calculateRoadDistanceKm, calculateTransitMinutes, getEtaDetails } = requ
  * Sum of delivered COD cash collected minus confirmed cash remittances
  */
 const calculateRiderCashInHand = async (riderId, riderPhone) => {
+  const riderOr = [];
+  if (riderId) riderOr.push({ 'rider.riderId': riderId });
+  if (riderPhone) riderOr.push({ 'rider.phone': riderPhone });
+  if (riderOr.length === 0) return 0;
+
   const codOrders = await Order.find({
-    $or: [{ 'rider.riderId': riderId }, { 'rider.phone': riderPhone }],
+    $or: riderOr,
     status: 'Delivered',
     paymentMethod: { $regex: /cash|cod/i },
   });
@@ -524,8 +529,13 @@ const getEarnings = async (req, res, next) => {
     const startOfWeek = new Date();
     startOfWeek.setDate(startOfWeek.getDate() - 7);
 
+    const riderOr = [{ 'rider.riderId': rider._id }];
+    if (rider.phone) {
+      riderOr.push({ 'rider.phone': rider.phone });
+    }
+
     const allDelivered = await Order.find({
-      $or: [{ 'rider.riderId': rider._id }, { 'rider.phone': rider.phone }],
+      $or: riderOr,
       status: 'Delivered',
     }).sort({ deliveredAt: -1, updatedAt: -1 });
 
@@ -601,8 +611,13 @@ const getOrders = async (req, res, next) => {
     const rider = await User.findById(req.user._id);
     const { filter } = req.query;
 
+    const riderOr = [{ 'rider.riderId': rider._id }];
+    if (rider.phone) {
+      riderOr.push({ 'rider.phone': rider.phone });
+    }
+
     const query = {
-      $or: [{ 'rider.riderId': rider._id }, { 'rider.phone': rider.phone }],
+      $or: riderOr,
     };
 
     if (filter === 'active') {

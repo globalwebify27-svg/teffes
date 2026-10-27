@@ -46,8 +46,27 @@ class AuthProvider with ChangeNotifier {
     try {
       final res = await _api.get(ApiEndpoints.myOrders);
       if (res.data['success'] == true && res.data['orders'] is List) {
+        final currentPhone = _user?.phone.replaceAll(RegExp(r'\D'), '') ?? '';
+        final currentClean10 = currentPhone.length >= 10
+            ? currentPhone.substring(currentPhone.length - 10)
+            : currentPhone;
+        final currentUserId = _user?.id ?? '';
+
         final serverOrders = (res.data['orders'] as List)
             .map((o) => OrderModel.fromJson(o as Map<String, dynamic>))
+            .where((ord) {
+              // Safety filter: Ensure the order belongs to this customer
+              if (currentClean10.isNotEmpty && ord.customerPhone != null && ord.customerPhone!.isNotEmpty) {
+                final ordPhone = ord.customerPhone!.replaceAll(RegExp(r'\D'), '');
+                final ordClean10 = ordPhone.length >= 10
+                    ? ordPhone.substring(ordPhone.length - 10)
+                    : ordPhone;
+                if (ordClean10 != currentClean10 && (ord.customerUserId != currentUserId || currentUserId.isEmpty)) {
+                  return false;
+                }
+              }
+              return true;
+            })
             .toList();
         _myOrders = serverOrders;
         notifyListeners();
@@ -63,6 +82,7 @@ class AuthProvider with ChangeNotifier {
     required Function(String verificationId, int? resendToken) onCodeSent,
     required Function(String errorMessage) onFailed,
     Function(PhoneAuthCredential credential)? onAutoCompleted,
+    int? resendToken,
   }) async {
     _isLoading = true;
     _error = null;
@@ -77,6 +97,7 @@ class AuthProvider with ChangeNotifier {
       await _firebaseAuth.verifyPhoneNumber(
         phoneNumber: formattedPhone,
         timeout: const Duration(seconds: 60),
+        forceResendingToken: resendToken,
         verificationCompleted: (PhoneAuthCredential credential) async {
           _isLoading = false;
           notifyListeners();

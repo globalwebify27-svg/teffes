@@ -95,7 +95,7 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                         ),
                         _buildHeroStat(
                           label: 'Weekly Total',
-                          value: CurrencyFormatter.format(earnings?.weekEarnings ?? 3450.0),
+                          value: CurrencyFormatter.format(earnings?.weekEarnings ?? 0.0),
                         ),
                       ],
                     ),

@@ -56,6 +56,8 @@ class OrderModel {
   final int? prepTimeMinutes;
   final int? remainingTransitMinutes;
   final String? etaStage;
+  final String? customerPhone;
+  final String? customerUserId;
 
   bool get isActive {
     final s = status.toLowerCase();
@@ -93,6 +95,8 @@ class OrderModel {
     this.prepTimeMinutes,
     this.remainingTransitMinutes,
     this.etaStage,
+    this.customerPhone,
+    this.customerUserId,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -148,6 +152,8 @@ class OrderModel {
       prepTimeMinutes: (json['prepTimeMinutes'] as num?)?.toInt(),
       remainingTransitMinutes: (json['remainingTransitMinutes'] as num?)?.toInt() ?? (json['etaDetails']?['minutesRemaining'] as num?)?.toInt(),
       etaStage: json['etaStage']?.toString() ?? json['etaDetails']?['stage']?.toString(),
+      customerPhone: json['customer'] is Map ? json['customer']['phone']?.toString() : null,
+      customerUserId: json['customer'] is Map ? (json['customer']['userId']?.toString() ?? json['customer']['id']?.toString()) : null,
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
@@ -17,6 +18,19 @@ class _SupportScreenState extends State<SupportScreen> {
   final ApiClient _api = ApiClient();
   Map<String, dynamic>? _dispatchData;
   bool _isLoading = false;
+
+  Future<void> _callPhone(String phone) async {
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    if (cleanPhone.isEmpty) return;
+    final uri = Uri(scheme: 'tel', path: cleanPhone);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      debugPrint('[SupportScreen] Call error: $e');
+    }
+  }
 
   @override
   void initState() {
@@ -98,12 +112,7 @@ class _SupportScreenState extends State<SupportScreen> {
             ),
             onPressed: () {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text('Calling Store Admin ($adminName) at $phone...'),
-                  backgroundColor: AppColors.dutyOnline,
-                ),
-              );
+              _callPhone(phone);
             },
             icon: const Icon(Icons.call, size: 16),
             label: const Text('Call Now'),
@@ -119,9 +128,9 @@ class _SupportScreenState extends State<SupportScreen> {
     final rider = auth.rider;
 
     // Dynamically retrieve associated Store Admin details from live API or Rider Profile
-    final storeName = _dispatchData?['storeName'] ?? rider?.storeName ?? 'TeFFe\'s Store Hub';
-    final adminName = _dispatchData?['storeAdminName'] ?? rider?.storeAdminName ?? 'Rahul Sharma';
-    final adminPhone = _dispatchData?['storeAdminPhone'] ?? rider?.storeAdminPhone ?? '+91 9779687955';
+    final storeName = _dispatchData?['storeName'] ?? rider?.storeName ?? 'TeFFe\'s Central Store Hub';
+    final adminName = _dispatchData?['storeAdminName'] ?? rider?.storeAdminName ?? 'Store Dispatch Desk';
+    final adminPhone = _dispatchData?['storeAdminPhone'] ?? rider?.storeAdminPhone ?? '+918340010000';
     final timings = _dispatchData?['timings'] ?? '08:00 AM - 08:00 PM';
 
     return Scaffold(

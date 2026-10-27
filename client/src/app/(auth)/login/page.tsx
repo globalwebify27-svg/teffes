@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import OTPForm from "@/components/auth/OTPForm";
+import GuestOnlyGuard from "@/components/auth/GuestOnlyGuard";
 
 export const metadata: Metadata = {
   title: "Customer Sign In - Teffes Ranchi",
@@ -9,7 +10,8 @@ export const metadata: Metadata = {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-gradient-to-b from-slate-50 to-slate-100">
+    <GuestOnlyGuard redirectTo="/">
+      <div className="min-h-screen flex items-center justify-center p-4 sm:p-6 bg-gradient-to-b from-slate-50 to-slate-100">
       <div className="w-full max-w-md bg-white rounded-3xl border border-gray-200/80 shadow-lg p-6 sm:p-10">
         {/* Brand Header with Original Logo */}
         <div className="text-center mb-7">
@@ -51,5 +53,6 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+    </GuestOnlyGuard>
   );
 }

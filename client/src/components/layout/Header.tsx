@@ -649,7 +649,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               </div>
 
               <a
-                href="https://wa.me/919779687955?text=Hello%20Teffes%2C%20I%20want%20to%20order%20fresh%20meat."
+                href="https://wa.me/919279682955?text=Hello%20Teffes%2C%20I%20want%20to%20order%20fresh%20meat."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn w-full bg-[#25D366] text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 shadow-sm text-sm border-none cursor-pointer"

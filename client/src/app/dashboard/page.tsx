@@ -35,9 +35,9 @@ export default function DashboardPage() {
   const [liveOrders, setLiveOrders] = useState<any[]>([]);
 
   // Profile Form state
-  const [name, setName] = useState("Satyam Jha");
-  const [email, setEmail] = useState("satyam.jha@example.com");
-  const [phone, setPhone] = useState("+91 6204419167");
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
   const [savedSuccess, setSavedSuccess] = useState(false);
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -746,12 +746,22 @@ export default function DashboardPage() {
       targetDeliveryTime: o.targetDeliveryTime,
       etaStage: o.etaStage,
       deliveryOtp: o.deliveryOtp || o.rawOrder?.deliveryOtp || null,
+      storeName: o.storeName || "Central Store (Kishore Ganj Hub)",
+      storeLat: 23.3441,
+      storeLng: 85.3096,
+      customer: o.customer || o.rawOrder?.customer || null,
+      customerLat: o.customer?.lat || o.rawOrder?.customer?.lat || 23.3512,
+      customerLng: o.customer?.lng || o.rawOrder?.customer?.lng || 85.3154,
+      customerAddress: o.customer?.address || o.rawOrder?.customer?.address || "Your Kitchen",
       rider: {
-        name: o.rider?.name || (o.deliverySlot === "Store Pickup" ? "Store Pickup Counter" : "Express Rider Assigned"),
-        phone: o.rider?.phone || "+91 94311 00000",
-        vehicle: o.rider?.vehicleNumber || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : "Insulated Cold-Box (JH-01)"),
-        rating: "4.9",
-        deliveriesCount: "420+",
+        isAssigned: !!(o.rider?.name || o.rider?.riderId),
+        name: o.rider?.name || (o.deliverySlot === "Store Pickup" ? "Store Pickup Counter" : ""),
+        phone: o.rider?.phone || "",
+        vehicle: o.rider?.vehicleNumber || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : ""),
+        lat: o.rider?.lat || 23.3441,
+        lng: o.rider?.lng || 85.3096,
+        rating: o.rider?.rating || "4.9",
+        deliveriesCount: o.rider?.deliveriesCount || "Fleet Partner",
         bagTemp: "Fresh-Lock Insulated Box",
         eta: etaText,
       },
@@ -790,14 +800,14 @@ export default function DashboardPage() {
               <div className="flex items-center justify-between gap-2.5 pb-1">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-13 h-13 rounded-full bg-[#7c3aed]/15 border-2 border-[#7c3aed]/30 flex items-center justify-center text-[#6d28d9] shrink-0 font-extrabold text-xl shadow-xs">
-                    {name.charAt(0) || "S"}
+                    {(name || phone || "C").charAt(0).toUpperCase()}
                   </div>
                   <div className="min-w-0">
                     <h2 className="font-headline-sm font-extrabold text-gray-900 text-base leading-tight truncate">
-                      {name}
+                      {name || phone || "Customer"}
                     </h2>
                     <p className="text-xs text-slate-500 font-semibold mt-0.5 truncate">
-                      {phone}
+                      {phone || email || "Active Member"}
                     </p>
                   </div>
                 </div>
@@ -922,11 +932,29 @@ export default function DashboardPage() {
                   </h1>
                 </div>
 
-                {ordersList.map((order) => (
-                  <div
-                    key={order.id}
-                    className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden shadow-2xs hover:border-gray-300 transition-all"
-                  >
+                {ordersList.length === 0 ? (
+                  <div className="bg-white rounded-2xl border border-gray-200/90 p-10 text-center flex flex-col items-center justify-center">
+                    <div className="w-16 h-16 rounded-full bg-amber-50 flex items-center justify-center mb-3 text-amber-700">
+                      <span className="material-symbols-outlined text-[32px]">shopping_bag</span>
+                    </div>
+                    <h3 className="font-headline-sm font-bold text-gray-900 text-base">No orders yet</h3>
+                    <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                      You haven&apos;t placed any orders yet. Fresh chicken, mutton, and fish are ready for 90-minute delivery in Ranchi!
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => router.push("/")}
+                      className="mt-4 px-5 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs shadow-md border-none cursor-pointer transition-all"
+                    >
+                      Browse Storefront
+                    </button>
+                  </div>
+                ) : (
+                  ordersList.map((order) => (
+                    <div
+                      key={order.id}
+                      className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden shadow-2xs hover:border-gray-300 transition-all"
+                    >
                     {/* Order Header */}
                     <div className="p-4 sm:p-5 flex items-start justify-between gap-3">
                       <div>
@@ -1077,8 +1105,9 @@ export default function DashboardPage() {
                       </div>
                     )}
                   </div>
-                ))}
-              </div>
+                ))
+              )}
+            </div>
             )}
 
             {/* 2. CUSTOMER SUPPORT TAB (Image 2 Style) */}
@@ -1612,14 +1641,14 @@ export default function DashboardPage() {
                       Contact support within 60 mins with your Order ID and photo of the cut.
                     </p>
                     <div className="mt-2 text-xs text-slate-700 space-y-1">
-                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">call</span> Hotline: <strong>+91 97796 87955</strong> / <strong>+91 94311 00000</strong></div>
-                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">chat</span> WhatsApp: <strong>+91 97796 87955</strong></div>
-                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">mail</span> Email: <strong>support@teffes.com</strong></div>
+                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">call</span> Hotline: <strong>+91 92796 82955</strong></div>
+                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">chat</span> WhatsApp: <strong>+91 92796 82955</strong></div>
+                      <div className="flex items-center gap-1.5"><span className="material-symbols-outlined text-[15px] text-slate-500">mail</span> Email: <strong>rakeshroshanteffes@gmail.com</strong></div>
                     </div>
                   </div>
 
                   <a
-                    href="https://wa.me/919779687955?text=Hello%20Teffes%2C%20I%20want%20to%20request%20an%20exchange%20for%20my%20order."
+                    href="https://wa.me/919279682955?text=Hello%20Teffes%2C%20I%20want%20to%20request%20an%20exchange%20for%20my%20order."
                     target="_blank"
                     rel="noopener noreferrer"
                     className="px-5 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20bd5a] text-white font-headline-sm font-bold text-xs flex items-center gap-2 shadow-xs text-decoration-none whitespace-nowrap shrink-0"
@@ -1775,9 +1804,13 @@ export default function DashboardPage() {
               <GoogleLiveMap
                 riderLat={liveRiderCoords?.lat || trackingOrder.rider?.lat || 23.3512}
                 riderLng={liveRiderCoords?.lng || trackingOrder.rider?.lng || 85.3154}
-                riderName={trackingOrder.rider?.name || "Md. Imran"}
-                storeName={trackingOrder.storeName || "Fulfillment Store"}
-                customerAddress={trackingOrder.customer?.address || "Your Kitchen"}
+                riderName={trackingOrder.rider?.name || "Delivery Partner"}
+                storeName={trackingOrder.storeName || "Central Store (Kishore Ganj Hub)"}
+                storeLat={trackingOrder.storeLat || 23.3441}
+                storeLng={trackingOrder.storeLng || 85.3096}
+                customerLat={trackingOrder.customerLat || trackingOrder.customer?.lat || 23.3512}
+                customerLng={trackingOrder.customerLng || trackingOrder.customer?.lng || 85.3154}
+                customerAddress={trackingOrder.customerAddress || trackingOrder.customer?.address || "Your Kitchen"}
                 orderStatus={trackingOrder.status || "Out for Delivery"}
                 className="h-52 w-full rounded-2xl overflow-hidden shadow-inner"
               />
@@ -1813,31 +1846,44 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg shrink-0">
-                      <span className="material-symbols-outlined text-[26px]">person</span>
+                      <span className="material-symbols-outlined text-[26px]">
+                        {trackingOrder.rider?.isAssigned ? "two_wheeler" : "pending"}
+                      </span>
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
-                          {trackingOrder.rider?.name || "Md. Imran (Rider)"}
+                          {trackingOrder.rider?.name || (trackingOrder.status === "Pending" || trackingOrder.status === "Cutting" ? "Assigning Fleet Partner..." : "Store Express Rider")}
                         </h4>
-                        <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-0.5">
-                          <span>{(trackingOrder.rider?.rating || "4.9").replace("★", "").trim()}</span>
-                          <span className="material-symbols-outlined text-[12px] fill-current text-amber-500">star</span>
-                        </span>
+                        {trackingOrder.rider?.isAssigned && (
+                          <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-0.5">
+                            <span>{(trackingOrder.rider?.rating || "4.9").toString().replace("★", "").trim()}</span>
+                            <span className="material-symbols-outlined text-[12px] fill-current text-amber-500">star</span>
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-slate-500 font-medium">
-                        {trackingOrder.rider?.vehicle || "Hero Splendor Plus"} • {trackingOrder.rider?.deliveriesCount || "420+"} deliveries
+                        {trackingOrder.rider?.vehicle || (trackingOrder.rider?.isAssigned ? "Insulated Cold Box (Fleet)" : "Meat cutting in progress at central hub")}
                       </p>
                     </div>
                   </div>
 
-                  <a
-                    href={`tel:${trackingOrder.rider?.phone || "+919876543210"}`}
-                    className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm text-decoration-none shrink-0"
-                    title="Call Rider"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">call</span>
-                  </a>
+                  {trackingOrder.rider?.phone ? (
+                    <a
+                      href={`tel:${trackingOrder.rider.phone}`}
+                      className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm text-decoration-none shrink-0"
+                      title="Call Rider"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">call</span>
+                    </a>
+                  ) : (
+                    <div
+                      className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center shrink-0"
+                      title="Rider being assigned"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">schedule</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Fresh-Lock Hygiene Guarantee */}

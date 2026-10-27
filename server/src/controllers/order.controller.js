@@ -323,13 +323,24 @@ const getOrderById = async (req, res, next) => {
  */
 const getMyOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({
-      $or: [
-        { 'customer.userId': req.user._id },
-        { 'customer.phone': req.user.phone },
-        { 'customer.email': req.user.email },
-      ],
-    }).sort({ createdAt: -1 });
+    const orConditions = [
+      { 'customer.userId': req.user._id },
+    ];
+
+    if (req.user.phone) {
+      orConditions.push({ 'customer.phone': req.user.phone });
+      // Also match normalized clean 10-digit or +91 e164 variations
+      const clean10 = req.user.phone.replace(/\D/g, '').slice(-10);
+      orConditions.push({ 'customer.phone': clean10 });
+      orConditions.push({ 'customer.phone': `+91 ${clean10.slice(0, 5)} ${clean10.slice(5)}` });
+      orConditions.push({ 'customer.phone': `+91${clean10}` });
+    }
+
+    if (req.user.email && req.user.email.trim() !== '') {
+      orConditions.push({ 'customer.email': req.user.email.trim().toLowerCase() });
+    }
+
+    const orders = await Order.find({ $or: orConditions }).sort({ createdAt: -1 });
 
     const enrichedOrders = orders.map(o => {
       const obj = o.toObject ? o.toObject() : o;

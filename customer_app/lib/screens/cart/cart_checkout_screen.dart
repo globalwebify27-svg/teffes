@@ -19,6 +19,7 @@ import '../auth/login_screen.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
 import '../../models/store_model.dart';
+import '../../models/product_model.dart';
 
 class CartCheckoutScreen extends StatefulWidget {
   const CartCheckoutScreen({super.key});
@@ -32,7 +33,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   final TextEditingController _customTipController = TextEditingController();
   final TextEditingController _pickupInstructionController = TextEditingController();
   String _fulfillmentType = 'delivery'; // 'delivery' or 'pickup'
-  String _selectedPaymentMethod = 'razorpay'; // 'razorpay', 'cod', 'wallet'
+  String _selectedPaymentMethod = 'cod'; // 'cod' is active; 'razorpay' & 'wallet' are temporarily disabled per client instructions
   String _selectedSlot = '90 Min Delivery'; // 'Express Delivery (60 min)', '90 Min Delivery', 'Custom Delivery'
   String _selectedCustomSlot = '';
   List<ProductModel> _crossSellItems = [];
@@ -2434,20 +2435,27 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         ),
                         const SizedBox(height: 8),
                         _buildPaymentOption(
-                          'razorpay',
-                          'Online UPI / Card / NetBanking (Razorpay)',
-                          Icons.credit_card_rounded,
-                          badge: 'Recommended',
-                        ),
-                        _buildPaymentOption(
                           'cod',
                           isPickup ? 'Pay at Store Counter (Cash / POS Machine)' : 'Cash on Delivery (COD)',
                           Icons.money_rounded,
+                          badge: 'Available',
+                          isEnabled: true,
+                        ),
+                        _buildPaymentOption(
+                          'razorpay',
+                          'Online UPI / Card / NetBanking (Razorpay)',
+                          Icons.credit_card_rounded,
+                          badge: 'Temporarily Disabled',
+                          isEnabled: false,
+                          disabledReason: 'Online payment gateway is temporarily disabled by admin. Please select Cash on Delivery.',
                         ),
                         _buildPaymentOption(
                           'wallet',
                           "Teffe's Cash Wallet (${CurrencyFormatter.format(auth.user?.walletBalance ?? 0)})",
                           Icons.account_balance_wallet_rounded,
+                          badge: 'Temporarily Disabled',
+                          isEnabled: false,
+                          disabledReason: 'Wallet checkout is temporarily disabled. Please select Cash on Delivery.',
                         ),
                       ],
                     ),
@@ -2547,59 +2555,99 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     );
   }
 
-  Widget _buildPaymentOption(String key, String label, IconData icon, {String? badge}) {
+  Widget _buildPaymentOption(
+    String key,
+    String label,
+    IconData icon, {
+    String? badge,
+    bool isEnabled = true,
+    String? disabledReason,
+  }) {
     final isSelected = _selectedPaymentMethod == key;
     return GestureDetector(
-      onTap: () => setState(() => _selectedPaymentMethod = key),
+      onTap: isEnabled
+          ? () => setState(() => _selectedPaymentMethod = key)
+          : () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(disabledReason ?? 'Temporarily unavailable. Please choose Cash on Delivery.'),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            },
       child: Container(
         margin: const EdgeInsets.only(top: 6),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.primaryLight.withOpacity(0.3) : AppColors.surfaceSubtle,
+          color: !isEnabled
+              ? Colors.grey.shade100
+              : (isSelected ? AppColors.primaryLight.withOpacity(0.3) : AppColors.surfaceSubtle),
           borderRadius: AppDimensions.roundedMd,
-          border: Border.all(color: isSelected ? AppColors.primaryMaroon : AppColors.borderHairline),
+          border: Border.all(
+            color: !isEnabled
+                ? Colors.grey.shade300
+                : (isSelected ? AppColors.primaryMaroon : AppColors.borderHairline),
+          ),
         ),
-        child: Row(
-          children: [
-            Icon(icon, size: 18, color: isSelected ? AppColors.primaryMaroon : AppColors.textSecondary),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
-                        color: isSelected ? AppColors.primaryMaroon : AppColors.textPrimary,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (badge != null) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                      decoration: BoxDecoration(
-                        color: AppColors.hygieneLight,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        badge,
-                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: AppColors.hygieneDark),
-                      ),
-                    ),
-                  ],
-                ],
+        child: Opacity(
+          opacity: isEnabled ? 1.0 : 0.6,
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: !isEnabled
+                    ? Colors.grey.shade500
+                    : (isSelected ? AppColors.primaryMaroon : AppColors.textSecondary),
               ),
-            ),
-            Icon(
-              isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-              size: 16,
-              color: isSelected ? AppColors.primaryMaroon : AppColors.textMuted,
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                          color: !isEnabled
+                              ? Colors.grey.shade600
+                              : (isSelected ? AppColors.primaryMaroon : AppColors.textPrimary),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (badge != null) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: !isEnabled ? Colors.grey.shade200 : AppColors.hygieneLight,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          badge,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: !isEnabled ? Colors.grey.shade700 : AppColors.hygieneDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              Icon(
+                isSelected ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                size: 16,
+                color: !isEnabled
+                    ? Colors.grey.shade400
+                    : (isSelected ? AppColors.primaryMaroon : AppColors.textMuted),
+              ),
+            ],
+          ),
         ),
       ),
     );

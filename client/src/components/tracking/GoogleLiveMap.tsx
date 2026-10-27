@@ -19,7 +19,7 @@ interface GoogleLiveMapProps {
 
 export default function GoogleLiveMap({
   riderLat = 23.3512,
-  riderLng = 23.3154,
+  riderLng = 85.3154,
   riderName = "Delivery Rider",
   storeName = "Fulfillment Store",
   storeLat = 23.3441,

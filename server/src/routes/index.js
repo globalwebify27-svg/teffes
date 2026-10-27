@@ -197,22 +197,6 @@ router.get('/announcements/active', async (req, res, next) => {
   }
 });
 
-// Customer Orders & Tracking
-router.get('/orders/my-orders', protect, async (req, res, next) => {
-  try {
-    const orders = await Order.find({
-      $or: [
-        { 'customer.userId': req.user._id },
-        { 'customer.phone': req.user.phone },
-        { 'customer.email': req.user.email },
-      ],
-    }).sort({ createdAt: -1 });
-
-    res.status(200).json({ success: true, count: orders.length, orders });
-  } catch (error) {
-    next(error);
-  }
-});
 
 router.get('/orders/:id', async (req, res, next) => {
   try {

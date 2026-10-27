@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../core/utils/currency_formatter.dart';
@@ -1305,6 +1306,41 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: AppDimensions.spaceMd),
+            ] else if (auth.isAuthenticated) ...[
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg, vertical: 22),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppDimensions.roundedLg,
+                  border: Border.all(color: AppColors.borderHairline),
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryMaroon.withOpacity(0.08),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.shopping_bag_outlined, color: AppColors.primaryMaroon, size: 24),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'No Orders Yet',
+                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14, color: AppColors.textPrimary),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Your order history will appear here once you place an order.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppDimensions.spaceMd),
             ],
 
             // 5. Saved Addresses Section with Edit & Delete Options (Only visible when Logged In)
@@ -1430,11 +1466,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       Expanded(
                         child: OutlinedButton.icon(
                           icon: const Icon(Icons.phone_rounded, size: 16),
-                          label: const Text('Call Teffe\'s'),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Calling Store Support at +91 94311 88204...')),
-                            );
+                          label: const Text('Call Teffes'),
+                          onPressed: () async {
+                            final uri = Uri(scheme: 'tel', path: '9279682955');
+                            try {
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              } else {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              }
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Could not open dialer for +91 92796 82955')),
+                                );
+                              }
+                            }
                           },
                         ),
                       ),
@@ -1444,10 +1491,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF25D366)),
                           icon: const Icon(Icons.chat_rounded, size: 16, color: Colors.white),
                           label: const Text('WhatsApp Us', style: TextStyle(color: Colors.white)),
-                          onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Opening WhatsApp with Teffe\'s Support...')),
-                            );
+                          onPressed: () async {
+                            final uri = Uri.parse('https://wa.me/919279682955?text=Hello%20Teffes%2C%20I%20need%20assistance.');
+                            try {
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri, mode: LaunchMode.externalApplication);
+                              } else {
+                                await launchUrl(uri);
+                              }
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please reach Teffes on WhatsApp at +91 92796 82955')),
+                                );
+                              }
+                            }
                           },
                         ),
                       ),

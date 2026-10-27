@@ -303,7 +303,7 @@ export default function TermsAndConditionsPage() {
               </li>
               <li style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
                 <span style={{ color: "#91000a", fontWeight: 700 }}>•</span>
-                <span><strong>60-Minute Exchange Guarantee:</strong> If the delivered cuts do not match your order or temperature has been compromised, notify us on WhatsApp (+91 9779687955) within 60 minutes of delivery for an instant replacement.</span>
+                <span><strong>60-Minute Exchange Guarantee:</strong> If the delivered cuts do not match your order or temperature has been compromised, notify us on WhatsApp (+91 92796 82955) within 60 minutes of delivery for an instant replacement.</span>
               </li>
               <li style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
                 <span style={{ color: "#91000a", fontWeight: 700 }}>•</span>
@@ -369,7 +369,7 @@ export default function TermsAndConditionsPage() {
                 <FontAwesomeIcon icon={faPhone} style={{ color: "#4ade80", marginTop: "3px", fontSize: "1rem" }} />
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", textTransform: "uppercase", fontWeight: 700 }}>Helpline</div>
-                  <a href="tel:9779687955" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>+91 9779687955</a>
+                  <a href="tel:9279682955" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>+91 92796 82955</a>
                 </div>
               </div>
 
@@ -377,7 +377,7 @@ export default function TermsAndConditionsPage() {
                 <FontAwesomeIcon icon={faEnvelope} style={{ color: "#ff8477", marginTop: "3px", fontSize: "1rem" }} />
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", textTransform: "uppercase", fontWeight: 700 }}>Email</div>
-                  <a href="mailto:support@teffes.com" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>support@teffes.com</a>
+                  <a href="mailto:rakeshroshanteffes@gmail.com" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>rakeshroshanteffes@gmail.com</a>
                 </div>
               </div>
 
@@ -392,7 +392,7 @@ export default function TermsAndConditionsPage() {
 
             <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.12)" }}>
               <a
-                href="https://wa.me/919779687955?text=Hello%20Teffes%2C%20I%20have%20an%20inquiry%20regarding%20Terms%20and%20Conditions."
+                href="https://wa.me/919279682955?text=Hello%20Teffes%2C%20I%20have%20an%20inquiry%20regarding%20Terms%20and%20Conditions."
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

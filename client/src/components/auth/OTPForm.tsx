@@ -43,35 +43,60 @@ export default function OTPForm({
     return () => clearTimeout(timer);
   }, [step, resendTimer]);
 
-  // Clean up recaptcha verifier on unmount
+  // Clean up on unmount
   useEffect(() => {
     return () => {
-      if (recaptchaVerifierRef.current) {
-        try {
-          recaptchaVerifierRef.current.clear();
-        } catch {
-          // ignore cleanup errors
-        }
-        recaptchaVerifierRef.current = null;
-      }
+      resetRecaptcha();
     };
   }, []);
 
-  const initRecaptchaVerifier = () => {
-    const auth = getFirebaseAuth();
-    if (!recaptchaVerifierRef.current) {
-      recaptchaVerifierRef.current = new RecaptchaVerifier(auth, containerId, {
-        size: "invisible",
-        callback: () => {
-          // reCAPTCHA solved
-        },
-        "expired-callback": () => {
-          setError("reCAPTCHA expired. Please try again.");
-          setLoading(false);
-        },
-      });
+  /**
+   * Safely resets reCAPTCHA instance and wipes DOM child nodes
+   * to prevent "reCAPTCHA has already been rendered in this element".
+   */
+  const resetRecaptcha = () => {
+    if (recaptchaVerifierRef.current) {
+      try {
+        recaptchaVerifierRef.current.clear();
+      } catch {
+        // ignore cleanup errors
+      }
+      recaptchaVerifierRef.current = null;
     }
-    return recaptchaVerifierRef.current;
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.innerHTML = "";
+    }
+  };
+
+  /**
+   * Returns an active RecaptchaVerifier or safely initializes a fresh one.
+   */
+  const getOrCreateRecaptchaVerifier = (): RecaptchaVerifier => {
+    if (recaptchaVerifierRef.current) {
+      return recaptchaVerifierRef.current;
+    }
+
+    const container = document.getElementById(containerId);
+    if (container) {
+      container.innerHTML = "";
+    }
+
+    const auth = getFirebaseAuth();
+    const verifier = new RecaptchaVerifier(auth, containerId, {
+      size: "invisible",
+      callback: () => {
+        // reCAPTCHA solved callback
+      },
+      "expired-callback": () => {
+        setError("reCAPTCHA expired. Please click Send again.");
+        setLoading(false);
+        resetRecaptcha();
+      },
+    });
+
+    recaptchaVerifierRef.current = verifier;
+    return verifier;
   };
 
   const handleSendOTP = async (e: React.FormEvent) => {
@@ -79,7 +104,7 @@ export default function OTPForm({
     const cleanPhone = phone.replace(/\D/g, "");
 
     if (cleanPhone.length < 10) {
-      setError("Please enter a valid 10-digit mobile number.");
+      setError("Please enter a valid 10-digit Indian mobile number.");
       return;
     }
 
@@ -88,9 +113,13 @@ export default function OTPForm({
 
     try {
       const auth = getFirebaseAuth();
-      const verifier = initRecaptchaVerifier();
       const formattedPhone = `+91${cleanPhone.slice(-10)}`;
 
+      if (process.env.NODE_ENV !== "production") {
+        console.log(`[Firebase Phone Auth] Initiating OTP send for: ${formattedPhone.slice(0, 6)}****`);
+      }
+
+      const verifier = getOrCreateRecaptchaVerifier();
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, verifier);
       confirmationResultRef.current = confirmation;
 
@@ -99,26 +128,27 @@ export default function OTPForm({
       setCanResend(false);
       toast.success("Verification code sent via SMS", "OTP Sent");
     } catch (err: any) {
-      console.error("[Firebase Web Phone Auth] Error sending OTP:", err);
+      console.error("[Firebase Web Phone Auth] Error sending OTP:", err?.code || err?.message || err);
+      // Cleanly reset verifier on failure so the next attempt starts fresh without DOM collisions
+      resetRecaptcha();
+
       let msg = "Failed to send verification SMS. Please try again.";
       if (err.code === "auth/invalid-phone-number") {
-        msg = "Invalid phone number format.";
+        msg = "Invalid phone number format. Please enter a valid 10-digit mobile number.";
       } else if (err.code === "auth/too-many-requests") {
-        msg = "Too many attempts. Please try again in a few minutes.";
+        msg = "Too many attempts on this number. Google has temporarily throttled it. Please wait 15 minutes or use a registered test number.";
       } else if (err.code === "auth/quota-exceeded") {
-        msg = "Daily SMS quota exceeded for testing. Use registered test number.";
+        msg = "Daily SMS quota exceeded for testing. Use a registered Firebase test number.";
+      } else if (err.code === "auth/billing-not-enabled") {
+        msg = "SMS billing is not enabled on this Firebase project. Please ensure Blaze plan is active.";
+      } else if (err.code === "auth/invalid-app-credential") {
+        msg = "reCAPTCHA verification failed (auth/invalid-app-credential). On localhost, add 127.0.0.1 to Authorized Domains or use a configured test phone number.";
+      } else if (err.code === "auth/operation-not-allowed") {
+        msg = "Phone sign-in is not enabled in Firebase Console. Please enable Phone provider under Authentication > Sign-in method.";
       } else if (err.message) {
         msg = err.message;
       }
       setError(msg);
-
-      // Reset recaptcha if failed
-      if (recaptchaVerifierRef.current) {
-        try {
-          recaptchaVerifierRef.current.clear();
-        } catch {}
-        recaptchaVerifierRef.current = null;
-      }
     } finally {
       setLoading(false);
     }
@@ -142,15 +172,29 @@ export default function OTPForm({
     setError("");
     setLoading(true);
 
+    let idToken = "";
     try {
       // 1. Verify OTP with Firebase
       const userCredential = await confirmationResultRef.current.confirm(cleanOtp);
       const user = userCredential.user;
+      idToken = await user.getIdToken();
+    } catch (firebaseErr: any) {
+      console.error("[Firebase OTP Confirm Error]:", firebaseErr?.code || firebaseErr?.message || firebaseErr);
+      let msg = "Invalid verification code. Please check and try again.";
+      if (firebaseErr.code === "auth/invalid-verification-code") {
+        msg = "Incorrect 6-digit verification code. Please enter the code configured in Firebase Console.";
+      } else if (firebaseErr.code === "auth/code-expired") {
+        msg = "Verification code has expired. Please click Resend OTP.";
+      } else if (firebaseErr.message) {
+        msg = firebaseErr.message;
+      }
+      setError(msg);
+      setLoading(false);
+      return;
+    }
 
-      // 2. Obtain Firebase ID token
-      const idToken = await user.getIdToken();
-
-      // 3. Send ID token to TeFFe backend to create/login customer and issue TeFFe JWT
+    try {
+      // 2. Send ID token to TeFFe backend to create/login customer and issue TeFFe JWT
       const authRes = await firebaseLogin(idToken);
 
       if (authRes.success) {
@@ -163,15 +207,13 @@ export default function OTPForm({
       } else {
         setError("Failed to create customer session. Please try again.");
       }
-    } catch (err: any) {
-      console.error("[Firebase Web Phone Auth] Error verifying OTP:", err);
-      let msg = "Invalid verification code. Please check and try again.";
-      if (err.code === "auth/invalid-verification-code") {
-        msg = "Incorrect 6-digit verification code.";
-      } else if (err.code === "auth/code-expired") {
-        msg = "Verification code has expired. Please request a new one.";
-      }
-      setError(msg);
+    } catch (backendErr: any) {
+      console.error("[Backend Login Error]:", backendErr);
+      const backendMsg =
+        backendErr?.response?.data?.message ||
+        backendErr?.message ||
+        "Failed to establish customer session with server.";
+      setError(`Login server error: ${backendMsg}`);
     } finally {
       setLoading(false);
     }
@@ -180,13 +222,19 @@ export default function OTPForm({
   const handleResend = async () => {
     if (!canResend || loading) return;
     setOtp("");
+    setError("");
+    resetRecaptcha();
     await handleSendOTP({ preventDefault: () => {} } as any);
   };
 
   return (
     <div className="w-full">
-      {/* Invisible reCAPTCHA container required by Firebase Web */}
-      <div id={containerId}></div>
+      {/*
+        Invisible reCAPTCHA container:
+        Must be present in the active DOM without display: none.
+        Google reCAPTCHA with size: 'invisible' is automatically invisible.
+      */}
+      <div id={containerId} className="flex justify-center my-1"></div>
 
       {step === "phone" ? (
         <form onSubmit={handleSendOTP} noValidate id="otp-phone-form">
@@ -291,10 +339,10 @@ export default function OTPForm({
                 <button
                   type="button"
                   onClick={handleResend}
-                  className="text-primary font-bold hover:underline bg-transparent border-none p-0 cursor-pointer"
+                  className="text-primary font-bold hover:underline bg-transparent border-none p-0 cursor-pointer disabled:opacity-50"
                   disabled={loading}
                 >
-                  Resend OTP
+                  {loading ? "Resending…" : "Resend OTP"}
                 </button>
               ) : (
                 <span className="text-slate-400 font-medium">Resend in {resendTimer}s</span>

@@ -263,6 +263,35 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
   }
 
+  Future<void> _makePhoneCall(String? phone) async {
+    if (phone == null || phone.trim().isEmpty) return;
+    final cleanPhone = phone.replaceAll(RegExp(r'\s+'), '');
+    final uri = Uri(scheme: 'tel', path: cleanPhone);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      debugPrint('[OrderTracking] Call error: $e');
+    }
+  }
+
+  Future<void> _openWhatsApp(String? phone) async {
+    if (phone == null || phone.trim().isEmpty) return;
+    final cleanDigits = phone.replaceAll(RegExp(r'[^0-9]'), '');
+    final formattedNumber = cleanDigits.length == 10 ? '91$cleanDigits' : cleanDigits;
+    final uri = Uri.parse('https://wa.me/$formattedNumber');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      debugPrint('[OrderTracking] WhatsApp error: $e');
+    }
+  }
+
   Map<String, String> _getEtaDisplayInfo(OrderModel order) {
     final status = order.status;
     final isPickup = order.isPickup;
@@ -786,47 +815,73 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                         border: Border.all(color: AppColors.borderHairline),
                         boxShadow: AppDimensions.cardShadow,
                       ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: AppColors.surfaceSubtle,
-                            child: const Icon(Icons.person_rounded, color: AppColors.textPrimary),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  order.rider?.name ?? 'Md. Imran Ansari',
-                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                      child: Builder(
+                        builder: (context) {
+                          final isRiderAssigned = order.rider?.name != null && (order.rider?.name?.trim().isNotEmpty == true);
+                          final String riderName = isRiderAssigned
+                              ? (order.rider?.name ?? 'Store Express Rider')
+                              : (order.status == 'Pending' || order.status == 'Cutting'
+                                  ? 'Assigning Fleet Partner...'
+                                  : 'Store Express Rider');
+                          final riderSubtitle = isRiderAssigned
+                              ? '${order.rider?.vehicle ?? "Insulated Fleet Partner"} • ${(order.rider?.rating ?? "4.9").replaceAll("★", "").trim()} ★'
+                              : 'Order being prepared at local store counter';
+                          final riderPhone = order.rider?.phone;
+
+                          return Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 22,
+                                backgroundColor: isRiderAssigned ? const Color(0xFF941717).withOpacity(0.1) : AppColors.surfaceSubtle,
+                                child: Icon(
+                                  isRiderAssigned ? Icons.two_wheeler_rounded : Icons.pending_actions_rounded,
+                                  color: isRiderAssigned ? AppColors.primaryMaroon : AppColors.textSecondary,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${order.rider?.vehicle ?? "Honda Activa"} • ${(order.rider?.rating ?? "4.9").replaceAll("★", "").trim()} (840+ deliveries)',
-                                  style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      riderName,
+                                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      riderSubtitle,
+                                      style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isRiderAssigned && riderPhone != null && riderPhone.trim().isNotEmpty) ...[
+                                IconButton(
+                                  icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primaryMaroon),
+                                  tooltip: 'Call Rider',
+                                  onPressed: () => _makePhoneCall(riderPhone),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.chat_rounded, color: Color(0xFF25D366)),
+                                  tooltip: 'WhatsApp Rider',
+                                  onPressed: () => _openWhatsApp(riderPhone),
+                                ),
+                              ] else ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.surfaceSubtle,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'Prep in progress',
+                                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                                  ),
                                 ),
                               ],
-                            ),
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primaryMaroon),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Calling rider at ${order.rider?.phone ?? "+91 94311 88204"}...')),
-                              );
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.chat_rounded, color: Color(0xFF25D366)),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Opening WhatsApp with Teffe\'s Delivery Agent...')),
-                              );
-                            },
-                          ),
-                        ],
+                            ],
+                          );
+                        },
                       ),
                     ),
               const SizedBox(height: AppDimensions.spaceMd),

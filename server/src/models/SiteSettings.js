@@ -53,8 +53,8 @@ const siteSettingsSchema = new mongoose.Schema(
       linkedin: { type: String, trim: true, default: '' },
     },
     contactDetails: {
-      phone: { type: String, trim: true, default: '+91 91539 85949' },
-      email: { type: String, trim: true, default: 'care@teffes.com' },
+      phone: { type: String, trim: true, default: '+91 92796 82955' },
+      email: { type: String, trim: true, default: 'rakeshroshanteffes@gmail.com' },
       address: {
         street: { type: String, trim: true, default: 'Harmu Road, Kishore Ganj' },
         city: { type: String, trim: true, default: 'Ranchi' },

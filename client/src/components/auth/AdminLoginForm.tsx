@@ -205,28 +205,6 @@ export default function AdminLoginForm() {
           </div>
         )}
 
-        {/* Demo Credentials Info */}
-        <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 mb-5 text-xs text-slate-600 space-y-1">
-          <div className="font-bold text-slate-800 flex items-center gap-1.5 mb-1">
-            <svg className="w-3.5 h-3.5 text-slate-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            <span>Demo & Super Admin Credentials</span>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Super Admin:</span>
-            <code className="bg-white px-1.5 py-0.5 rounded border border-gray-200 text-primary font-bold">
-              superadmin@teffes.com
-            </code>
-          </div>
-          <div className="flex justify-between items-center">
-            <span>Store Admin:</span>
-            <code className="bg-white px-1.5 py-0.5 rounded border border-gray-200 text-emerald-700 font-bold">
-              storeadmin@teffes.com
-            </code>
-          </div>
-        </div>
-
         <button
           id="admin-login-btn"
           type="submit"

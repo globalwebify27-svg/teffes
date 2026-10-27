@@ -10,7 +10,7 @@ class AppConfig {
   /// Drop client's key in --dart-define=GOOGLE_MAPS_API_KEY=... or AndroidManifest
   static const String googleMapsApiKey = String.fromEnvironment(
     'GOOGLE_MAPS_API_KEY',
-    defaultValue: 'AIzaSy_demo_placeholder_key',
+    defaultValue: 'AIzaSyB_ZC0cTMgCcoLByus4krDNd4RA27qnjMs',
   );
 
   static const String appName = "TeFFe's";

@@ -315,8 +315,8 @@ export default function ReturnAndExchangePolicyPage() {
                     Company &amp; Email
                   </div>
                   <div style={{ fontSize: "0.95rem", fontWeight: 700 }}>Teffes Farm and Foods LLP</div>
-                  <a href="mailto:support@teffes.com" style={{ color: "#ff8477", fontSize: "0.85rem" }}>
-                    support@teffes.com / rakeshroshanteffes@gmail.com
+                  <a href="mailto:rakeshroshanteffes@gmail.com" style={{ color: "#ff8477", fontSize: "0.85rem" }}>
+                    rakeshroshanteffes@gmail.com
                   </a>
                 </div>
               </div>
@@ -327,8 +327,8 @@ export default function ReturnAndExchangePolicyPage() {
                   <div style={{ fontSize: "0.75rem", color: "var(--gray-400)", textTransform: "uppercase", fontWeight: 700 }}>
                     Phone / Helpline
                   </div>
-                  <a href="tel:9779687955" style={{ fontSize: "1.1rem", fontWeight: 800, color: "#ffffff" }}>
-                    9779687955
+                  <a href="tel:9279682955" style={{ fontSize: "1.1rem", fontWeight: 800, color: "#ffffff" }}>
+                    +91 92796 82955
                   </a>
                 </div>
               </div>
@@ -349,7 +349,7 @@ export default function ReturnAndExchangePolicyPage() {
             {/* Quick WhatsApp Support Button */}
             <div style={{ marginTop: "24px", paddingTop: "20px", borderTop: "1px solid rgba(255,255,255,0.15)" }}>
               <a
-                href="https://wa.me/919779687955?text=Hello%20Teffes%2C%20I%20have%20an%20inquiry%20regarding%20my%20meat%20order."
+                href="https://wa.me/919279682955?text=Hello%20Teffes%2C%20I%20have%20an%20inquiry%20regarding%20my%20meat%20order."
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-primary btn-lg"

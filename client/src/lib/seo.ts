@@ -54,8 +54,8 @@ export const DEFAULT_SEO_SETTINGS: PublicSeoSettings = {
     linkedin: "",
   },
   contactDetails: {
-    phone: "+91 91539 85949",
-    email: "care@teffes.com",
+    phone: "+91 92796 82955",
+    email: "rakeshroshanteffes@gmail.com",
     address: {
       street: "Harmu Road, Kishore Ganj",
       city: "Ranchi",

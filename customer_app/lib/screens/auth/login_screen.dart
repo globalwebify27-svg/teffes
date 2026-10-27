@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../providers/auth_provider.dart';
@@ -34,9 +35,46 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isOtpSent = false;
   String? _verificationId;
+  int? _resendToken;
   final String _testOtp = '123456';
   int _resendTimerSeconds = 30;
   Timer? _countdownTimer;
+
+  static const String _superAdminPhone = '9279682955';
+
+  Future<void> _callTeffes() async {
+    final uri = Uri(scheme: 'tel', path: _superAdminPhone);
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      } else {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Opening dialer for +91 92796 82955...')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openWhatsApp() async {
+    final uri = Uri.parse('https://wa.me/919279682955?text=Hello%20Teffes%2C%20I%20need%20assistance%20signing%20in%20to%20my%20account.');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please reach Teffes Support on WhatsApp at +91 92796 82955')),
+        );
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -97,7 +135,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String get _currentOtp =>
       '${_box1.text}${_box2.text}${_box3.text}${_box4.text}${_box5.text}${_box6.text}'.trim();
 
-  Future<void> _handleSendOtp() async {
+  Future<void> _handleSendOtp({bool isResend = false}) async {
     final cleanPhone = _phoneController.text.replaceAll(RegExp(r'\D'), '');
     if (cleanPhone.length < 10) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -110,28 +148,40 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final auth = context.read<AuthProvider>();
+    if (auth.isLoading) return;
+
+    if (isResend) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Requesting new OTP code via SMS...'),
+          duration: Duration(seconds: 2),
+        ),
+      );
+    }
 
     await auth.sendFirebaseOtp(
       phone: cleanPhone,
+      resendToken: isResend ? _resendToken : null,
       onCodeSent: (verificationId, resendToken) {
         if (!mounted) return;
         setState(() {
           _verificationId = verificationId;
+          _resendToken = resendToken;
           _isOtpSent = true;
         });
         _clearOtpBoxes();
         _startResendTimer();
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Row(
               children: [
-                Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 20),
-                SizedBox(width: 8),
-                Expanded(child: Text('6-digit verification code sent via SMS')),
+                const Icon(Icons.mark_email_read_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text(isResend ? 'New 6-digit OTP code sent via SMS' : '6-digit verification code sent via SMS')),
               ],
             ),
             backgroundColor: AppColors.hygieneDark,
-            duration: Duration(seconds: 4),
+            duration: const Duration(seconds: 4),
           ),
         );
       },
@@ -607,42 +657,36 @@ class _LoginScreenState extends State<LoginScreen> {
                       )
                     else
                       GestureDetector(
-                        onTap: _handleSendOtp,
-                        child: const Text(
-                          'Resend OTP',
-                          style: TextStyle(
-                            color: AppColors.primaryMaroon,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    GestureDetector(
-                      onTap: () => _fillOtp(_testOtp),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.touch_app_rounded, size: 14, color: AppColors.primaryMaroon),
-                            SizedBox(width: 4),
-                            Text(
-                              'Test Code: 123456',
-                              style: TextStyle(
-                                color: AppColors.primaryMaroon,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
+                        onTap: isLoading ? null : () => _handleSendOtp(isResend: true),
+                        child: isLoading
+                            ? Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: const [
+                                  SizedBox(
+                                    width: 12,
+                                    height: 12,
+                                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryMaroon),
+                                  ),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Resending...',
+                                    style: TextStyle(
+                                      color: AppColors.primaryMaroon,
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : const Text(
+                                'Resend OTP',
+                                style: TextStyle(
+                                  color: AppColors.primaryMaroon,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 12,
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
                       ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 24),
@@ -679,7 +723,79 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
               ],
 
-              const SizedBox(height: 36),
+              const SizedBox(height: 24),
+
+              // Super Admin Customer Support: Call Teffes & WhatsApp Us
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppDimensions.roundedMd,
+                  border: Border.all(color: AppColors.borderHairline),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.04),
+                      blurRadius: 8,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: const [
+                          Text(
+                            'Need Help Signing In?',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Teffes Support Desk',
+                            style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _callTeffes,
+                      icon: const Icon(Icons.phone_in_talk_rounded, size: 13, color: AppColors.primaryMaroon),
+                      label: const Text(
+                        'Call Teffes',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryMaroon),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        side: const BorderSide(color: AppColors.primaryMaroon),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: _openWhatsApp,
+                      icon: const Icon(Icons.chat_rounded, size: 13, color: Colors.white),
+                      label: const Text(
+                        'WhatsApp us',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF25D366),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        elevation: 0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
 
               // Trust Badges Grid
               Container(

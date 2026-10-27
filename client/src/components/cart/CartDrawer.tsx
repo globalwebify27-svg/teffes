@@ -2034,63 +2034,49 @@ export default function CartDrawer() {
                     </div>
                   </label>
 
-                  {/* Method B: Razorpay Online Payment */}
-                  <label
-                    onClick={() => setSelectedPayment("razorpay")}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${selectedPayment === "razorpay" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
-                      }`}
+                  {/* Method B: Razorpay Online Payment (Disabled per client instructions) */}
+                  <div
+                    onClick={() => toast.info("Online payment gateway is temporarily disabled. Please place your order via Cash on Delivery.")}
+                    className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50/90 flex items-center justify-between cursor-not-allowed opacity-60 shadow-2xs transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                      <div className="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center text-gray-500">
                         <span className="material-symbols-outlined text-[24px]">credit_card</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900 text-sm">Pay Online (Razorpay)</span>
-                          <span className="text-[9.5px] font-extrabold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded uppercase">Instant</span>
+                          <span className="font-bold text-gray-600 text-sm">Pay Online (Razorpay)</span>
+                          <span className="text-[9.5px] font-extrabold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded uppercase">Temporarily Disabled</span>
                         </div>
-                        <span className="text-[11.5px] text-slate-500">
-                          UPI (GPay, PhonePe, Paytm), Cards, Netbanking
+                        <span className="text-[11.5px] text-gray-400">
+                          UPI, Cards & Netbanking temporarily paused by store
                         </span>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === "razorpay" ? "border-primary" : "border-gray-300"}`}>
-                      {selectedPayment === "razorpay" && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
-                    </div>
-                  </label>
+                    <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center" />
+                  </div>
 
-                  {/* Method C: Teffes Cash / Wallet */}
-                  <label
-                    onClick={() => {
-                      if (walletBalance >= finalPayable) {
-                        setSelectedPayment("wallet");
-                      }
-                    }}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${walletBalance >= finalPayable
-                      ? "cursor-pointer hover:border-gray-300"
-                      : "opacity-50 cursor-not-allowed bg-gray-50 border-gray-100"
-                      } ${selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200"
-                      }`}
+                  {/* Method C: Teffes Cash / Wallet (Disabled per client instructions) */}
+                  <div
+                    onClick={() => toast.info("Wallet payment is temporarily disabled. Please place your order via Cash on Delivery.")}
+                    className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50/90 flex items-center justify-between cursor-not-allowed opacity-60 shadow-2xs transition-all"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-[#7c3aed]/10 flex items-center justify-center text-[#7c3aed]">
+                      <div className="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center text-gray-500">
                         <span className="material-symbols-outlined text-[24px]">account_balance_wallet</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900 text-sm">Teffes Cash</span>
-                          <span className="text-[9.5px] font-extrabold bg-[#7c3aed]/10 text-[#6d28d9] px-1.5 py-0.5 rounded uppercase">Wallet</span>
+                          <span className="font-bold text-gray-600 text-sm">Teffes Cash</span>
+                          <span className="text-[9.5px] font-extrabold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded uppercase">Temporarily Disabled</span>
                         </div>
-                        <span className="text-[11.5px] text-slate-500">
-                          Balance: <strong className="text-gray-800">₹{walletBalance}</strong>
-                          {walletBalance < finalPayable && " (Insufficient)"}
+                        <span className="text-[11.5px] text-gray-400">
+                          Balance: ₹{walletBalance} (Wallet payments temporarily paused)
                         </span>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === "wallet" ? "border-primary" : "border-gray-300"}`}>
-                      {selectedPayment === "wallet" && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
-                    </div>
-                  </label>
+                    <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center" />
+                  </div>
                 </div>
               </div>
 

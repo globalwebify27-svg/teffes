@@ -305,7 +305,7 @@ export default function PrivacyPolicyPage() {
                 <FontAwesomeIcon icon={faEnvelope} style={{ color: "#ff8477", marginTop: "3px", fontSize: "1rem" }} />
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", textTransform: "uppercase", fontWeight: 700 }}>Privacy Email</div>
-                  <a href="mailto:support@teffes.com" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>support@teffes.com</a>
+                  <a href="mailto:rakeshroshanteffes@gmail.com" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>rakeshroshanteffes@gmail.com</a>
                 </div>
               </div>
 
@@ -313,7 +313,7 @@ export default function PrivacyPolicyPage() {
                 <FontAwesomeIcon icon={faPhone} style={{ color: "#4ade80", marginTop: "3px", fontSize: "1rem" }} />
                 <div>
                   <div style={{ fontSize: "0.72rem", color: "var(--gray-400)", textTransform: "uppercase", fontWeight: 700 }}>Support Line</div>
-                  <a href="tel:9779687955" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>+91 9779687955</a>
+                  <a href="tel:9279682955" style={{ color: "#ffffff", fontWeight: 700, fontSize: "0.95rem", textDecoration: "none" }}>+91 92796 82955</a>
                 </div>
               </div>
 
@@ -328,7 +328,7 @@ export default function PrivacyPolicyPage() {
 
             <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid rgba(255,255,255,0.12)" }}>
               <a
-                href="https://wa.me/919779687955?text=Hello%20Teffes%2C%20I%20have%20an%20inquiry%20regarding%20Privacy%20Policy."
+                href="https://wa.me/919279682955?text=Hello%20Teffes%2C%20I%20have%20an%20inquiry%20regarding%20Privacy%20Policy."
                 target="_blank"
                 rel="noopener noreferrer"
                 style={{

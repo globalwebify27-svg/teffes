@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import AdminLoginForm from "@/components/auth/AdminLoginForm";
+import GuestOnlyGuard from "@/components/auth/GuestOnlyGuard";
 
 export const metadata: Metadata = {
   title: "Teffes Admin Portal",
@@ -13,16 +14,17 @@ export const metadata: Metadata = {
 
 export default function AdminLoginPage() {
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "40px 20px",
-        background: "linear-gradient(135deg, #111c36 0%, #1a2542 100%)",
-      }}
-    >
+    <GuestOnlyGuard>
+      <div
+        style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "40px 20px",
+          background: "linear-gradient(135deg, #111c36 0%, #1a2542 100%)",
+        }}
+      >
       <div
         style={{
           width: "100%",
@@ -81,5 +83,6 @@ export default function AdminLoginPage() {
         </div>
       </div>
     </div>
+    </GuestOnlyGuard>
   );
 }
