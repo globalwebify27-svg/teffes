@@ -97,6 +97,11 @@ export default function DashboardPage() {
   const [riderRatingFeedback, setRiderRatingFeedback] = useState<string>("");
   const [isSubmittingRating, setIsSubmittingRating] = useState<boolean>(false);
 
+  // Cancel Order Modal states
+  const [cancelModalOrderId, setCancelModalOrderId] = useState<string | null>(null);
+  const [isSubmittingCancel, setIsSubmittingCancel] = useState(false);
+  const [cancelFeedback, setCancelFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+
   // Edit address state
   const [editingAddress, setEditingAddress] = useState<DashboardAddress | null>(null);
 
@@ -646,6 +651,46 @@ export default function DashboardPage() {
     }
   };
 
+  const handleConfirmCancelOrder = async () => {
+    if (!cancelModalOrderId) return;
+    setIsSubmittingCancel(true);
+    setCancelFeedback(null);
+    try {
+      const res = await api.put(`/orders/${cancelModalOrderId}/cancel`, {
+        reason: "Cancelled by customer from website dashboard",
+      });
+      if (res.data?.success) {
+        setCancelFeedback({
+          type: "success",
+          message: "Order cancelled successfully! Items restocked and funds refunded to your wallet.",
+        });
+        const ordersRes = await api.get<{ success: boolean; orders: any[] }>("/orders/my-orders");
+        if (ordersRes.data?.success && ordersRes.data.orders) {
+          setLiveOrders(ordersRes.data.orders);
+        }
+        api.get<{ success: boolean; balance: number }>("/wallet/details")
+          .then((w) => {
+            if (w.data?.success) setTeffesCash(w.data.balance || 0);
+          })
+          .catch(() => {});
+        if (trackingOrder && (trackingOrder.id === cancelModalOrderId || trackingOrder.orderId === cancelModalOrderId)) {
+          setTrackingOrder((prev: any) => prev ? { ...prev, status: "Cancelled" } : null);
+        }
+        setTimeout(() => {
+          setCancelModalOrderId(null);
+          setCancelFeedback(null);
+        }, 1500);
+      }
+    } catch (err: any) {
+      setCancelFeedback({
+        type: "error",
+        message: err.response?.data?.message || "Failed to cancel order",
+      });
+    } finally {
+      setIsSubmittingCancel(false);
+    }
+  };
+
   const handleSaveEditedAddress = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAddress || !editingAddress.address.trim()) return;
@@ -1025,14 +1070,18 @@ export default function DashboardPage() {
                       ))}
                     </div>
 
-                    {/* Action CTA: Track Rider for in-progress vs Order Again for completed */}
+                    {/* Action CTA: Track Rider / Cancel for in-progress vs Order Again for completed */}
                     {order.status === "in-progress" ? (
                       <div className="p-3.5 bg-amber-50/80 border-t border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <div className="flex items-center gap-2">
                             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
                             <span className="text-xs font-bold text-amber-950">
-                              Rider on the way • {order.rider?.name || "Delivery Partner"}
+                              {order.rawOrder?.status === "Cutting"
+                                ? "Store Butcher Cutting Meat"
+                                : order.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(order.rawOrder?.status)
+                                ? `Rider Dispatched • ${order.rider.name}`
+                                : "Order Confirmed • Prepping Fresh Cuts"}
                             </span>
                           </div>
                           {order.deliveryOtp && (
@@ -1049,17 +1098,32 @@ export default function DashboardPage() {
                             onClick={() => setTrackingOrder(order)}
                             className="flex-1 sm:flex-none py-2 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer"
                           >
-                            <span className="material-symbols-outlined text-[17px]">two_wheeler</span>
-                            <span>Track Rider</span>
+                            <span className="material-symbols-outlined text-[17px]">
+                              {order.rider?.name && ["Ready", "Out for Delivery"].includes(order.rawOrder?.status) ? "two_wheeler" : "schedule"}
+                            </span>
+                            <span>Track Order</span>
                           </button>
 
-                          <a
-                            href={`tel:${order.rider?.phone}`}
-                            className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-gray-800 font-headline-sm font-bold text-xs hover:bg-gray-50 transition-all flex items-center gap-1 text-decoration-none shadow-2xs"
-                          >
-                            <span className="material-symbols-outlined text-emerald-600 text-[17px]">call</span>
-                            <span>Call</span>
-                          </a>
+                          {["Placed", "Pending", "Confirmed", "Cutting"].includes(order.rawOrder?.status || "Pending") && (
+                            <button
+                              type="button"
+                              onClick={() => { setCancelModalOrderId(order.id || order.rawOrder?._id || order.orderId); setCancelFeedback(null); }}
+                              className="py-2 px-3 rounded-xl bg-white border border-red-200 text-red-700 hover:bg-red-50 font-headline-sm font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                            >
+                              <span className="material-symbols-outlined text-red-600 text-[16px]">cancel</span>
+                              <span>Cancel Order</span>
+                            </button>
+                          )}
+
+                          {order.rider?.phone && ["Ready", "Out for Delivery"].includes(order.rawOrder?.status) && (
+                            <a
+                              href={`tel:${order.rider?.phone}`}
+                              className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-gray-800 font-headline-sm font-bold text-xs hover:bg-gray-50 transition-all flex items-center gap-1 text-decoration-none shadow-2xs"
+                            >
+                              <span className="material-symbols-outlined text-emerald-600 text-[17px]">call</span>
+                              <span>Call</span>
+                            </a>
+                          )}
                         </div>
                       </div>
                     ) : (
@@ -1800,20 +1864,59 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              {/* Google Live Map / GPS Interactive Radar Component */}
-              <GoogleLiveMap
-                riderLat={liveRiderCoords?.lat || trackingOrder.rider?.lat || 23.3512}
-                riderLng={liveRiderCoords?.lng || trackingOrder.rider?.lng || 85.3154}
-                riderName={trackingOrder.rider?.name || "Delivery Partner"}
-                storeName={trackingOrder.storeName || "Central Store (Kishore Ganj Hub)"}
-                storeLat={trackingOrder.storeLat || 23.3441}
-                storeLng={trackingOrder.storeLng || 85.3096}
-                customerLat={trackingOrder.customerLat || trackingOrder.customer?.lat || 23.3512}
-                customerLng={trackingOrder.customerLng || trackingOrder.customer?.lng || 85.3154}
-                customerAddress={trackingOrder.customerAddress || trackingOrder.customer?.address || "Your Kitchen"}
-                orderStatus={trackingOrder.status || "Out for Delivery"}
-                className="h-52 w-full rounded-2xl overflow-hidden shadow-inner"
-              />
+              {/* Google Live Map vs Dark Store Preparation Card */}
+              {trackingOrder.status === "Cancelled" ? (
+                <div className="p-6 bg-red-50 border border-red-200 rounded-2xl text-center">
+                  <span className="material-symbols-outlined text-red-600 text-[36px] mb-2">cancel</span>
+                  <h4 className="font-headline-sm font-black text-gray-900 text-base">Order Cancelled</h4>
+                  <p className="text-xs text-slate-600 mt-1">This order was cancelled and inventory has been restocked.</p>
+                </div>
+              ) : trackingOrder.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(trackingOrder.status) ? (
+                <GoogleLiveMap
+                  riderLat={liveRiderCoords?.lat || trackingOrder.rider?.lat || 23.3512}
+                  riderLng={liveRiderCoords?.lng || trackingOrder.rider?.lng || 85.3154}
+                  riderName={trackingOrder.rider?.name || "Delivery Partner"}
+                  storeName={trackingOrder.storeName || "Central Store (Kishore Ganj Hub)"}
+                  storeLat={trackingOrder.storeLat || 23.3441}
+                  storeLng={trackingOrder.storeLng || 85.3096}
+                  customerLat={trackingOrder.customerLat || trackingOrder.customer?.lat || 23.3512}
+                  customerLng={trackingOrder.customerLng || trackingOrder.customer?.lng || 85.3154}
+                  customerAddress={trackingOrder.customerAddress || trackingOrder.customer?.address || "Your Kitchen"}
+                  orderStatus={trackingOrder.status || "Out for Delivery"}
+                  className="h-52 w-full rounded-2xl overflow-hidden shadow-inner"
+                />
+              ) : (
+                <div className="p-5 bg-amber-50/70 border border-amber-200/80 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-900 shrink-0">
+                      <span className="material-symbols-outlined text-[22px]">
+                        {trackingOrder.status === "Cutting" ? "content_cut" : "storefront"}
+                      </span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
+                          {trackingOrder.status === "Cutting" ? "Fresh Meat Cutting in Progress" : "Order Verified at Dark Store"}
+                        </h4>
+                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
+                          0-4°C Chill
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-600 mt-0.5">
+                        {trackingOrder.storeName || "Teffes Ranchi Hub"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="mt-3 p-3 bg-white/80 rounded-xl border border-amber-100 text-[11.5px] text-slate-600 flex items-start gap-2">
+                    <span className="material-symbols-outlined text-amber-600 text-[16px] shrink-0 mt-0.5">info</span>
+                    <span>
+                      {trackingOrder.status === "Cutting"
+                        ? "Fresh cuts are being prepared on a sanitized cutting block. Live tracking will activate once meat is packed and dispatched to your delivery partner."
+                        : "Your order is confirmed at the store. Cutting and packing will begin shortly, followed by delivery partner assignment."}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Ordered Items Summary */}
               {trackingOrder.items && trackingOrder.items.length > 0 && (
@@ -1842,62 +1945,74 @@ export default function DashboardPage() {
               )}
 
               {/* Rider Details Card */}
-              <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-2xs">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg shrink-0">
-                      <span className="material-symbols-outlined text-[26px]">
-                        {trackingOrder.rider?.isAssigned ? "two_wheeler" : "pending"}
-                      </span>
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
-                          {trackingOrder.rider?.name || (trackingOrder.status === "Pending" || trackingOrder.status === "Cutting" ? "Assigning Fleet Partner..." : "Store Express Rider")}
-                        </h4>
-                        {trackingOrder.rider?.isAssigned && (
+              {trackingOrder.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(trackingOrder.status) ? (
+                <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-lg shrink-0">
+                        <span className="material-symbols-outlined text-[26px]">two_wheeler</span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
+                            {trackingOrder.rider.name}
+                          </h4>
                           <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 inline-flex items-center gap-0.5">
                             <span>{(trackingOrder.rider?.rating || "4.9").toString().replace("★", "").trim()}</span>
                             <span className="material-symbols-outlined text-[12px] fill-current text-amber-500">star</span>
                           </span>
-                        )}
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium">
+                          {trackingOrder.rider?.vehicle || "Insulated Cold Box (Fleet)"}
+                        </p>
                       </div>
-                      <p className="text-xs text-slate-500 font-medium">
-                        {trackingOrder.rider?.vehicle || (trackingOrder.rider?.isAssigned ? "Insulated Cold Box (Fleet)" : "Meat cutting in progress at central hub")}
-                      </p>
                     </div>
+
+                    {trackingOrder.rider?.phone && (
+                      <a
+                        href={`tel:${trackingOrder.rider.phone}`}
+                        className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm text-decoration-none shrink-0"
+                        title="Call Rider"
+                      >
+                        <span className="material-symbols-outlined text-[20px]">call</span>
+                      </a>
+                    )}
                   </div>
 
-                  {trackingOrder.rider?.phone ? (
-                    <a
-                      href={`tel:${trackingOrder.rider.phone}`}
-                      className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white flex items-center justify-center shadow-sm text-decoration-none shrink-0"
-                      title="Call Rider"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">call</span>
-                    </a>
-                  ) : (
-                    <div
-                      className="w-10 h-10 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center shrink-0"
-                      title="Rider being assigned"
-                    >
-                      <span className="material-symbols-outlined text-[20px]">schedule</span>
+                  {/* Fresh-Lock Hygiene Guarantee */}
+                  <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-primary text-[16px]">local_shipping</span>
+                      <span>Packaging: <strong>{trackingOrder.rider?.bagTemp || "Fresh-Lock Insulated"}</strong></span>
                     </div>
-                  )}
-                </div>
-
-                {/* Fresh-Lock Hygiene Guarantee */}
-                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-slate-600">
-                  <div className="flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-primary text-[16px]">local_shipping</span>
-                    <span>Packaging: <strong>{trackingOrder.rider?.bagTemp || "Fresh-Lock Insulated"}</strong></span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
-                    <span className="material-symbols-outlined text-[16px]">verified</span>
-                    <span>100% Fresh Cuts</span>
+                    <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                      <span className="material-symbols-outlined text-[16px]">verified</span>
+                      <span>100% Chilled Dispatch</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center font-bold text-lg shrink-0">
+                        <span className="material-symbols-outlined text-[26px]">two_wheeler</span>
+                      </div>
+                      <div>
+                        <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
+                          Delivery Fleet Partner
+                        </h4>
+                        <p className="text-xs text-amber-800 font-medium mt-0.5">
+                          Will be assigned after cutting and packing is completed
+                        </p>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
+                      Awaiting Dispatch
+                    </span>
+                  </div>
+                </div>
+              )}
 
               {/* Dynamic Real-Time Order Milestones Timeline */}
               <div className="p-4 bg-gray-50 rounded-2xl border border-gray-200/70 space-y-3">
@@ -2016,13 +2131,28 @@ export default function DashboardPage() {
               <span className="text-xs text-slate-500">
                 Payable: <strong>₹{trackingOrder.amount}</strong> ({trackingOrder.paymentMethod || "Cash On Delivery"})
               </span>
-              <button
-                type="button"
-                onClick={() => setTrackingOrder(null)}
-                className="px-5 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 font-headline-sm font-bold text-xs border-none cursor-pointer transition-colors"
-              >
-                Close
-              </button>
+              <div className="flex items-center gap-2">
+                {["Placed", "Pending", "Confirmed", "Cutting"].includes(trackingOrder.status) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCancelModalOrderId(trackingOrder.id || trackingOrder.orderId);
+                      setCancelFeedback(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white border border-red-200 hover:bg-red-50 text-red-700 font-headline-sm font-bold text-xs cursor-pointer transition-colors shadow-2xs flex items-center gap-1"
+                  >
+                    <span className="material-symbols-outlined text-[15px] text-red-600">cancel</span>
+                    <span>Cancel Order</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setTrackingOrder(null)}
+                  className="px-5 py-2 rounded-xl bg-gray-200 hover:bg-gray-300 text-gray-800 font-headline-sm font-bold text-xs border-none cursor-pointer transition-colors"
+                >
+                  Close
+                </button>
+              </div>
             </div>
 
           </div>
@@ -2534,6 +2664,56 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Order Confirmation Modal */}
+      {cancelModalOrderId && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-gray-100 space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 shrink-0">
+                <span className="material-symbols-outlined text-[28px]">cancel</span>
+              </div>
+              <div>
+                <h3 className="font-headline-sm font-black text-gray-900 text-lg">
+                  Cancel Order #{cancelModalOrderId}?
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Pre-dispatch cancellation
+                </p>
+              </div>
+            </div>
+
+            <p className="text-sm text-slate-600 leading-relaxed">
+              Are you sure you want to cancel this order? Any items will be restocked and prepaid amounts will be credited back immediately to your Teffes Cash wallet.
+            </p>
+
+            {cancelFeedback && (
+              <div className={`p-3 rounded-xl text-xs font-bold ${cancelFeedback.type === "success" ? "bg-emerald-50 text-emerald-800 border border-emerald-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+                {cancelFeedback.message}
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                disabled={isSubmittingCancel}
+                onClick={() => { setCancelModalOrderId(null); setCancelFeedback(null); }}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 text-gray-700 font-headline-sm font-bold text-xs hover:bg-gray-50 transition-all cursor-pointer"
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                disabled={isSubmittingCancel}
+                onClick={handleConfirmCancelOrder}
+                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-headline-sm font-bold text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {isSubmittingCancel ? "Cancelling..." : "Yes, Cancel Order"}
+              </button>
             </div>
           </div>
         </div>
