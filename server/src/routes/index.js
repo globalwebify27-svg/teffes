@@ -231,6 +231,14 @@ router.put('/transfers/:transferId/execute', protectStaging, requireStagingRole(
 router.post('/inventory/:storeId/:itemId/defreeze-transfer', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.transferDefreeze);
 router.post('/inventory/:storeId/:itemId/waste', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.recordWaste);
 
+// ─── Super Admin & Store Admin Portals ─────────────────────────────────────
+router.use('/super-admin', require('./superAdmin.routes'));
+router.use('/store-admin', require('./storeAdmin.routes'));
+router.use('/upload', require('./upload.routes'));
+router.use('/location', require('./location.routes'));
+router.use('/notifications', require('./notification.routes'));
+router.use('/payment', require('./payment.routes'));
+
 // ─── Staging Namespace (Retained for Test Harness & Backward Compatibility) ───
 router.use('/staging', require('./staging/staging.routes'));
 
