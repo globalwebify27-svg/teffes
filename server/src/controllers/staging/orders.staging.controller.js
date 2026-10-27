@@ -89,15 +89,15 @@ const getMyOrders = async (req, res, next) => {
 
 const cancelOrder = async (req, res, next) => {
   try {
-    const userId = req.user._id || req.user.id;
-    const userRole = req.user.role || 'customer';
-    const { reason } = req.body;
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userRole = req.user ? (req.user.role || 'customer') : 'customer';
+    const userPhone = req.user ? (req.user.phone || null) : null;
+    const { reason } = req.body || {};
 
     const cancelled = await cancelOrderTransactional(
       req.params.orderId,
       reason || 'Customer requested cancellation',
-      userId,
-      userRole
+      { id: userId, role: userRole, phone: userPhone }
     );
 
     try {

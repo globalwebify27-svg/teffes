@@ -221,17 +221,18 @@ export default function CartDrawer() {
 
       const payload = {
         type: fulfillmentType,
+        fulfillmentType,
         items: items.map((i) => ({
           id: i.product.id,
           name: i.product.name,
           quantity: i.quantity,
         })),
-        customerLat: activeAddr?.lat || 23.3512,
-        customerLng: activeAddr?.lng || 85.3154,
-        lat: activeAddr?.lat,
-        lng: activeAddr?.lng,
-        address: fullAddressStr,
-        shippingAddress: fullAddressStr,
+        customerLat: activeAddr?.lat || currentLocation?.lat || 23.3512,
+        customerLng: activeAddr?.lng || currentLocation?.lng || 85.3154,
+        lat: activeAddr?.lat || currentLocation?.lat,
+        lng: activeAddr?.lng || currentLocation?.lng,
+        address: fullAddressStr || currentLocation?.fullAddress || "",
+        shippingAddress: fullAddressStr || currentLocation?.fullAddress || "",
       };
 
       const res = await api.post<{

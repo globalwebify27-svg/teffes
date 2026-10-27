@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:dio/dio.dart';
 import 'package:provider/provider.dart';
 import 'package:socket_io_client/socket_io_client.dart' as IO;
 import 'package:url_launcher/url_launcher.dart';
@@ -87,6 +88,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
   bool _isCancelling = false;
 
   Future<void> _cancelOrder(OrderModel order) async {
+    final targetOrderId = order.orderId.isNotEmpty ? order.orderId : (order.id.isNotEmpty ? order.id : widget.orderId);
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -97,7 +99,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'Cancel Order #${order.orderId}?',
+                'Cancel Order #$targetOrderId?',
                 style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
               ),
             ),
@@ -130,7 +132,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     setState(() => _isCancelling = true);
     try {
       final res = await _api.put(
-        '/orders/${order.orderId}/cancel',
+        '/orders/$targetOrderId/cancel',
         data: {'reason': 'Customer requested cancellation from app'},
       );
 
@@ -142,7 +144,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                 children: [
                   const Icon(Icons.check_circle_outline, color: Colors.white),
                   const SizedBox(width: 8),
-                  Expanded(child: Text('Order #${order.orderId} cancelled successfully.')),
+                  Expanded(child: Text('Order #$targetOrderId cancelled successfully.')),
                 ],
               ),
               backgroundColor: Colors.red.shade700,
@@ -159,9 +161,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         }
       }
     } catch (e) {
+      String errorMsg = 'Error cancelling order: $e';
+      if (e is DioException && e.response?.data != null && e.response!.data is Map) {
+        errorMsg = e.response!.data['message']?.toString() ?? errorMsg;
+      }
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error cancelling order: $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
         );
       }
     } finally {

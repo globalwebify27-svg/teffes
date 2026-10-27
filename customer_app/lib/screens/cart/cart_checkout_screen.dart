@@ -243,6 +243,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       }).toList();
 
       final payload = {
+        'type': _fulfillmentType,
         'fulfillmentType': _fulfillmentType,
         'lat': lat,
         'lng': lng,
@@ -273,18 +274,31 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               suggestedId = (res.data['suggestedStore']['storeId'] ?? res.data['suggestedStore']['id'])?.toString();
             }
 
-            final currentSel = _stores.where((s) => s.storeId == _selectedStoreId).isNotEmpty
-                ? _stores.firstWhere((s) => s.storeId == _selectedStoreId)
-                : null;
+            final firstAvail = _stores.where((s) => s.isAvailable).isNotEmpty
+                ? _stores.firstWhere((s) => s.isAvailable)
+                : _stores.first;
 
-            if (currentSel == null || !currentSel.isAvailable) {
+            final isPickup = _fulfillmentType == 'pickup';
+
+            if (!isPickup) {
+              // In Home Delivery: strictly auto-select nearest suggested store from server
               if (suggestedId != null && _stores.any((s) => s.storeId == suggestedId)) {
                 _selectedStoreId = suggestedId;
               } else {
-                final firstAvail = _stores.where((s) => s.isAvailable).isNotEmpty
-                    ? _stores.firstWhere((s) => s.isAvailable)
-                    : _stores.first;
                 _selectedStoreId = firstAvail.storeId;
+              }
+            } else {
+              // In Store Pickup: keep user selection if valid and available; otherwise default to suggested
+              final currentSel = _stores.where((s) => s.storeId == _selectedStoreId).isNotEmpty
+                  ? _stores.firstWhere((s) => s.storeId == _selectedStoreId)
+                  : null;
+
+              if (currentSel == null || !currentSel.isAvailable) {
+                if (suggestedId != null && _stores.any((s) => s.storeId == suggestedId)) {
+                  _selectedStoreId = suggestedId;
+                } else {
+                  _selectedStoreId = firstAvail.storeId;
+                }
               }
             }
           });

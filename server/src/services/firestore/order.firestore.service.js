@@ -485,6 +485,9 @@ const updateOrderStatus = async (orderId, newStatus, actor = null, note = '') =>
 /**
  * Atomically cancel an order, restore stock, and process refund if paid via wallet.
  */
+/**
+ * Atomically cancel an order, restore stock, and process refund if paid via wallet.
+ */
 const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', actor = null) => {
   if (!orderId || typeof orderId !== 'string') {
     throw new Error('orderId is required');
@@ -494,8 +497,58 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
   const db = getDb();
   const now = new Date().toISOString();
 
+  // Normalize actor information
+  let cleanActor = { role: 'system' };
+  if (actor) {
+    if (typeof actor === 'object') {
+      cleanActor = {
+        id: actor.id || actor._id || actor.userId || null,
+        role: actor.role || 'customer',
+        phone: actor.phone || null,
+      };
+    } else if (typeof actor === 'string') {
+      cleanActor = {
+        id: actor,
+        role: 'customer',
+      };
+    }
+  }
+
+  // 1. Resolve order doc by ID or orderId or id
+  let targetDocId = cleanOrderId;
+  let targetDocRef = db.collection(ORDERS_COLLECTION).doc(cleanOrderId);
+  let initialSnap = await targetDocRef.get();
+
+  if (!initialSnap.exists) {
+    // Try query by orderId
+    const q1 = await db.collection(ORDERS_COLLECTION).where('orderId', '==', cleanOrderId).limit(1).get();
+    if (!q1.empty) {
+      targetDocId = q1.docs[0].id;
+      initialSnap = q1.docs[0];
+    } else {
+      // Try query by id
+      const q2 = await db.collection(ORDERS_COLLECTION).where('id', '==', cleanOrderId).limit(1).get();
+      if (!q2.empty) {
+        targetDocId = q2.docs[0].id;
+        initialSnap = q2.docs[0];
+      } else {
+        // Try with TEF- prefix or without TEF- prefix
+        const altId = cleanOrderId.startsWith('TEF-') ? cleanOrderId.replace(/^TEF-/, '') : `TEF-${cleanOrderId}`;
+        const q3 = await db.collection(ORDERS_COLLECTION).where('orderId', '==', altId).limit(1).get();
+        if (!q3.empty) {
+          targetDocId = q3.docs[0].id;
+          initialSnap = q3.docs[0];
+        }
+      }
+    }
+  }
+
+  if (!initialSnap.exists) {
+    throw new Error(`Order "${cleanOrderId}" not found`);
+  }
+
   return runTransaction(async (transaction) => {
-    const orderRef = db.collection(ORDERS_COLLECTION).doc(cleanOrderId);
+    const orderRef = db.collection(ORDERS_COLLECTION).doc(targetDocId);
     const orderSnap = await transaction.get(orderRef);
     if (!orderSnap.exists) {
       throw new Error(`Order "${cleanOrderId}" not found`);
@@ -508,15 +561,45 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
     if (orderData.status === 'Delivered') {
       throw new Error('Delivered orders cannot be cancelled');
     }
+    if (orderData.status === 'Out for Delivery' && cleanActor.role === 'customer') {
+      throw new Error('Order is already out for delivery and cannot be cancelled');
+    }
+
+    // Customer authorization check
+    if (cleanActor.role === 'customer' && cleanActor.id) {
+      const orderCustomerUserId = orderData.customer?.userId || orderData.customer?.id || orderData.userId;
+      if (orderCustomerUserId && String(orderCustomerUserId) !== String(cleanActor.id)) {
+        const actorPhone = cleanActor.phone;
+        const orderPhone = orderData.customer?.phone;
+        if (!actorPhone || !orderPhone || actorPhone !== orderPhone) {
+          throw new Error('You are not authorized to cancel this order');
+        }
+      }
+    }
 
     // ── PHASE A: ALL READS FIRST (Firestore Transaction Rule) ──
     const inventoryReads = [];
-    if (orderData.isInventoryDeducted && !orderData.isInventoryRestocked) {
+    if (orderData.isInventoryDeducted && !orderData.isInventoryRestocked && orderData.storeId) {
+      const itemsByInvDoc = new Map();
       for (const item of orderData.items || []) {
-        const invDocId = getInventoryDocId(orderData.storeId, item.productId);
-        const invRef = db.collection(INVENTORY_COLLECTION).doc(invDocId);
-        inventoryReads.push({ item, invRef });
+        const prodId = item.productId || item.itemId || item.id || item._id;
+        if (!prodId) continue;
+        const invDocId = getInventoryDocId(orderData.storeId, prodId);
+        const qty = Math.max(1, Number(item.quantity) || 1);
+        if (itemsByInvDoc.has(invDocId)) {
+          const existing = itemsByInvDoc.get(invDocId);
+          existing.quantity += qty;
+        } else {
+          itemsByInvDoc.set(invDocId, {
+            invDocId,
+            item,
+            productId: prodId,
+            quantity: qty,
+            invRef: db.collection(INVENTORY_COLLECTION).doc(invDocId),
+          });
+        }
       }
+      inventoryReads.push(...itemsByInvDoc.values());
     }
 
     const inventorySnaps = [];
@@ -529,7 +612,7 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
 
     let userSnap = null;
     let userRef = null;
-    const isWallet = orderData.paymentMethod?.toLowerCase().includes('wallet') && orderData.amount > 0;
+    const isWallet = orderData.paymentMethod?.toLowerCase().includes('wallet') && Number(orderData.amount) > 0;
     if (isWallet && orderData.customer?.userId) {
       userRef = db.collection(USERS_COLLECTION).doc(orderData.customer.userId);
       userSnap = await transaction.get(userRef);
@@ -538,7 +621,7 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
     // ── PHASE B: ALL WRITES AFTER READS ──
     // 1. Restore Inventory Stock
     for (const entry of inventorySnaps) {
-      const reqQty = Math.max(1, Number(entry.item.quantity) || 1);
+      const reqQty = entry.quantity;
       const currentStock = Number(entry.data.stock) || 0;
       const restoredStock = Math.round((currentStock + reqQty) * 1000) / 1000;
       const newStatus = calculateInventoryStatus(restoredStock, entry.data.min);
@@ -554,16 +637,16 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
         id: histRef.id,
         _id: histRef.id,
         storeId: orderData.storeId,
-        itemId: entry.item.productId,
-        productName: entry.item.name,
+        itemId: entry.productId,
+        productName: entry.item?.name || 'Restocked item',
         classification: 'fresh',
         actionType: 'order_restock',
         quantity: reqQty,
-        unit: 'kg',
+        unit: entry.data.unit || 'kg',
         previousQuantity: currentStock,
         resultingQuantity: restoredStock,
-        reason: `Restocked — Order #${cleanOrderId} cancelled`,
-        orderId: cleanOrderId,
+        reason: `Restocked — Order #${orderData.orderId || cleanOrderId} cancelled`,
+        orderId: orderData.orderId || cleanOrderId,
         createdAt: now,
       });
     }
@@ -587,8 +670,8 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
         type: 'Credit',
         amount: refundAmount,
         balanceAfter: newBal,
-        description: `Refund for cancelled order #${cleanOrderId}`,
-        orderId: cleanOrderId,
+        description: `Refund for cancelled order #${orderData.orderId || cleanOrderId}`,
+        orderId: orderData.orderId || cleanOrderId,
         status: 'Success',
         createdAt: now,
       });
@@ -600,7 +683,7 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
       status: 'Cancelled',
       timestamp: now,
       note: reason,
-      actor: actor ? { id: actor.id || null, role: actor.role || 'system' } : { role: 'system' },
+      actor: cleanActor,
     });
 
     transaction.update(orderRef, {
@@ -614,7 +697,7 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
     return {
       success: true,
       message: 'Order cancelled, inventory restored, and wallet refunded if applicable',
-      orderId: cleanOrderId,
+      orderId: orderData.orderId || cleanOrderId,
     };
   });
 };
