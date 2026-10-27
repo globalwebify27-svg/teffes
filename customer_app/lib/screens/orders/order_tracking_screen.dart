@@ -84,6 +84,91 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
   }
 
+  bool _isCancelling = false;
+
+  Future<void> _cancelOrder(OrderModel order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            const Icon(Icons.cancel_outlined, color: Colors.red, size: 22),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Cancel Order #${order.orderId}?',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: const Text(
+          'Are you sure you want to cancel this order?\n\nYour items will be restocked and any prepaid amount will be refunded immediately to your TeFFe wallet.',
+          style: TextStyle(fontSize: 13, height: 1.4, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Keep Order', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, Cancel Order', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isCancelling = true);
+    try {
+      final res = await _api.put(
+        '/orders/${order.orderId}/cancel',
+        data: {'reason': 'Customer requested cancellation from app'},
+      );
+
+      if (res.data != null && res.data['success'] == true) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, color: Colors.white),
+                  const SizedBox(width: 8),
+                  Expanded(child: Text('Order #${order.orderId} cancelled successfully.')),
+                ],
+              ),
+              backgroundColor: Colors.red.shade700,
+            ),
+          );
+          await _fetchLiveOrderDetails();
+        }
+      } else {
+        final msg = res.data?['message'] ?? 'Could not cancel order';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg.toString()), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error cancelling order: $e'), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
   Set<Marker> _buildMapMarkers(OrderModel order) {
     final markers = <Marker>{};
 
@@ -296,6 +381,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     final status = order.status;
     final isPickup = order.isPickup;
 
+    if (status == 'Cancelled') {
+      return {
+        'badge': 'ORDER CANCELLED',
+        'title': 'Order Cancelled',
+        'sub': order.cancellationReason ?? 'This order was cancelled and inventory has been restocked',
+      };
+    }
+
     if (status == 'Delivered') {
       return {
         'badge': 'DELIVERY COMPLETED',
@@ -428,6 +521,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
 
     final status = order.status;
+    final isCancelled = status == 'Cancelled';
+    final isRiderAssigned = order.rider != null && (order.rider?.name?.trim().isNotEmpty == true);
+    final isRiderDispatched = isRiderAssigned && ['Ready', 'Out for Delivery', 'Delivered'].contains(status);
+    final canCancelOrder = !['Ready', 'Out for Delivery', 'Delivered', 'Cancelled'].contains(status);
     final etaInfo = _getEtaDisplayInfo(order);
 
     return Scaffold(
@@ -466,20 +563,24 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
               Container(
                 padding: const EdgeInsets.all(AppDimensions.spaceMd),
                 decoration: BoxDecoration(
-                  color: status == 'Delivered'
-                      ? AppColors.hygieneLight
-                      : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                          ? const Color(0xFFFFF7ED)
-                          : status == 'Cutting'
-                              ? Colors.amber.shade50
-                              : AppColors.deliveryAmberBg,
+                  color: isCancelled
+                      ? Colors.red.shade50
+                      : status == 'Delivered'
+                          ? AppColors.hygieneLight
+                          : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                              ? const Color(0xFFFFF7ED)
+                              : status == 'Cutting'
+                                  ? Colors.amber.shade50
+                                  : AppColors.deliveryAmberBg,
                   borderRadius: AppDimensions.roundedLg,
                   border: Border.all(
-                    color: status == 'Delivered'
-                        ? AppColors.hygieneDark.withOpacity(0.3)
-                        : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                            ? const Color(0xFFFDBA74)
-                            : AppColors.deliveryAmber.withOpacity(0.3),
+                    color: isCancelled
+                        ? Colors.red.shade200
+                        : status == 'Delivered'
+                            ? AppColors.hygieneDark.withOpacity(0.3)
+                            : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                                ? const Color(0xFFFDBA74)
+                                : AppColors.deliveryAmber.withOpacity(0.3),
                   ),
                 ),
                 child: Row(
@@ -494,11 +595,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                 width: 8,
                                 height: 8,
                                 decoration: BoxDecoration(
-                                  color: status == 'Delivered'
-                                      ? AppColors.hygieneDark
-                                      : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                                          ? const Color(0xFFEA580C)
-                                          : Colors.amber.shade800,
+                                  color: isCancelled
+                                      ? Colors.red.shade700
+                                      : status == 'Delivered'
+                                          ? AppColors.hygieneDark
+                                          : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                                              ? const Color(0xFFEA580C)
+                                              : Colors.amber.shade800,
                                   shape: BoxShape.circle,
                                 ),
                               ),
@@ -508,11 +611,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.w800,
-                                  color: status == 'Delivered'
-                                      ? AppColors.hygieneDark
-                                      : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                                          ? const Color(0xFFC2410C)
-                                          : AppColors.deliveryAmber,
+                                  color: isCancelled
+                                      ? Colors.red.shade800
+                                      : status == 'Delivered'
+                                          ? AppColors.hygieneDark
+                                          : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                                              ? const Color(0xFFC2410C)
+                                              : AppColors.deliveryAmber,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -524,11 +629,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w900,
-                              color: status == 'Delivered'
-                                  ? AppColors.hygieneDark
-                                  : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                                      ? const Color(0xFF9A3412)
-                                      : const Color(0xFF78350F),
+                              color: isCancelled
+                                  ? Colors.red.shade900
+                                  : status == 'Delivered'
+                                      ? AppColors.hygieneDark
+                                      : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                                          ? const Color(0xFF9A3412)
+                                          : const Color(0xFF78350F),
                             ),
                           ),
                           const SizedBox(height: 2),
@@ -536,11 +643,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             etaInfo['sub']!,
                             style: TextStyle(
                               fontSize: 11.5,
-                              color: status == 'Delivered'
-                                  ? AppColors.hygieneDark
-                                  : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                                      ? const Color(0xFFC2410C)
-                                      : Colors.amber.shade900,
+                              color: isCancelled
+                                  ? Colors.red.shade700
+                                  : status == 'Delivered'
+                                      ? AppColors.hygieneDark
+                                      : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                                          ? const Color(0xFFC2410C)
+                                          : Colors.amber.shade900,
                             ),
                           ),
                         ],
@@ -550,28 +659,34 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                       width: 48,
                       height: 48,
                       decoration: BoxDecoration(
-                        color: status == 'Delivered'
-                            ? AppColors.hygieneLight
-                            : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                                ? const Color(0xFFFFEDD5)
-                                : AppColors.deliveryAmber.withOpacity(0.2),
+                        color: isCancelled
+                            ? Colors.red.shade100
+                            : status == 'Delivered'
+                                ? AppColors.hygieneLight
+                                : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                                    ? const Color(0xFFFFEDD5)
+                                    : AppColors.deliveryAmber.withOpacity(0.2),
                         shape: BoxShape.circle,
                       ),
                       child: Icon(
-                        status == 'Delivered'
-                            ? Icons.check_circle_rounded
-                            : status == 'Cutting'
-                                ? Icons.content_cut_rounded
+                        isCancelled
+                            ? Icons.cancel_rounded
+                            : status == 'Delivered'
+                                ? Icons.check_circle_rounded
+                                : status == 'Cutting'
+                                    ? Icons.content_cut_rounded
+                                    : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
+                                        ? Icons.near_me_rounded
+                                        : order.isPickup
+                                            ? Icons.storefront_rounded
+                                            : Icons.two_wheeler_rounded,
+                        color: isCancelled
+                            ? Colors.red.shade700
+                            : status == 'Delivered'
+                                ? AppColors.hygieneDark
                                 : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                                    ? Icons.near_me_rounded
-                                    : order.isPickup
-                                        ? Icons.storefront_rounded
-                                        : Icons.two_wheeler_rounded,
-                        color: status == 'Delivered'
-                            ? AppColors.hygieneDark
-                            : (status == 'Out for Delivery' && (order.remainingTransitMinutes ?? 12) <= 5)
-                                ? const Color(0xFFEA580C)
-                                : AppColors.deliveryAmber,
+                                    ? const Color(0xFFEA580C)
+                                    : AppColors.deliveryAmber,
                         size: 26,
                       ),
                     ),
@@ -639,8 +754,43 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                 const SizedBox(height: AppDimensions.spaceMd),
               ],
 
-              // 2. Interactive Google Maps Live Tracking Card
-              Container(
+              // 2. Interactive Google Maps Live Tracking Card (Only when dispatched)
+              if (isCancelled)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: AppDimensions.roundedLg,
+                    border: Border.all(color: Colors.red.shade200),
+                    boxShadow: AppDimensions.cardShadow,
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.cancel_outlined, color: Colors.red.shade700, size: 36),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'Order Cancelled',
+                        style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.black87),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        order.cancellationReason ?? 'This order has been cancelled. Any prepaid amount has been refunded to your wallet.',
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, height: 1.4),
+                      ),
+                    ],
+                  ),
+                )
+              else if (isRiderDispatched)
+                Container(
                 height: 250,
                 decoration: BoxDecoration(
                   color: const Color(0xFFF1F5F9),
@@ -756,28 +906,34 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                     ],
                   ),
                 ),
-              ),
-              const SizedBox(height: AppDimensions.spaceMd),
-
-              // 3. Contact Card (Store Counter for Pickup vs Rider for Delivery)
-              order.isPickup
-                  ? Container(
-                      padding: const EdgeInsets.all(AppDimensions.spaceMd),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: AppDimensions.roundedLg,
-                        border: Border.all(color: const Color(0xFFFDE68A)),
-                        boxShadow: AppDimensions.cardShadow,
-                      ),
-                      child: Row(
+              )
+              else
+                // Dark Store Fresh Meat Preparation Card (Shown before rider dispatch)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(18),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: AppDimensions.roundedLg,
+                    border: Border.all(color: const Color(0xFFFDE68A)),
+                    boxShadow: AppDimensions.cardShadow,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
-                            decoration: const BoxDecoration(
-                              color: Color(0xFFFEF3C7),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade100,
                               shape: BoxShape.circle,
                             ),
-                            child: const Icon(Icons.storefront_rounded, color: Color(0xFFB45309), size: 24),
+                            child: Icon(
+                              status == 'Cutting' ? Icons.content_cut_rounded : Icons.storefront_rounded,
+                              color: Colors.amber.shade900,
+                              size: 24,
+                            ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
@@ -785,105 +941,201 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '${order.storeName != null ? "${order.storeName} Counter" : "Store Takeaway Counter"}',
-                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                                  status == 'Cutting'
+                                      ? 'Butcher Cutting in Progress'
+                                      : 'Order Verified at Dark Store',
+                                  style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  '${order.storeAddress ?? "Store Counter, Ranchi"} • Open till 09:00 PM',
-                                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                  order.storeName != null ? '${order.storeName} Hub' : 'Teffes Local Dark Store Hub',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
                                 ),
                               ],
                             ),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primaryMaroon),
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(content: Text('Calling ${order.storeName ?? "Store Counter"} at +91 94311 88200...')),
-                              );
-                            },
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.hygieneLight,
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text('0-4°C Chill', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.hygieneDark)),
                           ),
                         ],
                       ),
-                    )
-                  : Container(
-                      padding: const EdgeInsets.all(AppDimensions.spaceMd),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: AppDimensions.roundedLg,
-                        border: Border.all(color: AppColors.borderHairline),
-                        boxShadow: AppDimensions.cardShadow,
+                      const SizedBox(height: 14),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF64748B)),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                status == 'Cutting'
+                                    ? 'Fresh meat is being cut on a sanitized block. Once packed, a delivery partner will be assigned and live tracking will start.'
+                                    : 'Your order is confirmed at the store. Cutting and packing will begin shortly, followed by delivery partner assignment.',
+                                style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569), height: 1.35),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      child: Builder(
-                        builder: (context) {
-                          final isRiderAssigned = order.rider?.name != null && (order.rider?.name?.trim().isNotEmpty == true);
-                          final String riderName = isRiderAssigned
-                              ? (order.rider?.name ?? 'Store Express Rider')
-                              : (order.status == 'Pending' || order.status == 'Cutting'
-                                  ? 'Assigning Fleet Partner...'
-                                  : 'Store Express Rider');
-                          final riderSubtitle = isRiderAssigned
-                              ? '${order.rider?.vehicle ?? "Insulated Fleet Partner"} • ${(order.rider?.rating ?? "4.9").replaceAll("★", "").trim()} ★'
-                              : 'Order being prepared at local store counter';
-                          final riderPhone = order.rider?.phone;
+                    ],
+                  ),
+                ),
+              const SizedBox(height: AppDimensions.spaceMd),
 
-                          return Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 22,
-                                backgroundColor: isRiderAssigned ? const Color(0xFF941717).withOpacity(0.1) : AppColors.surfaceSubtle,
-                                child: Icon(
-                                  isRiderAssigned ? Icons.two_wheeler_rounded : Icons.pending_actions_rounded,
-                                  color: isRiderAssigned ? AppColors.primaryMaroon : AppColors.textSecondary,
-                                ),
+              // 3. Contact Card (Store Counter for Pickup vs Rider for Delivery)
+              if (!isCancelled)
+                order.isPickup
+                    ? Container(
+                        padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: AppDimensions.roundedLg,
+                          border: Border.all(color: const Color(0xFFFDE68A)),
+                          boxShadow: AppDimensions.cardShadow,
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: const BoxDecoration(
+                                color: Color(0xFFFEF3C7),
+                                shape: BoxShape.circle,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      riderName,
-                                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      riderSubtitle,
-                                      style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
-                                    ),
-                                  ],
-                                ),
+                              child: const Icon(Icons.storefront_rounded, color: Color(0xFFB45309), size: 24),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '${order.storeName != null ? "${order.storeName} Counter" : "Store Takeaway Counter"}',
+                                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${order.storeAddress ?? "Store Counter, Ranchi"} • Open till 09:00 PM',
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                  ),
+                                ],
                               ),
-                              if (isRiderAssigned && riderPhone != null && riderPhone.trim().isNotEmpty) ...[
-                                IconButton(
-                                  icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primaryMaroon),
-                                  tooltip: 'Call Rider',
-                                  onPressed: () => _makePhoneCall(riderPhone),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primaryMaroon),
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Calling ${order.storeName ?? "Store Counter"} at +91 94311 88200...')),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      )
+                    : isRiderDispatched
+                        ? Container(
+                            padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: AppDimensions.roundedLg,
+                              border: Border.all(color: AppColors.borderHairline),
+                              boxShadow: AppDimensions.cardShadow,
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: const Color(0xFF941717).withOpacity(0.1),
+                                  child: const Icon(Icons.two_wheeler_rounded, color: AppColors.primaryMaroon),
                                 ),
-                                IconButton(
-                                  icon: const Icon(Icons.chat_rounded, color: Color(0xFF25D366)),
-                                  tooltip: 'WhatsApp Rider',
-                                  onPressed: () => _openWhatsApp(riderPhone),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        order.rider?.name ?? 'Store Express Rider',
+                                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        '${order.rider?.vehicle ?? "Insulated Fleet Partner"} • ${(order.rider?.rating ?? "4.9").replaceAll("★", "").trim()} ★',
+                                        style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ] else ...[
+                                if (order.rider?.phone != null && order.rider!.phone!.trim().isNotEmpty) ...[
+                                  IconButton(
+                                    icon: const Icon(Icons.phone_in_talk_rounded, color: AppColors.primaryMaroon),
+                                    tooltip: 'Call Rider',
+                                    onPressed: () => _makePhoneCall(order.rider!.phone),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.chat_rounded, color: Color(0xFF25D366)),
+                                    tooltip: 'WhatsApp Rider',
+                                    onPressed: () => _openWhatsApp(order.rider!.phone),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        : Container(
+                            padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: AppDimensions.roundedLg,
+                              border: Border.all(color: AppColors.borderHairline),
+                              boxShadow: AppDimensions.cardShadow,
+                            ),
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: AppColors.surfaceSubtle,
+                                  child: const Icon(Icons.two_wheeler_rounded, color: AppColors.textSecondary),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Delivery Fleet Partner',
+                                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Will be assigned after cutting & packing is completed',
+                                        style: TextStyle(fontSize: 11.5, color: Colors.amber.shade900, fontWeight: FontWeight.w500),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                   decoration: BoxDecoration(
-                                    color: AppColors.surfaceSubtle,
+                                    color: Colors.amber.shade50,
                                     borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: Colors.amber.shade200),
                                   ),
-                                  child: const Text(
-                                    'Prep in progress',
-                                    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                                  child: Text(
+                                    'Awaiting Dispatch',
+                                    style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.amber.shade900),
                                   ),
                                 ),
                               ],
-                            ],
-                          );
-                        },
-                      ),
-                    ),
+                            ),
+                          ),
               const SizedBox(height: AppDimensions.spaceMd),
 
               // 4. Exact Timeline Steps Matching Website
@@ -965,7 +1217,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                     : 'Rider is on the way (arriving in ${order.remainingTransitMinutes ?? 12} min)')
                                 : status == 'Delivered'
                                     ? 'Dispatched & safely reached your address'
-                                    : 'Assigned to delivery fleet from ${order.storeName ?? "our store"}',
+                                    : isRiderAssigned
+                                        ? 'Assigned to ${order.rider?.name ?? "rider"} from ${order.storeName ?? "our store"}'
+                                        : 'Will be assigned to delivery fleet once cut & packed',
                             isCompleted: status == 'Delivered',
                             isActive: status == 'Out for Delivery',
                             showLine: true,
@@ -1067,6 +1321,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                   child: const Text('Back to Home', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
                 ),
               ),
+
+              // 7. Cancel Order Action (Customer can cancel before dispatch)
+              if (canCancelOrder) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red.shade700,
+                      side: BorderSide(color: Colors.red.shade300, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 13),
+                      shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                    ),
+                    icon: _isCancelling
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.red))
+                        : const Icon(Icons.cancel_outlined, size: 18),
+                    label: Text(
+                      _isCancelling ? 'Cancelling Order...' : 'Cancel Order',
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
+                    ),
+                    onPressed: _isCancelling ? null : () => _cancelOrder(order),
+                  ),
+                ),
+              ],
             ],
           ),
         ),

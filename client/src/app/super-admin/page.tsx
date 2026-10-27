@@ -3552,6 +3552,8 @@ function RidersTab() {
   const [showAddRiderModal, setShowAddRiderModal] = useState(false);
   const [newRider, setNewRider] = useState({
     name: "",
+    email: "",
+    password: "Rider@12345",
     phone: "",
     vehicleNumber: "",
     storeId: "S001",
@@ -3562,6 +3564,7 @@ function RidersTab() {
   const [editingRider, setEditingRider] = useState<any | null>(null);
   const [editForm, setEditForm] = useState({
     name: "",
+    email: "",
     phone: "",
     vehicleNumber: "",
     storeId: "S001",
@@ -3587,22 +3590,27 @@ function RidersTab() {
   }, []);
 
   const handleAddRider = async () => {
-    if (!newRider.name.trim() || !newRider.phone.trim()) {
-      alert("Please enter rider name and phone number");
+    if (!newRider.name.trim() || !newRider.email.trim() || !newRider.phone.trim()) {
+      alert("Please enter rider full name, email address, and phone number.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newRider.email.trim())) {
+      alert("Please enter a valid email address for rider login.");
       return;
     }
     setSubmitting(true);
     try {
       await api.post("/super-admin/riders", {
         name: newRider.name.trim(),
-        email: `rider_${Date.now()}@teffes.com`,
+        email: newRider.email.trim().toLowerCase(),
+        password: newRider.password.trim() || "Rider@12345",
         phone: newRider.phone.trim(),
         vehicleNumber: newRider.vehicleNumber.trim() || "JH01-EC-1234",
         storeId: newRider.storeId || "S001",
       });
       fetchRiders();
       setShowAddRiderModal(false);
-      setNewRider({ name: "", phone: "", vehicleNumber: "", storeId: "S001" });
+      setNewRider({ name: "", email: "", password: "Rider@12345", phone: "", vehicleNumber: "", storeId: "S001" });
     } catch (err: any) {
       alert(err.response?.data?.message || "Failed to add rider");
     } finally {
@@ -3614,6 +3622,7 @@ function RidersTab() {
     setEditingRider(r);
     setEditForm({
       name: r.name || "",
+      email: r.email || "",
       phone: r.phone || "",
       vehicleNumber: r.vehicleNumber || "",
       storeId: r.storeId || "S001",
@@ -3631,6 +3640,7 @@ function RidersTab() {
     try {
       const res = await api.put(`/super-admin/riders/${editingRider._id}`, {
         name: editForm.name.trim(),
+        email: editForm.email.trim().toLowerCase(),
         phone: editForm.phone.trim(),
         vehicleNumber: editForm.vehicleNumber.trim(),
         storeId: editForm.storeId,
@@ -3719,7 +3729,10 @@ function RidersTab() {
               ) : (
                 riders.map((r, i) => (
                   <tr key={r._id || r.phone || i} style={{ borderBottom: i < riders.length - 1 ? "1px solid #ede8e0" : "none" }}>
-                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{r.name}</td>
+                    <td style={{ padding: "14px 16px" }}>
+                      <div style={{ fontWeight: 700, color: "#171410" }}>{r.name}</div>
+                      <div style={{ fontSize: "0.78rem", color: "#73695b", marginTop: "2px", fontFamily: "monospace" }}>{r.email || "No email set"}</div>
+                    </td>
                     <td style={{ padding: "14px 16px", color: "#423b32", fontFamily: "monospace" }}>{r.phone}</td>
                     <td style={{ padding: "14px 16px", color: "#73695b", fontWeight: 600 }}>{r.vehicleNumber || "—"}</td>
                     <td style={{ padding: "14px 16px", color: "#423b32" }}>
@@ -3781,12 +3794,35 @@ function RidersTab() {
               </div>
 
               <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Email Address * (Required for Rider App Login)</label>
+                <input
+                  type="email"
+                  placeholder="e.g. rahul.rider@teffes.com"
+                  value={newRider.email}
+                  onChange={e => setNewRider({ ...newRider, email: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+                <span style={{ fontSize: "0.75rem", color: "#73695b" }}>Rider uses this email to log into the TeFFe Rider mobile app.</span>
+              </div>
+
+              <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Phone Number *</label>
                 <input
                   type="text"
                   placeholder="+91 98765 43210"
                   value={newRider.phone}
                   onChange={e => setNewRider({ ...newRider, phone: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Initial Password</label>
+                <input
+                  type="text"
+                  placeholder="Rider@12345"
+                  value={newRider.password}
+                  onChange={e => setNewRider({ ...newRider, password: e.target.value })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                 />
               </div>
@@ -3810,8 +3846,8 @@ function RidersTab() {
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
                 >
                   <option value="S001">S001 — Ranchi Kishore Ganj</option>
-                  <option value="S002">S002 — Ranchi Doranda</option>
-                  <option value="S003">S003 — Ranchi Lalpur</option>
+                  <option value="S003">S003 — Ranchi Harmu Road</option>
+                  <option value="S004">S004 — Ranchi Doranda (Teffes - Doranda store)</option>
                 </select>
               </div>
             </div>
@@ -3838,7 +3874,7 @@ function RidersTab() {
                 <h3 style={{ margin: 0, fontSize: "1.25rem", fontWeight: 800, color: "#171410", display: "flex", alignItems: "center", gap: "8px" }}>
                   <FontAwesomeIcon icon={faPen} style={{ color: "#941717" }} /> Edit Rider Details
                 </h3>
-                <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#73695b" }}>Update phone, vehicle number, and store assignment</p>
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.8rem", color: "#73695b" }}>Update email, phone, vehicle number, and store assignment</p>
               </div>
               <button onClick={() => setEditingRider(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
                 <span className="material-symbols-outlined" style={{ fontSize: "20px" }}>close</span>
@@ -3857,6 +3893,17 @@ function RidersTab() {
               </div>
 
               <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Email Address * (Required for App Login)</label>
+                <input
+                  type="email"
+                  placeholder="e.g. rahul.rider@teffes.com"
+                  value={editForm.email}
+                  onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                  style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
+                />
+              </div>
+
+              <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Phone Number *</label>
                 <input
                   type="text"
@@ -3865,7 +3912,6 @@ function RidersTab() {
                   onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                 />
-                <span style={{ fontSize: "0.75rem", color: "#73695b" }}>Rider logs into the rider app with this phone number</span>
               </div>
 
               <div>
@@ -3887,8 +3933,8 @@ function RidersTab() {
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
                 >
                   <option value="S001">S001 — Ranchi Kishore Ganj</option>
-                  <option value="S002">S002 — Ranchi Doranda</option>
-                  <option value="S003">S003 — Ranchi Lalpur</option>
+                  <option value="S003">S003 — Ranchi Harmu Road</option>
+                  <option value="S004">S004 — Ranchi Doranda (Teffes - Doranda store)</option>
                 </select>
               </div>
 

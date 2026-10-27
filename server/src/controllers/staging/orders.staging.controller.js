@@ -100,6 +100,11 @@ const cancelOrder = async (req, res, next) => {
       userRole
     );
 
+    try {
+      const { emitOrderStatusUpdate } = require('../../socket');
+      emitOrderStatusUpdate(req.params.orderId, { orderId: req.params.orderId, status: 'Cancelled' });
+    } catch (_) {}
+
     return res.status(200).json({
       success: true,
       message: 'Order cancelled successfully and inventory restocked',
@@ -193,6 +198,10 @@ const updateStatus = async (req, res, next) => {
     const orderId = req.params.orderId;
     const actor = req.user;
     const updated = await updateOrderStatus(orderId, status, actor, note);
+    try {
+      const { emitOrderStatusUpdate } = require('../../socket');
+      emitOrderStatusUpdate(orderId, { orderId, status });
+    } catch (_) {}
     return res.status(200).json({ success: true, message: `Status updated to ${status}`, order: updated });
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
@@ -223,6 +232,10 @@ const assignRider = async (req, res, next) => {
       status: 'Ready',
       updatedAt: new Date().toISOString(),
     });
+    try {
+      const { emitOrderStatusUpdate } = require('../../socket');
+      emitOrderStatusUpdate(orderId, { orderId, status: 'Ready', rider: riderData });
+    } catch (_) {}
     return res.status(200).json({ success: true, message: 'Rider assigned to order', rider: riderData });
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
