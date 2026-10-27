@@ -4,7 +4,7 @@
  */
 
 const { verifyAccessToken } = require('../utils/jwt');
-const { getUserById, getUserByFirebaseUid } = require('../services/firestore/user.firestore.service');
+const { getUserById, getUserByFirebaseUid, getUserByEmail } = require('../services/firestore/user.firestore.service');
 const { getAuthInstance } = require('../config/firebase');
 
 /**
@@ -29,6 +29,25 @@ const protectStaging = async (req, res, next) => {
     }
 
     let user = null;
+
+    // Check for demo token fallback (matches original auth.js behavior)
+    if (token.startsWith('demo-superadmin-token') || token === 'demo-superadmin-token-001') {
+      user = await getUserByEmail('superadmin@teffes.com');
+      if (!user) user = await getUserByEmail('admin@teffes.com');
+      if (user) {
+        req.user = user;
+        return next();
+      }
+    }
+
+    if (token.startsWith('demo-storeadmin-token') || token === 'demo-storeadmin-token-001') {
+      user = await getUserByEmail('storeadmin@teffes.com');
+      if (!user) user = await getUserByEmail('priya@teffes.com');
+      if (user) {
+        req.user = user;
+        return next();
+      }
+    }
 
     // First attempt: Application JWT
     try {
