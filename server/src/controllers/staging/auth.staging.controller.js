@@ -97,17 +97,28 @@ const adminLogin = async (req, res, next) => {
 
     const accessToken = signAccessToken({ id: user._id || user.id, role: user.role });
 
+    res.cookie('accessToken', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+      maxAge: 15 * 60 * 1000,
+    });
+
     return res.status(200).json({
       success: true,
       message: 'Login successful',
       accessToken,
+      token: accessToken,
       user: {
         id: user._id || user.id,
         _id: user._id || user.id,
         name: user.name,
         email: user.email,
+        phone: user.phone || '',
         role: user.role,
         storeId: user.storeId || null,
+        storeName: user.storeName || null,
+        isVerified: user.isVerified !== false,
       },
     });
   } catch (err) {
