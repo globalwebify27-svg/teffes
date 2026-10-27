@@ -46,8 +46,23 @@ const getAvailableStoresHandler = async (req, res, next) => {
     }
     items = Array.isArray(items) ? items : [];
 
-    const customerLat = Number(req.body?.customerLat || req.query?.customerLat || 23.3512);
-    const customerLng = Number(req.body?.customerLng || req.query?.customerLng || 85.3154);
+    let customerLat = req.body?.lat !== undefined ? Number(req.body.lat) : (req.body?.customerLat !== undefined ? Number(req.body.customerLat) : (req.query?.lat !== undefined ? Number(req.query.lat) : (req.query?.customerLat !== undefined ? Number(req.query.customerLat) : null)));
+    let customerLng = req.body?.lng !== undefined ? Number(req.body.lng) : (req.body?.customerLng !== undefined ? Number(req.body.customerLng) : (req.query?.lng !== undefined ? Number(req.query.lng) : (req.query?.customerLng !== undefined ? Number(req.query.customerLng) : null)));
+
+    // Address text geocoding fallback: inspect shippingAddress or address string
+    const addressHint = (req.body?.shippingAddress || req.body?.address || req.query?.shippingAddress || req.query?.address || '').toLowerCase();
+    if (addressHint) {
+      if (addressHint.includes('doranda') || addressHint.includes('834002') || addressHint.includes('hinoo')) {
+        customerLat = 23.332;
+        customerLng = 85.321;
+      } else if (addressHint.includes('harmu') || addressHint.includes('kishore') || addressHint.includes('834001')) {
+        customerLat = 23.3441;
+        customerLng = 85.3096;
+      }
+    }
+
+    if (!customerLat || isNaN(customerLat)) customerLat = 23.3441;
+    if (!customerLng || isNaN(customerLng)) customerLng = 85.3096;
 
     const activeStores = await getActiveStores();
     const evaluatedStores = [];
@@ -234,6 +249,7 @@ router.post('/inventory/:storeId/:itemId/waste', protectStaging, requireStagingR
 // ─── Super Admin & Store Admin Portals ─────────────────────────────────────
 router.use('/super-admin', require('./superAdmin.routes'));
 router.use('/store-admin', require('./storeAdmin.routes'));
+router.use('/rider', require('./rider.routes'));
 router.use('/upload', require('./upload.routes'));
 router.use('/location', require('./location.routes'));
 router.use('/notifications', require('./notification.routes'));

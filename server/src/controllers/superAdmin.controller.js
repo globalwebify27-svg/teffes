@@ -396,6 +396,13 @@ const createRider = async (req, res, next) => {
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Rider name is required' });
     }
+    if (!email || !email.trim()) {
+      return res.status(400).json({ success: false, message: 'Email address is required for rider login' });
+    }
+    email = email.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
+    }
     if (!phone || !phone.trim()) {
       return res.status(400).json({ success: false, message: 'Phone number is required' });
     }
@@ -409,7 +416,7 @@ const createRider = async (req, res, next) => {
     const existingRider = await User.findOne({
       $or: [
         { phone },
-        ...(email ? [{ email: email.toLowerCase().trim() }] : []),
+        { email },
       ],
     });
 
@@ -420,7 +427,7 @@ const createRider = async (req, res, next) => {
           message: `Phone number ${phone} is already registered to ${existingRider.name || 'another account'}.`,
         });
       }
-      if (email && existingRider.email === email.toLowerCase().trim()) {
+      if (existingRider.email === email) {
         return res.status(400).json({
           success: false,
           message: `Email ${email} is already registered.`,
@@ -429,17 +436,22 @@ const createRider = async (req, res, next) => {
     }
 
     let storeName = 'Ranchi Kishore Ganj';
-    if (storeId) {
+    if (storeId === 'S004') {
+      storeName = 'Teffes - Doranda store';
+    } else if (storeId === 'S003') {
+      storeName = 'TeFFe\'s — Harmu Road';
+    } else if (storeId) {
       const store = await Store.findOne({ storeId });
       if (store) storeName = store.name;
     }
 
+    const defaultPass = password && password.trim() ? password.trim() : 'Rider@12345';
     const rider = await User.create({
       name: name.trim(),
-      email: email ? email.toLowerCase().trim() : `rider_${Date.now()}@teffes.com`,
-      password: password || 'Rider@12345',
+      email,
+      password: defaultPass,
       phone,
-      vehicleNumber: (vehicleNumber && vehicleNumber.trim()) || 'JH01-XX-0000',
+      vehicleNumber: (vehicleNumber && vehicleNumber.trim()) || 'JH01-EC-1234',
       storeId: storeId || 'S001',
       storeName,
       role: 'rider',
@@ -447,6 +459,38 @@ const createRider = async (req, res, next) => {
       isVerified: true,
       isActive: true,
     });
+
+    // Dual-sync to Firestore users collection so rider can immediately log into the Rider App
+    try {
+      const bcrypt = require('bcryptjs');
+      const hashedPassword = await bcrypt.hash(defaultPass, 10);
+      const { getDb } = require('../lib/firestore');
+      const db = getDb();
+      const firestoreDocId = rider._id.toString();
+      await db.collection('users').doc(firestoreDocId).set({
+        id: firestoreDocId,
+        _id: firestoreDocId,
+        name: rider.name,
+        email: rider.email,
+        phone: rider.phone,
+        password: hashedPassword,
+        vehicleNumber: rider.vehicleNumber,
+        storeId: rider.storeId,
+        storeName: rider.storeName,
+        role: 'rider',
+        riderStatus: 'Available',
+        isVerified: true,
+        isActive: true,
+        dailyTarget: 16,
+        cashInHand: 0,
+        walletBalance: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (fsErr) {
+      console.warn('[createRider] Firestore dual-sync warning:', fsErr.message);
+    }
+
     res.status(201).json({ success: true, rider });
   } catch (error) {
     if (error.code === 11000) {
@@ -519,6 +563,32 @@ const updateRider = async (req, res, next) => {
     }
 
     await rider.save();
+
+    // Dual-sync updates to Firestore
+    try {
+      const { getDb } = require('../lib/firestore');
+      const db = getDb();
+      const firestoreDocId = id.toString();
+      const fsUpdate = {
+        name: rider.name,
+        email: rider.email,
+        phone: rider.phone,
+        vehicleNumber: rider.vehicleNumber,
+        storeId: rider.storeId,
+        storeName: rider.storeName,
+        riderStatus: rider.riderStatus,
+        isActive: rider.isActive,
+        updatedAt: new Date().toISOString(),
+      };
+      if (password && password.trim()) {
+        const bcrypt = require('bcryptjs');
+        fsUpdate.password = await bcrypt.hash(password.trim(), 10);
+      }
+      await db.collection('users').doc(firestoreDocId).set(fsUpdate, { merge: true });
+    } catch (fsErr) {
+      console.warn('[updateRider] Firestore dual-sync warning:', fsErr.message);
+    }
+
     res.status(200).json({ success: true, rider });
   } catch (error) {
     if (error.code === 11000) {
@@ -542,6 +612,13 @@ const deleteRider = async (req, res, next) => {
     }
 
     await rider.deleteOne();
+
+    try {
+      const { getDb } = require('../lib/firestore');
+      const db = getDb();
+      await db.collection('users').doc(id.toString()).delete();
+    } catch (_) {}
+
     res.status(200).json({ success: true, message: 'Rider deleted successfully' });
   } catch (error) {
     next(error);

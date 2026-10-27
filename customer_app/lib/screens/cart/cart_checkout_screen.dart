@@ -223,8 +223,18 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       final location = context.read<LocationProvider>();
       final cart = context.read<CartProvider>();
 
-      final lat = location.latitude ?? 23.3441;
-      final lng = location.longitude ?? 85.3096;
+      double lat = location.latitude ?? 23.3441;
+      double lng = location.longitude ?? 85.3096;
+
+      // Smart locality geocoding fallback for Ranchi dark stores
+      final addrStr = '${location.activeAddressString} ${location.selectedAddress?.pincode ?? ""}'.toLowerCase();
+      if (addrStr.contains('doranda') || addrStr.contains('834002') || addrStr.contains('hinoo')) {
+        lat = 23.332;
+        lng = 85.321;
+      } else if (addrStr.contains('harmu') || addrStr.contains('kishore') || addrStr.contains('834001')) {
+        lat = 23.3441;
+        lng = 85.3096;
+      }
 
       final itemsPayload = cart.items.values.map((it) => {
         'productId': it.product.id,
@@ -236,6 +246,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         'fulfillmentType': _fulfillmentType,
         'lat': lat,
         'lng': lng,
+        'customerLat': lat,
+        'customerLng': lng,
+        'shippingAddress': location.activeAddressString,
+        'address': location.activeAddressString,
         'items': itemsPayload,
       };
 
@@ -1059,17 +1073,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         prepTimeMinutes: 25,
         remainingTransitMinutes: isPickup ? 0 : 12,
         etaStage: 'PREPARING',
-        rider: isPickup
-            ? null
-            : OrderRiderModel(
-                name: 'Md. Imran Ansari',
-                phone: '+91 94311 88204',
-                vehicle: 'Honda Activa (JH-01-BK-4920)',
-                rating: '4.9 (840+ deliveries)',
-                eta: '12 mins',
-                lat: 23.3512,
-                lng: 85.3154,
-              ),
+        rider: null,
       );
       auth.addOrder(createdOrder);
 
@@ -1576,7 +1580,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       ),
                     ),
 
-                  // 1.05 Fulfilling Hub Card for Delivery (Nearest Auto-Selected with Option to Change)
+                  // 1.05 Fulfilling Hub Card for Delivery (Nearest Auto-Selected, Locked for Home Delivery)
                   if (!isPickup)
                     Container(
                       margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, 0, AppDimensions.spaceMd, AppDimensions.spaceMd),
@@ -1616,33 +1620,28 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                   ],
                                 ],
                               ),
-                              if (_stores.length > 1)
-                                GestureDetector(
-                                  onTap: () => setState(() => _showStorePickerInDelivery = !_showStorePickerInDelivery),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        _showStorePickerInDelivery ? 'DONE' : 'CHANGE',
-                                        style: const TextStyle(
-                                          color: AppColors.primaryMaroon,
-                                          fontWeight: FontWeight.w800,
-                                          fontSize: 11.5,
-                                        ),
-                                      ),
-                                      Icon(
-                                        _showStorePickerInDelivery ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
-                                        size: 16,
-                                        color: AppColors.primaryMaroon,
-                                      ),
-                                    ],
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: AppColors.primaryLight.withOpacity(0.4),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'Nearest Auto-Assigned',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primaryMaroon,
+                                    letterSpacing: 0.2,
                                   ),
                                 ),
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 10),
 
-                          // Collapsed Selected Hub
-                          if (!_showStorePickerInDelivery && _selectedStore != null)
+                          // Selected Auto-Assigned Hub
+                          if (_selectedStore != null)
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
@@ -1652,7 +1651,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                     children: [
                                       Text(
                                         _selectedStore!.name,
-                                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.textPrimary),
+                                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppColors.textPrimary),
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
@@ -1697,107 +1696,6 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                 ),
                               ],
                             ),
-
-                          // Expanded Hub Selector
-                          if (_showStorePickerInDelivery) ...[
-                            const SizedBox(height: 4),
-                            ..._stores.map((store) {
-                              final isSel = store.storeId == _selectedStoreId;
-                              final isOutOfStock = !store.isAvailable;
-                              return GestureDetector(
-                                onTap: isOutOfStock
-                                    ? null
-                                    : () {
-                                        setState(() {
-                                          _selectedStoreId = store.storeId;
-                                          _showStorePickerInDelivery = false;
-                                        });
-                                      },
-                                child: Opacity(
-                                  opacity: isOutOfStock ? 0.6 : 1.0,
-                                  child: Container(
-                                    margin: const EdgeInsets.only(top: 6),
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: isOutOfStock
-                                          ? const Color(0xFFF9FAFB)
-                                          : (isSel ? AppColors.primaryLight.withOpacity(0.35) : Colors.white),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                        color: isSel && !isOutOfStock ? AppColors.primaryMaroon : AppColors.borderHairline,
-                                        width: isSel && !isOutOfStock ? 1.5 : 1.0,
-                                      ),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Container(
-                                          width: 16,
-                                          height: 16,
-                                          decoration: BoxDecoration(
-                                            shape: BoxShape.circle,
-                                            border: Border.all(
-                                              color: isSel && !isOutOfStock ? AppColors.primaryMaroon : AppColors.borderHairline,
-                                              width: 1.5,
-                                            ),
-                                            color: isSel && !isOutOfStock ? AppColors.primaryMaroon : Colors.white,
-                                          ),
-                                          child: isSel && !isOutOfStock
-                                              ? Center(
-                                                  child: Container(
-                                                    width: 5,
-                                                    height: 5,
-                                                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
-                                                  ),
-                                                )
-                                              : null,
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Row(
-                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                children: [
-                                                  Expanded(
-                                                    child: Text(
-                                                      store.name,
-                                                      style: TextStyle(
-                                                        fontWeight: FontWeight.w700,
-                                                        fontSize: 12.5,
-                                                        color: isSel && !isOutOfStock ? AppColors.primaryMaroon : AppColors.textPrimary,
-                                                      ),
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                  Text(
-                                                    store.distance,
-                                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.primaryMaroon),
-                                                  ),
-                                                ],
-                                              ),
-                                              const SizedBox(height: 2),
-                                              Text(
-                                                isOutOfStock ? 'Out of stock for selected cart items' : store.address,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  color: isOutOfStock ? Colors.red.shade700 : AppColors.textSecondary,
-                                                  fontWeight: isOutOfStock ? FontWeight.w600 : FontWeight.normal,
-                                                ),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }),
-                          ],
                         ],
                       ),
                     ),

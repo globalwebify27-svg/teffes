@@ -212,6 +212,13 @@ export default function CartDrawer() {
       const addrList = addrs || addresses;
       const addrId = selectedAddrId || selectedAddressId;
       const activeAddr = addrList.find((a) => a._id === addrId) || addrList[0];
+      const fullAddressStr = [
+        activeAddr?.line1,
+        activeAddr?.line2,
+        activeAddr?.city,
+        activeAddr?.pincode,
+      ].filter(Boolean).join(" ");
+
       const payload = {
         type: fulfillmentType,
         items: items.map((i) => ({
@@ -221,6 +228,10 @@ export default function CartDrawer() {
         })),
         customerLat: activeAddr?.lat || 23.3512,
         customerLng: activeAddr?.lng || 85.3154,
+        lat: activeAddr?.lat,
+        lng: activeAddr?.lng,
+        address: fullAddressStr,
+        shippingAddress: fullAddressStr,
       };
 
       const res = await api.post<{

@@ -58,6 +58,7 @@ class OrderModel {
   final String? etaStage;
   final String? customerPhone;
   final String? customerUserId;
+  final String? cancellationReason;
 
   bool get isActive {
     final s = status.toLowerCase();
@@ -97,6 +98,7 @@ class OrderModel {
     this.etaStage,
     this.customerPhone,
     this.customerUserId,
+    this.cancellationReason,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -154,6 +156,7 @@ class OrderModel {
       etaStage: json['etaStage']?.toString() ?? json['etaDetails']?['stage']?.toString(),
       customerPhone: json['customer'] is Map ? json['customer']['phone']?.toString() : null,
       customerUserId: json['customer'] is Map ? (json['customer']['userId']?.toString() ?? json['customer']['id']?.toString()) : null,
+      cancellationReason: json['cancellationReason']?.toString(),
     );
   }
 }
