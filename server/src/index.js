@@ -22,11 +22,17 @@ app.use(
     origin: (origin, callback) => {
       // Allow requests with no origin (like mobile apps, curl)
       if (!origin) return callback(null, true);
-      // Allow localhost with any port (for React client, Flutter web, etc.)
+      const allowedProductionOrigins = [
+        process.env.CLIENT_URL,
+        'https://teffes.com',
+        'https://www.teffes.com',
+        'https://teffes.onrender.com',
+      ].filter(Boolean);
+
       if (
         /^http:\/\/localhost(:\d+)?$/.test(origin) ||
         /^http:\/\/127\.0\.0\.1(:\d+)?$/.test(origin) ||
-        origin === (process.env.CLIENT_URL || 'http://localhost:3000')
+        allowedProductionOrigins.includes(origin)
       ) {
         return callback(null, true);
       }

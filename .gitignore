@@ -59,3 +59,9 @@ server/config/
 **/*firebase-adminsdk*.json
 **/google-services.json
 **/GoogleService-Info.plist
+
+# Backups & Local Uploads
+server/backups/
+server/uploads/
+*.backup.js
+

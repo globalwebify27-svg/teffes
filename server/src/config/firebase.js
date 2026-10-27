@@ -1,12 +1,14 @@
 const { initializeApp, cert, getApps } = require('firebase-admin/app');
 const { getMessaging } = require('firebase-admin/messaging');
 const { getAuth } = require('firebase-admin/auth');
+const { getFirestore } = require('firebase-admin/firestore');
 const path = require('path');
 const fs = require('fs');
 
 let firebaseApp = null;
 let messagingInstance = null;
 let authInstance = null;
+let firestoreInstance = null;
 
 const initFirebase = () => {
   if (firebaseApp) return firebaseApp;
@@ -17,6 +19,7 @@ const initFirebase = () => {
       firebaseApp = existingApps[0];
       messagingInstance = getMessaging(firebaseApp);
       authInstance = getAuth(firebaseApp);
+      firestoreInstance = getFirestore(firebaseApp);
       return firebaseApp;
     }
 
@@ -29,6 +32,7 @@ const initFirebase = () => {
         });
         messagingInstance = getMessaging(firebaseApp);
         authInstance = getAuth(firebaseApp);
+        firestoreInstance = getFirestore(firebaseApp);
         console.log(`[Firebase Admin] Initialized from FIREBASE_SERVICE_ACCOUNT_JSON (Project: ${serviceAccount.project_id})`);
         return firebaseApp;
       } catch (parseErr) {
@@ -65,6 +69,7 @@ const initFirebase = () => {
       });
       messagingInstance = getMessaging(firebaseApp);
       authInstance = getAuth(firebaseApp);
+      firestoreInstance = getFirestore(firebaseApp);
       console.log(`[Firebase Admin] Initialized successfully using ${path.basename(serviceAccountPath)} (Project: ${serviceAccount.project_id})`);
     } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY) {
       // Direct env variables fallback for serverless/container deployments
@@ -77,6 +82,7 @@ const initFirebase = () => {
       });
       messagingInstance = getMessaging(firebaseApp);
       authInstance = getAuth(firebaseApp);
+      firestoreInstance = getFirestore(firebaseApp);
       console.log(`[Firebase Admin] Initialized from environment variables (Project: ${process.env.FIREBASE_PROJECT_ID})`);
     } else {
       console.warn('[Firebase Admin] Warning: No service account key found. Push notifications and Auth verification will run in simulation mode.');
@@ -105,6 +111,13 @@ const getAuthInstance = () => {
   return authInstance;
 };
 
+const getFirestoreInstance = () => {
+  if (!firestoreInstance) {
+    initFirebase();
+  }
+  return firestoreInstance;
+};
+
 const isFirebaseReady = () => {
   return !!firebaseApp;
 };
@@ -113,5 +126,7 @@ module.exports = {
   initFirebase,
   getMessagingInstance,
   getAuthInstance,
+  getFirestoreInstance,
   isFirebaseReady,
 };
+

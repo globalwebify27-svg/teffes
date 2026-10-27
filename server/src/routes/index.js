@@ -1,48 +1,23 @@
+/**
+ * TeFFe Production API Routes (Cloud Firestore Backend)
+ * 
+ * Cutover Status: Live Production Routed to Google Cloud Firestore
+ * Rollback Guard: MongoDB Mongoose models preserved in server/src/models/
+ */
+
 const { Router } = require('express');
-const authRoutes = require('./auth.routes');
-const productRoutes = require('./product.routes');
-const storeAdminRoutes = require('./storeAdmin.routes');
-const superAdminRoutes = require('./superAdmin.routes');
-const userRoutes = require('./user.routes');
-const orderRoutes = require('./order.routes');
-const paymentRoutes = require('./payment.routes');
-const couponRoutes = require('./coupon.routes');
-const walletRoutes = require('./wallet.routes');
-const reviewRoutes = require('./review.routes');
-const { protect } = require('../middlewares/auth');
-const Order = require('../models/Order');
-const Store = require('../models/Store');
-const Inventory = require('../models/Inventory');
+const { protectStaging, requireStagingRole } = require('../middlewares/stagingAuth');
+
+const auth = require('../controllers/staging/auth.staging.controller');
+const catalog = require('../controllers/staging/catalog.staging.controller');
+const orders = require('../controllers/staging/orders.staging.controller');
+const operational = require('../controllers/staging/operational.staging.controller');
+
+const { getActiveStores, getStoreById } = require('../services/firestore/store.firestore.service');
+const { getStoreInventory } = require('../services/firestore/inventory.firestore.service');
+const { matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
 
 const router = Router();
-
-router.use('/auth', authRoutes);
-router.use('/', productRoutes); // provides /categories, /products, /products/:id
-router.use('/user', userRoutes); // provides persistent /user/cart, /user/wishlist
-router.use('/orders', orderRoutes);
-router.use('/payment', paymentRoutes);
-router.use('/coupons', couponRoutes);
-router.use('/banners', require('./banner.routes'));
-router.use('/wallet', walletRoutes);
-router.use('/reviews', reviewRoutes);
-router.use('/transfers', require('./transfer.routes'));
-router.use('/store-admin', storeAdminRoutes);
-router.use('/super-admin', superAdminRoutes);
-router.use('/rider', require('./rider.routes'));
-router.use('/notifications', require('./notification.routes'));
-router.use('/location', require('./location.routes'));
-router.use('/upload', require('./upload.routes'));
-
-// Public SEO and metadata endpoint
-const { getPublicSeoSettings } = require('../controllers/seo.controller');
-router.get('/seo', getPublicSeoSettings);
-router.get('/settings/seo', getPublicSeoSettings);
-
-// Public Cart Cross-Selling endpoint
-const { getPublicCrossSellItems } = require('../controllers/crossSell.controller');
-router.get('/cross-sell', getPublicCrossSellItems);
-
-const { matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
 
 // Distance calculation between customer and store coordinates (in km)
 const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
@@ -57,13 +32,7 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
   return Math.round(R * c * 10) / 10;
 };
 
-/**
- * Filter stores by:
- * 1. Active status & Open
- * 2. deliveryEnabled / pickupEnabled
- * 3. Inventory availability for selected items & quantities
- * 4. Sort ascending by distance (nearest shop first)
- */
+// ─── Available Stores Filter (Firestore-backed) ─────────────────────────────
 const getAvailableStoresHandler = async (req, res, next) => {
   try {
     const type = (req.body?.type || req.query?.type || 'delivery').toLowerCase();
@@ -80,21 +49,13 @@ const getAvailableStoresHandler = async (req, res, next) => {
     const customerLat = Number(req.body?.customerLat || req.query?.customerLat || 23.3512);
     const customerLng = Number(req.body?.customerLng || req.query?.customerLng || 85.3154);
 
-    const storeQuery = {
-      status: 'Active',
-      isOpen: { $ne: false },
-    };
-
-    if (type === 'pickup') {
-      storeQuery.pickupEnabled = { $ne: false };
-    } else {
-      storeQuery.deliveryEnabled = { $ne: false };
-    }
-
-    const stores = await Store.find(storeQuery).lean();
+    const activeStores = await getActiveStores();
     const evaluatedStores = [];
 
-    for (const store of stores) {
+    for (const store of activeStores) {
+      if (type === 'pickup' && store.pickupEnabled === false) continue;
+      if (type === 'delivery' && store.deliveryEnabled === false) continue;
+
       let storeLat = 23.3441;
       let storeLng = 85.3096;
       if (store.location && Array.isArray(store.location.coordinates) && store.location.coordinates.length >= 2) {
@@ -107,7 +68,7 @@ const getAvailableStoresHandler = async (req, res, next) => {
       // Verify inventory in this specific store
       let isAvailable = true;
       const outOfStockItems = [];
-      const invList = await Inventory.find({ storeId: store.storeId }).lean();
+      const invList = await getStoreInventory(store.storeId);
 
       if (items.length > 0) {
         if (!invList || invList.length === 0) {
@@ -148,7 +109,6 @@ const getAvailableStoresHandler = async (req, res, next) => {
       });
     }
 
-    // Sort: Available stores first, then by nearest distance ascending
     evaluatedStores.sort((a, b) => {
       if (a.isAvailable !== b.isAvailable) {
         return a.isAvailable ? -1 : 1;
@@ -159,7 +119,7 @@ const getAvailableStoresHandler = async (req, res, next) => {
     const eligibleStores = evaluatedStores.filter((s) => s.isAvailable);
     const suggestedStore = eligibleStores.length > 0 ? eligibleStores[0] : (evaluatedStores[0] || null);
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       count: evaluatedStores.length,
       eligibleCount: eligibleStores.length,
@@ -172,24 +132,51 @@ const getAvailableStoresHandler = async (req, res, next) => {
   }
 };
 
-// Endpoints for available & filtered store selection
+// ─── Authentication & Profile ───────────────────────────────────────────────
+router.post('/auth/firebase-login', auth.firebaseLogin);
+router.post('/auth/admin-login', auth.adminLogin);
+router.get('/auth/me', protectStaging, auth.getMe);
+router.put('/auth/me', protectStaging, auth.updateMe);
+router.get('/auth/addresses', protectStaging, auth.getUserAddresses);
+router.post('/auth/addresses', protectStaging, auth.createUserAddress);
+router.put('/auth/addresses/:addressId', protectStaging, auth.updateUserAddress);
+router.delete('/auth/addresses/:addressId', protectStaging, auth.deleteUserAddress);
+
+// ─── User Cart & Wishlist ───────────────────────────────────────────────────
+router.get('/user/cart', protectStaging, auth.getUserCart);
+router.post('/user/cart', protectStaging, auth.setUserCart);
+router.delete('/user/cart', protectStaging, auth.emptyUserCart);
+router.get('/user/wishlist', protectStaging, auth.getUserWishlist);
+router.post('/user/wishlist', protectStaging, auth.toggleUserWishlist);
+
+// ─── Master Data, Categories, Products & SEO ────────────────────────────────
+router.get('/categories', catalog.getCategories);
+router.get('/categories/:slug', catalog.getCategory);
+router.get('/products', catalog.listProducts);
+router.get('/products/:id', catalog.getProduct);
+router.get('/banners', catalog.getBanners);
+router.get('/seo', catalog.getSeoSettings);
+router.get('/settings/seo', catalog.getSeoSettings);
+router.get('/cross-sell', catalog.getCrossSell);
+
+// ─── Stores & Inventory ─────────────────────────────────────────────────────
 router.get('/stores/available', getAvailableStoresHandler);
 router.post('/stores/available', getAvailableStoresHandler);
-router.get('/stores', getAvailableStoresHandler);
+router.get('/stores', catalog.listStores);
+router.get('/stores/:storeId', catalog.getStore);
+router.get('/inventory/:storeId', catalog.getInventoryByStore);
+router.get('/inventory/:storeId/:itemId', catalog.getInventoryByItem);
 
 // Active Announcements & Emergency Notice Endpoint
 router.get('/announcements/active', async (req, res, next) => {
   try {
-    const store = await Store.findOne({
-      status: 'Active',
-      emergencyNotice: { $exists: true, $ne: '' },
-    }).select('emergencyNotice name storeId isOpen timings').lean();
-
-    res.status(200).json({
+    const stores = await getActiveStores();
+    const store = stores.find((s) => s.emergencyNotice && s.emergencyNotice.trim());
+    return res.status(200).json({
       success: true,
       notice: store?.emergencyNotice || '',
       storeName: store?.name || '',
-      isOpen: store?.isOpen !== false,
+      isOpen: store ? store.isOpen !== false : true,
       timings: store?.timings || '',
     });
   } catch (error) {
@@ -197,20 +184,54 @@ router.get('/announcements/active', async (req, res, next) => {
   }
 });
 
+// ─── Orders, Checkout, Wallet & Coupons ─────────────────────────────────────
+router.post('/orders', protectStaging, orders.createOrder);
+router.get('/orders/my-orders', protectStaging, orders.getMyOrders);
+router.get('/orders/store/:storeId', protectStaging, requireStagingRole('storeadmin', 'superadmin', 'admin'), orders.getOrdersForStore);
+router.get('/orders/:orderId', protectStaging, orders.getOrderById);
+router.put('/orders/:orderId/status', protectStaging, requireStagingRole('storeadmin', 'superadmin', 'rider'), orders.updateStatus);
+router.put('/orders/:orderId/assign-rider', protectStaging, requireStagingRole('storeadmin', 'superadmin'), orders.assignRider);
+router.put('/orders/:orderId/cancel', protectStaging, orders.cancelOrder);
 
-router.get('/orders/:id', async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const order = await Order.findOne({
-      $or: [{ orderId: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }],
-    });
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-    res.status(200).json({ success: true, order });
-  } catch (error) {
-    next(error);
-  }
-});
+// Coupons
+router.post('/coupons/validate', orders.validateCoupon);
+router.get('/coupons', orders.listCoupons);
+
+// Wallet
+router.get('/wallet', protectStaging, orders.getWallet);
+router.post('/wallet/credit', protectStaging, orders.creditWallet);
+
+// ─── Operational Modules ────────────────────────────────────────────────────
+// Delivery Slots
+router.get('/delivery-slots/:storeId', operational.getSlots);
+router.post('/delivery-slots/book', protectStaging, operational.bookSlot);
+
+// Returns
+router.post('/returns', protectStaging, operational.createReturn);
+router.get('/returns/store/:storeId', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.getReturnsByStore);
+
+// Reviews
+router.post('/reviews', protectStaging, operational.postReview);
+router.get('/reviews/product/:productId', operational.getReviewsForProduct);
+
+// Rider SOS & Location
+router.post('/sos', protectStaging, requireStagingRole('rider'), operational.triggerSos);
+router.get('/sos/store/:storeId', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.getSosByStore);
+router.post('/rider/location', protectStaging, requireStagingRole('rider'), operational.updateRiderLocation);
+
+// Remittances
+router.post('/remittances', protectStaging, requireStagingRole('rider'), operational.createNewRemittance);
+router.put('/remittances/:remittanceId/confirm', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.confirmRemittance);
+
+// Transfers
+router.post('/transfers', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.requestTransfer);
+router.put('/transfers/:transferId/execute', protectStaging, requireStagingRole('superadmin'), operational.executeTransfer);
+
+// Inventory Defreeze & Waste
+router.post('/inventory/:storeId/:itemId/defreeze-transfer', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.transferDefreeze);
+router.post('/inventory/:storeId/:itemId/waste', protectStaging, requireStagingRole('storeadmin', 'superadmin'), operational.recordWaste);
+
+// ─── Staging Namespace (Retained for Test Harness & Backward Compatibility) ───
+router.use('/staging', require('./staging/staging.routes'));
 
 module.exports = router;
