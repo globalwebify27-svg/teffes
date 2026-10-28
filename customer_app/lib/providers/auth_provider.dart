@@ -212,38 +212,37 @@ class AuthProvider with ChangeNotifier {
       }
 
       // Send Firebase ID Token to TeFFe backend to create/login customer & issue JWT
-      try {
-        final res = await _api.post(ApiEndpoints.firebaseLogin, data: {
-          'idToken': idToken,
-          if (phone != null) 'phone': phone,
-          if (name != null) 'name': name,
-        });
+      final res = await _api.post(ApiEndpoints.firebaseLogin, data: {
+        'idToken': idToken,
+        if (phone != null) 'phone': phone,
+        if (name != null) 'name': name,
+      });
 
-        if (res.data['success'] == true) {
-          _token = (res.data['accessToken'] ?? res.data['token'])?.toString();
-          if (_token != null && _token!.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('auth_token', _token!);
-          }
-
-          if (res.data['user'] != null) {
-            _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
-          } else {
-            _user = UserModel(
-              id: 'cust-${phone ?? firebaseUser.phoneNumber ?? "user"}',
-              name: name ?? 'Valued Customer',
-              phone: phone ?? firebaseUser.phoneNumber ?? '',
-              role: 'customer',
-            );
-          }
-
-          await fetchMyOrders();
-          await FcmService.instance.syncUserSession();
-          _isLoading = false;
-          notifyListeners();
-          return true;
+      if (res.data['success'] == true) {
+        _token = (res.data['accessToken'] ?? res.data['token'])?.toString();
+        if (_token != null && _token!.isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('auth_token', _token!);
         }
+
+        if (res.data['user'] != null) {
+          _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
+        } else {
+          _user = UserModel(
+            id: 'cust-${phone ?? firebaseUser.phoneNumber ?? "user"}',
+            name: name ?? 'Valued Customer',
+            phone: phone ?? firebaseUser.phoneNumber ?? '',
+            role: 'customer',
+          );
+        }
+
+        await fetchMyOrders();
+        await FcmService.instance.syncUserSession();
+        _isLoading = false;
+        notifyListeners();
+        return true;
       }
+
       throw Exception('Failed to authenticate with TeFFe backend');
     } on FirebaseAuthException catch (e) {
       debugPrint('[AuthProvider] FirebaseAuthException: [${e.code}] ${e.message}');
