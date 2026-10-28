@@ -52,6 +52,7 @@ class OrderModel {
   final String fulfillmentType;
   final bool pickupMode;
   final String? deliveryOtp;
+  final String? deliverySlot;
   final String? targetDeliveryTime;
   final int? prepTimeMinutes;
   final int? remainingTransitMinutes;
@@ -92,6 +93,7 @@ class OrderModel {
     this.fulfillmentType = 'delivery',
     this.pickupMode = false,
     this.deliveryOtp,
+    this.deliverySlot,
     this.targetDeliveryTime,
     this.prepTimeMinutes,
     this.remainingTransitMinutes,
@@ -150,6 +152,7 @@ class OrderModel {
       fulfillmentType: isPickup ? 'pickup' : (json['fulfillmentType'] ?? 'delivery'),
       pickupMode: isPickup,
       deliveryOtp: json['deliveryOtp']?.toString(),
+      deliverySlot: json['deliverySlot']?.toString(),
       targetDeliveryTime: json['targetDeliveryTime']?.toString() ?? json['etaDetails']?['targetClockTime']?.toString(),
       prepTimeMinutes: (json['prepTimeMinutes'] as num?)?.toInt(),
       remainingTransitMinutes: (json['remainingTransitMinutes'] as num?)?.toInt() ?? (json['etaDetails']?['minutesRemaining'] as num?)?.toInt(),

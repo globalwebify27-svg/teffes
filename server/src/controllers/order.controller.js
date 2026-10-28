@@ -313,6 +313,21 @@ const createOrder = async (req, res, next) => {
   }
 };
 
+const sanitizeOrderDates = (order) => {
+  if (!order) return order;
+  const o = { ...order };
+  if (o.targetDeliveryTime && typeof o.targetDeliveryTime === 'object' && o.targetDeliveryTime._seconds !== undefined) {
+    o.targetDeliveryTime = new Date(o.targetDeliveryTime._seconds * 1000).toISOString();
+  }
+  if (o.createdAt && typeof o.createdAt === 'object' && o.createdAt._seconds !== undefined) {
+    o.createdAt = new Date(o.createdAt._seconds * 1000).toISOString();
+  }
+  if (o.updatedAt && typeof o.updatedAt === 'object' && o.updatedAt._seconds !== undefined) {
+    o.updatedAt = new Date(o.updatedAt._seconds * 1000).toISOString();
+  }
+  return o;
+};
+
 /**
  * GET /api/orders
  * Get user's orders (Pure Firestore)
@@ -322,8 +337,8 @@ const getUserOrders = async (req, res, next) => {
     const userId = req.user?.id || req.user?._id;
     const orders = await getUserOrdersFS(String(userId));
     const enrichedOrders = orders.map((o) => {
-      const obj = { ...o };
-      obj.etaDetails = getEtaDetails(o);
+      const obj = sanitizeOrderDates(o);
+      obj.etaDetails = getEtaDetails(obj);
       return obj;
     });
 
@@ -351,8 +366,8 @@ const getOrderById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const orderObj = { ...order };
-    orderObj.etaDetails = getEtaDetails(order);
+    const orderObj = sanitizeOrderDates(order);
+    orderObj.etaDetails = getEtaDetails(orderObj);
 
     res.status(200).json({
       success: true,
@@ -384,8 +399,8 @@ const getMyOrders = async (req, res, next) => {
     }
 
     const enrichedOrders = orders.map((o) => {
-      const obj = { ...o };
-      obj.etaDetails = getEtaDetails(o);
+      const obj = sanitizeOrderDates(o);
+      obj.etaDetails = getEtaDetails(obj);
       return obj;
     });
 
