@@ -3562,9 +3562,11 @@ function RidersTab() {
 
   // Edit rider state
   const [editingRider, setEditingRider] = useState<any | null>(null);
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [editForm, setEditForm] = useState({
     name: "",
     email: "",
+    password: "",
     phone: "",
     vehicleNumber: "",
     storeId: "S001",
@@ -3620,9 +3622,11 @@ function RidersTab() {
 
   const handleStartEdit = (r: any) => {
     setEditingRider(r);
+    setShowEditPassword(false);
     setEditForm({
       name: r.name || "",
       email: r.email || "",
+      password: "",
       phone: r.phone || "",
       vehicleNumber: r.vehicleNumber || "",
       storeId: r.storeId || "S001",
@@ -3636,16 +3640,29 @@ function RidersTab() {
       alert("Phone number cannot be empty");
       return;
     }
+    if (editForm.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email.trim())) {
+      alert("Please enter a valid email address for rider login.");
+      return;
+    }
+    if (editForm.password.trim() && editForm.password.trim().length < 6) {
+      alert("New password must be at least 6 characters long.");
+      return;
+    }
     setSubmittingEdit(true);
     try {
-      const res = await api.put(`/super-admin/riders/${editingRider._id}`, {
+      const payload: any = {
         name: editForm.name.trim(),
         email: editForm.email.trim().toLowerCase(),
         phone: editForm.phone.trim(),
         vehicleNumber: editForm.vehicleNumber.trim(),
         storeId: editForm.storeId,
         riderStatus: editForm.riderStatus,
-      });
+      };
+      if (editForm.password.trim()) {
+        payload.password = editForm.password.trim();
+      }
+
+      const res = await api.put(`/super-admin/riders/${editingRider._id}`, payload);
       if (res.data.success) {
         setEditingRider(null);
         fetchRiders();
@@ -3901,6 +3918,79 @@ function RidersTab() {
                   onChange={e => setEditForm({ ...editForm, email: e.target.value })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", boxSizing: "border-box" }}
                 />
+              </div>
+
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                  <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#423b32" }}>
+                    Rider App Password (leave blank to keep current)
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const temp = `Rider@${Math.floor(1000 + Math.random() * 9000)}`;
+                      setEditForm(prev => ({ ...prev, password: temp }));
+                      setShowEditPassword(true);
+                    }}
+                    style={{
+                      background: "none",
+                      border: "none",
+                      color: "#941717",
+                      fontSize: "0.75rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      padding: 0,
+                      textDecoration: "underline",
+                    }}
+                  >
+                    Generate Temp PIN
+                  </button>
+                </div>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showEditPassword ? "text" : "password"}
+                    placeholder="Enter new password (min 6 characters)"
+                    value={editForm.password}
+                    onChange={e => setEditForm({ ...editForm, password: e.target.value })}
+                    style={{
+                      padding: "10px 42px 10px 12px",
+                      borderRadius: "8px",
+                      border: editForm.password ? "1px solid #941717" : "1px solid #d1cbbf",
+                      width: "100%",
+                      fontSize: "0.9rem",
+                      boxSizing: "border-box",
+                      fontFamily: editForm.password && !showEditPassword ? "inherit" : "monospace",
+                      background: editForm.password ? "#fffcfc" : "#fff",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(!showEditPassword)}
+                    style={{
+                      position: "absolute",
+                      right: "10px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#73695b",
+                      padding: "4px",
+                      display: "inline-flex",
+                      alignItems: "center",
+                    }}
+                    title={showEditPassword ? "Hide password" : "Show password"}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: "18px" }}>
+                      {showEditPassword ? "visibility_off" : "visibility"}
+                    </span>
+                  </button>
+                </div>
+                <p style={{ margin: "4px 0 0 0", fontSize: "0.75rem", color: editForm.password ? "#941717" : "#73695b", fontWeight: editForm.password ? 600 : 400 }}>
+                  {editForm.password
+                    ? "✓ Password will be updated upon saving. Rider can log in with this new password immediately."
+                    : "If rider forgot their password or is locked out, enter a new password above to reset it."}
+                </p>
               </div>
 
               <div>

@@ -559,6 +559,9 @@ const updateRider = async (req, res, next) => {
     }
 
     if (password && password.trim()) {
+      if (password.trim().length < 6) {
+        return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
+      }
       rider.password = password.trim();
     }
 
@@ -582,9 +585,18 @@ const updateRider = async (req, res, next) => {
       };
       if (password && password.trim()) {
         const bcrypt = require('bcryptjs');
-        fsUpdate.password = await bcrypt.hash(password.trim(), 10);
+        fsUpdate.password = await bcrypt.hash(password.trim(), 12);
       }
-      await db.collection('users').doc(firestoreDocId).set(fsUpdate, { merge: true });
+
+      let userRef = db.collection('users').doc(firestoreDocId);
+      const userSnap = await userRef.get();
+      if (!userSnap.exists && rider.email) {
+        const q = await db.collection('users').where('email', '==', rider.email.toLowerCase().trim()).limit(1).get();
+        if (!q.empty) {
+          userRef = q.docs[0].ref;
+        }
+      }
+      await userRef.set(fsUpdate, { merge: true });
     } catch (fsErr) {
       console.warn('[updateRider] Firestore dual-sync warning:', fsErr.message);
     }
