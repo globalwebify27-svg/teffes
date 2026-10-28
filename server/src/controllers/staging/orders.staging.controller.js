@@ -41,11 +41,12 @@ const getOrderById = async (req, res, next) => {
     // Ownership check: customer can only view own order unless admin/rider
     const userId = req.user._id || req.user.id;
     const userRole = req.user.role || 'customer';
-    if (userRole === 'customer' && order.customer?.userId !== userId) {
+    if (userRole === 'customer' && order.customer?.userId && order.customer.userId !== userId) {
       return res.status(403).json({ success: false, message: 'Unauthorized to view this order' });
     }
 
-    return res.status(200).json({ success: true, order });
+    const sanitized = orderCtrl.sanitizeOrderDates ? orderCtrl.sanitizeOrderDates(order) : order;
+    return res.status(200).json({ success: true, order: sanitized });
   } catch (err) {
     next(err);
   }
@@ -55,10 +56,11 @@ const getMyOrders = async (req, res, next) => {
   try {
     const userId = req.user._id || req.user.id;
     const orders = await getUserOrders(userId);
+    const sanitizedOrders = orders.map((o) => (orderCtrl.sanitizeOrderDates ? orderCtrl.sanitizeOrderDates(o) : o));
     return res.status(200).json({
       success: true,
-      count: orders.length,
-      orders,
+      count: sanitizedOrders.length,
+      orders: sanitizedOrders,
     });
   } catch (err) {
     next(err);
