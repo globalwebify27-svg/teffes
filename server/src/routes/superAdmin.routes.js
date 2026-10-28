@@ -22,6 +22,7 @@ const {
   setSuperOffer,
   getAllOrders,
   getSettings,
+  getInventoryHistory,
 } = require('../controllers/superAdmin.controller');
 
 const router = Router();
@@ -62,6 +63,9 @@ router.put('/coupons/:id/super-offer', setSuperOffer);
 
 // 7. Orders
 router.get('/orders', getAllOrders);
+
+// 7b. Inventory Logs Platform-Wide
+router.get('/inventory/history', getInventoryHistory);
 
 // 8. Settings & Homepage SEO
 const {

@@ -25,6 +25,7 @@ import { orderAlarm } from "@/lib/orderAlarm";
 import ThermalKOTModal from "@/components/store-admin/ThermalKOTModal";
 import StoreStatusModal from "@/components/store-admin/StoreStatusModal";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
+import StoreAdminInventoryLogsTab from "@/components/store-admin/InventoryLogsTab";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
@@ -33,6 +34,7 @@ const TABS = [
   { key: "products", label: "Products & Stock", icon: "restaurant", sub: "Toggle live availability of fresh cuts for your store" },
   { key: "cross_sell", label: "Cross-Selling", icon: "shopping_basket", sub: "Manage addon products shown to customers in cart" },
   { key: "inventory", label: "Inventory", icon: "inventory_2", sub: "Track fresh stock levels and morning fresh batches" },
+  { key: "inventory_logs", label: "Inventory Logs", icon: "history", sub: "Audit trail of fresh stock additions, thawing, order deductions, and waste" },
   { key: "customers", label: "Customers", icon: "group", sub: "Directory of customers who ordered from your store" },
   { key: "riders", label: "Riders & Dispatch", icon: "two_wheeler", sub: "Assign ready orders to available delivery partners" },
   { key: "returns", label: "Returns & Exchange", icon: "swap_horiz", sub: "Process customer exchange requests under the 60-minute policy" },
@@ -4346,6 +4348,7 @@ export default function StoreAdminPage() {
     products: <ProductsStockTab />,
     cross_sell: <CrossSellTab />,
     inventory: <InventoryTab />,
+    inventory_logs: <StoreAdminInventoryLogsTab />,
     customers: <CustomersTab />,
     riders: <RidersTab />,
     returns: <ReturnsTab />,

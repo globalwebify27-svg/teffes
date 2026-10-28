@@ -39,6 +39,10 @@ const {
   deleteCoupon: deleteCouponFS,
 } = require('../services/firestore/coupon.firestore.service');
 
+const {
+  getInventoryHistory: getInventoryHistoryFS,
+} = require('../services/firestore/inventory.firestore.service');
+
 /**
  * GET /api/super-admin/dashboard
  * Platform-wide KPIs & recent activity log (Firestore-backed)
@@ -791,6 +795,34 @@ const getSettings = async (req, res) => {
   });
 };
 
+/**
+ * GET /api/super-admin/inventory/history
+ * List platform-wide inventory logs with store filtering, date range, and pagination
+ */
+const getInventoryHistory = async (req, res, next) => {
+  try {
+    const { storeId, itemId, actionType, classification, search, startDate, endDate, page = 1, limit = 50 } = req.query;
+
+    const result = await getInventoryHistoryFS(storeId && storeId !== 'all' ? storeId : null, {
+      itemId,
+      actionType,
+      classification,
+      search,
+      startDate,
+      endDate,
+      page,
+      limit,
+    });
+
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getPlatformDashboard,
   getStores,
@@ -813,4 +845,5 @@ module.exports = {
   setSuperOffer,
   getAllOrders,
   getSettings,
+  getInventoryHistory,
 };

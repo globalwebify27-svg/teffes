@@ -311,7 +311,7 @@ const updateInventoryItem = async (req, res, next) => {
     if (min !== undefined) updates.min = Math.max(0, Number(min));
     updates.lastRestocked = `Today ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
-    const updated = await updateInventoryItemFS(storeId, id, updates);
+    const updated = await updateInventoryItemFS(storeId, id, updates, req.user, reason);
 
     try {
       emitInventoryUpdate(storeId, [updated]);
@@ -386,46 +386,22 @@ const recordInventoryWaste = async (req, res, next) => {
 const getInventoryHistory = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
-    const { itemId, actionType, classification, search, page = 1, limit = 50 } = req.query;
+    const { itemId, actionType, classification, search, startDate, endDate, page = 1, limit = 50 } = req.query;
 
-    let history = await getInventoryHistoryFS(storeId);
-
-    if (itemId) {
-      history = history.filter((h) => h.itemId === itemId);
-    }
-    if (actionType && actionType !== 'all') {
-      history = history.filter((h) => h.actionType === actionType);
-    }
-    if (classification && classification !== 'all') {
-      history = history.filter(
-        (h) =>
-          h.classification === classification ||
-          h.sourceClassification === classification ||
-          h.destinationClassification === classification
-      );
-    }
-    if (search && search.trim()) {
-      const s = search.trim().toLowerCase();
-      history = history.filter(
-        (h) =>
-          (h.productName && h.productName.toLowerCase().includes(s)) ||
-          (h.reason && h.reason.toLowerCase().includes(s)) ||
-          (h.orderId && h.orderId.toLowerCase().includes(s))
-      );
-    }
-
-    const pageNum = Math.max(1, parseInt(page, 10) || 1);
-    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
-    const skip = (pageNum - 1) * limitNum;
-    const paginated = history.slice(skip, skip + limitNum);
+    const result = await getInventoryHistoryFS(storeId, {
+      itemId,
+      actionType,
+      classification,
+      search,
+      startDate,
+      endDate,
+      page,
+      limit,
+    });
 
     res.status(200).json({
       success: true,
-      total: history.length,
-      page: pageNum,
-      totalPages: Math.ceil(history.length / limitNum),
-      count: paginated.length,
-      history: paginated,
+      ...result,
     });
   } catch (error) {
     next(error);
