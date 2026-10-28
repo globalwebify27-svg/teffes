@@ -12,6 +12,7 @@ const auth = require('../controllers/staging/auth.staging.controller');
 const catalog = require('../controllers/staging/catalog.staging.controller');
 const orders = require('../controllers/staging/orders.staging.controller');
 const operational = require('../controllers/staging/operational.staging.controller');
+const orderCtrl = require('../controllers/order.controller');
 
 const { getActiveStores, getStoreById } = require('../services/firestore/store.firestore.service');
 const { getStoreInventory } = require('../services/firestore/inventory.firestore.service');
@@ -208,6 +209,9 @@ router.get('/orders/:orderId', protectStaging, orders.getOrderById);
 router.put('/orders/:orderId/status', protectStaging, requireStagingRole('storeadmin', 'superadmin', 'rider'), orders.updateStatus);
 router.put('/orders/:orderId/assign-rider', protectStaging, requireStagingRole('storeadmin', 'superadmin'), orders.assignRider);
 router.put('/orders/:orderId/cancel', protectStaging, orders.cancelOrder);
+router.post('/orders/:orderId/return', protectStaging, orderCtrl.requestReturn);
+router.post('/orders/:orderId/rate-rider', protectStaging, orderCtrl.rateRider);
+router.post('/orders/verify-payment', protectStaging, orderCtrl.verifyPayment);
 
 // Coupons
 router.post('/coupons/validate', orders.validateCoupon);

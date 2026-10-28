@@ -182,7 +182,7 @@ const createOrder = async (req, res, next) => {
     // Dynamic initial ETA calculation
     const prepMinutes = Number(req.body.prepTimeMinutes) || 25;
     const initialTransit = isPickup ? 0 : 15;
-    const targetDelivery = calculateTargetDeliveryTime(new Date(), prepMinutes, initialTransit);
+    const targetDelivery = calculateTargetDeliveryTime(new Date(), prepMinutes, initialTransit).toISOString();
 
     // ─── Deduct Store Inventory in Firestore (if mapped) ───
     try {
@@ -572,4 +572,5 @@ module.exports = {
   requestReturn,
   verifyPayment,
   rateRider,
+  sanitizeOrderDates,
 };
