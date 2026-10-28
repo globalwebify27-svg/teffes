@@ -1,5 +1,4 @@
-const Inventory = require('../models/Inventory');
-const InventoryHistory = require('../models/InventoryHistory');
+// Pure inventory calculation & matcher utilities
 
 /**
  * Helper to normalize product and inventory names for robust matching.

@@ -1,5 +1,5 @@
 const { Server } = require('socket.io');
-const Order = require('./models/Order');
+const { updateDoc } = require('./lib/firestore');
 
 let io = null;
 
@@ -123,16 +123,12 @@ const initSocket = (httpServer) => {
         io.to(room).emit('rider:location:update', locationPayload);
         io.to(room).emit('rider:location_changed', locationPayload);
 
-        // Persist rider coordinates in Order document
-        await Order.findOneAndUpdate(
-          { orderId },
-          {
-            $set: {
-              'rider.lat': Number(finalLat),
-              'rider.lng': Number(finalLng),
-            },
-          }
-        ).catch((err) => console.warn('[Socket.IO] DB location update warn:', err.message));
+        // Persist rider coordinates in Order document in Firestore
+        await updateDoc('orders', orderId, {
+          'rider.lat': Number(finalLat),
+          'rider.lng': Number(finalLng),
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => console.warn('[Socket.IO] Firestore location update warn:', err.message));
       } catch (err) {
         console.error('[Socket.IO] rider location update error:', err);
       }

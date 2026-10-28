@@ -3,7 +3,6 @@
  * Call this once at server startup before anything else.
  */
 const REQUIRED_ENV = [
-  'MONGO_URI',
   'JWT_ACCESS_SECRET',
   'JWT_REFRESH_SECRET',
 ];

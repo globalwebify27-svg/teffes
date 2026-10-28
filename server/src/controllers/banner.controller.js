@@ -1,37 +1,23 @@
-const Banner = require('../models/Banner');
+/**
+ * Hero Banners Controller (Firestore-backed)
+ * Zero dependency on MongoDB. Full Super Admin CRUD + Active Banners public API.
+ */
 
-const DEFAULT_BANNERS = [
-  {
-    title: 'Fresh • Hygienic • Farm-Raised Chicken',
-    image: 'https://cdn.dotpe.in/longtail/themes/7524323/pLA8ptbh.webp',
-    link: '/#chicken-section',
-    order: 1,
-    isActive: true,
-  },
-  {
-    title: "TeFFe's Farm Quality Meat • 90 Min Delivery",
-    image: 'https://cdn.dotpe.in/longtail/themes/7524323/VRLhTQ4p.webp',
-    link: '/#all-products',
-    order: 2,
-    isActive: true,
-  },
-];
+const {
+  getActiveBanners: fetchActiveBanners,
+  getAllBanners: fetchAllBanners,
+  getBannerById,
+  createBanner: createBannerFirestore,
+  updateBanner: updateBannerFirestore,
+  deleteBanner: deleteBannerFirestore,
+} = require('../services/firestore/banner.firestore.service');
 
 /**
  * Public: Get all active banners for website & customer app
- * Auto-seeds the two initial banners if no banners exist in database
  */
 const getActiveBanners = async (req, res, next) => {
   try {
-    let banners = await Banner.find({ isActive: true }).sort({ order: 1, createdAt: -1 });
-
-    if (!banners || banners.length === 0) {
-      const totalCount = await Banner.countDocuments();
-      if (totalCount === 0) {
-        banners = await Banner.insertMany(DEFAULT_BANNERS);
-      }
-    }
-
+    const banners = await fetchActiveBanners();
     res.status(200).json({
       success: true,
       count: banners.length,
@@ -47,12 +33,7 @@ const getActiveBanners = async (req, res, next) => {
  */
 const getAllBanners = async (req, res, next) => {
   try {
-    let banners = await Banner.find().sort({ order: 1, createdAt: -1 });
-
-    if (!banners || banners.length === 0) {
-      banners = await Banner.insertMany(DEFAULT_BANNERS);
-    }
-
+    const banners = await fetchAllBanners();
     res.status(200).json({
       success: true,
       count: banners.length,
@@ -77,7 +58,7 @@ const createBanner = async (req, res, next) => {
       });
     }
 
-    const banner = await Banner.create({
+    const banner = await createBannerFirestore({
       title: title || '',
       image: image.trim(),
       link: link || '',
@@ -101,17 +82,21 @@ const createBanner = async (req, res, next) => {
 const updateBanner = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const banner = await Banner.findByIdAndUpdate(id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const { title, image, link, order, isActive } = req.body;
 
-    if (!banner) {
-      return res.status(404).json({
-        success: false,
-        message: 'Banner not found',
-      });
+    const existing = await getBannerById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Banner not found' });
     }
+
+    const updates = {};
+    if (typeof title !== 'undefined') updates.title = title;
+    if (typeof image !== 'undefined') updates.image = image.trim();
+    if (typeof link !== 'undefined') updates.link = link;
+    if (typeof order !== 'undefined') updates.order = typeof order === 'number' ? order : Number(order) || 0;
+    if (typeof isActive !== 'undefined') updates.isActive = isActive;
+
+    const banner = await updateBannerFirestore(id, updates);
 
     res.status(200).json({
       success: true,
@@ -129,18 +114,15 @@ const updateBanner = async (req, res, next) => {
 const deleteBanner = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const banner = await Banner.findByIdAndDelete(id);
-
-    if (!banner) {
-      return res.status(404).json({
-        success: false,
-        message: 'Banner not found',
-      });
+    const existing = await getBannerById(id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: 'Banner not found' });
     }
 
+    await deleteBannerFirestore(id);
     res.status(200).json({
       success: true,
-      message: 'Banner removed successfully',
+      message: 'Banner deleted successfully',
     });
   } catch (error) {
     next(error);

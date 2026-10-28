@@ -1,6 +1,15 @@
+/**
+ * Payment Controller (Pure Cloud Firestore Backend)
+ * 100% Zero MongoDB dependency - Fully migrated to Google Cloud Firestore
+ */
+
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-const Order = require('../models/Order');
+const {
+  queryDocs,
+  updateDoc,
+  getDoc,
+} = require('../lib/firestore');
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate, emitOrderCreated } = require('../socket');
 
@@ -38,24 +47,30 @@ const createRazorpayOrder = async (req, res, next) => {
         });
         isLiveOrTestWorking = true;
       } catch (err) {
-        console.warn('[Razorpay] Live order creation warning:', err.message);
+        console.warn('[Razorpay] Live instance failed, falling back to mock simulator:', err.message);
       }
     }
 
-    if (!razorpayOrder) {
-      // Fallback simulated order id for testing / development
+    if (!isLiveOrTestWorking) {
       razorpayOrder = {
-        id: `order_dev_${Date.now()}`,
+        id: `order_mock_${Date.now()}`,
+        entity: 'order',
         amount: amountInPaise,
+        amount_paid: 0,
+        amount_due: amountInPaise,
         currency: 'INR',
+        receipt: `rcpt_${Date.now()}`,
+        status: 'created',
+        attempts: 0,
+        created_at: Math.floor(Date.now() / 1000),
       };
     }
 
     res.status(200).json({
       success: true,
       order: razorpayOrder,
-      keyId: isLiveOrTestWorking ? key_id : null,
-      isSimulation: !isLiveOrTestWorking,
+      keyId: key_id,
+      mockMode: !isLiveOrTestWorking,
     });
   } catch (error) {
     next(error);
@@ -94,15 +109,13 @@ const verifyRazorpayPayment = async (req, res, next) => {
 
 /**
  * POST /api/payment/webhook
- * Razorpay Webhook Listener for asynchronous drop-off payment reconciliation
- * Handles: order.paid, payment.captured, payment.failed
+ * Razorpay Webhook Listener for asynchronous payment reconciliation
  */
 const handleRazorpayWebhook = async (req, res, next) => {
   try {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
     const signature = req.headers['x-razorpay-signature'];
 
-    // If webhook secret is configured, strictly verify HMAC-SHA256 signature
     if (webhookSecret) {
       if (!signature) {
         console.warn('[Razorpay Webhook] Missing x-razorpay-signature header');
@@ -119,8 +132,6 @@ const handleRazorpayWebhook = async (req, res, next) => {
         console.warn('[Razorpay Webhook] Invalid webhook signature');
         return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
       }
-    } else {
-      console.log('[Razorpay Webhook] RAZORPAY_WEBHOOK_SECRET not set. Processing event in permissive mode.');
     }
 
     const { event, payload } = req.body || {};
@@ -134,82 +145,83 @@ const handleRazorpayWebhook = async (req, res, next) => {
       const razorpayPaymentId = paymentEntity.id;
 
       if (!razorpayOrderId && !razorpayPaymentId) {
-        console.warn('[Razorpay Webhook] No order_id or payment_id found in payload');
         return res.status(200).json({ status: 'ok', message: 'No order identifier found' });
       }
 
-      // Find order matching razorpayOrderId or razorpayPaymentId
-      const order = await Order.findOne({
-        $or: [
-          ...(razorpayOrderId ? [{ razorpayOrderId }] : []),
-          ...(razorpayPaymentId ? [{ razorpayPaymentId }] : []),
-        ],
-      });
+      // Find order in Firestore matching razorpayOrderId or razorpayPaymentId
+      let matchingOrders = [];
+      if (razorpayOrderId) {
+        matchingOrders = await queryDocs('orders', (ref) =>
+          ref.where('razorpayOrderId', '==', razorpayOrderId).limit(1)
+        );
+      }
+      if (matchingOrders.length === 0 && razorpayPaymentId) {
+        matchingOrders = await queryDocs('orders', (ref) =>
+          ref.where('razorpayPaymentId', '==', razorpayPaymentId).limit(1)
+        );
+      }
+
+      const order = matchingOrders[0] || null;
 
       if (order) {
-        let modified = false;
+        const docId = order.orderId || order.id;
+        const updates = {
+          paymentStatus: 'Paid',
+          updatedAt: new Date().toISOString(),
+        };
 
-        if (order.paymentStatus !== 'Paid') {
-          order.paymentStatus = 'Paid';
-          modified = true;
+        if (razorpayPaymentId) {
+          updates.razorpayPaymentId = razorpayPaymentId;
         }
 
-        if (razorpayPaymentId && order.razorpayPaymentId !== razorpayPaymentId) {
-          order.razorpayPaymentId = razorpayPaymentId;
-          modified = true;
-        }
-
-        // If order was in draft or pending payment status, advance it to Pending for butchery processing
         if (order.status === 'Draft' || order.status === 'PendingPayment' || !order.status) {
-          order.status = 'Pending';
-          modified = true;
+          updates.status = 'Pending';
         }
 
-        if (modified) {
-          await order.save();
-          console.log(`[Razorpay Webhook] Successfully reconciled Order #${order.orderId} as Paid via Webhook`);
+        await updateDoc('orders', docId, updates);
+        const updatedOrder = { ...order, ...updates };
 
-          // Emit real-time socket events for Store Admin alarm & tracking screens
-          emitOrderStatusUpdate(order.orderId, order);
-          emitOrderCreated(order);
+        console.log(`[Razorpay Webhook] Successfully reconciled Order #${docId} as Paid via Firestore`);
 
-          // Push notification to customer
-          if (order.customer?.userId) {
-            notificationService.sendToUser(order.customer.userId, {
-              title: 'Payment Received',
-              body: `Your payment for order #${order.orderId} was confirmed. Order preparation is underway!`,
-              data: {
-                notificationType: 'ORDER_STATUS',
-                orderId: order.orderId,
-                status: order.status,
-                clickAction: `/dashboard?orderId=${order.orderId}`,
-              },
-            }).catch((err) => console.warn('[FCM] Webhook order push error:', err.message));
-          }
+        emitOrderStatusUpdate(docId, updatedOrder);
+        emitOrderCreated(updatedOrder);
+
+        if (order.customer?.userId) {
+          notificationService.sendToUser(order.customer.userId, {
+            title: 'Payment Received',
+            body: `Your payment for order #${docId} was confirmed. Order preparation is underway!`,
+            data: {
+              notificationType: 'ORDER_STATUS',
+              orderId: docId,
+              status: updatedOrder.status,
+              clickAction: `/dashboard?orderId=${docId}`,
+            },
+          }).catch((err) => console.warn('[FCM] Webhook order push error:', err.message));
         }
-      } else {
-        console.warn(`[Razorpay Webhook] Order for razorpayOrderId ${razorpayOrderId} not found in DB yet.`);
       }
     } else if (event === 'payment.failed') {
       const paymentEntity = payload?.payment?.entity || {};
       const razorpayOrderId = paymentEntity.order_id;
 
       if (razorpayOrderId) {
-        const order = await Order.findOne({ razorpayOrderId });
+        const matchingOrders = await queryDocs('orders', (ref) =>
+          ref.where('razorpayOrderId', '==', razorpayOrderId).limit(1)
+        );
+        const order = matchingOrders[0] || null;
         if (order && order.paymentStatus !== 'Paid') {
-          order.paymentStatus = 'Failed';
-          await order.save();
-          emitOrderStatusUpdate(order.orderId, order);
-          console.log(`[Razorpay Webhook] Order #${order.orderId} marked as Failed due to payment.failed event`);
+          const docId = order.orderId || order.id;
+          await updateDoc('orders', docId, {
+            paymentStatus: 'Failed',
+            updatedAt: new Date().toISOString(),
+          });
+          emitOrderStatusUpdate(docId, { ...order, paymentStatus: 'Failed' });
         }
       }
     }
 
-    // Always respond 200 OK to Razorpay to prevent webhook retry storms
     res.status(200).json({ status: 'ok', received: true });
   } catch (error) {
     console.error('[Razorpay Webhook] Error processing webhook:', error);
-    // Return 200 with error logged to avoid endless webhook retries
     res.status(200).json({ status: 'error', message: error.message });
   }
 };

@@ -717,6 +717,17 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
 };
 
 /**
+ * Retrieve all orders.
+ */
+const getAllOrders = async (options = {}) => {
+  let orders = await queryDocs(ORDERS_COLLECTION);
+  if (!options.includeTest) {
+    orders = orders.filter((o) => !isTestOrderRecord(o));
+  }
+  return orders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+};
+
+/**
  * Safely delete an order (strictly for test cleanup).
  */
 const deleteOrder = async (orderId) => {
@@ -730,6 +741,7 @@ module.exports = {
   ORDER_STATUS_ENUM,
   generateOrderId,
   getOrderById,
+  getAllOrders,
   getUserOrders,
   getStoreOrders,
   createOrderTransactional,

@@ -1,34 +1,72 @@
-const Order = require('../models/Order');
-const Store = require('../models/Store');
-const User = require('../models/User');
-const Product = require('../models/Product');
-const Category = require('../models/Category');
-const Coupon = require('../models/Coupon');
+/**
+ * Super Admin Controller (Pure Cloud Firestore Backend)
+ * 100% Zero MongoDB dependency - Fully migrated to Google Cloud Firestore
+ */
+
+const bcrypt = require('bcryptjs');
+const {
+  getDb,
+  getDoc,
+  createDoc,
+  updateDoc,
+  deleteDoc,
+  queryDocs,
+} = require('../lib/firestore');
+
+const {
+  getAllStores,
+  getActiveStores,
+  getStoreById,
+  createStore: createStoreFS,
+  updateStore: updateStoreFS,
+  deleteStore: deleteStoreFS,
+} = require('../services/firestore/store.firestore.service');
+
+const {
+  getAllOrders: getAllOrdersFS,
+  getOrderById,
+} = require('../services/firestore/order.firestore.service');
+
+const {
+  getProducts,
+} = require('../services/firestore/product.firestore.service');
+
+const {
+  getAllCoupons,
+  getCouponByCode,
+  createCoupon: createCouponFS,
+  updateCoupon: updateCouponFS,
+  deleteCoupon: deleteCouponFS,
+} = require('../services/firestore/coupon.firestore.service');
 
 /**
  * GET /api/super-admin/dashboard
- * Platform-wide KPIs & recent activity log
+ * Platform-wide KPIs & recent activity log (Firestore-backed)
  */
 const getPlatformDashboard = async (req, res, next) => {
   try {
     const [
-      totalOrdersToday,
       orders,
-      activeStoresCount,
-      activeRidersCount,
-      totalCustomersCount,
-      totalProductsCount,
+      activeStores,
+      allRiders,
+      allCustomers,
+      allProducts,
     ] = await Promise.all([
-      Order.countDocuments(),
-      Order.find().sort({ createdAt: -1 }).limit(10),
-      Store.countDocuments({ status: 'Active' }),
-      User.countDocuments({ role: 'rider', isActive: true }),
-      User.countDocuments({ role: 'customer' }),
-      Product.countDocuments(),
+      getAllOrdersFS(),
+      getActiveStores(),
+      queryDocs('users', (ref) => ref.where('role', '==', 'rider')),
+      queryDocs('users', (ref) => ref.where('role', '==', 'customer')),
+      getProducts(),
     ]);
 
-    const deliveredOrders = await Order.find({ status: 'Delivered' });
-    const todayRevenue = deliveredOrders.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+    const activeRiders = allRiders.filter((r) => r.isActive !== false);
+    const deliveredOrders = orders.filter((o) => o.status === 'Delivered');
+    const todayRevenue = deliveredOrders.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    const activeStoresCount = activeStores.length;
+    const activeRidersCount = activeRiders.length;
+    const totalCustomersCount = allCustomers.length;
+    const totalProductsCount = allProducts.length;
+    const totalOrdersToday = orders.length;
 
     const kpis = [
       {
@@ -51,42 +89,41 @@ const getPlatformDashboard = async (req, res, next) => {
         icon: 'storefront',
         label: 'Active Stores',
         value: `${activeStoresCount}`,
-        sub: 'Ranchi Kishore Ganj, Doranda',
+        sub: activeStores.map((s) => s.name).join(', ') || 'Ranchi Kishore Ganj, Doranda',
         color: '#059669',
         tab: 'stores',
       },
       {
         icon: 'two_wheeler',
         label: 'Active Riders',
-        value: `${activeRidersCount || 8}`,
-        sub: '4 out for delivery',
+        value: `${activeRidersCount}`,
+        sub: `${allRiders.filter((r) => r.riderStatus === 'On Delivery').length} out for delivery`,
         color: '#7c3aed',
         tab: 'riders',
       },
       {
         icon: 'group',
         label: 'Total Customers',
-        value: `${totalCustomersCount || 2841}`,
-        sub: '↑ 34 new today',
+        value: `${totalCustomersCount}`,
+        sub: 'Platform customers',
         color: '#0284c7',
         tab: 'customers',
       },
       {
         icon: 'restaurant',
         label: 'Total Products',
-        value: `${totalProductsCount || 24}`,
+        value: `${totalProductsCount}`,
         sub: 'Master meat & seafood catalog',
         color: '#d97706',
         tab: 'products',
       },
     ];
 
-    // Build recent platform activities
-    const recentActivity = orders.map((o) => ({
+    const recentActivity = orders.slice(0, 10).map((o) => ({
       time: o.createdAt ? new Date(o.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Just now',
-      event: `Order #${o.orderId} ${o.status.toLowerCase()} for ${o.customer?.name}`,
+      event: `Order #${o.orderId || o.id} ${(o.status || 'Pending').toLowerCase()} for ${o.customer?.name || 'Customer'}`,
       store: o.storeName || 'Kishore Ganj',
-      status: o.status,
+      status: o.status || 'Pending',
     }));
 
     res.status(200).json({
@@ -105,7 +142,7 @@ const getPlatformDashboard = async (req, res, next) => {
  */
 const getStores = async (req, res, next) => {
   try {
-    const stores = await Store.find().sort({ storeId: 1 });
+    const stores = await getAllStores();
     res.status(200).json({ success: true, count: stores.length, stores });
   } catch (error) {
     next(error);
@@ -120,36 +157,32 @@ const createStore = async (req, res, next) => {
   try {
     let { storeId, ...rest } = req.body;
 
-    // Check if storeId is missing, empty, or already taken
-    const existing = storeId && typeof storeId === 'string' && storeId.trim() !== ''
-      ? await Store.findOne({ storeId: storeId.trim() })
-      : null;
+    const allStores = await getAllStores({ includeTest: true });
 
-    if (!storeId || typeof storeId !== 'string' || storeId.trim() === '' || existing) {
-      // Find the highest existing numeric S-ID in the database
-      const allStores = await Store.find({}, 'storeId').lean();
+    if (!storeId || typeof storeId !== 'string' || storeId.trim() === '') {
       let maxNum = 0;
       for (const s of allStores) {
-        if (s.storeId) {
-          const match = String(s.storeId).match(/^S(\d+)$/i);
+        const idToCheck = s.storeId || s.id;
+        if (idToCheck) {
+          const match = String(idToCheck).match(/^S(\d+)$/i);
           if (match) {
             const num = parseInt(match[1], 10);
             if (!isNaN(num) && num > maxNum) maxNum = num;
           }
         }
       }
-      const nextNum = maxNum + 1;
-      storeId = `S${String(nextNum).padStart(3, '0')}`;
+      storeId = `S${String(maxNum + 1).padStart(3, '0')}`;
     } else {
       storeId = storeId.trim();
+      const existing = allStores.find((s) => s.storeId === storeId || s.id === storeId);
+      if (existing) {
+        return res.status(400).json({ success: false, message: 'Store ID already exists. Please try again.' });
+      }
     }
 
-    const store = await Store.create({ storeId, ...rest });
-    res.status(201).json({ success: true, store });
+    const created = await createStoreFS({ storeId, ...rest });
+    res.status(201).json({ success: true, store: created });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'Store ID already exists. Please try again.' });
-    }
     next(error);
   }
 };
@@ -161,11 +194,7 @@ const createStore = async (req, res, next) => {
 const updateStore = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const store = await Store.findOneAndUpdate(
-      { $or: [{ storeId: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }] },
-      req.body,
-      { new: true }
-    );
+    const store = await updateStoreFS(id, req.body);
     if (!store) {
       return res.status(404).json({ success: false, message: 'Store not found' });
     }
@@ -182,12 +211,7 @@ const updateStore = async (req, res, next) => {
 const deleteStore = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const store = await Store.findOneAndDelete(
-      { $or: [{ storeId: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }] }
-    );
-    if (!store) {
-      return res.status(404).json({ success: false, message: 'Store not found' });
-    }
+    await deleteStoreFS(id);
     res.status(200).json({ success: true, message: 'Store deleted' });
   } catch (error) {
     next(error);
@@ -200,8 +224,13 @@ const deleteStore = async (req, res, next) => {
  */
 const getStoreAdmins = async (req, res, next) => {
   try {
-    const admins = await User.find({ role: 'storeadmin' }).select('-password');
-    res.status(200).json({ success: true, count: admins.length, admins });
+    const admins = await queryDocs('users', (ref) => ref.where('role', '==', 'storeadmin'));
+    const safeAdmins = admins.map((a) => {
+      const copy = { ...a };
+      delete copy.password;
+      return copy;
+    });
+    res.status(200).json({ success: true, count: safeAdmins.length, admins: safeAdmins });
   } catch (error) {
     next(error);
   }
@@ -214,7 +243,7 @@ const getStoreAdmins = async (req, res, next) => {
 const createStoreAdmin = async (req, res, next) => {
   try {
     let { name, email, password, phone, storeId } = req.body;
-    
+
     if (!name || !email || !storeId) {
       return res.status(400).json({ success: false, message: 'Name, email, and store are required' });
     }
@@ -225,52 +254,60 @@ const createStoreAdmin = async (req, res, next) => {
       if (!phone.startsWith('+') && phone.length === 10) phone = '+91' + phone;
     }
 
-    const store = await Store.findOne({ storeId });
+    const cleanStoreId = storeId.trim();
+    const store = await getStoreById(cleanStoreId);
     if (!store) {
       return res.status(404).json({ success: false, message: 'Store not found' });
     }
 
-    const existingUser = await User.findOne({
-      $or: [
-        { email: email.toLowerCase().trim() },
-        ...(phone ? [{ phone }] : []),
-      ],
-    });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: existingUser.email === email.toLowerCase().trim()
-          ? `An account with email ${email} already exists.`
-          : `An account with phone ${phone} already exists.`,
-      });
+    const emailClean = email.toLowerCase().trim();
+    const existingByEmail = await queryDocs('users', (ref) => ref.where('email', '==', emailClean).limit(1));
+    if (existingByEmail.length > 0) {
+      return res.status(400).json({ success: false, message: `An account with email ${email} already exists.` });
     }
 
-    const user = await User.create({
+    if (phone) {
+      const existingByPhone = await queryDocs('users', (ref) => ref.where('phone', '==', phone).limit(1));
+      if (existingByPhone.length > 0) {
+        return res.status(400).json({ success: false, message: `An account with phone ${phone} already exists.` });
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password || 'Store@12345', 10);
+    const userId = `admin_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
+
+    const userData = {
+      id: userId,
+      _id: userId,
       name: name.trim(),
-      email: email.toLowerCase().trim(),
-      password: password || 'Store@12345',
-      phone,
-      storeId: store.storeId,
-      storeName: store.name,
+      email: emailClean,
+      password: hashedPassword,
+      phone: phone || '',
+      storeId: store.storeId || cleanStoreId,
+      storeName: store.name || '',
       role: 'storeadmin',
       isVerified: true,
       isActive: true,
-    });
+      createdAt: now,
+      updatedAt: now,
+    };
 
-    store.admin = name.trim();
-    store.adminEmail = email.toLowerCase().trim();
-    await store.save();
+    await createDoc('users', userId, userData);
 
-    res.status(201).json({ success: true, user });
+    // Update store manager info
+    try {
+      await updateStoreFS(store.storeId || cleanStoreId, {
+        admin: name.trim(),
+        adminEmail: emailClean,
+      });
+    } catch (_) {}
+
+    const safeUser = { ...userData };
+    delete safeUser.password;
+
+    res.status(201).json({ success: true, user: safeUser });
   } catch (error) {
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern || {})[0] || 'Phone/Email';
-      return res.status(400).json({ success: false, message: `A user with this ${field} already exists.` });
-    }
-    if (error.name === 'ValidationError') {
-      const msg = Object.values(error.errors).map(e => e.message).join(', ');
-      return res.status(400).json({ success: false, message: msg });
-    }
     next(error);
   }
 };
@@ -282,31 +319,34 @@ const createStoreAdmin = async (req, res, next) => {
 const updateStoreAdmin = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, email, phone, password, isActive } = req.body;
-    
-    const user = await User.findById(id);
+    const { name, email, phone, password, isActive, storeId } = req.body;
+
+    const user = await getDoc('users', id);
     if (!user || user.role !== 'storeadmin') {
       return res.status(404).json({ success: false, message: 'Store admin not found' });
     }
-    
-    user.name = name || user.name;
-    user.email = email || user.email;
-    user.phone = phone || user.phone;
-    if (password) user.password = password;
-    if (typeof isActive !== 'undefined') user.isActive = isActive;
-    
-    await user.save();
 
-    if (user.storeId) {
-      const store = await Store.findOne({ storeId: user.storeId });
-      if (store) {
-        store.admin = user.name;
-        store.adminEmail = user.email;
-        await store.save();
-      }
+    const updates = {};
+    if (name) updates.name = name.trim();
+    if (email) updates.email = email.toLowerCase().trim();
+    if (phone) updates.phone = phone.trim();
+    if (typeof isActive !== 'undefined') updates.isActive = Boolean(isActive);
+    if (storeId) {
+      updates.storeId = storeId.trim();
+      const s = await getStoreById(storeId.trim());
+      if (s) updates.storeName = s.name;
     }
+    if (password && password.trim()) {
+      updates.password = await bcrypt.hash(password.trim(), 10);
+    }
+    updates.updatedAt = new Date().toISOString();
 
-    res.status(200).json({ success: true, user });
+    const updated = await updateDoc('users', id, updates);
+
+    const safeUser = { ...updated };
+    delete safeUser.password;
+
+    res.status(200).json({ success: true, user: safeUser });
   } catch (error) {
     next(error);
   }
@@ -319,21 +359,21 @@ const updateStoreAdmin = async (req, res, next) => {
 const deleteStoreAdmin = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const user = await User.findById(id);
+    const user = await getDoc('users', id);
     if (!user || user.role !== 'storeadmin') {
       return res.status(404).json({ success: false, message: 'Store admin not found' });
     }
-    
+
     if (user.storeId) {
-      const store = await Store.findOne({ storeId: user.storeId });
-      if (store) {
-        store.admin = '—';
-        store.adminEmail = '';
-        await store.save();
-      }
+      try {
+        await updateStoreFS(user.storeId, {
+          admin: '—',
+          adminEmail: '',
+        });
+      } catch (_) {}
     }
-    
-    await user.deleteOne();
+
+    await deleteDoc('users', id);
     res.status(200).json({ success: true, message: 'Store admin removed' });
   } catch (error) {
     next(error);
@@ -342,14 +382,14 @@ const deleteStoreAdmin = async (req, res, next) => {
 
 /**
  * GET /api/super-admin/riders
- * List riders
+ * List riders with real-time delivery status
  */
 const getRiders = async (req, res, next) => {
   try {
-    const riders = await User.find({ role: 'rider' }).select('-password').lean();
+    const riders = await queryDocs('users', (ref) => ref.where('role', '==', 'rider'));
+    const orders = await getAllOrdersFS();
+    const activeOrders = orders.filter((o) => o.status === 'Out for Delivery');
 
-    // Live verification: Check active "Out for Delivery" orders to guarantee 100% real-time status
-    const activeOrders = await Order.find({ status: 'Out for Delivery' }).select('rider status');
     const activeRiderIdentifiers = new Set();
     activeOrders.forEach((o) => {
       if (o.rider?.riderId) activeRiderIdentifiers.add(o.rider.riderId.toString());
@@ -359,7 +399,7 @@ const getRiders = async (req, res, next) => {
 
     const updatedRiders = await Promise.all(
       riders.map(async (r) => {
-        const idStr = r._id ? r._id.toString() : '';
+        const idStr = r._id ? r._id.toString() : (r.id || '');
         const phoneStr = (r.phone || '').replace(/\D/g, '');
         const nameStr = (r.name || '').trim().toLowerCase();
 
@@ -368,14 +408,17 @@ const getRiders = async (req, res, next) => {
           (phoneStr && activeRiderIdentifiers.has(phoneStr)) ||
           (nameStr && activeRiderIdentifiers.has(nameStr));
 
+        const copy = { ...r };
+        delete copy.password;
+
         if (isOnDelivery && r.riderStatus !== 'On Delivery') {
-          await User.updateOne({ _id: r._id }, { riderStatus: 'On Delivery' });
-          return { ...r, riderStatus: 'On Delivery' };
+          await updateDoc('users', idStr, { riderStatus: 'On Delivery' });
+          copy.riderStatus = 'On Delivery';
         } else if (!isOnDelivery && r.riderStatus === 'On Delivery') {
-          await User.updateOne({ _id: r._id }, { riderStatus: 'Available' });
-          return { ...r, riderStatus: 'Available' };
+          await updateDoc('users', idStr, { riderStatus: 'Available' });
+          copy.riderStatus = 'Available';
         }
-        return r;
+        return copy;
       })
     );
 
@@ -392,7 +435,7 @@ const getRiders = async (req, res, next) => {
 const createRider = async (req, res, next) => {
   try {
     let { name, email, password, phone, vehicleNumber, storeId } = req.body;
-    
+
     if (!name || !name.trim()) {
       return res.status(400).json({ success: false, message: 'Rider name is required' });
     }
@@ -407,49 +450,41 @@ const createRider = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Phone number is required' });
     }
 
-    // Clean and normalize phone number
     phone = phone.replace(/[\s\-()]/g, '');
     if (phone.startsWith('0')) phone = phone.substring(1);
     if (!phone.startsWith('+') && phone.length === 10) phone = '+91' + phone;
 
-    // Check if phone or email already exists
-    const existingRider = await User.findOne({
-      $or: [
-        { phone },
-        { email },
-      ],
-    });
+    const existingEmail = await queryDocs('users', (ref) => ref.where('email', '==', email).limit(1));
+    if (existingEmail.length > 0) {
+      return res.status(400).json({ success: false, message: `Email ${email} is already registered.` });
+    }
 
-    if (existingRider) {
-      if (existingRider.phone === phone) {
-        return res.status(400).json({
-          success: false,
-          message: `Phone number ${phone} is already registered to ${existingRider.name || 'another account'}.`,
-        });
-      }
-      if (existingRider.email === email) {
-        return res.status(400).json({
-          success: false,
-          message: `Email ${email} is already registered.`,
-        });
-      }
+    const existingPhone = await queryDocs('users', (ref) => ref.where('phone', '==', phone).limit(1));
+    if (existingPhone.length > 0) {
+      return res.status(400).json({ success: false, message: `Phone number ${phone} is already registered.` });
     }
 
     let storeName = 'Ranchi Kishore Ganj';
-    if (storeId === 'S004') {
-      storeName = 'Teffes - Doranda store';
+    if (storeId === 'S004' || storeId === 'S002') {
+      storeName = "TeFFe's — Doranda Hub";
     } else if (storeId === 'S003') {
-      storeName = 'TeFFe\'s — Harmu Road';
+      storeName = "TeFFe's — Harmu Road";
     } else if (storeId) {
-      const store = await Store.findOne({ storeId });
-      if (store) storeName = store.name;
+      const s = await getStoreById(storeId);
+      if (s) storeName = s.name;
     }
 
     const defaultPass = password && password.trim() ? password.trim() : 'Rider@12345';
-    const rider = await User.create({
+    const hashedPassword = await bcrypt.hash(defaultPass, 10);
+    const userId = `rider_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const now = new Date().toISOString();
+
+    const riderData = {
+      id: userId,
+      _id: userId,
       name: name.trim(),
       email,
-      password: defaultPass,
+      password: hashedPassword,
       phone,
       vehicleNumber: (vehicleNumber && vehicleNumber.trim()) || 'JH01-EC-1234',
       storeId: storeId || 'S001',
@@ -458,155 +493,77 @@ const createRider = async (req, res, next) => {
       riderStatus: 'Available',
       isVerified: true,
       isActive: true,
-    });
+      dailyTarget: 16,
+      cashInHand: 0,
+      walletBalance: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-    // Dual-sync to Firestore users collection so rider can immediately log into the Rider App
-    try {
-      const bcrypt = require('bcryptjs');
-      const hashedPassword = await bcrypt.hash(defaultPass, 10);
-      const { getDb } = require('../lib/firestore');
-      const db = getDb();
-      const firestoreDocId = rider._id.toString();
-      await db.collection('users').doc(firestoreDocId).set({
-        id: firestoreDocId,
-        _id: firestoreDocId,
-        name: rider.name,
-        email: rider.email,
-        phone: rider.phone,
-        password: hashedPassword,
-        vehicleNumber: rider.vehicleNumber,
-        storeId: rider.storeId,
-        storeName: rider.storeName,
-        role: 'rider',
-        riderStatus: 'Available',
-        isVerified: true,
-        isActive: true,
-        dailyTarget: 16,
-        cashInHand: 0,
-        walletBalance: 0,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      }, { merge: true });
-    } catch (fsErr) {
-      console.warn('[createRider] Firestore dual-sync warning:', fsErr.message);
-    }
+    await createDoc('users', userId, riderData);
 
-    res.status(201).json({ success: true, rider });
+    const safeRider = { ...riderData };
+    delete safeRider.password;
+
+    res.status(201).json({ success: true, rider: safeRider });
   } catch (error) {
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern || {})[0] || 'Phone/Email';
-      return res.status(400).json({ success: false, message: `A user with this ${field} already exists.` });
-    }
-    if (error.name === 'ValidationError') {
-      const msg = Object.values(error.errors).map(e => e.message).join(', ');
-      return res.status(400).json({ success: false, message: msg });
-    }
     next(error);
   }
 };
 
 /**
  * PUT /api/super-admin/riders/:id
- * Update a rider: phone, vehicleNumber, assigned store, name, status
+ * Update a rider
  */
 const updateRider = async (req, res, next) => {
   try {
     const { id } = req.params;
     let { name, email, phone, vehicleNumber, storeId, riderStatus, isActive, password } = req.body;
 
-    const rider = await User.findById(id);
+    const rider = await getDoc('users', id);
     if (!rider || rider.role !== 'rider') {
       return res.status(404).json({ success: false, message: 'Rider not found' });
     }
 
-    if (name && name.trim()) rider.name = name.trim();
-    if (email && email.trim()) rider.email = email.toLowerCase().trim();
+    const updates = {};
+    if (name && name.trim()) updates.name = name.trim();
+    if (email && email.trim()) updates.email = email.toLowerCase().trim();
 
     if (phone && phone.trim()) {
       let cleanPhone = phone.replace(/[\s\-()]/g, '');
       if (cleanPhone.startsWith('0')) cleanPhone = cleanPhone.substring(1);
       if (!cleanPhone.startsWith('+') && cleanPhone.length === 10) cleanPhone = '+91' + cleanPhone;
 
-      // Ensure phone is unique to this rider
-      const existing = await User.findOne({ phone: cleanPhone, _id: { $ne: id } });
-      if (existing) {
-        return res.status(400).json({
-          success: false,
-          message: `Phone number ${cleanPhone} is already assigned to ${existing.name || 'another user'}.`,
-        });
+      const existingPhone = await queryDocs('users', (ref) => ref.where('phone', '==', cleanPhone).limit(1));
+      if (existingPhone.length > 0 && existingPhone[0].id !== id) {
+        return res.status(400).json({ success: false, message: `Phone number ${cleanPhone} is already registered.` });
       }
-      rider.phone = cleanPhone;
+      updates.phone = cleanPhone;
     }
 
-    if (typeof vehicleNumber !== 'undefined') {
-      rider.vehicleNumber = vehicleNumber.trim();
-    }
-
+    if (typeof vehicleNumber !== 'undefined') updates.vehicleNumber = vehicleNumber.trim();
     if (typeof storeId !== 'undefined' && storeId.trim()) {
-      rider.storeId = storeId.trim();
-      const store = await Store.findOne({ storeId: rider.storeId });
-      if (store) {
-        rider.storeName = store.name;
-      }
+      updates.storeId = storeId.trim();
+      const s = await getStoreById(storeId.trim());
+      if (s) updates.storeName = s.name;
     }
-
-    if (riderStatus) {
-      rider.riderStatus = riderStatus;
-    }
-
-    if (typeof isActive !== 'undefined') {
-      rider.isActive = isActive;
-    }
+    if (riderStatus) updates.riderStatus = riderStatus;
+    if (typeof isActive !== 'undefined') updates.isActive = Boolean(isActive);
 
     if (password && password.trim()) {
       if (password.trim().length < 6) {
         return res.status(400).json({ success: false, message: 'Password must be at least 6 characters long' });
       }
-      rider.password = password.trim();
+      updates.password = await bcrypt.hash(password.trim(), 10);
     }
+    updates.updatedAt = new Date().toISOString();
 
-    await rider.save();
+    const updated = await updateDoc('users', id, updates);
+    const safeRider = { ...updated };
+    delete safeRider.password;
 
-    // Dual-sync updates to Firestore
-    try {
-      const { getDb } = require('../lib/firestore');
-      const db = getDb();
-      const firestoreDocId = id.toString();
-      const fsUpdate = {
-        name: rider.name,
-        email: rider.email,
-        phone: rider.phone,
-        vehicleNumber: rider.vehicleNumber,
-        storeId: rider.storeId,
-        storeName: rider.storeName,
-        riderStatus: rider.riderStatus,
-        isActive: rider.isActive,
-        updatedAt: new Date().toISOString(),
-      };
-      if (password && password.trim()) {
-        const bcrypt = require('bcryptjs');
-        fsUpdate.password = await bcrypt.hash(password.trim(), 12);
-      }
-
-      let userRef = db.collection('users').doc(firestoreDocId);
-      const userSnap = await userRef.get();
-      if (!userSnap.exists && rider.email) {
-        const q = await db.collection('users').where('email', '==', rider.email.toLowerCase().trim()).limit(1).get();
-        if (!q.empty) {
-          userRef = q.docs[0].ref;
-        }
-      }
-      await userRef.set(fsUpdate, { merge: true });
-    } catch (fsErr) {
-      console.warn('[updateRider] Firestore dual-sync warning:', fsErr.message);
-    }
-
-    res.status(200).json({ success: true, rider });
+    res.status(200).json({ success: true, rider: safeRider });
   } catch (error) {
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern || {})[0] || 'Phone/Email';
-      return res.status(400).json({ success: false, message: `A user with this ${field} already exists.` });
-    }
     next(error);
   }
 };
@@ -618,19 +575,12 @@ const updateRider = async (req, res, next) => {
 const deleteRider = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const rider = await User.findById(id);
+    const rider = await getDoc('users', id);
     if (!rider || rider.role !== 'rider') {
       return res.status(404).json({ success: false, message: 'Rider not found' });
     }
 
-    await rider.deleteOne();
-
-    try {
-      const { getDb } = require('../lib/firestore');
-      const db = getDb();
-      await db.collection('users').doc(id.toString()).delete();
-    } catch (_) {}
-
+    await deleteDoc('users', id);
     res.status(200).json({ success: true, message: 'Rider deleted successfully' });
   } catch (error) {
     next(error);
@@ -643,8 +593,14 @@ const deleteRider = async (req, res, next) => {
  */
 const getPlatformCustomers = async (req, res, next) => {
   try {
-    const customers = await User.find({ role: 'customer' }).select('-password').sort({ createdAt: -1 });
-    res.status(200).json({ success: true, count: customers.length, customers });
+    const customers = await queryDocs('users', (ref) => ref.where('role', '==', 'customer'));
+    const safeCustomers = customers.map((c) => {
+      const copy = { ...c };
+      delete copy.password;
+      return copy;
+    });
+    safeCustomers.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    res.status(200).json({ success: true, count: safeCustomers.length, customers: safeCustomers });
   } catch (error) {
     next(error);
   }
@@ -656,7 +612,7 @@ const getPlatformCustomers = async (req, res, next) => {
  */
 const getCoupons = async (req, res, next) => {
   try {
-    const coupons = await Coupon.find().sort({ createdAt: -1 });
+    const coupons = await getAllCoupons({ includeTest: false });
     res.status(200).json({ success: true, count: coupons.length, coupons });
   } catch (error) {
     next(error);
@@ -696,54 +652,20 @@ const createCoupon = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Discount value must be greater than 0.' });
     }
 
-    if (discountType === 'percentage' && (val < 1 || val > 100)) {
-      return res.status(400).json({ success: false, message: 'Percentage discount must be between 1 and 100.' });
-    }
-
     const minAmount = Number(minOrderAmount !== undefined ? minOrderAmount : minOrder || 0);
-    if (minAmount < 0) {
-      return res.status(400).json({ success: false, message: 'Minimum order amount cannot be negative.' });
-    }
+    const fromDate = validFrom ? new Date(validFrom).toISOString() : new Date().toISOString();
+    const tillDate = validTill ? new Date(validTill).toISOString() : new Date('2026-12-31T23:59:59.999Z').toISOString();
 
-    const maxDiscount = maxDiscountAmount !== undefined && maxDiscountAmount !== '' && maxDiscountAmount !== null
-      ? Number(maxDiscountAmount)
-      : null;
-    if (maxDiscount !== null && maxDiscount < 0) {
-      return res.status(400).json({ success: false, message: 'Maximum discount cannot be negative.' });
-    }
+    const desc = (description || discount || `${val}% off`).trim();
 
-    const fromDate = validFrom ? new Date(validFrom) : new Date();
-    if (isNaN(fromDate.getTime())) {
-      return res.status(400).json({ success: false, message: 'Invalid Valid From date.' });
+    if (isSuperOffer) {
+      const allCoupons = await getAllCoupons();
+      for (const c of allCoupons) {
+        if (c.isSuperOffer) {
+          await updateCouponFS(c.code, { isSuperOffer: false });
+        }
+      }
     }
-
-    if (!validTill) {
-      return res.status(400).json({ success: false, message: 'Valid Till date is required.' });
-    }
-    const tillDate = new Date(validTill);
-    if (isNaN(tillDate.getTime())) {
-      return res.status(400).json({ success: false, message: 'Invalid Valid Till date.' });
-    }
-    tillDate.setHours(23, 59, 59, 999);
-
-    if (tillDate < fromDate) {
-      return res.status(400).json({ success: false, message: 'Valid Till date cannot be before Valid From date.' });
-    }
-
-    const limit = usageLimit !== undefined && usageLimit !== '' && usageLimit !== null
-      ? Number(usageLimit)
-      : null;
-    if (limit !== null && limit < 0) {
-      return res.status(400).json({ success: false, message: 'Usage limit cannot be negative.' });
-    }
-
-    const defaultDesc = discountType === 'percentage'
-      ? `${val}% instant discount on orders above ₹${minAmount}`
-      : discountType === 'free_delivery'
-        ? `Free express delivery on orders above ₹${minAmount}`
-        : `₹${val} flat off on orders above ₹${minAmount}`;
-
-    const desc = (description || discount || defaultDesc).trim();
 
     const couponData = {
       code: cleanCode,
@@ -751,11 +673,11 @@ const createCoupon = async (req, res, next) => {
       discountValue: val,
       minOrderAmount: minAmount,
       minOrder: minAmount,
-      maxDiscountAmount: maxDiscount,
+      maxDiscountAmount: maxDiscountAmount ? Number(maxDiscountAmount) : null,
       validFrom: fromDate,
       validTill: tillDate,
       firstOrderOnly: Boolean(firstOrderOnly),
-      usageLimit: limit,
+      usageLimit: usageLimit ? Number(usageLimit) : null,
       description: desc,
       discount: desc,
       isSuperOffer: Boolean(isSuperOffer),
@@ -763,16 +685,9 @@ const createCoupon = async (req, res, next) => {
       status: (isActive !== undefined && !isActive) ? 'Paused' : 'Active',
     };
 
-    if (couponData.isSuperOffer) {
-      await Coupon.updateMany({}, { $set: { isSuperOffer: false } });
-    }
-
-    const coupon = await Coupon.create(couponData);
-    res.status(201).json({ success: true, coupon });
+    const created = await createCouponFS(couponData);
+    res.status(201).json({ success: true, coupon: created });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'Promo code already exists. Please enter a unique code.' });
-    }
     next(error);
   }
 };
@@ -784,55 +699,21 @@ const createCoupon = async (req, res, next) => {
 const updateCoupon = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const cleanId = id.trim().toUpperCase();
     const updates = { ...req.body };
 
-    if (updates.code) {
-      updates.code = updates.code.trim().toUpperCase();
-    }
-    if (updates.discountValue !== undefined) {
-      const val = Number(updates.discountValue);
-      if (isNaN(val) || val <= 0) {
-        return res.status(400).json({ success: false, message: 'Discount value must be greater than 0.' });
+    if (updates.isSuperOffer) {
+      const allCoupons = await getAllCoupons();
+      for (const c of allCoupons) {
+        if (c.code !== cleanId && c.isSuperOffer) {
+          await updateCouponFS(c.code, { isSuperOffer: false });
+        }
       }
-      if (updates.discountType === 'percentage' && (val < 1 || val > 100)) {
-        return res.status(400).json({ success: false, message: 'Percentage discount must be between 1 and 100.' });
-      }
-      updates.discountValue = val;
-    }
-    if (updates.minOrderAmount !== undefined) {
-      updates.minOrderAmount = Number(updates.minOrderAmount) || 0;
-      updates.minOrder = updates.minOrderAmount;
-    }
-    if (updates.maxDiscountAmount !== undefined) {
-      updates.maxDiscountAmount = updates.maxDiscountAmount !== '' && updates.maxDiscountAmount !== null
-        ? Number(updates.maxDiscountAmount)
-        : null;
-    }
-    if (updates.validTill) {
-      const tillDate = new Date(updates.validTill);
-      tillDate.setHours(23, 59, 59, 999);
-      updates.validTill = tillDate;
-    }
-    if (updates.validFrom) {
-      updates.validFrom = new Date(updates.validFrom);
-    }
-    if (updates.isActive !== undefined) {
-      updates.isActive = Boolean(updates.isActive);
-      updates.status = updates.isActive ? 'Active' : 'Paused';
-    }
-    if (updates.isSuperOffer === true) {
-      await Coupon.updateMany({ _id: { $ne: id } }, { $set: { isSuperOffer: false } });
     }
 
-    const coupon = await Coupon.findByIdAndUpdate(id, updates, { new: true, runValidators: true });
-    if (!coupon) {
-      return res.status(404).json({ success: false, message: 'Coupon not found' });
-    }
-    res.status(200).json({ success: true, coupon });
+    const updated = await updateCouponFS(cleanId, updates);
+    res.status(200).json({ success: true, coupon: updated });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'Promo code already exists. Please enter a unique code.' });
-    }
     next(error);
   }
 };
@@ -844,10 +725,7 @@ const updateCoupon = async (req, res, next) => {
 const deleteCoupon = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const coupon = await Coupon.findByIdAndDelete(id);
-    if (!coupon) {
-      return res.status(404).json({ success: false, message: 'Coupon not found' });
-    }
+    await deleteCouponFS(id.trim().toUpperCase());
     res.status(200).json({ success: true, message: 'Coupon deleted successfully' });
   } catch (error) {
     next(error);
@@ -861,25 +739,20 @@ const deleteCoupon = async (req, res, next) => {
 const setSuperOffer = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const cleanCode = id.trim().toUpperCase();
 
-    // Unset isSuperOffer across all coupons
-    await Coupon.updateMany({}, { $set: { isSuperOffer: false } });
-
-    // Mark this coupon as the Super Offer and ensure it is active
-    const coupon = await Coupon.findByIdAndUpdate(
-      id,
-      { $set: { isSuperOffer: true, status: 'Active' } },
-      { new: true }
-    );
-
-    if (!coupon) {
-      return res.status(404).json({ success: false, message: 'Coupon not found' });
+    const allCoupons = await getAllCoupons();
+    for (const c of allCoupons) {
+      if (c.isSuperOffer) {
+        await updateCouponFS(c.code, { isSuperOffer: false });
+      }
     }
 
+    const updated = await updateCouponFS(cleanCode, { isSuperOffer: true, status: 'Active', isActive: true });
     res.status(200).json({
       success: true,
-      message: `Coupon "${coupon.code}" set as platform Super Offer`,
-      coupon,
+      message: `Coupon "${cleanCode}" set as platform Super Offer`,
+      coupon: updated,
     });
   } catch (error) {
     next(error);
@@ -892,7 +765,7 @@ const setSuperOffer = async (req, res, next) => {
  */
 const getAllOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find().sort({ createdAt: -1 });
+    const orders = await getAllOrdersFS();
     res.status(200).json({ success: true, count: orders.length, orders });
   } catch (error) {
     next(error);

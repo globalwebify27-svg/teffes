@@ -1,5 +1,12 @@
+/**
+ * Push Notification Dispatch Service (Pure Cloud Firestore Backend)
+ * 100% Zero MongoDB dependency - Fully migrated to Google Cloud Firestore
+ */
+
 const { getMessagingInstance, isFirebaseReady } = require('../config/firebase');
-const NotificationToken = require('../models/NotificationToken');
+const { queryDocs, updateDoc } = require('../lib/firestore');
+
+const NOTIFICATION_TOKENS_COLLECTION = 'notification_tokens';
 
 /**
  * Clean up invalid or expired tokens returned by Firebase
@@ -22,11 +29,15 @@ const handleInvalidTokens = async (tokens, responses) => {
 
   if (invalidTokens.length > 0) {
     try {
-      await NotificationToken.updateMany(
-        { fcmToken: { $in: invalidTokens } },
-        { $set: { isActive: false, lastSeenAt: new Date() } }
-      );
-      console.log(`[FCM] Deactivated ${invalidTokens.length} expired/unregistered FCM token(s).`);
+      const crypto = require('crypto');
+      for (const tok of invalidTokens) {
+        const docId = crypto.createHash('sha256').update(tok).digest('hex').slice(0, 32);
+        await updateDoc(NOTIFICATION_TOKENS_COLLECTION, docId, {
+          isActive: false,
+          lastSeenAt: new Date().toISOString(),
+        }).catch(() => {});
+      }
+      console.log(`[FCM] Deactivated ${invalidTokens.length} expired/unregistered FCM token(s) in Firestore.`);
     } catch (err) {
       console.warn('[FCM] Error deactivating stale tokens:', err.message);
     }
@@ -52,7 +63,6 @@ const formatDataPayload = (data = {}) => {
 const sendToTokens = async (tokens, { title, body, data = {}, channelId = 'teffes_customer_channel' }) => {
   if (!tokens || tokens.length === 0) return { success: true, count: 0 };
 
-  // Check if Firebase is initialized
   if (!isFirebaseReady()) {
     console.log(`[FCM Mock Log] Push notification to ${tokens.length} token(s): "${title}" - "${body}"`);
     return { success: false, reason: 'Firebase not initialized' };
@@ -123,17 +133,25 @@ const sendToTokens = async (tokens, { title, body, data = {}, channelId = 'teffe
 const sendToUser = async (userId, { title, body, data = {} }, appType = null) => {
   try {
     if (!userId) return;
+    const cleanUserId = String(userId).trim();
 
-    const query = { userId, isActive: true };
-    if (appType) query.appType = appType;
+    const records = await queryDocs(NOTIFICATION_TOKENS_COLLECTION, (ref) =>
+      ref.where('userId', '==', cleanUserId).where('isActive', '==', true)
+    );
 
-    const records = await NotificationToken.find(query).select('fcmToken').lean();
-    if (!records || records.length === 0) {
-      console.log(`[FCM] No active FCM tokens found for user ${userId}`);
+    let filtered = records;
+    if (appType) {
+      filtered = records.filter((r) => r.appType === appType);
+    }
+
+    if (!filtered || filtered.length === 0) {
+      console.log(`[FCM] No active FCM tokens found in Firestore for user ${cleanUserId}`);
       return;
     }
 
-    const tokens = records.map((r) => r.fcmToken);
+    const tokens = filtered.map((r) => r.fcmToken).filter(Boolean);
+    if (tokens.length === 0) return;
+
     return await sendToTokens(tokens, {
       title,
       body,
@@ -150,9 +168,7 @@ const sendToUser = async (userId, { title, body, data = {} }, appType = null) =>
  */
 const sendToRider = async (riderId, { title, body, data = {} }) => {
   if (!riderId) return { success: false, reason: 'No riderId provided' };
-  // First attempt: specifically targeting rider app tokens
   let res = await sendToUser(riderId, { title, body, data }, 'rider');
-  // Fallback: if no tokens registered under appType='rider', check any active token registered for this user
   if (!res || !res.success || res.failureCount > 0) {
     const fallbackRes = await sendToUser(riderId, { title, body, data });
     if (fallbackRes && fallbackRes.success) {
@@ -170,7 +186,7 @@ const sendToToken = async (fcmToken, { title, body, data = {}, channelId }) => {
 };
 
 /**
- * Send notification to a Firebase topic (e.g. 'all_customers', 'all_riders', 'offers')
+ * Send notification to a Firebase topic
  */
 const sendToTopic = async (topic, { title, body, data = {} }) => {
   if (!isFirebaseReady()) return;

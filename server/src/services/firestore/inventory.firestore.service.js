@@ -377,6 +377,37 @@ const recordDamageWasteTransactional = async ({
 };
 
 /**
+/**
+ * Safely update an inventory record.
+ */
+const updateInventoryItem = async (storeId, itemId, updates = {}) => {
+  const docId = getInventoryDocId(storeId, itemId);
+  const existing = await getDoc(INVENTORY_COLLECTION, docId);
+  if (!existing) {
+    throw new Error(`Inventory item "${itemId}" not found for store "${storeId}"`);
+  }
+  const payload = { ...updates };
+  if (payload.stock !== undefined || payload.min !== undefined) {
+    const stock = payload.stock !== undefined ? Number(payload.stock) : existing.stock;
+    const min = payload.min !== undefined ? Number(payload.min) : existing.min;
+    payload.status = calculateInventoryStatus(stock, min);
+  }
+  payload.updatedAt = new Date().toISOString();
+  return updateDoc(INVENTORY_COLLECTION, docId, payload);
+};
+
+/**
+ * Retrieve inventory audit history.
+ */
+const getInventoryHistory = async (storeId, options = {}) => {
+  if (!storeId || typeof storeId !== 'string') return [];
+  const entries = await queryDocs(HISTORY_COLLECTION, (ref) =>
+    ref.where('storeId', '==', storeId.trim())
+  );
+  return entries.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+};
+
+/**
  * Safely delete an inventory record.
  */
 const deleteInventoryItem = async (storeId, itemId) => {
@@ -397,8 +428,11 @@ module.exports = {
   getStoreInventory,
   getInventoryItem,
   createInventoryItem,
+  updateInventoryItem,
+  getInventoryHistory,
   deductStockTransactional,
   transferDefreezeToFreshTransactional,
   recordDamageWasteTransactional,
   deleteInventoryItem,
 };
+
