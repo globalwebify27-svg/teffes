@@ -302,6 +302,14 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       _socket?.on('order:status_updated', (_) {
         _fetchLiveOrderDetails();
       });
+
+      _socket?.on('order:status_changed', (_) {
+        _fetchLiveOrderDetails();
+      });
+
+      _socket?.on('orders:refreshed', (_) {
+        _fetchLiveOrderDetails();
+      });
     } catch (e) {
       debugPrint('[Customer Tracking] Socket initialization error: $e');
     }
@@ -447,40 +455,35 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       };
     }
 
-    // Preparation Phase: Pending, Cutting, Ready
-    String targetClock = '';
-    if (order.targetDeliveryTime != null && order.targetDeliveryTime!.isNotEmpty) {
-      try {
-        final dt = DateTime.parse(order.targetDeliveryTime!).toLocal();
-        final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-        final minute = dt.minute.toString().padLeft(2, '0');
-        final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-        targetClock = '$hour:$minute $ampm';
-      } catch (_) {
-        targetClock = order.targetDeliveryTime!;
-      }
-    }
-
-    final targetText = targetClock.isNotEmpty ? 'Arriving by $targetClock' : 'Preparing your cuts';
-
-    if (status == 'Cutting') {
+    if (status == 'Ready') {
+      return {
+        'badge': 'FRESH MEAT CUT & PACKED',
+        'title': 'Packed & Sealed Fresh',
+        'sub': 'Insulated cold pack ready for rider pickup',
+      };
+    } else if (status == 'Cutting') {
       return {
         'badge': 'FRESH CUTTING STATION',
-        'title': targetText,
-        'sub': 'Store team slicing & packing your fresh cuts',
+        'title': 'Slicing & Custom Cuts in Progress',
+        'sub': 'Store butchery team preparing your order',
       };
-    } else if (status == 'Ready') {
-      return {
-        'badge': 'PACKED FRESH',
-        'title': targetText,
-        'sub': 'Fresh insulated pack assigned to rider',
-      };
+    }
+
+    // Pending: Check if user booked a specific hour slot
+    String slotInfo = '';
+    final slot = order.deliverySlot;
+    if (slot != null && slot.isNotEmpty) {
+      final s = slot.toLowerCase();
+      final isGeneric = (s.contains('min express') || s.contains('min delivery') || s == 'delivery' || s == 'pickup' || s == 'standard') && !s.contains('am') && !s.contains('pm');
+      if (!isGeneric && (s.contains('am') || s.contains('pm') || RegExp(r'\d{1,2}:\d{2}').hasMatch(s))) {
+        slotInfo = slot;
+      }
     }
 
     return {
       'badge': 'ORDER IN PREPARATION',
-      'title': targetText,
-      'sub': 'Fresh cuts in preparation',
+      'title': slotInfo.isNotEmpty ? 'Delivery Slot: $slotInfo' : 'Order Confirmed & Preparing',
+      'sub': 'Order verified at ${order.storeName ?? "Doranda Hub"}',
     };
   }
 
@@ -954,7 +957,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  order.storeName != null ? '${order.storeName} Hub' : 'Teffes Local Dark Store Hub',
+                                  order.storeName != null
+                                      ? (order.storeName!.endsWith('Hub') ? order.storeName! : '${order.storeName} Hub')
+                                      : 'TeFFe\'s Local Store Hub',
                                   style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
                                 ),
                               ],
@@ -1181,7 +1186,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                       desc: order.isPickup
                           ? 'Verified for counter pickup at ${order.storeName ?? "Store Counter"}'
                           : 'Verified by store manager',
-                      isCompleted: status != 'Pending',
+                      isCompleted: ['Cutting', 'Ready', 'Out for Delivery', 'Delivered'].contains(status),
                       isActive: status == 'Pending',
                       showLine: true,
                     ),
@@ -1192,11 +1197,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                       title: status == 'Cutting' ? 'Store Team Cutting Meat' : 'Fresh Meat Cut & Packed',
                       desc: status == 'Cutting'
                           ? 'Clean cutting on sanitized cutting block in progress'
-                          : ['Ready', 'Out for Delivery', 'Delivered'].contains(status)
-                              ? 'Cleanly cut upon order & sealed fresh'
-                              : 'Next up: Order preparation',
-                      isCompleted: ['Ready', 'Out for Delivery', 'Delivered'].contains(status),
-                      isActive: status == 'Cutting',
+                          : status == 'Ready'
+                              ? 'Cleanly cut upon order & sealed in insulated pack'
+                              : ['Out for Delivery', 'Delivered'].contains(status)
+                                  ? 'Cleanly cut upon order & sealed fresh'
+                                  : 'Next up: Order preparation',
+                      isCompleted: ['Out for Delivery', 'Delivered'].contains(status),
+                      isActive: status == 'Cutting' || status == 'Ready',
                       showLine: true,
                     ),
 
@@ -1241,7 +1248,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               ? 'Show Order #${order.orderId} at the store counter'
                               : 'Temperature-controlled doorstep delivery',
                       isCompleted: status == 'Delivered',
-                      isActive: false,
+                      isActive: status == 'Delivered',
                       showLine: false,
                     ),
                   ],

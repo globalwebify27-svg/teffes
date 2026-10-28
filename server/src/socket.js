@@ -152,14 +152,18 @@ const getIO = () => {
 const emitOrderStatusUpdate = (orderId, order) => {
   if (!io) return;
   const room = `order:${orderId}`;
-  io.to(room).emit('order:status_changed', {
+  const payload = {
     orderId,
     status: order.status,
     order,
     updatedAt: new Date().toISOString(),
-  });
+  };
+  io.to(room).emit('order:status_changed', payload);
+  io.to(room).emit('order:status_updated', payload);
   // Also broadcast to general feed for Store Admin & Dashboard live refresh
   io.emit('orders:refreshed', { orderId, status: order.status });
+  io.emit('order:status_changed', payload);
+  io.emit('order:status_updated', payload);
 };
 
 const emitWalletUpdate = (userId, balance, transaction) => {
