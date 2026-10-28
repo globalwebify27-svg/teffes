@@ -189,92 +189,6 @@ const findOrCreateFirebaseCustomer = async ({
 };
 
 /**
- * Atomically authenticate or register a customer via Phone number (Direct OTP flow).
- * Ensures customer document exists in Firestore and is properly formatted.
- */
-const findOrCreateCustomerByPhone = async ({
-  phone,
-  name = 'Valued Customer',
-  email = '',
-}) => {
-  const cleanPhone = normalizePhone(phone);
-  if (!cleanPhone || cleanPhone.length < 10) {
-    throw new Error('Valid 10-digit phone number is required');
-  }
-
-  const now = new Date().toISOString();
-  const db = getDb();
-
-  return runTransaction(async (transaction) => {
-    // 1. Query for existing user with this phone number
-    const phoneQuery = await db.collection(COLLECTION).where('phone', '==', cleanPhone).limit(1).get();
-
-    if (!phoneQuery.empty) {
-      const existingDoc = phoneQuery.docs[0];
-      const existingData = existingDoc.data();
-
-      if (existingData.isActive === false) {
-        throw new Error('Account is deactivated. Contact customer support.');
-      }
-
-      const updates = {
-        isVerified: true,
-        lastLoginAt: now,
-        updatedAt: now,
-      };
-
-      if (name && (!existingData.name || existingData.name === 'Valued Customer')) {
-        updates.name = name.trim();
-      }
-      if (email && !existingData.email) {
-        updates.email = email.trim().toLowerCase();
-      }
-
-      transaction.update(existingDoc.ref, updates);
-
-      return {
-        _id: existingDoc.id,
-        id: existingDoc.id,
-        ...existingData,
-        ...updates,
-        isNewUser: false,
-      };
-    }
-
-    // 2. Create fresh customer document
-    const newDocId = `cust_${cleanPhone}`;
-    const userRef = db.collection(COLLECTION).doc(newDocId);
-
-    const newCustomer = {
-      phone: cleanPhone,
-      name: (name || 'Valued Customer').trim(),
-      email: (email || '').trim().toLowerCase(),
-      role: 'customer',
-      isActive: true,
-      isVerified: true,
-      walletBalance: 0.0,
-      totalSpent: 0.0,
-      loyaltyTier: 'Bronze',
-      addresses: [],
-      cart: [],
-      wishlist: [],
-      lastLoginAt: now,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    transaction.set(userRef, newCustomer);
-
-    return {
-      _id: newDocId,
-      id: newDocId,
-      ...newCustomer,
-      isNewUser: true,
-    };
-  });
-};
-
-/**
  * Create a privileged staff account (Rider, Store Admin, Super Admin).
  * Strictly requires authorized caller role checks before execution.
  */
@@ -550,7 +464,6 @@ module.exports = {
   getUserByEmail,
   getUserByPhone,
   findOrCreateFirebaseCustomer,
-  findOrCreateCustomerByPhone,
   createPrivilegedUser,
   updateUserProfile,
   getAddresses,

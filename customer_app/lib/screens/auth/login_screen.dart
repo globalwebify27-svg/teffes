@@ -185,27 +185,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         );
       },
-      onFailed: (errorMessage) async {
+      onFailed: (errorMessage) {
         if (!mounted) return;
-        // Resilient automatic fallback: try backend direct OTP so testing/client is never blocked
-        final directSent = await auth.sendOtp(cleanPhone);
-        if (directSent && mounted) {
-          setState(() {
-            _verificationId = 'direct_backend_otp';
-            _isOtpSent = true;
-          });
-          _clearOtpBoxes();
-          _startResendTimer();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Switched to secure direct verification. Please enter OTP or test code 123456.'),
-              backgroundColor: AppColors.hygieneDark,
-              duration: Duration(seconds: 4),
-            ),
-          );
-          return;
-        }
-
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(errorMessage),
@@ -249,8 +230,6 @@ class _LoginScreenState extends State<LoginScreen> {
         smsCode: cleanOtp,
         phone: cleanPhone,
       );
-    } else {
-      success = await auth.verifyOtp(cleanPhone, cleanOtp);
     }
 
     if (!success) {
@@ -706,32 +685,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                       ),
-                    GestureDetector(
-                      onTap: () => _fillOtp('123456'),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryLight,
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: const [
-                            Icon(Icons.touch_app_rounded, size: 14, color: AppColors.primaryMaroon),
-                            SizedBox(width: 4),
-                            Text(
-                              'Test Code: 123456',
-                              style: TextStyle(
-                                color: AppColors.primaryMaroon,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
                   ],
                 ),
                 const SizedBox(height: 24),

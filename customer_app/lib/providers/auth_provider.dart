@@ -81,9 +81,9 @@ class AuthProvider with ChangeNotifier {
     } catch (_) {}
   }
 
-  // ─── FIREBASE & RESILIENT BACKEND PHONE AUTHENTICATION ─────────────────────
+  // ─── FIREBASE PHONE AUTHENTICATION ─────────────────────────────────────────
 
-  /// Send verification SMS via Firebase Phone Auth with automatic fallback to Backend OTP
+  /// Send verification SMS via Firebase Phone Auth
   Future<void> sendFirebaseOtp({
     required String phone,
     required Function(String verificationId, int? resendToken) onCodeSent,
@@ -114,34 +114,8 @@ class AuthProvider with ChangeNotifier {
             await _signInWithFirebaseCredential(credential, phone: clean10);
           }
         },
-        verificationFailed: (FirebaseAuthException e) async {
+        verificationFailed: (FirebaseAuthException e) {
           debugPrint('[AuthProvider] Firebase phone verificationFailed: ${e.code} - ${e.message}');
-          // If Firebase failed due to Play Integrity, missing-client-identifier, quota, or network check:
-          // Immediately fall back to direct backend OTP so client and users are NEVER blocked!
-          final isAppCheckOrIntegrity = e.code.contains('missing-client-identifier') ||
-              e.code.contains('app-not-authorized') ||
-              e.code.contains('play-integrity') ||
-              e.code.contains('recaptcha') ||
-              e.code.contains('quota-exceeded') ||
-              (e.message != null && (
-                e.message!.contains('missing a valid app identifier') ||
-                e.message!.contains('Play Integrity') ||
-                e.message!.contains('reCAPTCHA') ||
-                e.message!.contains('quota')
-              ));
-
-          if (isAppCheckOrIntegrity) {
-            debugPrint('[AuthProvider] Play Integrity / App Identifier check bypassed. Triggering resilient backend OTP fallback.');
-            final sent = await sendOtp(clean10);
-            if (sent) {
-              _isLoading = false;
-              _error = null;
-              notifyListeners();
-              onCodeSent('direct_backend_otp', null);
-              return;
-            }
-          }
-
           _isLoading = false;
           String friendlyMsg = 'Phone verification failed.';
           if (e.code == 'invalid-phone-number') {
@@ -149,8 +123,8 @@ class AuthProvider with ChangeNotifier {
           } else if (e.code == 'too-many-requests') {
             friendlyMsg = 'Too many attempts. Please try again later.';
           } else if (e.code == 'quota-exceeded') {
-            friendlyMsg = 'SMS quota reached. Please use direct OTP verification.';
-          } else if (e.message != null) {
+            friendlyMsg = 'SMS quota reached. Please try again later.';
+          } else if (e.message != null && e.message!.isNotEmpty) {
             friendlyMsg = e.message!;
           }
           _error = friendlyMsg;
@@ -167,23 +141,15 @@ class AuthProvider with ChangeNotifier {
         },
       );
     } catch (e) {
-      debugPrint('[AuthProvider] verifyPhoneNumber threw exception: $e. Falling back to backend OTP.');
-      final sent = await sendOtp(clean10);
-      if (sent) {
-        _isLoading = false;
-        _error = null;
-        notifyListeners();
-        onCodeSent('direct_backend_otp', null);
-      } else {
-        _isLoading = false;
-        _error = 'Failed to send verification code: $e';
-        notifyListeners();
-        onFailed(_error!);
-      }
+      debugPrint('[AuthProvider] verifyPhoneNumber threw exception: $e');
+      _isLoading = false;
+      _error = 'Failed to send verification SMS: $e';
+      notifyListeners();
+      onFailed(_error!);
     }
   }
 
-  /// Verify 6-digit OTP code with Firebase (or direct backend fallback) and establish session
+  /// Verify 6-digit OTP code with Firebase and exchange ID Token with TeFFe backend
   Future<bool> verifyFirebaseOtp({
     required String verificationId,
     required String smsCode,
@@ -197,35 +163,34 @@ class AuthProvider with ChangeNotifier {
     final cleanPhone = phone?.replaceAll(RegExp(r'\D'), '') ?? '';
     final clean10 = cleanPhone.length > 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
 
-    // Direct backend OTP bypass (when Play Integrity or device check failed)
-    if (verificationId == 'direct_backend_otp' || verificationId.isEmpty) {
-      return await verifyOtp(clean10, smsCode);
-    }
-
     try {
       final credential = PhoneAuthProvider.credential(
         verificationId: verificationId,
         smsCode: smsCode.trim(),
       );
 
-      final success = await _signInWithFirebaseCredential(credential, phone: clean10, name: name);
-      if (success) return true;
+      return await _signInWithFirebaseCredential(credential, phone: clean10, name: name);
     } on FirebaseAuthException catch (e) {
-      debugPrint('[AuthProvider] Firebase verify error: ${e.code} - ${e.message}. Attempting backend verify fallback.');
+      debugPrint('[AuthProvider] FirebaseAuthException: [${e.code}] ${e.message}');
+      _isLoading = false;
+      if (e.code == 'invalid-verification-code' || e.code == 'invalid-otp') {
+        _error = 'Provided OTP is wrong. Please enter the correct code.';
+      } else if (e.code == 'session-expired') {
+        _error = 'Verification code has expired. Please request a new code.';
+      } else if (e.code == 'too-many-requests') {
+        _error = 'Too many attempts. Please try again later.';
+      } else {
+        _error = 'Provided OTP is wrong. Please enter the correct code.';
+      }
+      notifyListeners();
+      return false;
     } catch (e) {
-      debugPrint('[AuthProvider] Firebase credential error: $e. Attempting backend verify fallback.');
+      debugPrint('[AuthProvider] Error verifying Firebase OTP: $e');
+      _isLoading = false;
+      _error = 'Provided OTP is wrong. Please enter the correct code.';
+      notifyListeners();
+      return false;
     }
-
-    // Resilient fallback: verify directly with backend in case of test codes or Firebase mismatch
-    if (clean10.isNotEmpty) {
-      final backendSuccess = await verifyOtp(clean10, smsCode);
-      if (backendSuccess) return true;
-    }
-
-    _isLoading = false;
-    _error = 'Provided OTP is wrong. Please enter the correct code.';
-    notifyListeners();
-    return false;
   }
 
   /// Helper to sign in with PhoneAuthCredential, retrieve ID token, and exchange with TeFFe backend
@@ -278,27 +243,8 @@ class AuthProvider with ChangeNotifier {
           notifyListeners();
           return true;
         }
-      } catch (backendError) {
-        debugPrint('[AuthProvider] Backend API note: $backendError. Using verified session.');
       }
-
-      // Resilient Fallback: Phone number has been verified by Firebase!
-      // If backend network or remote endpoint isn't accessible, establish session seamlessly
-      _token = 'teffes-verified-${firebaseUser.uid}';
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', _token!);
-
-      _user = UserModel(
-        id: 'cust-${phone ?? firebaseUser.phoneNumber ?? "user"}',
-        name: name ?? 'Valued Customer',
-        phone: phone ?? firebaseUser.phoneNumber ?? '',
-        role: 'customer',
-      );
-
-      await FcmService.instance.syncUserSession();
-      _isLoading = false;
-      notifyListeners();
-      return true;
+      throw Exception('Failed to authenticate with TeFFe backend');
     } on FirebaseAuthException catch (e) {
       debugPrint('[AuthProvider] FirebaseAuthException: [${e.code}] ${e.message}');
       _isLoading = false;
@@ -320,69 +266,6 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return false;
     }
-  }
-
-  // ─── LEGACY / FALLBACK DIRECT OTP FLOW ────────────────────────────────────
-
-  Future<bool> sendOtp(String phone) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final res = await _api.post(ApiEndpoints.sendOtp, data: {'phone': phone});
-      _isLoading = false;
-      notifyListeners();
-      return res.data['success'] == true;
-    } catch (e) {
-      _error = 'Failed to send verification code. Please check your phone number.';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> verifyOtp(String phone, String otp) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final res = await _api.post(ApiEndpoints.verifyOtp, data: {
-        'phone': phone,
-        'otp': otp,
-      });
-
-      if (res.data['success'] == true) {
-        _token = (res.data['accessToken'] ?? res.data['token'])?.toString();
-        if (_token != null && _token!.isNotEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('auth_token', _token!);
-        }
-
-        if (res.data['user'] != null) {
-          _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
-        } else {
-          _user = UserModel(
-            id: 'cust-$phone',
-            name: 'Valued Customer',
-            phone: phone,
-            role: 'customer',
-          );
-        }
-        await fetchMyOrders();
-        await FcmService.instance.syncUserSession();
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-    } catch (e) {
-      debugPrint('Error verifying OTP with backend: $e');
-    }
-
-    _isLoading = false;
-    notifyListeners();
-    return false;
   }
 
   // ─── PROFILE & WALLET METHODS ─────────────────────────────────────────────
