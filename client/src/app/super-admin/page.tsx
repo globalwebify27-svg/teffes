@@ -22,6 +22,7 @@ import axios from "axios";
 import { toast } from "@/lib/toast";
 import { isYouTubeUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
+import SuperAdminInventoryLogsTab from "@/components/super-admin/InventoryLogsTab";
 
 // ─── Icon helpers ──────────────────────────────────────────────────────────────
 const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
@@ -36,6 +37,7 @@ const TABS = [
   { key: "products", label: "Products", icon: "restaurant", sub: "Master meat and seafood catalog across all Teffes branches" },
   { key: "categories", label: "Categories", icon: "category", sub: "Product categories displayed live on mobile apps and website" },
   { key: "orders", label: "All Orders", icon: "local_shipping", sub: "Consolidated platform-wide orders placed across all store branches" },
+  { key: "inventory-logs", label: "Inventory Logs", icon: "history", sub: "Platform-wide audit trail of fresh stock, thawing, and waste movements" },
   { key: "riders", label: "Riders", icon: "two_wheeler", sub: "Manage delivery fleet, assigned hubs, and vehicle details" },
   { key: "customers", label: "Customers", icon: "group", sub: "Registered customer directory and order history across Ranchi" },
   { key: "coupons", label: "Coupons & Offers", icon: "sell", sub: "Platform promo engine for discount codes, first-order deals, and banners" },
@@ -6668,6 +6670,7 @@ export default function SuperAdminPage() {
     products: <ProductsTab />,
     categories: <CategoriesTab />,
     orders: <OrdersTab />,
+    "inventory-logs": <SuperAdminInventoryLogsTab />,
     riders: <RidersTab />,
     customers: <CustomersTab />,
     coupons: <CouponsTab />,

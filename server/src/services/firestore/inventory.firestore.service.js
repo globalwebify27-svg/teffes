@@ -11,6 +11,36 @@ const {
 const INVENTORY_COLLECTION = 'inventory';
 const HISTORY_COLLECTION = 'inventory_history';
 
+// In-memory cache for dark store names to ensure fast and enriched audit logs
+let cachedStoreNames = null;
+let cachedStoreNamesExpiry = 0;
+
+const getStoreNameMap = async () => {
+  const now = Date.now();
+  if (cachedStoreNames && now < cachedStoreNamesExpiry) {
+    return cachedStoreNames;
+  }
+  try {
+    const db = getDb();
+    const snap = await db.collection('stores').get();
+    const map = {};
+    snap.forEach((doc) => {
+      const d = doc.data();
+      const name = d.name || d.storeName || doc.id;
+      map[doc.id] = name;
+      if (d.storeId) {
+        map[d.storeId] = name;
+      }
+    });
+    cachedStoreNames = map;
+    cachedStoreNamesExpiry = now + 5 * 60 * 1000;
+    return map;
+  } catch (err) {
+    console.warn('[Inventory] Failed to load store name map:', err.message);
+    return cachedStoreNames || {};
+  }
+};
+
 /**
  * Generate a deterministic document ID for store-specific inventory.
  * Guarantees O(1) direct access and strictly prevents duplicate store-product records.
@@ -143,7 +173,7 @@ const getInventoryItem = async (storeId, itemId) => {
  * Safely create a new inventory record.
  * Rejects duplicate storeId + itemId combinations.
  */
-const createInventoryItem = async (data = {}) => {
+const createInventoryItem = async (data = {}, user = null) => {
   if (!data.storeId || typeof data.storeId !== 'string' || !data.storeId.trim()) {
     throw new Error('storeId is required');
   }
@@ -182,7 +212,46 @@ const createInventoryItem = async (data = {}) => {
     lastRestocked: data.lastRestocked || `Today ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
   };
 
-  return createDoc(INVENTORY_COLLECTION, docId, payload, { overwrite: false });
+  const doc = await createDoc(INVENTORY_COLLECTION, docId, payload, { overwrite: false });
+
+  // If initial stock is provided, record fresh_stock_added in inventory_history
+  if (stock > 0) {
+    try {
+      const storeNameMap = await getStoreNameMap();
+      const storeName = storeNameMap[storeId] || storeId;
+      const historyRef = getDb().collection(HISTORY_COLLECTION).doc();
+      const now = new Date().toISOString();
+      await createDoc(HISTORY_COLLECTION, historyRef.id, {
+        id: historyRef.id,
+        _id: historyRef.id,
+        storeId,
+        storeName,
+        itemId,
+        productName: data.item.trim(),
+        category: (data.category || 'fresh').trim(),
+        classification: 'fresh',
+        actionType: 'fresh_stock_added',
+        quantity: stock,
+        unit: (data.unit || 'kg').trim(),
+        previousQuantity: 0,
+        resultingQuantity: stock,
+        sourceClassification: null,
+        destinationClassification: 'fresh',
+        reason: data.reason || 'Initial fresh stock added',
+        actor: user ? {
+          userId: user.id || user._id || null,
+          name: user.name || 'Store Admin',
+          role: user.role || 'storeadmin',
+          email: user.email || '',
+        } : { name: 'Store Admin', role: 'storeadmin' },
+        createdAt: now,
+      });
+    } catch (logErr) {
+      console.warn('[Inventory] Failed to log initial stock creation:', logErr.message);
+    }
+  }
+
+  return doc;
 };
 
 /**
@@ -541,34 +610,225 @@ const recordReturnedMeatToWasteTransactional = async ({
 
 
 /**
-/**
- * Safely update an inventory record.
+ * Safely update an inventory record with automatic audit history logging.
  */
-const updateInventoryItem = async (storeId, itemId, updates = {}) => {
+const updateInventoryItem = async (storeId, itemId, updates = {}, user = null, reason = '') => {
   const docId = getInventoryDocId(storeId, itemId);
   const existing = await getDoc(INVENTORY_COLLECTION, docId);
   if (!existing) {
     throw new Error(`Inventory item "${itemId}" not found for store "${storeId}"`);
   }
   const payload = { ...updates };
+  const oldStock = Number(existing.stock) || 0;
+  const oldDefreeze = Number(existing.defreezeStock) || 0;
+
   if (payload.stock !== undefined || payload.min !== undefined) {
     const stock = payload.stock !== undefined ? Number(payload.stock) : existing.stock;
     const min = payload.min !== undefined ? Number(payload.min) : existing.min;
     payload.status = calculateInventoryStatus(stock, min);
   }
   payload.updatedAt = new Date().toISOString();
-  return updateDoc(INVENTORY_COLLECTION, docId, payload);
+  const updated = await updateDoc(INVENTORY_COLLECTION, docId, payload);
+
+  // Check if fresh stock was changed directly (e.g. morning delivery / restock)
+  if (payload.stock !== undefined) {
+    const newStock = Number(payload.stock);
+    const delta = Math.round((newStock - oldStock) * 1000) / 1000;
+    if (delta !== 0) {
+      try {
+        const isIncrease = delta > 0;
+        const storeNameMap = await getStoreNameMap();
+        const storeName = storeNameMap[storeId] || storeId;
+        const historyRef = getDb().collection(HISTORY_COLLECTION).doc();
+        const now = new Date().toISOString();
+        await createDoc(HISTORY_COLLECTION, historyRef.id, {
+          id: historyRef.id,
+          _id: historyRef.id,
+          storeId,
+          storeName,
+          itemId,
+          productName: existing.item,
+          category: existing.category || '',
+          classification: 'fresh',
+          actionType: isIncrease ? 'fresh_stock_added' : 'stock_adjustment',
+          quantity: Math.abs(delta),
+          unit: existing.unit || 'kg',
+          previousQuantity: oldStock,
+          resultingQuantity: newStock,
+          sourceClassification: isIncrease ? null : 'fresh',
+          destinationClassification: isIncrease ? 'fresh' : null,
+          reason: reason || (isIncrease ? `Restocked ${Math.abs(delta)} ${existing.unit || 'kg'} fresh inventory` : `Stock adjusted by ${delta} ${existing.unit || 'kg'}`),
+          actor: user ? {
+            userId: user.id || user._id || null,
+            name: user.name || 'Store Admin',
+            role: user.role || 'storeadmin',
+            email: user.email || '',
+          } : { name: 'Store Admin', role: 'storeadmin' },
+          createdAt: now,
+        });
+      } catch (logErr) {
+        console.warn('[Inventory] Failed to log direct stock update:', logErr.message);
+      }
+    }
+  }
+
+  // Check if defreeze stock was changed directly
+  if (payload.defreezeStock !== undefined) {
+    const newDefreeze = Number(payload.defreezeStock);
+    const deltaDefreeze = Math.round((newDefreeze - oldDefreeze) * 1000) / 1000;
+    if (deltaDefreeze > 0) {
+      try {
+        const storeNameMap = await getStoreNameMap();
+        const storeName = storeNameMap[storeId] || storeId;
+        const historyRef = getDb().collection(HISTORY_COLLECTION).doc();
+        const now = new Date().toISOString();
+        await createDoc(HISTORY_COLLECTION, historyRef.id, {
+          id: historyRef.id,
+          _id: historyRef.id,
+          storeId,
+          storeName,
+          itemId,
+          productName: existing.item,
+          category: existing.category || '',
+          classification: 'defreeze',
+          actionType: 'defreeze_stock_added',
+          quantity: deltaDefreeze,
+          unit: existing.unit || 'kg',
+          previousQuantity: oldDefreeze,
+          resultingQuantity: newDefreeze,
+          sourceClassification: null,
+          destinationClassification: 'defreeze',
+          reason: reason || `Added ${deltaDefreeze} ${existing.unit || 'kg'} to De-Freeze inventory`,
+          actor: user ? {
+            userId: user.id || user._id || null,
+            name: user.name || 'Store Admin',
+            role: user.role || 'storeadmin',
+            email: user.email || '',
+          } : { name: 'Store Admin', role: 'storeadmin' },
+          createdAt: now,
+        });
+      } catch (logErr) {
+        console.warn('[Inventory] Failed to log defreeze stock update:', logErr.message);
+      }
+    }
+  }
+
+  return updated;
 };
 
 /**
- * Retrieve inventory audit history.
+ * Retrieve inventory audit history with comprehensive filtering.
+ * Supports single store (Store Admin) and cross-store (Super Admin).
  */
-const getInventoryHistory = async (storeId, options = {}) => {
-  if (!storeId || typeof storeId !== 'string') return [];
-  const entries = await queryDocs(HISTORY_COLLECTION, (ref) =>
-    ref.where('storeId', '==', storeId.trim())
-  );
-  return entries.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+const getInventoryHistory = async (storeId = null, options = {}) => {
+  const {
+    itemId,
+    actionType,
+    classification,
+    search,
+    startDate,
+    endDate,
+    page = 1,
+    limit = 50,
+  } = options;
+
+  let queryBuilder = (ref) => {
+    let q = ref;
+    if (storeId && storeId !== 'all') {
+      q = q.where('storeId', '==', storeId.trim());
+    }
+    return q;
+  };
+
+  let entries = await queryDocs(HISTORY_COLLECTION, queryBuilder);
+  const storeNames = await getStoreNameMap();
+
+  // Enrich missing storeName
+  entries = entries.map((e) => ({
+    ...e,
+    storeName: e.storeName || storeNames[e.storeId] || e.storeId || 'Dark Store',
+  }));
+
+  // Filtering by itemId
+  if (itemId && itemId.trim()) {
+    entries = entries.filter((h) => h.itemId === itemId.trim());
+  }
+
+  // Filtering by actionType
+  if (actionType && actionType !== 'all') {
+    entries = entries.filter((h) => h.actionType === actionType);
+  }
+
+  // Filtering by classification
+  if (classification && classification !== 'all') {
+    entries = entries.filter(
+      (h) =>
+        h.classification === classification ||
+        h.sourceClassification === classification ||
+        h.destinationClassification === classification
+    );
+  }
+
+  // Date Range Filtering (Inclusive of full start and end dates)
+  if (startDate) {
+    const start = new Date(startDate);
+    if (!isNaN(start.getTime())) {
+      start.setHours(0, 0, 0, 0);
+      entries = entries.filter((h) => {
+        if (!h.createdAt) return false;
+        const d = new Date(h.createdAt);
+        return d >= start;
+      });
+    }
+  }
+
+  if (endDate) {
+    const end = new Date(endDate);
+    if (!isNaN(end.getTime())) {
+      // Include the entire end date till 23:59:59.999
+      end.setHours(23, 59, 59, 999);
+      entries = entries.filter((h) => {
+        if (!h.createdAt) return false;
+        const d = new Date(h.createdAt);
+        return d <= end;
+      });
+    }
+  }
+
+  // Keyword Search across product, item ID, store, reason, order ID, and user
+  if (search && search.trim()) {
+    const s = search.trim().toLowerCase();
+    entries = entries.filter(
+      (h) =>
+        (h.productName && h.productName.toLowerCase().includes(s)) ||
+        (h.itemId && h.itemId.toLowerCase().includes(s)) ||
+        (h.storeName && h.storeName.toLowerCase().includes(s)) ||
+        (h.storeId && h.storeId.toLowerCase().includes(s)) ||
+        (h.reason && h.reason.toLowerCase().includes(s)) ||
+        (h.notes && h.notes.toLowerCase().includes(s)) ||
+        (h.orderId && h.orderId.toLowerCase().includes(s)) ||
+        (h.actor?.name && h.actor.name.toLowerCase().includes(s))
+    );
+  }
+
+  // Sort latest first
+  entries.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+  const total = entries.length;
+  const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+  const totalPages = Math.ceil(total / limitNum) || 1;
+  const skip = (pageNum - 1) * limitNum;
+  const paginated = entries.slice(skip, skip + limitNum);
+
+  return {
+    total,
+    page: pageNum,
+    totalPages,
+    limit: limitNum,
+    count: paginated.length,
+    history: paginated,
+  };
 };
 
 /**
