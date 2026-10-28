@@ -175,6 +175,176 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
   }
 
+  bool _isRequestingReturn = false;
+
+  bool _isReturnWindowValid(OrderModel order) {
+    if (order.status != 'Delivered') return false;
+    final dAtStr = order.deliveredAt;
+    if (dAtStr == null || dAtStr.isEmpty) return true;
+    try {
+      final dAt = DateTime.parse(dAtStr);
+      final diff = DateTime.now().difference(dAt);
+      return diff.inMinutes <= 60;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  int _remainingReturnMinutes(OrderModel order) {
+    final dAtStr = order.deliveredAt;
+    if (dAtStr == null || dAtStr.isEmpty) return 60;
+    try {
+      final dAt = DateTime.parse(dAtStr);
+      final diff = DateTime.now().difference(dAt);
+      return (60 - diff.inMinutes).clamp(0, 60);
+    } catch (_) {
+      return 60;
+    }
+  }
+
+  Future<void> _requestReturn(OrderModel order) async {
+    final targetOrderId = order.orderId.isNotEmpty ? order.orderId : (order.id.isNotEmpty ? order.id : widget.orderId);
+    final reasonController = TextEditingController();
+    String selectedReason = 'Quality issue';
+    final reasons = [
+      'Quality issue',
+      'Incorrect cut / item',
+      'Damaged packaging',
+      'Freshness concern',
+    ];
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const Icon(Icons.assignment_return_rounded, color: AppColors.primaryMaroon, size: 22),
+              const SizedBox(width: 8),
+              const Expanded(
+                child: Text(
+                  'Request Return / Exchange',
+                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Under our 60-Minute Freshness Guarantee, you can return or exchange this order.',
+                  style: TextStyle(fontSize: 12.5, height: 1.4, color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Reason for return:',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                ),
+                const SizedBox(height: 6),
+                DropdownButtonFormField<String>(
+                  value: selectedReason,
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  items: reasons.map((r) => DropdownMenuItem(value: r, child: Text(r, style: const TextStyle(fontSize: 13)))).toList(),
+                  onChanged: (val) {
+                    if (val != null) setDialogState(() => selectedReason = val);
+                  },
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: reasonController,
+                  maxLines: 2,
+                  decoration: InputDecoration(
+                    hintText: 'Additional details (optional)',
+                    hintStyle: const TextStyle(fontSize: 12),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel', style: TextStyle(fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryMaroon,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Submit Request', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isRequestingReturn = true);
+    try {
+      final fullReason = reasonController.text.trim().isNotEmpty
+          ? '$selectedReason - ${reasonController.text.trim()}'
+          : selectedReason;
+
+      final res = await _api.post(
+        '/orders/$targetOrderId/return',
+        data: {
+          'reason': fullReason,
+          'condition': 'Reported within 60 mins guarantee',
+        },
+      );
+
+      if (res.data != null && (res.data['success'] == true || res.data['requestId'] != null)) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.white),
+                  SizedBox(width: 8),
+                  Expanded(child: Text('Return requested. Store team is reviewing it.')),
+                ],
+              ),
+              backgroundColor: AppColors.hygieneEmerald,
+            ),
+          );
+          await _fetchLiveOrderDetails();
+        }
+      } else {
+        final msg = res.data?['message'] ?? 'Could not submit return request';
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(msg.toString()), backgroundColor: Colors.red),
+          );
+        }
+      }
+    } catch (err) {
+      if (mounted) {
+        String errorMsg = 'Failed to submit return request';
+        if (err is DioException && err.response?.data != null) {
+          errorMsg = err.response?.data['message']?.toString() ?? errorMsg;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(errorMsg), backgroundColor: Colors.red),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isRequestingReturn = false);
+    }
+  }
+
   Set<Marker> _buildMapMarkers(OrderModel order) {
     final markers = <Marker>{};
 
@@ -1357,6 +1527,159 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                     onPressed: _isCancelling ? null : () => _cancelOrder(order),
                   ),
                 ),
+              ],
+
+              // 8. Return / Exchange Section (Delivered orders)
+              if (status == 'Delivered') ...[
+                const SizedBox(height: 12),
+                if (order.returnStatus != null) ...[
+                  // Return Status Card with 4-Digit Reverse Pickup OTP
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: order.returnStatus == 'Completed'
+                          ? AppColors.hygieneLight
+                          : order.returnStatus == 'Rejected'
+                              ? Colors.red.shade50
+                              : const Color(0xFFFEF3C7),
+                      borderRadius: AppDimensions.roundedLg,
+                      border: Border.all(
+                        color: order.returnStatus == 'Completed'
+                            ? AppColors.hygieneDark.withOpacity(0.3)
+                            : order.returnStatus == 'Rejected'
+                                ? Colors.red.shade200
+                                : const Color(0xFFFDE68A),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              order.returnStatus == 'Completed'
+                                  ? Icons.check_circle_rounded
+                                  : order.returnStatus == 'Rejected'
+                                      ? Icons.cancel_rounded
+                                      : Icons.swap_horiz_rounded,
+                              size: 20,
+                              color: order.returnStatus == 'Completed'
+                                  ? AppColors.hygieneDark
+                                  : order.returnStatus == 'Rejected'
+                                      ? Colors.red.shade800
+                                      : const Color(0xFF92400E),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Return Status: ${order.returnStatus}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13.5,
+                                  color: order.returnStatus == 'Completed'
+                                      ? AppColors.hygieneDark
+                                      : order.returnStatus == 'Rejected'
+                                          ? Colors.red.shade800
+                                          : const Color(0xFF92400E),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (order.returnOtp != null && order.returnStatus != 'Completed' && order.returnStatus != 'Rejected') ...[
+                          const SizedBox(height: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFFF59E0B)),
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  'Handover Pickup OTP:',
+                                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                ),
+                                Text(
+                                  order.returnOtp!,
+                                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, letterSpacing: 2, color: AppColors.primaryMaroon),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Please share this 4-digit code with the pickup partner during meat handover.',
+                            style: TextStyle(fontSize: 11, color: Color(0xFF78350F)),
+                          ),
+                        ],
+                        if (order.returnRider != null) ...[
+                          const SizedBox(height: 8),
+                          Text(
+                            'Pickup Partner: ${order.returnRider?.name ?? "Rider"} (${order.returnRider?.vehicle ?? "Insulated Fleet"})',
+                            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF92400E)),
+                          ),
+                        ],
+                        if (order.returnStatus == 'Completed') ...[
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Package safely collected & refund credited directly to your TeFFe Wallet.',
+                            style: TextStyle(fontSize: 11.5, color: AppColors.hygieneDark, fontWeight: FontWeight.w600),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ] else if (_isReturnWindowValid(order)) ...[
+                  // Return within 60 minutes
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primaryMaroon,
+                        side: const BorderSide(color: AppColors.primaryMaroon, width: 1.5),
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                      ),
+                      icon: _isRequestingReturn
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primaryMaroon))
+                          : const Icon(Icons.assignment_return_rounded, size: 18),
+                      label: Text(
+                        _isRequestingReturn
+                            ? 'Submitting...'
+                            : 'Request Return / Exchange (${_remainingReturnMinutes(order)} min left)',
+                        style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                      ),
+                      onPressed: _isRequestingReturn ? null : () => _requestReturn(order),
+                    ),
+                  ),
+                ] else ...[
+                  // Return window expired (>60 mins)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: AppDimensions.roundedMd,
+                      border: Border.all(color: Colors.grey.shade300),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.timer_off_outlined, size: 18, color: Colors.grey.shade600),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Return window closed (Fresh meat 60-minute policy expired)',
+                            style: TextStyle(fontSize: 11.5, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ],
             ],
           ),

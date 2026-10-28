@@ -166,12 +166,16 @@ async function runSeniorQATest() {
   }
   console.log(`   ✅ Target delivery string is clean: "${targetTime}"`);
 
-  // STEP 7: Customer Return Request
+  // Transition to Delivered at customer doorstep
+  const delRes = await request(`/store-admin/orders/${orderId}/status`, 'PATCH', { status: 'Delivered' }, storeAdminToken);
+  console.log(`   ✅ Order #${orderId} delivered at customer doorstep`);
+
+  // STEP 7: Customer Return Request (within 60-min policy)
   console.log('\n👉 STEP 7: Customer Submits Return / Exchange Request...');
   const returnRes = await request(`/orders/${orderId}/return`, 'POST', {
     reason: 'Too much bone in curry cut; requesting fresh boneless exchange',
   }, customerToken);
-  if (returnRes.status !== 200) {
+  if (returnRes.status !== 200 && returnRes.status !== 201) {
     throw new Error(`Customer return request failed: ${JSON.stringify(returnRes.data)}`);
   }
   console.log(`   ✅ Return Requested for #${orderId}. Reason logged.`);

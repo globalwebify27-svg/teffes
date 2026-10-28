@@ -863,6 +863,32 @@ const markNotificationRead = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/rider/returns/:id/verify-otp
+ * Rider verifies 4-digit reverse pickup OTP at customer doorstep
+ */
+const verifyReturnPickup = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { otp } = req.body;
+    const { verifyReturnOtpAndComplete } = require('../services/firestore/return.firestore.service');
+
+    const returnReq = await verifyReturnOtpAndComplete({
+      requestId: id,
+      returnOtp: otp,
+      actorUser: req.user,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Reverse pickup completed, meat routed to waste inventory and customer refunded',
+      returnRequest: returnReq,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboard,
   getDispatchSupport,
@@ -873,6 +899,7 @@ module.exports = {
   confirmPickup,
   updateLocation,
   completeDelivery,
+  verifyReturnPickup,
   getEarnings,
   getOrders,
   remitCash,
@@ -881,3 +908,4 @@ module.exports = {
   getNotifications,
   markNotificationRead,
 };
+

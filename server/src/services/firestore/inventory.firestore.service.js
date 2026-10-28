@@ -464,6 +464,83 @@ const recordDamageWasteTransactional = async ({
 };
 
 /**
+ * Record returned meat directly to Waste stock without deducting from fresh stock
+ * (since it was already deducted when the customer placed the order).
+ * In full compliance with FSSAI hygiene standards - returned meat is never restocked.
+ */
+const recordReturnedMeatToWasteTransactional = async ({
+  storeId,
+  itemId,
+  quantity,
+  reason = 'Customer Return - Freshness Guarantee',
+  orderId = '',
+  requestId = '',
+  actor = null,
+}) => {
+  const qty = Number(quantity);
+  if (isNaN(qty) || qty <= 0) {
+    throw new Error('Waste quantity must be a positive number');
+  }
+
+  const db = getDb();
+  const docId = getInventoryDocId(storeId, itemId);
+  const docRef = db.collection(INVENTORY_COLLECTION).doc(docId);
+
+  return runTransaction(async (transaction) => {
+    const snap = await transaction.get(docRef);
+    let productName = 'Returned Fresh Meat';
+    let unit = 'kg';
+    let currentWaste = 0;
+
+    if (snap.exists) {
+      const data = snap.data();
+      productName = data.item || productName;
+      unit = data.unit || unit;
+      currentWaste = Number(data.wasteStock) || 0;
+      const newWaste = Math.round((currentWaste + qty) * 1000) / 1000;
+
+      transaction.update(docRef, {
+        wasteStock: newWaste,
+        updatedAt: new Date().toISOString(),
+      });
+    }
+
+    // Always create an immutable inventory history entry
+    const historyRef = db.collection(HISTORY_COLLECTION).doc();
+    const historyPayload = {
+      id: historyRef.id,
+      _id: historyRef.id,
+      storeId,
+      itemId,
+      productName,
+      classification: 'waste',
+      actionType: 'return_waste',
+      quantity: qty,
+      unit,
+      sourceClassification: 'customer_return',
+      destinationClassification: 'waste',
+      reason,
+      notes: `Order #${orderId} - Return Request #${requestId}`,
+      actor: actor ? {
+        userId: actor.id || actor._id || null,
+        name: actor.name || 'Store Admin',
+        role: actor.role || 'storeadmin',
+      } : { name: 'System / Reverse Pickup', role: 'system' },
+      createdAt: new Date().toISOString(),
+    };
+    transaction.set(historyRef, historyPayload);
+
+    return {
+      success: true,
+      wasteAdded: qty,
+      productName,
+      historyId: historyRef.id,
+    };
+  });
+};
+
+
+/**
 /**
  * Safely update an inventory record.
  */
@@ -524,6 +601,7 @@ module.exports = {
   deductStockTransactional,
   transferDefreezeToFreshTransactional,
   recordDamageWasteTransactional,
+  recordReturnedMeatToWasteTransactional,
   deleteInventoryItem,
 };
 

@@ -15,6 +15,8 @@ const {
   updateDeliverySlot,
   getReturnRequests,
   updateReturnStatus,
+  assignRiderToReturnRequest,
+  verifyReturnOtp,
   getRiders,
   assignRiderToOrder,
   getStoreStatus,
@@ -58,6 +60,8 @@ router.patch('/slots/:id', updateDeliverySlot);
 // 6. Returns & Exchange
 router.get('/returns', getReturnRequests);
 router.patch('/returns/:id/status', updateReturnStatus);
+router.patch('/returns/:id/assign-rider', assignRiderToReturnRequest);
+router.post('/returns/:id/verify-otp', verifyReturnOtp);
 
 // 7. Riders & Fleet Remittances
 router.get('/riders', getRiders);
