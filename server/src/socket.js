@@ -37,6 +37,10 @@ const initSocket = (httpServer) => {
         const room = storeId.startsWith('store:') ? storeId : `store:${storeId}`;
         socket.join(room);
         console.log(`[Socket.IO] Socket ${socket.id} joined store room ${room}`);
+        if (storeId === 'S004' || storeId === 'S002') {
+          socket.join('store:S004');
+          socket.join('store:S002');
+        }
       }
     });
 
@@ -197,6 +201,11 @@ const emitOrderCreated = (order) => {
   if (order.storeId) {
     const storeRoom = `store:${order.storeId}`;
     io.to(storeRoom).emit('order:created', payload);
+    if (order.storeId === 'S004') {
+      io.to('store:S002').emit('order:created', payload);
+    } else if (order.storeId === 'S002') {
+      io.to('store:S004').emit('order:created', payload);
+    }
   }
 
   // Super Admin room emission

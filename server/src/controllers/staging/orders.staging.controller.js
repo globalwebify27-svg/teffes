@@ -22,6 +22,7 @@ const {
   creditWalletTransactional,
   debitWalletTransactional,
 } = require('../../services/firestore/wallet.firestore.service');
+const { emitOrderCreated, emitOrderStatusUpdate } = require('../../socket');
 
 // ─── Orders ─────────────────────────────────────────────────────────────────
 const createOrder = async (req, res, next) => {
@@ -40,6 +41,13 @@ const createOrder = async (req, res, next) => {
 
     const newOrder = await createOrderTransactional(orderData);
     const resolvedOrder = newOrder.order || newOrder;
+
+    try {
+      emitOrderCreated(resolvedOrder);
+    } catch (sockErr) {
+      console.warn('[Orders] Socket emitOrderCreated error:', sockErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Order created successfully',

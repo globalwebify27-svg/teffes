@@ -10,6 +10,11 @@ const Remittance = require('../models/Remittance');
 const notificationService = require('../services/notificationService');
 const inventoryService = require('../services/inventoryService');
 const { emitOrderStatusUpdate } = require('../socket');
+const {
+  getStoreOrders,
+  updateOrderStatus: updateOrderStatusFirestore,
+  getOrderById: getOrderByIdFirestore,
+} = require('../services/firestore/order.firestore.service');
 
 /**
  * GET /api/store-admin/dashboard
@@ -17,29 +22,48 @@ const { emitOrderStatusUpdate } = require('../socket');
  */
 const getDashboardOverview = async (req, res, next) => {
   try {
-    const storeId = req.user?.storeId || req.query.storeId || 'S001';
+    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
+    const storeId = (rawStoreId === 'S002' || rawStoreId === 'S004') ? 'S004' : rawStoreId;
 
+    let fsOrders = [];
+    try {
+      fsOrders = await getStoreOrders(storeId);
+    } catch (_) {}
+
+    const storeIds = (storeId === 'S004' || storeId === 'S002') ? ['S004', 'S002'] : [storeId];
     const [
-      pendingCount,
-      deliveredTodayCount,
-      totalOrders,
-      orders,
+      mongoPendingCount,
+      mongoDeliveredTodayCount,
+      mongoTotalOrders,
+      mongoOrders,
       chickenInventory,
       muttonInventory,
       activeRidersCount,
     ] = await Promise.all([
-      Order.countDocuments({ storeId, status: { $in: ['Pending', 'Cutting'] } }),
-      Order.countDocuments({ storeId, status: 'Delivered' }),
-      Order.countDocuments({ storeId }),
-      Order.find({ storeId }).sort({ createdAt: -1 }).limit(5),
+      Order.countDocuments({ storeId: { $in: storeIds }, status: { $in: ['Pending', 'Cutting'] } }),
+      Order.countDocuments({ storeId: { $in: storeIds }, status: 'Delivered' }),
+      Order.countDocuments({ storeId: { $in: storeIds } }),
+      Order.find({ storeId: { $in: storeIds } }).sort({ createdAt: -1 }).limit(5),
       Inventory.findOne({ storeId, category: 'Chicken', itemId: 'INV-001' }),
       Inventory.findOne({ storeId, category: 'Mutton', itemId: 'INV-005' }),
       User.countDocuments({ role: 'rider', isActive: true }),
     ]);
 
+    const hasFsOrders = fsOrders && fsOrders.length > 0;
+    const pendingCount = hasFsOrders
+      ? fsOrders.filter((o) => ['Pending', 'Cutting'].includes(o.status)).length
+      : mongoPendingCount;
+    const deliveredTodayCount = hasFsOrders
+      ? fsOrders.filter((o) => o.status === 'Delivered').length
+      : mongoDeliveredTodayCount;
+    const totalOrders = hasFsOrders ? fsOrders.length : mongoTotalOrders;
+    const orders = hasFsOrders ? fsOrders.slice(0, 5) : mongoOrders;
+
     // Calculate revenue
-    const deliveredOrders = await Order.find({ storeId, status: 'Delivered' });
-    const todayRevenue = deliveredOrders.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+    const deliveredOrders = hasFsOrders
+      ? fsOrders.filter((o) => o.status === 'Delivered')
+      : await Order.find({ storeId: { $in: storeIds }, status: 'Delivered' });
+    const todayRevenue = deliveredOrders.reduce((acc, curr) => acc + (curr.amount || curr.totalAmount || 0), 0);
 
     const kpis = [
       {
@@ -109,10 +133,27 @@ const getDashboardOverview = async (req, res, next) => {
  */
 const getOrders = async (req, res, next) => {
   try {
-    const storeId = req.user?.storeId || req.query.storeId || 'S001';
+    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
+    const storeId = (rawStoreId === 'S002' || rawStoreId === 'S004') ? 'S004' : rawStoreId;
     const { status } = req.query;
 
-    const query = { storeId };
+    // 1. Fetch from Firestore (Production primary data store)
+    try {
+      const firestoreOrders = await getStoreOrders(storeId, status);
+      if (firestoreOrders && firestoreOrders.length > 0) {
+        return res.status(200).json({
+          success: true,
+          count: firestoreOrders.length,
+          orders: firestoreOrders,
+        });
+      }
+    } catch (fsErr) {
+      console.warn('[storeAdmin] Firestore getStoreOrders fallback:', fsErr.message);
+    }
+
+    // 2. Fallback to MongoDB if Firestore has no records
+    const storeIds = (storeId === 'S004' || storeId === 'S002') ? ['S004', 'S002'] : [storeId];
+    const query = { storeId: { $in: storeIds } };
     if (status && status !== 'all') {
       query.status = status;
     }
@@ -143,6 +184,27 @@ const updateOrderStatus = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid order status' });
     }
 
+    // 1. Attempt Firestore update first
+    try {
+      const fsOrder = await getOrderByIdFirestore(id);
+      if (fsOrder) {
+        const updated = await updateOrderStatusFirestore(id, status, {
+          id: req.user?._id || req.user?.id,
+          name: req.user?.name || 'Store Admin',
+          role: req.user?.role || 'storeadmin',
+        });
+        emitOrderStatusUpdate(id, { orderId: id, status, storeId: fsOrder.storeId });
+        return res.status(200).json({
+          success: true,
+          message: `Order status advanced to ${status}`,
+          order: updated?.order || fsOrder,
+        });
+      }
+    } catch (fsErr) {
+      console.warn('[storeAdmin] Firestore updateOrderStatus fallback:', fsErr.message);
+    }
+
+    // 2. Fallback to MongoDB
     const order = await Order.findOne({
       $or: [{ orderId: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }]
     });

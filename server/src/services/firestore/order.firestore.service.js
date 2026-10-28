@@ -63,9 +63,21 @@ const getUserOrders = async (userId, options = {}) => {
 const getStoreOrders = async (storeId, status = null, options = {}) => {
   if (!storeId || typeof storeId !== 'string') return [];
   const cleanId = storeId.trim();
-  let orders = await queryDocs(ORDERS_COLLECTION, (ref) =>
-    ref.where('storeId', '==', cleanId)
-  );
+  const targetStoreIds = (cleanId === 'S002' || cleanId === 'S004') ? ['S004', 'S002'] : [cleanId];
+  let allOrders = [];
+  for (const sId of targetStoreIds) {
+    const docs = await queryDocs(ORDERS_COLLECTION, (ref) =>
+      ref.where('storeId', '==', sId)
+    );
+    allOrders.push(...docs);
+  }
+  const seen = new Set();
+  let orders = allOrders.filter((o) => {
+    const key = o.orderId || o.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   if (!options.includeTest) {
     orders = orders.filter((o) => !isTestOrderRecord(o));
   }
@@ -114,7 +126,9 @@ const createOrderTransactional = async (orderData = {}) => {
   const db = getDb();
   const now = new Date().toISOString();
   const cleanUserId = String(customer.userId).trim();
-  const cleanStoreId = String(storeId).trim();
+  const rawStoreId = String(storeId).trim();
+  const cleanStoreId = (rawStoreId === 'S002' || rawStoreId === 'S004') ? 'S004' : rawStoreId;
+  const resolvedStoreName = (rawStoreId === 'S002' || rawStoreId === 'S004') ? "TeFFe's — Doranda Hub" : storeName;
   const cleanOrderId = String(orderId).trim();
 
   // 1. Check idempotency outside transaction to avoid unnecessary locks
@@ -408,7 +422,7 @@ const createOrderTransactional = async (orderData = {}) => {
       couponCode: cleanCouponCode,
       coupon: verifiedCouponSnapshot,
       storeId: cleanStoreId,
-      storeName,
+      storeName: resolvedStoreName,
       deliverySlot: isPickup ? 'Store Pickup' : deliverySlot,
       fulfillmentType: resolvedFulfillment,
       pickupMode: isPickup,
