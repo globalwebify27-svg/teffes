@@ -27,6 +27,18 @@ const TABS = [
   { key: "returns", label: "Returns & Exchange", icon: "swap_horiz", sub: "Process customer exchange requests under the 60-minute policy" },
 ];
 
+// Helper to extract specific hour slot (e.g., '07:00 AM – 09:00 AM') while omitting generic on-demand labels
+const getSpecificDeliverySlot = (slot?: string) => {
+  if (!slot || typeof slot !== "string") return null;
+  const s = slot.trim();
+  const isGeneric = /^\s*(60\s*min|90\s*min|express|standard|home\s*delivery|store\s*pickup|pickup)\b/i.test(s) && !/(am|pm|\d{1,2}:\d{2})/i.test(s);
+  if (isGeneric) return null;
+  if (/(am|pm|\d{1,2}:\d{2}|\d{1,2}\s*(am|pm)?\s*[-–—to]\s*\d{1,2}\s*(am|pm))/i.test(s)) {
+    return s;
+  }
+  return null;
+};
+
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
 const KPICard = ({
   icon,
@@ -769,15 +781,19 @@ function LiveOrdersTab() {
                       <span className="material-symbols-outlined text-[14px]">timer</span>
                       Prep Time: <strong>{o.prepTimeMinutes || 25} mins</strong>
                     </span>
-                    <span>•</span>
-                    <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                      <span className="material-symbols-outlined text-[14px]">flag</span>
-                      Target Delivery: <strong>
-                        {o.targetDeliveryTime
-                          ? new Date(o.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                          : "Calculated"}
-                      </strong>
-                    </span>
+                    {(() => {
+                      const specificSlot = getSpecificDeliverySlot(o.slot || o.timeSlot || o.scheduledSlot || o.deliverySlot);
+                      if (!specificSlot) return null;
+                      return (
+                        <>
+                          <span>•</span>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
+                            <span className="material-symbols-outlined text-[14px]">schedule</span>
+                            Slot: <strong>{specificSlot}</strong>
+                          </span>
+                        </>
+                      );
+                    })()}
                     {o.status === "Out for Delivery" && (
                       <>
                         <span>•</span>
