@@ -54,30 +54,85 @@ const getPlatformDashboard = async (req, res, next) => {
       activeStores,
       allRiders,
       allCustomers,
-      allProducts,
+      productsResult,
     ] = await Promise.all([
       getAllOrdersFS(),
       getActiveStores(),
       queryDocs('users', (ref) => ref.where('role', '==', 'rider')),
       queryDocs('users', (ref) => ref.where('role', '==', 'customer')),
-      getProducts(),
+      getProducts({ all: true, limit: 1000 }),
     ]);
 
+    // Safe helper to convert any Firestore timestamp or ISO string into milliseconds
+    const toEpoch = (val) => {
+      if (!val) return 0;
+      if (val._seconds) return val._seconds * 1000;
+      if (val.seconds) return val.seconds * 1000;
+      const d = new Date(val);
+      return isNaN(d.getTime()) ? 0 : d.getTime();
+    };
+
+    // Calculate Indian Standard Time (IST, UTC+05:30) day bounds for accurate daily metrics
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000;
+    const nowIST = new Date(now.getTime() + istOffset);
+    const istYear = nowIST.getUTCFullYear();
+    const istMonth = nowIST.getUTCMonth();
+    const istDate = nowIST.getUTCDate();
+
+    const startTodayISTUtcEpoch = Date.UTC(istYear, istMonth, istDate) - istOffset;
+    const startYesterdayISTUtcEpoch = startTodayISTUtcEpoch - 24 * 60 * 60 * 1000;
+
+    // Filter orders by creation date
+    const todayOrders = orders.filter((o) => toEpoch(o.createdAt) >= startTodayISTUtcEpoch);
+    const yesterdayOrders = orders.filter((o) => {
+      const t = toEpoch(o.createdAt);
+      return t >= startYesterdayISTUtcEpoch && t < startTodayISTUtcEpoch;
+    });
+
+    // Orders trend calculation
+    const todayOrdersCount = todayOrders.length;
+    let ordersTrendSub = '';
+    if (yesterdayOrders.length > 0) {
+      const diff = todayOrdersCount - yesterdayOrders.length;
+      const pct = Math.round((diff / yesterdayOrders.length) * 100);
+      ordersTrendSub = pct >= 0 ? `↑ ${pct}% vs yesterday` : `↓ ${Math.abs(pct)}% vs yesterday`;
+    } else if (todayOrdersCount > 0) {
+      ordersTrendSub = `↑ ${todayOrdersCount} placed today`;
+    } else {
+      ordersTrendSub = 'No orders today';
+    }
+
+    // Revenue calculation (orders delivered today)
+    const todayDeliveredOrders = todayOrders.filter((o) => o.status === 'Delivered');
+    const todayRevenue = todayDeliveredOrders.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+
+    // Platform metrics
     const activeRiders = allRiders.filter((r) => r.isActive !== false);
-    const deliveredOrders = orders.filter((o) => o.status === 'Delivered');
-    const todayRevenue = deliveredOrders.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
     const activeStoresCount = activeStores.length;
     const activeRidersCount = activeRiders.length;
+    const onDeliveryRidersCount = allRiders.filter((r) => r.riderStatus === 'On Delivery').length;
+
+    // Customers metrics
     const totalCustomersCount = allCustomers.length;
-    const totalProductsCount = allProducts.length;
-    const totalOrdersToday = orders.length;
+    const verifiedCustomersCount = allCustomers.filter((c) => c.isVerified !== false).length;
+
+    // Products metrics from master catalog (handling object return from getProducts)
+    const catalogProducts = Array.isArray(productsResult)
+      ? productsResult
+      : (productsResult?.products || []);
+    const totalProductsCount = productsResult?.total ?? catalogProducts.length;
+    const inStockProductsCount = catalogProducts.filter(
+      (p) => p.inStock !== false
+    ).length;
+    const categoryCount = new Set(catalogProducts.map((p) => p.category).filter(Boolean)).size || 3;
 
     const kpis = [
       {
         icon: 'inventory_2',
         label: 'Total Orders Today',
-        value: `${totalOrdersToday}`,
-        sub: '↑ 18% vs yesterday',
+        value: `${todayOrdersCount}`,
+        sub: ordersTrendSub,
         color: '#941717',
         tab: 'orders',
       },
@@ -101,7 +156,7 @@ const getPlatformDashboard = async (req, res, next) => {
         icon: 'two_wheeler',
         label: 'Active Riders',
         value: `${activeRidersCount}`,
-        sub: `${allRiders.filter((r) => r.riderStatus === 'On Delivery').length} out for delivery`,
+        sub: `${onDeliveryRidersCount} out for delivery`,
         color: '#7c3aed',
         tab: 'riders',
       },
@@ -109,7 +164,7 @@ const getPlatformDashboard = async (req, res, next) => {
         icon: 'group',
         label: 'Total Customers',
         value: `${totalCustomersCount}`,
-        sub: 'Platform customers',
+        sub: `${verifiedCustomersCount} verified platform accounts`,
         color: '#0284c7',
         tab: 'customers',
       },
@@ -117,7 +172,7 @@ const getPlatformDashboard = async (req, res, next) => {
         icon: 'restaurant',
         label: 'Total Products',
         value: `${totalProductsCount}`,
-        sub: 'Master meat & seafood catalog',
+        sub: `${inStockProductsCount} in stock across ${categoryCount} categories`,
         color: '#d97706',
         tab: 'products',
       },

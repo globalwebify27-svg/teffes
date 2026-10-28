@@ -112,36 +112,30 @@ const getProducts = async (req, res, next) => {
   try {
     const { category, search, bestseller, sort, limit = 50, page = 1, all } = req.query;
 
-    const filters = {};
-    if (all !== 'true') {
-      filters.inStock = true;
-    }
-    if (category && category !== 'all') {
-      filters.category = category.toLowerCase();
-    }
-    if (bestseller === 'true') {
-      filters.bestseller = true;
-    }
-    if (search && search.trim()) {
-      filters.search = search.trim();
-    }
-
     const options = {
+      all: all === 'true' || all === true,
+      category: category && category !== 'all' ? category.toLowerCase() : undefined,
+      bestseller: bestseller === 'true' || bestseller === true,
+      search: search && search.trim() ? search.trim() : undefined,
       sort: sort || 'bestseller',
       limit: parseInt(limit, 10) || 50,
       page: parseInt(page, 10) || 1,
     };
 
-    const products = await getProductsFirestore(filters, options);
+    const result = await getProductsFirestore(options);
+    const productList = Array.isArray(result) ? result : (result?.products || []);
+    const totalCount = result?.total ?? productList.length;
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
     res.set('Expires', '0');
     res.status(200).json({
       success: true,
-      count: products.length,
-      total: products.length,
-      products,
+      count: productList.length,
+      total: totalCount,
+      page: result?.page || 1,
+      totalPages: result?.totalPages || 1,
+      products: productList,
     });
   } catch (error) {
     next(error);
@@ -155,20 +149,12 @@ const getProducts = async (req, res, next) => {
 const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const product = await getProductByIdFirestore(id);
+    const result = await getProductByIdFirestore(id);
+    const product = result?.product || result;
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
-
-    // Get up to 4 related products in same category
-    let related = [];
-    try {
-      if (product.category) {
-        const catProducts = await getProductsFirestore({ category: product.category }, { limit: 5 });
-        related = catProducts.filter((p) => p.id !== product.id && p._id !== product._id).slice(0, 4);
-      }
-    } catch (_) {}
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -176,7 +162,7 @@ const getProductById = async (req, res, next) => {
     res.status(200).json({
       success: true,
       product,
-      related,
+      related: result?.related || [],
     });
   } catch (error) {
     next(error);

@@ -17,6 +17,14 @@ const orderCtrl = require('../controllers/order.controller');
 const { getActiveStores, getStoreById } = require('../services/firestore/store.firestore.service');
 const { getStoreInventory } = require('../services/firestore/inventory.firestore.service');
 const { matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
+const {
+  createCategory,
+  updateCategory,
+  deleteCategory,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+} = require('../controllers/product.controller');
 
 const router = Router();
 
@@ -169,8 +177,16 @@ router.post('/user/wishlist', protectStaging, auth.toggleUserWishlist);
 // ─── Master Data, Categories, Products & SEO ────────────────────────────────
 router.get('/categories', catalog.getCategories);
 router.get('/categories/:slug', catalog.getCategory);
+router.post('/categories', protectStaging, requireStagingRole('superadmin', 'admin'), createCategory);
+router.put('/categories/:id', protectStaging, requireStagingRole('superadmin', 'admin'), updateCategory);
+router.delete('/categories/:id', protectStaging, requireStagingRole('superadmin', 'admin'), deleteCategory);
+
 router.get('/products', catalog.listProducts);
 router.get('/products/:id', catalog.getProduct);
+router.post('/products', protectStaging, requireStagingRole('superadmin', 'storeadmin', 'admin'), createProduct);
+router.put('/products/:id', protectStaging, requireStagingRole('superadmin', 'storeadmin', 'admin'), updateProduct);
+router.delete('/products/:id', protectStaging, requireStagingRole('superadmin', 'storeadmin', 'admin'), deleteProduct);
+
 router.get('/banners', catalog.getBanners);
 router.get('/seo', catalog.getSeoSettings);
 router.get('/settings/seo', catalog.getSeoSettings);
@@ -259,6 +275,7 @@ router.use('/upload', require('./upload.routes'));
 router.use('/location', require('./location.routes'));
 router.use('/notifications', require('./notification.routes'));
 router.use('/payment', require('./payment.routes'));
+router.use('/wallet', require('./wallet.routes'));
 
 // ─── Staging Namespace (Retained for Test Harness & Backward Compatibility) ───
 router.use('/staging', require('./staging/staging.routes'));

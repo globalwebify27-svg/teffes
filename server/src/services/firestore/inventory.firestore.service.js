@@ -49,7 +49,12 @@ const getInventoryDocId = (storeId, itemId) => {
   if (!storeId || !itemId) {
     throw new Error('Both storeId and itemId are required to generate inventory ID');
   }
-  return `${storeId.trim()}_${itemId.trim()}`;
+  const s = storeId.trim();
+  const raw = itemId.trim();
+  if (raw.startsWith(`${s}_`)) {
+    return raw;
+  }
+  return `${s}_${raw}`;
 };
 
 /**
