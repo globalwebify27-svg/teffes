@@ -34,6 +34,93 @@ const calculateInventoryStatus = (stock, minThreshold = 10) => {
 };
 
 /**
+ * Helper to normalize product and inventory names for robust matching.
+ */
+const normalizeItemName = (str) => {
+  return (str || '')
+    .toLowerCase()
+    .replace(/\b(\.?[0-9]+(\.[0-9]+)?\s*(kg|gm|g|gram|grams|ml|l|pcs|pieces))\b/gi, '')
+    .replace(/[().,\-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+/**
+ * Smart matcher linking a cart/order item to a store's butchery inventory item.
+ */
+const matchCartItemToInventory = (cartItem, invList) => {
+  if (!invList || invList.length === 0) return null;
+  const normProd = normalizeItemName(cartItem.name);
+  const prodWords = normProd.split(' ').filter((w) => w.length > 2);
+
+  for (const inv of invList) {
+    if (inv.itemId === cartItem.id || inv.itemId === cartItem.productId) return inv;
+    const normInv = normalizeItemName(inv.item);
+    if (normInv === normProd || normInv.includes(normProd) || normProd.includes(normInv)) {
+      return inv;
+    }
+  }
+
+  let best = null;
+  let bestScore = 0;
+  for (const inv of invList) {
+    const normInv = normalizeItemName(inv.item);
+    const invWords = normInv.split(' ').filter((w) => w.length > 2);
+    let score = 0;
+    for (const w of prodWords) {
+      if (invWords.includes(w)) score++;
+    }
+    if (score > bestScore && score >= 1) {
+      bestScore = score;
+      best = inv;
+    }
+  }
+  return bestScore >= 1 ? best : null;
+};
+
+/**
+ * Parse weight string (e.g. '500g', '500 gm', '1kg', '250g', '1.5 kg') to kg number.
+ */
+const parseWeightInKg = (weightStr) => {
+  if (typeof weightStr === 'number') {
+    if (isNaN(weightStr) || weightStr <= 0) return 1.0;
+    if (weightStr >= 50) return Math.round((weightStr / 1000) * 1000) / 1000;
+    return weightStr;
+  }
+  if (!weightStr || typeof weightStr !== 'string') return 1.0;
+
+  const cleaned = weightStr.trim().toLowerCase();
+  const match = cleaned.match(/([0-9]+(?:\.[0-9]+)?)\s*(kg|g|gm|gram|grams)?/i);
+  if (!match) return 1.0;
+
+  const val = parseFloat(match[1]);
+  if (isNaN(val) || val <= 0) return 1.0;
+
+  const unit = (match[2] || '').toLowerCase();
+  if (['g', 'gm', 'gram', 'grams'].includes(unit)) {
+    return Math.round((val / 1000) * 1000) / 1000;
+  }
+  return val;
+};
+
+/**
+ * Calculate required quantity or weight for an order item based on inventory unit.
+ */
+const getItemRequiredAmount = (item, inventoryUnit = 'kg') => {
+  const qty = Math.max(1, Number(item.quantity) || 1);
+  const weightStr = item.netWeight || item.weight || item.selectedWeight || item.packSize || '';
+
+  if (inventoryUnit === 'pcs' || inventoryUnit === 'pieces') {
+    const pcsMatch = (weightStr || '').match(/([0-9]+)\s*(pcs|pieces|pc|eggs)/i);
+    const pcsPerPack = pcsMatch ? parseInt(pcsMatch[1], 10) : 1;
+    return qty * pcsPerPack;
+  }
+
+  const packWeightKg = parseWeightInKg(weightStr);
+  return Math.round(qty * packWeightKg * 1000) / 1000;
+};
+
+/**
  * Retrieve inventory items for a specific store.
  */
 const getStoreInventory = async (storeId) => {
@@ -425,6 +512,10 @@ module.exports = {
   HISTORY_COLLECTION,
   getInventoryDocId,
   calculateInventoryStatus,
+  normalizeItemName,
+  matchCartItemToInventory,
+  parseWeightInKg,
+  getItemRequiredAmount,
   getStoreInventory,
   getInventoryItem,
   createInventoryItem,

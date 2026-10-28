@@ -59,14 +59,18 @@ const resolveStoreId = (rawStoreId) => {
   return (clean === 'S002' || clean === 'S004') ? 'S004' : clean;
 };
 
+const getEffectiveStoreId = (req) => {
+  const chosen = req.query?.storeId || req.body?.storeId || req.user?.storeId || 'S001';
+  return resolveStoreId(chosen);
+};
+
 /**
  * GET /api/store-admin/dashboard
  * Store Admin KPI summary & latest orders
  */
 const getDashboardOverview = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
 
     const [orders, inventory, allRiders] = await Promise.all([
       getStoreOrders(storeId),
@@ -144,8 +148,7 @@ const getDashboardOverview = async (req, res, next) => {
  */
 const getOrders = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const { status } = req.query;
 
     const orders = await getStoreOrders(storeId, status);
@@ -277,8 +280,7 @@ const delayPrepTime = async (req, res, next) => {
  */
 const getInventory = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const inventory = await getStoreInventory(storeId);
 
     res.status(200).json({
@@ -297,8 +299,7 @@ const getInventory = async (req, res, next) => {
  */
 const updateInventoryItem = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const { id } = req.params;
     const { stock, defreezeStock, min, reason } = req.body;
 
@@ -326,8 +327,7 @@ const updateInventoryItem = async (req, res, next) => {
  */
 const transferDefreezeStock = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.body.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const { itemId, quantity, notes } = req.body;
 
     if (!itemId) {
@@ -354,8 +354,7 @@ const transferDefreezeStock = async (req, res, next) => {
  */
 const recordInventoryWaste = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.body.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const { itemId, sourceClassification, quantity, reason, notes } = req.body;
 
     if (!itemId) {
@@ -384,8 +383,7 @@ const recordInventoryWaste = async (req, res, next) => {
  */
 const getInventoryHistory = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const { itemId, actionType, classification, search, page = 1, limit = 50 } = req.query;
 
     let history = await getInventoryHistoryFS(storeId);
@@ -438,8 +436,7 @@ const getInventoryHistory = async (req, res, next) => {
  */
 const getStoreCustomers = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
 
     const orders = await getStoreOrders(storeId);
     const map = new Map();
@@ -480,8 +477,7 @@ const getStoreCustomers = async (req, res, next) => {
  */
 const getDeliverySlots = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const slots = await getStoreDeliverySlots(storeId);
 
     res.status(200).json({
@@ -517,8 +513,7 @@ const updateDeliverySlot = async (req, res, next) => {
  */
 const getReturnRequests = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const returns = await getStoreReturnRequests(storeId);
 
     res.status(200).json({
@@ -559,8 +554,7 @@ const updateReturnStatus = async (req, res, next) => {
  */
 const getRiders = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
 
     const allRiders = await queryDocs('users', (ref) => ref.where('role', '==', 'rider'));
     let storeRiders = allRiders.filter(
@@ -690,8 +684,7 @@ const assignRiderToOrder = async (req, res, next) => {
  */
 const getStoreStatus = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     let store = await getStoreById(storeId);
     if (!store) {
       store = await createStoreFS({
@@ -718,8 +711,7 @@ const getStoreStatus = async (req, res, next) => {
  */
 const updateStoreStatus = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
 
     const store = await updateStoreFS(storeId, req.body);
     res.status(200).json({ success: true, store });
@@ -734,8 +726,7 @@ const updateStoreStatus = async (req, res, next) => {
  */
 const getStoreRemittances = async (req, res, next) => {
   try {
-    const rawStoreId = req.user?.storeId || req.query.storeId || 'S001';
-    const storeId = resolveStoreId(rawStoreId);
+    const storeId = getEffectiveStoreId(req);
     const remittances = await getStoreRemittancesFS(storeId);
     res.status(200).json({ success: true, count: remittances.length, remittances });
   } catch (error) {
