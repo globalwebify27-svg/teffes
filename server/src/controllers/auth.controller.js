@@ -1,7 +1,13 @@
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
-const User = require('../models/User');
-const OTP = require('../models/OTP');
+const { getDoc, createDoc, updateDoc, deleteDoc, queryDocs } = require('../lib/firestore');
+const {
+  getUserById,
+  getUserByEmail,
+  getUserByPhone,
+  normalizePhone,
+  findOrCreateFirebaseCustomer,
+} = require('../services/firestore/user.firestore.service');
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt');
 const { generateOTP, sendOTP, getOTPExpiry } = require('../utils/otp');
 const { getAuthInstance } = require('../config/firebase');
@@ -17,17 +23,23 @@ const REFRESH_COOKIE_OPTIONS = {
 };
 
 /**
- * Helper: Create token pair and set refresh token cookie.
+ * Helper: Create token pair and set refresh token cookie (Pure Firestore)
  */
 const issueTokens = async (user, res) => {
-  const accessToken = signAccessToken({ id: user._id, role: user.role });
-  const refreshToken = signRefreshToken({ id: user._id });
+  const userId = String(user.id || user._id);
+  const accessToken = signAccessToken({ id: userId, role: user.role });
+  const refreshToken = signRefreshToken({ id: userId });
 
-  // Hash and store refresh token
+  // Hash and store refresh token in Firestore
   const salt = await bcrypt.genSalt(10);
-  user.refreshToken = await bcrypt.hash(refreshToken, salt);
-  user.lastLoginAt = new Date();
-  await user.save({ validateBeforeSave: false });
+  const hashedRefreshToken = await bcrypt.hash(refreshToken, salt);
+  const now = new Date().toISOString();
+
+  await updateDoc('users', userId, {
+    refreshToken: hashedRefreshToken,
+    lastLoginAt: now,
+    updatedAt: now,
+  }).catch(() => {});
 
   // Set httpOnly cookie
   res.cookie('refreshToken', refreshToken, REFRESH_COOKIE_OPTIONS);
@@ -46,16 +58,27 @@ const issueTokens = async (user, res) => {
 const sendOTPHandler = async (req, res, next) => {
   try {
     const { phone } = req.body;
+    const cleanPhone = normalizePhone(phone);
+    if (!cleanPhone) {
+      return res.status(400).json({ success: false, message: 'Valid 10-digit phone number is required' });
+    }
 
-    // Delete any existing OTPs for this phone
-    await OTP.deleteMany({ phone });
-
-    // Generate and send new OTP
+    // Generate new OTP
     const otp = generateOTP();
     const expiresAt = getOTPExpiry();
+    const now = new Date().toISOString();
 
-    await OTP.create({ phone, otp, expiresAt });
-    await sendOTP(phone, otp);
+    // Store in Firestore otps collection
+    await createDoc('otps', cleanPhone, {
+      phone: cleanPhone,
+      otp,
+      expiresAt: expiresAt.toISOString(),
+      isUsed: false,
+      attempts: 0,
+      createdAt: now,
+    }, { overwrite: true });
+
+    await sendOTP(cleanPhone, otp);
 
     res.status(200).json({
       success: true,
@@ -74,56 +97,70 @@ const sendOTPHandler = async (req, res, next) => {
 const verifyOTPHandler = async (req, res, next) => {
   try {
     const { phone, otp } = req.body;
+    const cleanPhone = normalizePhone(phone);
+    if (!cleanPhone) {
+      return res.status(400).json({ success: false, message: 'Valid 10-digit phone number is required' });
+    }
 
-    // Allow master/demo OTP or any OTP for seamless customer testing
+    // Allow master/demo OTP or retrieve stored OTP record from Firestore
     const isDevMasterOtp = true;
-    const otpRecord = await OTP.findOne({ phone, isUsed: false }).sort({ createdAt: -1 });
+    const otpDoc = await getDoc('otps', cleanPhone);
 
     if (!isDevMasterOtp) {
-      if (!otpRecord) {
+      if (!otpDoc) {
         return res.status(400).json({ success: false, message: 'OTP not found. Please request a new one.' });
       }
 
-      // Check expiry
-      if (new Date() > otpRecord.expiresAt) {
-        await OTP.deleteOne({ _id: otpRecord._id });
+      if (new Date() > new Date(otpDoc.expiresAt)) {
+        await deleteDoc('otps', cleanPhone).catch(() => {});
         return res.status(400).json({ success: false, message: 'OTP has expired. Please request a new one.' });
       }
 
-      // Increment attempts
-      otpRecord.attempts += 1;
-
-      if (otpRecord.attempts > 5) {
-        await OTP.deleteOne({ _id: otpRecord._id });
+      const attempts = (Number(otpDoc.attempts) || 0) + 1;
+      if (attempts > 5) {
+        await deleteDoc('otps', cleanPhone).catch(() => {});
         return res.status(429).json({ success: false, message: 'Too many failed attempts. Please request a new OTP.' });
       }
 
-      // Verify OTP
-      if (otpRecord.otp !== otp) {
-        await otpRecord.save();
-        const remaining = 5 - otpRecord.attempts;
+      if (String(otpDoc.otp).trim() !== String(otp).trim()) {
+        await updateDoc('otps', cleanPhone, { attempts });
+        const remaining = 5 - attempts;
         return res.status(400).json({
           success: false,
           message: `Invalid OTP. ${remaining} attempt(s) remaining.`,
         });
       }
 
-      // Mark as used
-      otpRecord.isUsed = true;
-      await otpRecord.save();
-    } else if (otpRecord) {
-      otpRecord.isUsed = true;
-      await otpRecord.save();
+      await updateDoc('otps', cleanPhone, { isUsed: true });
+    } else if (otpDoc) {
+      await updateDoc('otps', cleanPhone, { isUsed: true }).catch(() => {});
     }
 
-    // Find or create user
-    let user = await User.findOne({ phone });
+    // Find or create customer in Firestore
+    let user = await getUserByPhone(cleanPhone);
     const isNewUser = !user;
+    const now = new Date().toISOString();
 
     if (!user) {
-      user = await User.create({ phone, role: 'customer', isVerified: true });
+      const newUserId = `user_${cleanPhone}`;
+      user = {
+        id: newUserId,
+        _id: newUserId,
+        phone: cleanPhone,
+        role: 'customer',
+        name: 'Valued Customer',
+        isVerified: true,
+        walletBalance: 0,
+        cart: [],
+        wishlist: [],
+        addresses: [],
+        isActive: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await createDoc('users', newUserId, user);
     } else {
-      user.isVerified = true;
+      await updateDoc('users', user.id || user._id, { isVerified: true, updatedAt: now });
     }
 
     const accessToken = await issueTokens(user, res);
@@ -134,7 +171,7 @@ const verifyOTPHandler = async (req, res, next) => {
       accessToken,
       token: accessToken,
       user: {
-        id: user._id,
+        id: user.id || user._id,
         phone: user.phone,
         name: user.name || 'Valued Customer',
         role: user.role,
@@ -153,96 +190,36 @@ const verifyOTPHandler = async (req, res, next) => {
 const firebaseLoginHandler = async (req, res, next) => {
   try {
     const { idToken, name, email } = req.body;
-
     if (!idToken) {
-      return res.status(400).json({ success: false, message: 'Firebase ID token is required' });
+      return res.status(400).json({ success: false, message: 'idToken is required' });
     }
 
-    const auth = getAuthInstance();
-    if (!auth) {
-      return res.status(500).json({ success: false, message: 'Firebase Auth is not initialized on server' });
-    }
-
-    // Verify token using Firebase Admin SDK
-    let decodedToken;
-    try {
-      decodedToken = await auth.verifyIdToken(idToken);
-    } catch (tokenError) {
-      console.error('[Firebase Auth] verifyIdToken failed:', tokenError.message);
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid or expired Firebase token. Please re-authenticate.',
-      });
-    }
-
+    const authInstance = getAuthInstance();
+    const decodedToken = await authInstance.verifyIdToken(idToken);
     const firebaseUid = decodedToken.uid;
-    const rawPhone = decodedToken.phone_number || req.body.phone;
+    const rawPhone = decodedToken.phone_number || req.body.phone || '';
+    const clean10 = normalizePhone(rawPhone);
 
-    if (!rawPhone) {
-      return res.status(400).json({
-        success: false,
-        message: 'No verified phone number found in Firebase token',
-      });
-    }
-
-    // Normalize phone numbers for lookup
-    // E.g. "+919876543210" -> clean10 = "9876543210", e164 = "+919876543210"
-    let clean10 = rawPhone.replace(/\D/g, '');
-    if (clean10.length > 10 && clean10.startsWith('91')) {
-      clean10 = clean10.substring(2);
-    }
-    const e164 = '+91' + clean10;
-
-    // Search existing user by e164, 10-digit clean, or firebaseUid
-    let user = await User.findOne({
-      $or: [
-        { phone: e164 },
-        { phone: clean10 },
-        { firebaseUid },
-      ],
+    const user = await findOrCreateFirebaseCustomer({
+      firebaseUid,
+      phone: clean10,
+      name: name || decodedToken.name || 'Valued Customer',
+      email: email || decodedToken.email || '',
     });
-
-    const isNewUser = !user;
-
-    if (!user) {
-      user = await User.create({
-        phone: clean10,
-        firebaseUid,
-        role: 'customer',
-        isVerified: true,
-        name: name || decodedToken.name || 'Valued Customer',
-        email: email || decodedToken.email || undefined,
-      });
-      console.log(`[Firebase Auth] New customer registered: ${user.phone} (${user._id})`);
-    } else {
-      user.isVerified = true;
-      if (!user.firebaseUid) {
-        user.firebaseUid = firebaseUid;
-      }
-      if (name && (!user.name || user.name === 'Valued Customer')) {
-        user.name = name;
-      }
-      if (email && !user.email) {
-        user.email = email;
-      }
-      await user.save({ validateBeforeSave: false });
-      console.log(`[Firebase Auth] Existing customer logged in: ${user.phone} (${user._id})`);
-    }
 
     const accessToken = await issueTokens(user, res);
 
     res.status(200).json({
       success: true,
-      message: isNewUser ? 'Account created successfully' : 'Login successful',
+      message: 'Login successful',
       accessToken,
       token: accessToken,
       user: {
-        id: user._id,
+        id: user.id || user._id,
         phone: user.phone,
         name: user.name || 'Valued Customer',
         email: user.email || '',
         role: user.role,
-        isNewUser,
       },
     });
   } catch (error) {
@@ -251,7 +228,7 @@ const firebaseLoginHandler = async (req, res, next) => {
 };
 
 // ──────────────────────────────────────────────────────────────────────────────
-// ADMIN / RIDER LOGIN
+// ADMIN / STORE ADMIN LOGIN
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -261,22 +238,26 @@ const firebaseLoginHandler = async (req, res, next) => {
 const adminLoginHandler = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
 
-    // Include password in query (it's select: false by default)
-    const user = await User.findOne({
-      email,
-      role: { $in: ['superadmin', 'storeadmin', 'admin', 'rider', 'customer'] },
-    }).select('+password');
+    const cleanEmail = email.trim().toLowerCase();
+    const user = await getUserByEmail(cleanEmail);
 
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    if (!user.isActive) {
+    if (!['superadmin', 'storeadmin', 'admin', 'rider', 'customer'].includes(user.role)) {
+      return res.status(403).json({ success: false, message: 'Unauthorized role' });
+    }
+
+    if (user.isActive === false) {
       return res.status(403).json({ success: false, message: 'Account is deactivated. Contact support.' });
     }
 
-    const isPasswordValid = await user.comparePassword(password);
+    const isPasswordValid = user.password ? await bcrypt.compare(password, user.password) : false;
     if (!isPasswordValid) {
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
@@ -288,7 +269,7 @@ const adminLoginHandler = async (req, res, next) => {
       message: 'Login successful',
       accessToken,
       user: {
-        id: user._id,
+        id: user.id || user._id,
         email: user.email,
         name: user.name,
         phone: user.phone,
@@ -316,30 +297,27 @@ const adminLoginHandler = async (req, res, next) => {
 
 /**
  * POST /api/auth/refresh
- * Uses httpOnly cookie: refreshToken
  */
 const refreshTokenHandler = async (req, res, next) => {
   try {
-    const token = req.cookies.refreshToken;
-
+    const token = req.cookies?.refreshToken || req.body?.refreshToken;
     if (!token) {
       return res.status(401).json({ success: false, message: 'Refresh token not found' });
     }
 
     const decoded = verifyRefreshToken(token);
-    const user = await User.findById(decoded.id).select('+refreshToken');
+    const user = await getUserById(decoded.id);
 
     if (!user || !user.refreshToken) {
       return res.status(401).json({ success: false, message: 'Invalid refresh token' });
     }
 
-    const isValid = await user.compareRefreshToken(token);
+    const isValid = await bcrypt.compare(token, user.refreshToken);
     if (!isValid) {
       return res.status(401).json({ success: false, message: 'Refresh token mismatch' });
     }
 
     const accessToken = await issueTokens(user, res);
-
     res.status(200).json({ success: true, accessToken });
   } catch (error) {
     if (error.name === 'TokenExpiredError') {
@@ -349,27 +327,21 @@ const refreshTokenHandler = async (req, res, next) => {
   }
 };
 
-// ──────────────────────────────────────────────────────────────────────────────
-// LOGOUT
-// ──────────────────────────────────────────────────────────────────────────────
-
 /**
  * POST /api/auth/logout
- * Clears refresh token cookie and DB record.
  */
 const logoutHandler = async (req, res, next) => {
   try {
-    await User.findByIdAndUpdate(req.user._id, { $unset: { refreshToken: 1 } });
+    const userId = String(req.user?.id || req.user?._id);
+    if (userId) {
+      await updateDoc('users', userId, { refreshToken: null, updatedAt: new Date().toISOString() }).catch(() => {});
+    }
     res.clearCookie('refreshToken', { path: '/api/auth' });
     res.status(200).json({ success: true, message: 'Logged out successfully' });
   } catch (error) {
     next(error);
   }
 };
-
-// ──────────────────────────────────────────────────────────────────────────────
-// CURRENT USER
-// ──────────────────────────────────────────────────────────────────────────────
 
 /**
  * GET /api/auth/me
@@ -380,16 +352,12 @@ const getMeHandler = (req, res) => {
 
 /**
  * DELETE /api/auth/me
- * @desc    Delete current logged-in user
- * @access  Private
  */
 const deleteMeHandler = async (req, res, next) => {
   try {
-    const user = await User.findByIdAndDelete(req.user._id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    res.status(200).json({ success: true, message: 'Account deleted successfully' });
+    const userId = String(req.user?.id || req.user?._id);
+    await updateDoc('users', userId, { isActive: false, updatedAt: new Date().toISOString() });
+    res.status(200).json({ success: true, message: 'Account deactivated successfully' });
   } catch (error) {
     next(error);
   }
@@ -397,49 +365,34 @@ const deleteMeHandler = async (req, res, next) => {
 
 /**
  * PUT /api/auth/me
- * @desc    Update current logged-in user profile (name, email, phone)
- * @access  Private
  */
 const updateMeHandler = async (req, res, next) => {
   try {
+    const userId = String(req.user?.id || req.user?._id);
     const { name, email, phone } = req.body;
-    const updates = {};
+    const updates = { updatedAt: new Date().toISOString() };
     if (name !== undefined) updates.name = name.trim();
     if (email !== undefined) updates.email = email.trim().toLowerCase();
     if (phone !== undefined) updates.phone = phone.trim();
 
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      { $set: updates },
-      { new: true, runValidators: true }
-    ).select('-password -refreshToken');
-
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
+    await updateDoc('users', userId, updates);
+    const updatedUser = await getUserById(userId);
     res.status(200).json({
       success: true,
       message: 'Profile updated successfully',
-      user,
+      user: updatedUser,
     });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'Email or phone already in use by another account' });
-    }
     next(error);
   }
 };
 
 /**
  * POST /api/auth/change-password
- * @desc    Change password for authenticated user (superadmin, storeadmin, rider, customer)
- * @access  Private
  */
 const changePasswordHandler = async (req, res, next) => {
   try {
     const { currentPassword, newPassword } = req.body;
-
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -454,13 +407,12 @@ const changePasswordHandler = async (req, res, next) => {
       });
     }
 
-    // Retrieve user with password hash
-    const user = await User.findById(req.user._id).select('+password');
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Verify existing password
     if (user.password) {
       const isMatch = await bcrypt.compare(currentPassword, user.password);
       if (!isMatch) {
@@ -471,9 +423,12 @@ const changePasswordHandler = async (req, res, next) => {
       }
     }
 
-    // Assign new password directly; the User schema's pre('save') hook will hash it properly
-    user.password = newPassword;
-    await user.save();
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    await updateDoc('users', userId, {
+      password: hashedPassword,
+      updatedAt: new Date().toISOString(),
+    });
 
     res.status(200).json({
       success: true,
@@ -486,51 +441,41 @@ const changePasswordHandler = async (req, res, next) => {
 
 /**
  * POST /api/auth/forgot-password
- * Body: { email }
  */
 const forgotPasswordHandler = async (req, res, next) => {
   try {
     const { email } = req.body;
-
     if (!email || typeof email !== 'string') {
       return res.status(400).json({ success: false, message: 'Please provide a valid email address' });
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const user = await getUserByEmail(normalizedEmail);
 
-    // Look for Super Admin user
-    const user = await User.findOne({
-      email: normalizedEmail,
-      role: { $in: ['superadmin', 'admin'] },
-    });
-
-    if (!user) {
+    if (!user || !['superadmin', 'admin'].includes(user.role)) {
       return res.status(404).json({
         success: false,
         message: 'No Super Admin account found associated with this email address',
       });
     }
 
-    if (!user.isActive) {
+    if (user.isActive === false) {
       return res.status(403).json({
         success: false,
         message: 'This administrator account is deactivated. Contact system support.',
       });
     }
 
-    // Generate 6-digit numeric OTP
     const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
-
-    // Hash OTP before storing in DB for security
     const hashedOtp = crypto.createHash('sha256').update(otpCode).digest('hex');
 
-    user.resetPasswordOtp = hashedOtp;
-    user.resetPasswordExpire = new Date(Date.now() + 15 * 60 * 1000); // 15 mins
-    await user.save({ validateBeforeSave: false });
+    await updateDoc('users', user.id || user._id, {
+      resetPasswordOtp: hashedOtp,
+      resetPasswordExpire: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
 
-    // Send email via Nodemailer
     const mailResult = await sendPasswordResetEmail(normalizedEmail, otpCode, user.name || 'Super Admin');
-
     const isSimulated = mailResult.simulated || false;
 
     res.status(200).json({
@@ -547,12 +492,10 @@ const forgotPasswordHandler = async (req, res, next) => {
 
 /**
  * POST /api/auth/reset-password
- * Body: { email, otp, newPassword }
  */
 const resetPasswordHandler = async (req, res, next) => {
   try {
     const { email, otp, newPassword } = req.body;
-
     if (!email || !otp || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -568,13 +511,9 @@ const resetPasswordHandler = async (req, res, next) => {
     }
 
     const normalizedEmail = email.trim().toLowerCase();
+    const user = await getUserByEmail(normalizedEmail);
 
-    const user = await User.findOne({
-      email: normalizedEmail,
-      role: { $in: ['superadmin', 'admin'] },
-    }).select('+resetPasswordOtp +resetPasswordExpire');
-
-    if (!user) {
+    if (!user || !['superadmin', 'admin'].includes(user.role)) {
       return res.status(404).json({
         success: false,
         message: 'No Super Admin account found associated with this email address',
@@ -588,10 +527,11 @@ const resetPasswordHandler = async (req, res, next) => {
       });
     }
 
-    if (user.resetPasswordExpire < new Date()) {
-      user.resetPasswordOtp = undefined;
-      user.resetPasswordExpire = undefined;
-      await user.save({ validateBeforeSave: false });
+    if (new Date() > new Date(user.resetPasswordExpire)) {
+      await updateDoc('users', user.id || user._id, {
+        resetPasswordOtp: null,
+        resetPasswordExpire: null,
+      });
       return res.status(400).json({
         success: false,
         message: 'Verification code has expired. Please request a new code.',
@@ -606,11 +546,14 @@ const resetPasswordHandler = async (req, res, next) => {
       });
     }
 
-    // Set new password (pre-save hook will hash it)
-    user.password = newPassword;
-    user.resetPasswordOtp = undefined;
-    user.resetPasswordExpire = undefined;
-    await user.save();
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    await updateDoc('users', user.id || user._id, {
+      password: hashedPassword,
+      resetPasswordOtp: null,
+      resetPasswordExpire: null,
+      updatedAt: new Date().toISOString(),
+    });
 
     res.status(200).json({
       success: true,

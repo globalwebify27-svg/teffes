@@ -1,10 +1,11 @@
-const Coupon = require('../models/Coupon');
 const {
+  getActiveCoupons: getActiveCouponsFS,
+  getCouponByCode,
+  calculateDiscount,
   isCouponExpired,
   isCouponFuture,
-  validateCouponEligibility,
-  calculateDiscount,
-} = require('../utils/couponCalculator');
+} = require('../services/firestore/coupon.firestore.service');
+const { validateCouponEligibility } = require('../utils/couponCalculator');
 
 /**
  * GET /api/coupons/active
@@ -12,15 +13,7 @@ const {
  */
 exports.getActiveCoupons = async (req, res, next) => {
   try {
-    const coupons = await Coupon.find({
-      isActive: { $ne: false },
-      status: { $ne: 'Paused' },
-    }).sort({ isSuperOffer: -1, createdAt: -1 });
-
-    const activeCoupons = coupons.filter(
-      (c) => !isCouponExpired(c.validTill) && !isCouponFuture(c.validFrom)
-    );
-
+    const activeCoupons = await getActiveCouponsFS();
     res.status(200).json({
       success: true,
       count: activeCoupons.length,
@@ -37,23 +30,12 @@ exports.getActiveCoupons = async (req, res, next) => {
  */
 exports.getSuperOffer = async (req, res, next) => {
   try {
-    const coupons = await Coupon.find({
-      isActive: { $ne: false },
-      status: { $ne: 'Paused' },
-    }).sort({ createdAt: -1 });
-
-    const activeCoupons = coupons.filter(
-      (c) => !isCouponExpired(c.validTill) && !isCouponFuture(c.validFrom)
-    );
-
+    const activeCoupons = await getActiveCouponsFS();
     if (activeCoupons.length === 0) {
       return res.status(200).json({ success: true, superOffer: null });
     }
 
-    // 1. Look for explicitly chosen Super Offer
     let superOffer = activeCoupons.find((c) => c.isSuperOffer === true);
-
-    // 2. Fallback: if none selected by Super Admin, latest active offer becomes the Super Offer
     if (!superOffer) {
       superOffer = activeCoupons[0];
     }
@@ -67,7 +49,6 @@ exports.getSuperOffer = async (req, res, next) => {
 /**
  * POST /api/coupons/apply
  * Customer explicitly applies a coupon to their cart.
- * Backend is the source of truth for validation and discount calculation.
  */
 exports.applyCoupon = async (req, res, next) => {
   try {
@@ -90,7 +71,7 @@ exports.applyCoupon = async (req, res, next) => {
       });
     }
 
-    const coupon = await Coupon.findOne({ code: cleanCode });
+    const coupon = await getCouponByCode(cleanCode);
     if (!coupon) {
       return res.status(404).json({
         success: false,
@@ -98,17 +79,45 @@ exports.applyCoupon = async (req, res, next) => {
       });
     }
 
-    // Comprehensive backend validation (active status, dates, min order, usage limit, first order, per-user single use)
-    const eligibility = await validateCouponEligibility(coupon, amount, req.user || null);
-
-    if (!eligibility.isValid) {
+    if (coupon.isActive === false || coupon.status === 'Paused') {
       return res.status(400).json({
         success: false,
-        message: eligibility.error,
+        message: 'Coupon is currently inactive.',
       });
     }
 
-    const discount = eligibility.discount;
+    if (isCouponFuture(coupon.validFrom)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Coupon is not active yet.',
+      });
+    }
+
+    if (isCouponExpired(coupon.validTill) || coupon.status === 'Expired') {
+      return res.status(400).json({
+        success: false,
+        message: 'Coupon has expired.',
+      });
+    }
+
+    const minReq = coupon.minOrderAmount || coupon.minOrder || 0;
+    if (amount < minReq) {
+      return res.status(400).json({
+        success: false,
+        message: `Minimum order amount for this coupon is ₹${minReq}`,
+      });
+    }
+
+    const usageLimit = Number(coupon.usageLimit);
+    const usage = Number(coupon.usageCount || coupon.used || 0);
+    if (usageLimit && usageLimit > 0 && usage >= usageLimit) {
+      return res.status(400).json({
+        success: false,
+        message: 'Coupon usage limit has been reached.',
+      });
+    }
+
+    const discount = calculateDiscount(coupon, amount);
     const payableAmount = Math.max(0, amount - discount);
 
     res.status(200).json({
@@ -122,7 +131,7 @@ exports.applyCoupon = async (req, res, next) => {
       minOrderAmount: coupon.minOrderAmount || coupon.minOrder || 0,
       payableAmount,
       coupon: {
-        id: coupon._id,
+        id: coupon.code,
         code: coupon.code,
         discountType: coupon.discountType,
         discountValue: coupon.discountValue,

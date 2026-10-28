@@ -49,7 +49,7 @@ export default function RegisteredShopsSection({
 
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Fetch registered stores dynamically from MongoDB via /api/stores
+  // Fetch registered stores dynamically from Cloud Firestore via /api/stores
   useEffect(() => {
     let isMounted = true;
     setIsLoading(true);
