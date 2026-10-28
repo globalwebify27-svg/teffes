@@ -67,7 +67,13 @@ const protect = async (req, res, next) => {
 
     const decoded = verifyAccessToken(token);
 
-    const user = await User.findById(decoded.id).select('-password -refreshToken');
+    let user = await User.findById(decoded.id).select('-password -refreshToken');
+    if (!user) {
+      try {
+        const { getUserById } = require('../services/firestore/user.firestore.service');
+        user = await getUserById(decoded.id);
+      } catch (_) {}
+    }
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found' });
     }
