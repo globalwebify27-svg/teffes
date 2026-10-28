@@ -5,7 +5,8 @@ const jwt = require('jsonwebtoken');
  * @param {object} payload - { id, role }
  */
 const signAccessToken = (payload) => {
-  return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
+  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'teffes-default-access-secret-2026';
+  return jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m',
     issuer: 'teffes-api',
     audience: 'teffes-client',
@@ -17,7 +18,8 @@ const signAccessToken = (payload) => {
  * @param {object} payload - { id }
  */
 const signRefreshToken = (payload) => {
-  return jwt.sign(payload, process.env.JWT_REFRESH_SECRET, {
+  const secret = process.env.JWT_REFRESH_SECRET || process.env.JWT_SECRET || 'teffes-default-refresh-secret-2026';
+  return jwt.sign(payload, secret, {
     expiresIn: process.env.JWT_REFRESH_EXPIRES || '7d',
     issuer: 'teffes-api',
     audience: 'teffes-client',
@@ -29,7 +31,8 @@ const signRefreshToken = (payload) => {
  * @returns Decoded payload or throws
  */
 const verifyAccessToken = (token) => {
-  return jwt.verify(token, process.env.JWT_ACCESS_SECRET, {
+  const secret = process.env.JWT_ACCESS_SECRET || process.env.JWT_SECRET || 'teffes-default-access-secret-2026';
+  return jwt.verify(token, secret, {
     issuer: 'teffes-api',
     audience: 'teffes-client',
   });

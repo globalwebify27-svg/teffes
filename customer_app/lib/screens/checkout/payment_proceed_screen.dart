@@ -432,7 +432,9 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
                       const Icon(Icons.person_outline_rounded, size: 16, color: AppColors.textMuted),
                       const SizedBox(width: 8),
                       Text(
-                        '${auth.user?.name ?? "Customer"} • ${auth.user?.phone ?? "+91 98765 43210"}',
+                        auth.user?.phone?.isNotEmpty == true
+                            ? '${auth.user?.name ?? "Customer"} • ${auth.user!.phone}'
+                            : (auth.user?.name ?? "Customer"),
                         style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
                       ),
                     ],

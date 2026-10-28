@@ -148,6 +148,8 @@ const getAvailableStoresHandler = async (req, res, next) => {
 };
 
 // ─── Authentication & Profile ───────────────────────────────────────────────
+router.post('/auth/send-otp', auth.sendOtp);
+router.post('/auth/verify-otp', auth.verifyOtp);
 router.post('/auth/firebase-login', auth.firebaseLogin);
 router.post('/auth/admin-login', auth.adminLogin);
 router.get('/auth/me', protectStaging, auth.getMe);

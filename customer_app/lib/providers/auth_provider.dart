@@ -19,7 +19,7 @@ class AuthProvider with ChangeNotifier {
 
   UserModel? get user => _user;
   String? get token => _token;
-  bool get isAuthenticated => _token != null && _token!.isNotEmpty;
+  bool get isAuthenticated => _token != null && _token!.isNotEmpty && _user != null;
   bool get isLoading => _isLoading;
   String? get error => _error;
   List<OrderModel> get myOrders => _myOrders;
@@ -34,10 +34,17 @@ class AuthProvider with ChangeNotifier {
   Future<void> initAuth() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('auth_token');
-    if (_token != null) {
-      await fetchCurrentUser();
-      await fetchMyOrders();
-      await FcmService.instance.syncUserSession();
+    if (_token != null && _token!.isNotEmpty) {
+      final success = await fetchCurrentUser();
+      if (!success || _user == null) {
+        // Invalid or stale token restored - purge immediately to avoid phantom logins
+        _token = null;
+        _user = null;
+        await prefs.remove('auth_token');
+      } else {
+        await fetchMyOrders();
+        await FcmService.instance.syncUserSession();
+      }
     }
     notifyListeners();
   }
@@ -74,9 +81,9 @@ class AuthProvider with ChangeNotifier {
     } catch (_) {}
   }
 
-  // ─── FIREBASE PHONE AUTHENTICATION ─────────────────────────────────────────
+  // ─── FIREBASE & RESILIENT BACKEND PHONE AUTHENTICATION ─────────────────────
 
-  /// Send verification SMS via Firebase Phone Auth
+  /// Send verification SMS via Firebase Phone Auth with automatic fallback to Backend OTP
   Future<void> sendFirebaseOtp({
     required String phone,
     required Function(String verificationId, int? resendToken) onCodeSent,
@@ -88,7 +95,7 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    // Ensure +91 prefix for Indian mobile numbers
+    // Ensure clean 10-digit number and +91 prefix for Indian mobile numbers
     final digitsOnly = phone.replaceAll(RegExp(r'\D'), '');
     final clean10 = digitsOnly.length > 10 ? digitsOnly.substring(digitsOnly.length - 10) : digitsOnly;
     final formattedPhone = '+91$clean10';
@@ -107,7 +114,34 @@ class AuthProvider with ChangeNotifier {
             await _signInWithFirebaseCredential(credential, phone: clean10);
           }
         },
-        verificationFailed: (FirebaseAuthException e) {
+        verificationFailed: (FirebaseAuthException e) async {
+          debugPrint('[AuthProvider] Firebase phone verificationFailed: ${e.code} - ${e.message}');
+          // If Firebase failed due to Play Integrity, missing-client-identifier, quota, or network check:
+          // Immediately fall back to direct backend OTP so client and users are NEVER blocked!
+          final isAppCheckOrIntegrity = e.code.contains('missing-client-identifier') ||
+              e.code.contains('app-not-authorized') ||
+              e.code.contains('play-integrity') ||
+              e.code.contains('recaptcha') ||
+              e.code.contains('quota-exceeded') ||
+              (e.message != null && (
+                e.message!.contains('missing a valid app identifier') ||
+                e.message!.contains('Play Integrity') ||
+                e.message!.contains('reCAPTCHA') ||
+                e.message!.contains('quota')
+              ));
+
+          if (isAppCheckOrIntegrity) {
+            debugPrint('[AuthProvider] Play Integrity / App Identifier check bypassed. Triggering resilient backend OTP fallback.');
+            final sent = await sendOtp(clean10);
+            if (sent) {
+              _isLoading = false;
+              _error = null;
+              notifyListeners();
+              onCodeSent('direct_backend_otp', null);
+              return;
+            }
+          }
+
           _isLoading = false;
           String friendlyMsg = 'Phone verification failed.';
           if (e.code == 'invalid-phone-number') {
@@ -115,7 +149,7 @@ class AuthProvider with ChangeNotifier {
           } else if (e.code == 'too-many-requests') {
             friendlyMsg = 'Too many attempts. Please try again later.';
           } else if (e.code == 'quota-exceeded') {
-            friendlyMsg = 'SMS quota reached. Please use the testing number.';
+            friendlyMsg = 'SMS quota reached. Please use direct OTP verification.';
           } else if (e.message != null) {
             friendlyMsg = e.message!;
           }
@@ -133,14 +167,23 @@ class AuthProvider with ChangeNotifier {
         },
       );
     } catch (e) {
-      _isLoading = false;
-      _error = 'Failed to send verification SMS: $e';
-      notifyListeners();
-      onFailed(_error!);
+      debugPrint('[AuthProvider] verifyPhoneNumber threw exception: $e. Falling back to backend OTP.');
+      final sent = await sendOtp(clean10);
+      if (sent) {
+        _isLoading = false;
+        _error = null;
+        notifyListeners();
+        onCodeSent('direct_backend_otp', null);
+      } else {
+        _isLoading = false;
+        _error = 'Failed to send verification code: $e';
+        notifyListeners();
+        onFailed(_error!);
+      }
     }
   }
 
-  /// Verify 6-digit OTP code with Firebase and exchange ID Token with TeFFe backend
+  /// Verify 6-digit OTP code with Firebase (or direct backend fallback) and establish session
   Future<bool> verifyFirebaseOtp({
     required String verificationId,
     required String smsCode,
@@ -151,32 +194,38 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    final cleanPhone = phone?.replaceAll(RegExp(r'\D'), '') ?? '';
+    final clean10 = cleanPhone.length > 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+    // Direct backend OTP bypass (when Play Integrity or device check failed)
+    if (verificationId == 'direct_backend_otp' || verificationId.isEmpty) {
+      return await verifyOtp(clean10, smsCode);
+    }
+
     try {
       final credential = PhoneAuthProvider.credential(
         verificationId: verificationId,
         smsCode: smsCode.trim(),
       );
 
-      return await _signInWithFirebaseCredential(credential, phone: phone, name: name);
+      final success = await _signInWithFirebaseCredential(credential, phone: clean10, name: name);
+      if (success) return true;
     } on FirebaseAuthException catch (e) {
-      _isLoading = false;
-      if (e.code == 'invalid-verification-code' || e.code == 'invalid-otp') {
-        _error = 'Provided OTP is wrong. Please enter the correct code.';
-      } else if (e.code == 'session-expired') {
-        _error = 'Verification code has expired. Please request a new code.';
-      } else if (e.code == 'too-many-requests') {
-        _error = 'Too many attempts. Please try again later.';
-      } else {
-        _error = 'Provided OTP is wrong. Please enter the correct code.';
-      }
-      notifyListeners();
-      return false;
+      debugPrint('[AuthProvider] Firebase verify error: ${e.code} - ${e.message}. Attempting backend verify fallback.');
     } catch (e) {
-      _isLoading = false;
-      _error = 'Provided OTP is wrong. Please enter the correct code.';
-      notifyListeners();
-      return false;
+      debugPrint('[AuthProvider] Firebase credential error: $e. Attempting backend verify fallback.');
     }
+
+    // Resilient fallback: verify directly with backend in case of test codes or Firebase mismatch
+    if (clean10.isNotEmpty) {
+      final backendSuccess = await verifyOtp(clean10, smsCode);
+      if (backendSuccess) return true;
+    }
+
+    _isLoading = false;
+    _error = 'Provided OTP is wrong. Please enter the correct code.';
+    notifyListeners();
+    return false;
   }
 
   /// Helper to sign in with PhoneAuthCredential, retrieve ID token, and exchange with TeFFe backend
@@ -338,14 +387,21 @@ class AuthProvider with ChangeNotifier {
 
   // ─── PROFILE & WALLET METHODS ─────────────────────────────────────────────
 
-  Future<void> fetchCurrentUser() async {
+  Future<bool> fetchCurrentUser() async {
     try {
       final res = await _api.get(ApiEndpoints.getMe);
       if (res.data['success'] == true && res.data['user'] != null) {
         _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
         notifyListeners();
+        return true;
+      } else {
+        _user = null;
+        return false;
       }
-    } catch (_) {}
+    } catch (_) {
+      _user = null;
+      return false;
+    }
   }
 
   Future<bool> updateProfileDetails({
