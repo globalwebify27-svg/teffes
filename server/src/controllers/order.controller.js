@@ -26,8 +26,11 @@ const {
   getUserOrders: getUserOrdersFS,
   getOrderById: getOrderByIdFS,
 } = require('../services/firestore/order.firestore.service');
+const {
+  requestReturn: requestReturnFS,
+} = require('../services/firestore/return.firestore.service');
 const notificationService = require('../services/notificationService');
-const { emitOrderCreated } = require('../socket');
+const { emitOrderCreated, emitOrderStatusUpdate } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
 
 const generateOrderId = () => {
@@ -412,58 +415,37 @@ const getMyOrders = async (req, res, next) => {
 
 /**
  * POST /api/orders/:orderId/return
- * (Pure Firestore)
+ * Customer submits return / exchange request
+ * (Pure Firestore - 60-min policy, 4-digit OTP, duplicate prevention)
  */
 const requestReturn = async (req, res, next) => {
   try {
     const { orderId } = req.params;
-    const { reason } = req.body;
+    const { reason, condition, items } = req.body;
 
-    let order = await getDoc('orders', orderId);
-    if (!order) {
-      const orders = await queryDocs('orders', (ref) => ref.where('orderId', '==', orderId).limit(1));
-      order = orders[0];
-    }
-
-    if (!order) {
-      return res.status(404).json({ success: false, message: 'Order not found' });
-    }
-
-    const targetId = order.id || order.orderId;
-    const now = new Date().toISOString();
-    await updateDoc('orders', targetId, {
-      returnStatus: 'Requested',
-      returnReason: reason || 'Customer requested return',
-      updatedAt: now,
+    const returnDoc = await requestReturnFS({
+      orderId,
+      user: req.user,
+      reason,
+      condition,
+      items,
     });
 
-    const returnReqId = 'RET-' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100).toString().padStart(2, '0');
-    await createDoc('return_requests', returnReqId, {
-      id: returnReqId,
-      _id: returnReqId,
-      requestId: returnReqId,
-      orderId: order.orderId,
-      customer: order.customer?.name || 'Customer',
-      phone: order.customer?.phone || '',
-      items: order.itemSummary || (order.items || []).map((i) => `${i.name} ×${i.quantity}`).join(', ') || 'Fresh cuts order',
-      reason: reason || 'Customer requested return/exchange',
-      condition: 'Reported within 60 mins guarantee',
-      status: 'Pending Review',
-      storeId: order.storeId || 'S001',
-      createdAt: now,
-      updatedAt: now,
-    }).catch(() => {});
+    const updatedOrder = await getDoc('orders', orderId);
+    emitOrderStatusUpdate(orderId, updatedOrder || { orderId, returnStatus: 'Requested' });
 
-    order.returnStatus = 'Requested';
-    order.returnReason = reason || 'Customer requested return';
-
-    res.status(200).json({
+    res.status(201).json({
       success: true,
-      message: 'Return requested successfully',
-      order,
+      message: 'Return request submitted successfully under 60-minute policy',
+      returnRequest: returnDoc,
+      requestId: returnDoc.requestId,
+      order: updatedOrder,
     });
   } catch (error) {
-    next(error);
+    return res.status(400).json({
+      success: false,
+      message: error.message || 'Failed to submit return request',
+    });
   }
 };
 

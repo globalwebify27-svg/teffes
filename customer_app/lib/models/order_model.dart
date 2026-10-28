@@ -38,8 +38,11 @@ class OrderModel {
   final String placedAt;
   final List<dynamic> items;
   final OrderRiderModel? rider;
+  final OrderRiderModel? returnRider;
   final String? returnStatus;
   final String? returnReason;
+  final String? returnOtp;
+  final String? deliveredAt;
   final String? deliveryAddress;
   final double? deliveryLat;
   final double? deliveryLng;
@@ -79,8 +82,11 @@ class OrderModel {
     required this.placedAt,
     required this.items,
     this.rider,
+    this.returnRider,
     this.returnStatus,
     this.returnReason,
+    this.returnOtp,
+    this.deliveredAt,
     this.deliveryAddress,
     this.deliveryLat,
     this.deliveryLng,
@@ -137,8 +143,11 @@ class OrderModel {
       placedAt: json['createdAt'] ?? json['placedAt'] ?? 'Recently',
       items: json['items'] is List ? json['items'] : [],
       rider: json['rider'] is Map<String, dynamic> ? OrderRiderModel.fromJson(json['rider']) : null,
+      returnRider: json['returnRider'] is Map<String, dynamic> ? OrderRiderModel.fromJson(json['returnRider']) : null,
       returnStatus: json['returnStatus'],
       returnReason: json['returnReason'],
+      returnOtp: json['returnOtp']?.toString(),
+      deliveredAt: json['deliveredAt']?.toString(),
       deliveryAddress: json['customer']?['address'] ?? json['deliveryAddress']?['line1'] ?? json['shippingAddress'] ?? 'Ranchi',
       deliveryLat: dLat,
       deliveryLng: dLng,

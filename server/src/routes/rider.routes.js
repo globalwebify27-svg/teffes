@@ -9,6 +9,7 @@ const {
   confirmPickup,
   updateLocation,
   completeDelivery,
+  verifyReturnPickup,
   getEarnings,
   getOrders,
   remitCash,
@@ -33,6 +34,7 @@ router.post('/orders/:id/reject', rejectOrder);
 router.post('/orders/:id/confirm-pickup', confirmPickup);
 router.post('/location', updateLocation);
 router.post('/orders/:id/complete-delivery', completeDelivery);
+router.post('/returns/:id/verify-otp', verifyReturnPickup);
 router.get('/earnings', getEarnings);
 router.get('/orders', getOrders);
 

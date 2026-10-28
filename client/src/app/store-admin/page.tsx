@@ -6,7 +6,18 @@ import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPowerOff } from "@fortawesome/free-solid-svg-icons";
+import {
+  faPowerOff,
+  faRotate,
+  faCheck,
+  faXmark,
+  faMotorcycle,
+  faKey,
+  faTrashCan,
+  faTriangleExclamation,
+  faClock,
+  faBoxOpen,
+} from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { getSocket } from "@/lib/socket";
@@ -3911,7 +3922,11 @@ function RidersTab() {
 
 function ReturnsTab() {
   const [requests, setRequests] = useState<any[]>([]);
+  const [riders, setRiders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRiderMap, setSelectedRiderMap] = useState<Record<string, string>>({});
+  const [otpInputMap, setOtpInputMap] = useState<Record<string, string>>({});
+  const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
   const fetchReturns = () => {
     setLoading(true);
@@ -3925,8 +3940,19 @@ function ReturnsTab() {
       .finally(() => setLoading(false));
   };
 
+  const fetchRiders = () => {
+    api.get<{ success: boolean; riders: any[] }>("/store-admin/riders")
+      .then(res => {
+        if (res.data.success) {
+          setRiders(res.data.riders || []);
+        }
+      })
+      .catch(err => console.warn("Failed to fetch riders:", err));
+  };
+
   useEffect(() => {
     fetchReturns();
+    fetchRiders();
   }, []);
 
   const updateStatus = async (requestId: string, status: string) => {
@@ -3934,15 +3960,51 @@ function ReturnsTab() {
       await api.patch(`/store-admin/returns/${requestId}/status`, { status });
       toast.success(`Exchange status updated to: ${status}`, "Request Updated");
       fetchReturns();
-    } catch (err) {
-      toast.error("Failed to update exchange status", "Exchange Error");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update exchange status", "Exchange Error");
+    }
+  };
+
+  const assignRider = async (requestId: string) => {
+    const riderId = selectedRiderMap[requestId];
+    if (!riderId) {
+      toast.error("Please select a rider from the dropdown to assign for reverse pickup", "Rider Required");
+      return;
+    }
+    try {
+      await api.patch(`/store-admin/returns/${requestId}/assign-rider`, { riderId });
+      toast.success("Rider assigned for reverse pickup successfully", "Rider Dispatched");
+      fetchReturns();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to assign rider", "Assignment Error");
+    }
+  };
+
+  const verifyOtpAndComplete = async (requestId: string) => {
+    const otp = otpInputMap[requestId];
+    if (!otp || otp.trim().length !== 4) {
+      toast.error("Please enter the 4-digit reverse pickup OTP provided by customer", "OTP Required");
+      return;
+    }
+    setVerifyingId(requestId);
+    try {
+      await api.post(`/store-admin/returns/${requestId}/verify-otp`, { otp: otp.trim() });
+      toast.success("Return verified! Meat routed to Waste Inventory & Customer refunded.", "Return Completed");
+      fetchReturns();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Invalid 4-digit OTP code", "Verification Failed");
+    } finally {
+      setVerifyingId(null);
     }
   };
 
   return (
     <div>
-      <div style={{ background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "12px", padding: "14px 18px", marginBottom: "24px", fontSize: "0.875rem", color: "#92400e" }}>
-        <strong>60-Minute Policy:</strong> All exchange requests must be processed within 60 minutes of delivery to be eligible.
+      <div style={{ background: "#fef3c7", border: "1px solid #fde68a", borderRadius: "12px", padding: "14px 18px", marginBottom: "24px", fontSize: "0.875rem", color: "#92400e", display: "flex", alignItems: "center", gap: "10px" }}>
+        <FontAwesomeIcon icon={faClock} style={{ color: "#d97706", fontSize: "1.1rem" }} />
+        <div>
+          <strong>60-Minute Fresh Meat Policy & Reverse Pickup:</strong> All return and exchange requests must be initiated within 60 minutes of delivery. Under FSSAI compliance, returned meat is automatically logged to <strong>Damaged/Waste Inventory</strong> and never restocked to fresh batches.
+        </div>
       </div>
 
       {loading ? (
@@ -3952,56 +4014,129 @@ function ReturnsTab() {
           No pending return or exchange tickets.
         </div>
       ) : (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {requests.map(r => (
-            <div key={r.requestId || r.id} style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "18px 20px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
-                <div>
-                  <div style={{ fontWeight: 800, color: "#171410" }}>#{r.requestId || r.id} — {r.customer}</div>
-                  <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "2px" }}>Order: #{r.orderId} · {r.condition}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+          {requests.map(r => {
+            const reqId = r.requestId || r.id;
+            return (
+              <div key={reqId} style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "18px 20px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+                  <div>
+                    <div style={{ fontWeight: 800, color: "#171410", fontSize: "1rem" }}>#{reqId} — {r.customer}</div>
+                    <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "2px" }}>Order: #{r.orderId} · Phone: {r.phone || "—"}</div>
+                  </div>
+                  <Badge
+                    label={r.status}
+                    color={
+                      r.status === "Completed" ? "#059669" :
+                      r.status === "Pickup Assigned" || r.status === "Approved" ? "#0284c7" :
+                      r.status === "Rejected" ? "#941717" : "#d97706"
+                    }
+                  />
                 </div>
-                <Badge label={r.status} color={r.status === "Approved" || r.status === "Exchange Dispatched" ? "#059669" : r.status === "Rejected" ? "#941717" : "#d97706"} />
+
+                <div style={{ color: "#423b32", fontSize: "0.875rem", marginBottom: "4px" }}>
+                  <strong>Items:</strong> {r.items}
+                </div>
+                <div style={{ color: "#73695b", fontSize: "0.8rem", marginBottom: "12px" }}>
+                  <strong>Reason:</strong> {r.reason}
+                </div>
+
+                {/* 4-Digit Handover OTP Badge */}
+                {r.returnOtp && (
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: "8px", background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "8px", padding: "6px 12px", marginBottom: "12px", fontSize: "0.825rem", color: "#0f172a" }}>
+                    <FontAwesomeIcon icon={faKey} style={{ color: "#0284c7" }} />
+                    <span>Customer Handover OTP: <strong style={{ color: "#941717", letterSpacing: "1.5px", fontSize: "0.95rem" }}>{r.returnOtp}</strong></span>
+                  </div>
+                )}
+
+                {/* Assigned Rider Info */}
+                {r.rider && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "6px 12px", marginBottom: "12px", fontSize: "0.825rem", color: "#166534" }}>
+                    <FontAwesomeIcon icon={faMotorcycle} style={{ color: "#16a34a" }} />
+                    <span>Pickup Partner: <strong>{r.rider.name}</strong> ({r.rider.phone || r.rider.vehicleNumber || "Insulated Partner"})</span>
+                  </div>
+                )}
+
+                {/* Completed info banner */}
+                {r.status === "Completed" && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "8px", padding: "8px 12px", fontSize: "0.825rem", color: "#065f46" }}>
+                    <FontAwesomeIcon icon={faTrashCan} style={{ color: "#059669" }} />
+                    <span>Returned meat safely routed to <strong>Waste Inventory</strong> · Customer TeFFe Wallet Refunded ₹{r.refundAmount || 0}</span>
+                  </div>
+                )}
+
+                {/* Action Row for Pending Review */}
+                {r.status === "Pending Review" && (
+                  <div style={{ display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" }}>
+                    <button
+                      onClick={() => updateStatus(reqId, "Approved")}
+                      style={{ background: "#059669", border: "none", borderRadius: "8px", padding: "8px 18px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      <FontAwesomeIcon icon={faCheck} />
+                      Approve Return
+                    </button>
+                    <button
+                      onClick={() => updateStatus(reqId, "Rejected")}
+                      style={{ background: "#fdf2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "8px 18px", color: "#941717", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                    >
+                      <FontAwesomeIcon icon={faXmark} />
+                      Reject
+                    </button>
+                  </div>
+                )}
+
+                {/* Action Row for Approved / Pickup Assigned: Assign Rider or Verify OTP */}
+                {(r.status === "Approved" || r.status === "Pickup Assigned") && (
+                  <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                      <select
+                        value={selectedRiderMap[reqId] || ""}
+                        onChange={(e) => setSelectedRiderMap(prev => ({ ...prev, [reqId]: e.target.value }))}
+                        style={{ border: "1px solid #cbd5e1", borderRadius: "8px", padding: "7px 12px", fontSize: "0.825rem", background: "#fff", minWidth: "220px", color: "#334155" }}
+                      >
+                        <option value="">-- Select Rider for Pickup --</option>
+                        {riders.map(rd => (
+                          <option key={rd._id || rd.id} value={rd._id || rd.id}>
+                            {rd.name} ({rd.phone || rd.riderStatus || "Available"})
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => assignRider(reqId)}
+                        style={{ background: "#0284c7", border: "none", borderRadius: "8px", padding: "8px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                      >
+                        <FontAwesomeIcon icon={faMotorcycle} />
+                        Assign Pickup Partner
+                      </button>
+                    </div>
+
+                    {/* Verify 4-digit OTP handover box */}
+                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px dashed #e2e8f0" }}>
+                      <input
+                        type="text"
+                        maxLength={4}
+                        placeholder="Enter 4-digit OTP"
+                        value={otpInputMap[reqId] || ""}
+                        onChange={(e) => setOtpInputMap(prev => ({ ...prev, [reqId]: e.target.value }))}
+                        style={{ border: "1px solid #cbd5e1", borderRadius: "8px", padding: "7px 12px", fontSize: "0.825rem", width: "160px", letterSpacing: "1px", fontWeight: 700, textAlign: "center" }}
+                      />
+                      <button
+                        disabled={verifyingId === reqId}
+                        onClick={() => verifyOtpAndComplete(reqId)}
+                        style={{ background: "#059669", border: "none", borderRadius: "8px", padding: "8px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: verifyingId === reqId ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                      >
+                        <FontAwesomeIcon icon={faCheck} />
+                        {verifyingId === reqId ? "Verifying..." : "Verify OTP & Complete Pickup"}
+                      </button>
+                      <span style={{ fontSize: "0.75rem", color: "#64748b" }}>
+                        (Automatically logs meat to Waste Stock & credits Customer Wallet)
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div style={{ color: "#423b32", fontSize: "0.875rem", marginBottom: "4px" }}><strong>{r.items}</strong></div>
-              <div style={{ color: "#73695b", fontSize: "0.8rem", marginBottom: "14px" }}>Reason: {r.reason}</div>
-              {r.status === "Pending Review" && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    onClick={() => updateStatus(r.requestId || r.id, "Approved")}
-                    style={{ background: "#059669", border: "none", borderRadius: "8px", padding: "7px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Approve Exchange
-                  </button>
-                  <button
-                    onClick={() => updateStatus(r.requestId || r.id, "Rejected")}
-                    style={{ background: "#fdf2f2", border: "1px solid #fecaca", borderRadius: "8px", padding: "7px 16px", color: "#941717", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Reject
-                  </button>
-                </div>
-              )}
-              {r.status === "Approved" && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    onClick={() => updateStatus(r.requestId || r.id, "Exchange Dispatched")}
-                    style={{ background: "#0284c7", border: "none", borderRadius: "8px", padding: "7px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Mark Dispatched
-                  </button>
-                </div>
-              )}
-              {r.status === "Exchange Dispatched" && (
-                <div style={{ display: "flex", gap: "8px" }}>
-                  <button
-                    onClick={() => updateStatus(r.requestId || r.id, "Delivered")}
-                    style={{ background: "#059669", border: "none", borderRadius: "8px", padding: "7px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer" }}
-                  >
-                    Mark Delivered
-                  </button>
-                </div>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

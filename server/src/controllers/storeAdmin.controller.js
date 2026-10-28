@@ -34,6 +34,8 @@ const {
 const {
   getStoreReturnRequests,
   updateReturnStatus: updateReturnStatusFS,
+  assignRiderToReturn: assignRiderToReturnFS,
+  verifyReturnOtpAndComplete: verifyReturnOtpAndCompleteFS,
 } = require('../services/firestore/return.firestore.service');
 
 const {
@@ -549,6 +551,52 @@ const updateReturnStatus = async (req, res, next) => {
 };
 
 /**
+ * PATCH /api/store-admin/returns/:id/assign-rider
+ * Assign rider for reverse pickup
+ */
+const assignRiderToReturnRequest = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { riderId } = req.body;
+
+    const returnReq = await assignRiderToReturnFS({
+      requestId: id,
+      riderId,
+      adminUser: req.user,
+    });
+
+    res.status(200).json({ success: true, returnRequest: returnReq });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/store-admin/returns/:id/verify-otp
+ * Verify 4-digit return OTP on package handover (credits customer wallet & logs to waste inventory)
+ */
+const verifyReturnOtp = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { otp } = req.body;
+
+    const returnReq = await verifyReturnOtpAndCompleteFS({
+      requestId: id,
+      returnOtp: otp,
+      actorUser: req.user,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'Return pickup verified, meat added to waste inventory and customer refunded',
+      returnRequest: returnReq,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /api/store-admin/riders
  * Get riders for this store
  */
@@ -768,6 +816,8 @@ module.exports = {
   updateDeliverySlot,
   getReturnRequests,
   updateReturnStatus,
+  assignRiderToReturnRequest,
+  verifyReturnOtp,
   getRiders,
   assignRiderToOrder,
   getStoreStatus,
