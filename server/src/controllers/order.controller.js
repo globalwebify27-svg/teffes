@@ -18,6 +18,9 @@ const {
 const {
   getStoreInventory,
   calculateInventoryStatus,
+  normalizeItemName,
+  matchCartItemToInventory,
+  getItemRequiredAmount,
 } = require('../services/firestore/inventory.firestore.service');
 const {
   getUserOrders: getUserOrdersFS,
@@ -26,7 +29,6 @@ const {
 const notificationService = require('../services/notificationService');
 const { emitOrderCreated } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
-const { normalizeItemName, matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
 
 const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');

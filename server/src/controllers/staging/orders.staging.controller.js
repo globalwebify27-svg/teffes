@@ -24,41 +24,11 @@ const {
 } = require('../../services/firestore/wallet.firestore.service');
 const { emitOrderCreated, emitOrderStatusUpdate } = require('../../socket');
 
+const orderCtrl = require('../order.controller');
+
 // ─── Orders ─────────────────────────────────────────────────────────────────
 const createOrder = async (req, res, next) => {
-  try {
-    const userId = req.user._id || req.user.id;
-    const orderData = {
-      ...req.body,
-      customer: {
-        ...(req.body.customer || {}),
-        userId,
-        name: req.body.customer?.name || req.user.name || 'Valued Customer',
-        phone: req.body.customer?.phone || req.user.phone || '',
-        email: req.body.customer?.email || req.user.email || '',
-      },
-    };
-
-    const newOrder = await createOrderTransactional(orderData);
-    const resolvedOrder = newOrder.order || newOrder;
-
-    try {
-      emitOrderCreated(resolvedOrder);
-    } catch (sockErr) {
-      console.warn('[Orders] Socket emitOrderCreated error:', sockErr.message);
-    }
-
-    return res.status(201).json({
-      success: true,
-      message: 'Order created successfully',
-      order: resolvedOrder,
-    });
-  } catch (err) {
-    return res.status(400).json({
-      success: false,
-      message: err.message,
-    });
-  }
+  return orderCtrl.createOrder(req, res, next);
 };
 
 const getOrderById = async (req, res, next) => {
