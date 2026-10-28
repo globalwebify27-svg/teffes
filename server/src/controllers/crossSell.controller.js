@@ -1,9 +1,21 @@
-const CrossSellItem = require('../models/CrossSellItem');
+/**
+ * Cross Sell Controller (Pure Cloud Firestore Backend)
+ * 100% Zero MongoDB dependency - Fully migrated to Google Cloud Firestore
+ */
+
+const {
+  getPublicCrossSellItems: getPublicCrossSellItemsFS,
+  getAdminCrossSellItems: getAdminCrossSellItemsFS,
+  createCrossSellItem: createCrossSellItemFS,
+  updateCrossSellItem: updateCrossSellItemFS,
+  deleteCrossSellItem: deleteCrossSellItemFS,
+} = require('../services/firestore/crossSell.firestore.service');
 
 // GET /api/cross-sell (Public for Cart in Web & Mobile App)
 const getPublicCrossSellItems = async (req, res, next) => {
   try {
-    const items = await CrossSellItem.find({ isActive: true, inStock: true }).sort({ displayOrder: 1, createdAt: -1 });
+    const storeId = req.query.storeId || req.user?.storeId || 'all';
+    const items = await getPublicCrossSellItemsFS(storeId);
     res.json({ success: true, count: items.length, data: items });
   } catch (error) {
     next(error);
@@ -13,7 +25,7 @@ const getPublicCrossSellItems = async (req, res, next) => {
 // GET /api/store-admin/cross-sell (Store Admin)
 const getAdminCrossSellItems = async (req, res, next) => {
   try {
-    const items = await CrossSellItem.find().sort({ displayOrder: 1, createdAt: -1 });
+    const items = await getAdminCrossSellItemsFS();
     res.json({ success: true, count: items.length, data: items });
   } catch (error) {
     next(error);
@@ -23,14 +35,14 @@ const getAdminCrossSellItems = async (req, res, next) => {
 // POST /api/store-admin/cross-sell
 const createCrossSellItem = async (req, res, next) => {
   try {
-    const { name, price, originalPrice, image, weight, category, inStock, isActive } = req.body;
+    const { name, price, originalPrice, image, weight, category, inStock, isActive, displayOrder } = req.body;
     if (!name || price === undefined || !image) {
       return res.status(400).json({ success: false, message: 'Name, price, and image are required.' });
     }
 
     const id = `cross-${name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-')}-${Date.now().toString().slice(-4)}`;
 
-    const newItem = await CrossSellItem.create({
+    const newItem = await createCrossSellItemFS({
       id,
       name,
       price: Number(price),
@@ -38,9 +50,9 @@ const createCrossSellItem = async (req, res, next) => {
       image,
       weight: weight || '',
       category: category || 'Essentials',
-      inStock: inStock !== undefined ? inStock : true,
-      isActive: isActive !== undefined ? isActive : true,
-      displayOrder: Number(req.body.displayOrder) || 0,
+      inStock: inStock !== undefined ? Boolean(inStock) : true,
+      isActive: isActive !== undefined ? Boolean(isActive) : true,
+      displayOrder: Number(displayOrder) || 0,
       storeId: req.user?.storeId || 'all',
     });
 
@@ -54,27 +66,8 @@ const createCrossSellItem = async (req, res, next) => {
 const updateCrossSellItem = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, price, originalPrice, image, weight, inStock, isActive, displayOrder } = req.body;
-
-    const query = id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : { id };
-    const item = await CrossSellItem.findOne(query);
-
-    if (!item) {
-      return res.status(404).json({ success: false, message: 'Cross-sell item not found' });
-    }
-
-    if (name !== undefined) item.name = name;
-    if (price !== undefined) item.price = Number(price);
-    if (originalPrice !== undefined) item.originalPrice = Number(originalPrice);
-    if (image !== undefined) item.image = image;
-    if (weight !== undefined) item.weight = weight;
-    if (inStock !== undefined) item.inStock = Boolean(inStock);
-    if (isActive !== undefined) item.isActive = Boolean(isActive);
-    if (displayOrder !== undefined) item.displayOrder = Number(displayOrder);
-
-    await item.save();
-
-    res.json({ success: true, message: 'Cross-sell item updated successfully', data: item });
+    const updated = await updateCrossSellItemFS(id, req.body);
+    res.json({ success: true, message: 'Cross-sell item updated successfully', data: updated });
   } catch (error) {
     next(error);
   }
@@ -84,13 +77,7 @@ const updateCrossSellItem = async (req, res, next) => {
 const deleteCrossSellItem = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const query = id.match(/^[0-9a-fA-F]{24}$/) ? { _id: id } : { id };
-    const item = await CrossSellItem.findOneAndDelete(query);
-
-    if (!item) {
-      return res.status(404).json({ success: false, message: 'Cross-sell item not found' });
-    }
-
+    await deleteCrossSellItemFS(id);
     res.json({ success: true, message: 'Cross-sell item deleted successfully' });
   } catch (error) {
     next(error);

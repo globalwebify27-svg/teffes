@@ -230,8 +230,6 @@ class _LoginScreenState extends State<LoginScreen> {
         smsCode: cleanOtp,
         phone: cleanPhone,
       );
-    } else {
-      success = await auth.verifyOtp(cleanPhone, cleanOtp);
     }
 
     if (!success) {
@@ -584,7 +582,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const Text('Code sent to', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
                           const SizedBox(height: 2),
                           Text(
-                            '+91 ${_phoneController.text.isNotEmpty ? _phoneController.text : "9876543210"}',
+                            '+91 ${_phoneController.text.trim()}',
                             style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800),
                           ),
                         ],

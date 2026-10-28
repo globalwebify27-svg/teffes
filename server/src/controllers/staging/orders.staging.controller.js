@@ -22,6 +22,7 @@ const {
   creditWalletTransactional,
   debitWalletTransactional,
 } = require('../../services/firestore/wallet.firestore.service');
+const { emitOrderCreated, emitOrderStatusUpdate } = require('../../socket');
 
 // ─── Orders ─────────────────────────────────────────────────────────────────
 const createOrder = async (req, res, next) => {
@@ -40,6 +41,13 @@ const createOrder = async (req, res, next) => {
 
     const newOrder = await createOrderTransactional(orderData);
     const resolvedOrder = newOrder.order || newOrder;
+
+    try {
+      emitOrderCreated(resolvedOrder);
+    } catch (sockErr) {
+      console.warn('[Orders] Socket emitOrderCreated error:', sockErr.message);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Order created successfully',
@@ -89,15 +97,15 @@ const getMyOrders = async (req, res, next) => {
 
 const cancelOrder = async (req, res, next) => {
   try {
-    const userId = req.user._id || req.user.id;
-    const userRole = req.user.role || 'customer';
-    const { reason } = req.body;
+    const userId = req.user ? (req.user._id || req.user.id) : null;
+    const userRole = req.user ? (req.user.role || 'customer') : 'customer';
+    const userPhone = req.user ? (req.user.phone || null) : null;
+    const { reason } = req.body || {};
 
     const cancelled = await cancelOrderTransactional(
       req.params.orderId,
       reason || 'Customer requested cancellation',
-      userId,
-      userRole
+      { id: userId, role: userRole, phone: userPhone }
     );
 
     try {

@@ -24,18 +24,19 @@ const { getAuthInstance } = require('../../config/firebase');
 
 /**
  * POST /api/staging/auth/firebase-login
- * Body: { token, name, email }
+ * Body: { token, idToken, name, email, phone }
  */
 const firebaseLogin = async (req, res, next) => {
   try {
-    const { token, name, email } = req.body;
+    const token = req.body.token || req.body.idToken;
+    const { name, email, phone: bodyPhone } = req.body;
     if (!token) {
       return res.status(400).json({ success: false, message: 'Firebase token is required' });
     }
 
     const auth = getAuthInstance();
     const decodedToken = await auth.verifyIdToken(token);
-    const phone = decodedToken.phone_number || '';
+    const phone = decodedToken.phone_number || bodyPhone || '';
 
     const user = await findOrCreateFirebaseCustomer({
       firebaseUid: decodedToken.uid,
@@ -58,7 +59,7 @@ const firebaseLogin = async (req, res, next) => {
         name: user.name,
         email: user.email,
         role: user.role,
-        isVerified: user.isVerified,
+        isVerified: user.isVerified !== false,
       },
     });
   } catch (err) {

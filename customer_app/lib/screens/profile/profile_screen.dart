@@ -855,7 +855,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            auth.user?.phone ?? '+91 98765 43210',
+                            auth.user?.phone ?? '',
                             style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                           ),
                           if (auth.user?.email != null)

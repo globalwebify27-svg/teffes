@@ -1,5 +1,11 @@
+/**
+ * Auth Middleware (Pure Cloud Firestore Backend)
+ * 100% Zero MongoDB dependency - Fully migrated to Google Cloud Firestore
+ */
+
 const { verifyAccessToken } = require('../utils/jwt');
-const User = require('../models/User');
+const { getUserById, getUserByEmail } = require('../services/firestore/user.firestore.service');
+const { queryDocs, createDoc } = require('../lib/firestore');
 
 /**
  * Middleware: Verify JWT access token from Authorization header.
@@ -16,50 +22,69 @@ const protect = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
 
     if (token.startsWith('demo-superadmin-token') || token === 'demo-superadmin-token-001') {
-      let superadmin = await User.findOne({ role: 'superadmin' });
+      const superadmins = await queryDocs('users', (ref) => ref.where('role', '==', 'superadmin').limit(1));
+      let superadmin = superadmins[0] || null;
       if (!superadmin) {
-        superadmin = await User.findOne({ email: 'superadmin@teffes.com' });
+        superadmin = await getUserByEmail('superadmin@teffes.com');
       }
       if (!superadmin) {
-        superadmin = await User.create({
+        const id = 'superadmin_default';
+        superadmin = {
+          id,
+          _id: id,
           name: 'Teffes Super Admin',
           email: 'superadmin@teffes.com',
           phone: '+919876543214',
           role: 'superadmin',
           isVerified: true,
-        });
+          isActive: true,
+        };
+        await createDoc('users', id, superadmin);
       }
       req.user = superadmin;
       return next();
     }
 
     if (token.startsWith('demo-storeadmin-token') || token === 'demo-storeadmin-token-001') {
-      let storeadmin = await User.findOne({ role: 'storeadmin' });
+      const storeadmins = await queryDocs('users', (ref) => ref.where('role', '==', 'storeadmin').limit(1));
+      let storeadmin = storeadmins[0] || null;
       if (!storeadmin) {
-        storeadmin = await User.findOne({ email: 'storeadmin@teffes.com' });
+        storeadmin = await getUserByEmail('storeadmin@teffes.com');
       }
       if (!storeadmin) {
-        storeadmin = await User.create({
+        const id = 'storeadmin_default';
+        storeadmin = {
+          id,
+          _id: id,
           name: 'Ranchi Store Admin',
           email: 'storeadmin@teffes.com',
           phone: '+919876543215',
           role: 'storeadmin',
+          storeId: 'S001',
           isVerified: true,
-        });
+          isActive: true,
+        };
+        await createDoc('users', id, storeadmin);
       }
       req.user = storeadmin;
       return next();
     }
 
     if (token.startsWith('teffes-jwt-token-') || token === 'guest-token') {
-      let customer = await User.findOne({ role: 'customer' });
+      const customers = await queryDocs('users', (ref) => ref.where('role', '==', 'customer').limit(1));
+      let customer = customers[0] || null;
       if (!customer) {
-        customer = await User.create({
+        const id = 'customer_guest_default';
+        customer = {
+          id,
+          _id: id,
           name: 'Valued Customer',
           phone: '+919999999999',
           role: 'customer',
           isVerified: true,
-        });
+          isActive: true,
+        };
+        await createDoc('users', id, customer);
       }
       req.user = customer;
       return next();
@@ -67,12 +92,15 @@ const protect = async (req, res, next) => {
 
     const decoded = verifyAccessToken(token);
 
-    const user = await User.findById(decoded.id).select('-password -refreshToken');
+    let user = await getUserById(decoded.id);
+    if (!user && decoded.email) {
+      user = await getUserByEmail(decoded.email);
+    }
     if (!user) {
       return res.status(401).json({ success: false, message: 'User not found' });
     }
 
-    if (!user.isActive) {
+    if (user.isActive === false) {
       return res.status(403).json({ success: false, message: 'Account is deactivated' });
     }
 
@@ -91,7 +119,6 @@ const protect = async (req, res, next) => {
 
 /**
  * Middleware factory: Restrict access to specific roles.
- * @param  {...string} roles - Allowed roles ('customer', 'rider', 'admin')
  */
 const authorize = (...roles) => {
   return (req, res, next) => {
@@ -112,7 +139,6 @@ const authorize = (...roles) => {
 
 /**
  * Middleware: Optional JWT verification.
- * Attaches `req.user` if token is valid, but does not block request if missing or expired.
  */
 const optionalProtect = async (req, res, next) => {
   try {
@@ -127,22 +153,9 @@ const optionalProtect = async (req, res, next) => {
       return next();
     }
 
-    if (token.startsWith('demo-superadmin-token') || token === 'demo-superadmin-token-001') {
-      req.user = await User.findOne({ role: 'superadmin' });
-      return next();
-    }
-    if (token.startsWith('demo-storeadmin-token') || token === 'demo-storeadmin-token-001') {
-      req.user = await User.findOne({ role: 'storeadmin' });
-      return next();
-    }
-    if (token.startsWith('teffes-jwt-token-') || token === 'guest-token') {
-      req.user = await User.findOne({ role: 'customer' });
-      return next();
-    }
-
     const decoded = verifyAccessToken(token);
     if (decoded && decoded.id) {
-      req.user = await User.findById(decoded.id).select('-password -refreshToken');
+      req.user = await getUserById(decoded.id);
     }
     next();
   } catch (_) {

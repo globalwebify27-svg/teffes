@@ -19,7 +19,7 @@ class AuthProvider with ChangeNotifier {
 
   UserModel? get user => _user;
   String? get token => _token;
-  bool get isAuthenticated => _token != null && _token!.isNotEmpty;
+  bool get isAuthenticated => _token != null && _token!.isNotEmpty && _user != null;
   bool get isLoading => _isLoading;
   String? get error => _error;
   List<OrderModel> get myOrders => _myOrders;
@@ -34,10 +34,17 @@ class AuthProvider with ChangeNotifier {
   Future<void> initAuth() async {
     final prefs = await SharedPreferences.getInstance();
     _token = prefs.getString('auth_token');
-    if (_token != null) {
-      await fetchCurrentUser();
-      await fetchMyOrders();
-      await FcmService.instance.syncUserSession();
+    if (_token != null && _token!.isNotEmpty) {
+      final success = await fetchCurrentUser();
+      if (!success || _user == null) {
+        // Invalid or stale token restored - purge immediately to avoid phantom logins
+        _token = null;
+        _user = null;
+        await prefs.remove('auth_token');
+      } else {
+        await fetchMyOrders();
+        await FcmService.instance.syncUserSession();
+      }
     }
     notifyListeners();
   }
@@ -88,7 +95,7 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
-    // Ensure +91 prefix for Indian mobile numbers
+    // Ensure clean 10-digit number and +91 prefix for Indian mobile numbers
     final digitsOnly = phone.replaceAll(RegExp(r'\D'), '');
     final clean10 = digitsOnly.length > 10 ? digitsOnly.substring(digitsOnly.length - 10) : digitsOnly;
     final formattedPhone = '+91$clean10';
@@ -108,6 +115,7 @@ class AuthProvider with ChangeNotifier {
           }
         },
         verificationFailed: (FirebaseAuthException e) {
+          debugPrint('[AuthProvider] Firebase phone verificationFailed: ${e.code} - ${e.message}');
           _isLoading = false;
           String friendlyMsg = 'Phone verification failed.';
           if (e.code == 'invalid-phone-number') {
@@ -115,8 +123,8 @@ class AuthProvider with ChangeNotifier {
           } else if (e.code == 'too-many-requests') {
             friendlyMsg = 'Too many attempts. Please try again later.';
           } else if (e.code == 'quota-exceeded') {
-            friendlyMsg = 'SMS quota reached. Please use the testing number.';
-          } else if (e.message != null) {
+            friendlyMsg = 'SMS quota reached. Please try again later.';
+          } else if (e.message != null && e.message!.isNotEmpty) {
             friendlyMsg = e.message!;
           }
           _error = friendlyMsg;
@@ -133,6 +141,7 @@ class AuthProvider with ChangeNotifier {
         },
       );
     } catch (e) {
+      debugPrint('[AuthProvider] verifyPhoneNumber threw exception: $e');
       _isLoading = false;
       _error = 'Failed to send verification SMS: $e';
       notifyListeners();
@@ -151,14 +160,18 @@ class AuthProvider with ChangeNotifier {
     _error = null;
     notifyListeners();
 
+    final cleanPhone = phone?.replaceAll(RegExp(r'\D'), '') ?? '';
+    final clean10 = cleanPhone.length > 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
     try {
       final credential = PhoneAuthProvider.credential(
         verificationId: verificationId,
         smsCode: smsCode.trim(),
       );
 
-      return await _signInWithFirebaseCredential(credential, phone: phone, name: name);
+      return await _signInWithFirebaseCredential(credential, phone: clean10, name: name);
     } on FirebaseAuthException catch (e) {
+      debugPrint('[AuthProvider] FirebaseAuthException: [${e.code}] ${e.message}');
       _isLoading = false;
       if (e.code == 'invalid-verification-code' || e.code == 'invalid-otp') {
         _error = 'Provided OTP is wrong. Please enter the correct code.';
@@ -172,6 +185,7 @@ class AuthProvider with ChangeNotifier {
       notifyListeners();
       return false;
     } catch (e) {
+      debugPrint('[AuthProvider] Error verifying Firebase OTP: $e');
       _isLoading = false;
       _error = 'Provided OTP is wrong. Please enter the correct code.';
       notifyListeners();
@@ -198,58 +212,38 @@ class AuthProvider with ChangeNotifier {
       }
 
       // Send Firebase ID Token to TeFFe backend to create/login customer & issue JWT
-      try {
-        final res = await _api.post(ApiEndpoints.firebaseLogin, data: {
-          'idToken': idToken,
-          if (phone != null) 'phone': phone,
-          if (name != null) 'name': name,
-        });
+      final res = await _api.post(ApiEndpoints.firebaseLogin, data: {
+        'idToken': idToken,
+        if (phone != null) 'phone': phone,
+        if (name != null) 'name': name,
+      });
 
-        if (res.data['success'] == true) {
-          _token = (res.data['accessToken'] ?? res.data['token'])?.toString();
-          if (_token != null && _token!.isNotEmpty) {
-            final prefs = await SharedPreferences.getInstance();
-            await prefs.setString('auth_token', _token!);
-          }
-
-          if (res.data['user'] != null) {
-            _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
-          } else {
-            _user = UserModel(
-              id: 'cust-${phone ?? firebaseUser.phoneNumber ?? "user"}',
-              name: name ?? 'Valued Customer',
-              phone: phone ?? firebaseUser.phoneNumber ?? '',
-              role: 'customer',
-            );
-          }
-
-          await fetchMyOrders();
-          await FcmService.instance.syncUserSession();
-          _isLoading = false;
-          notifyListeners();
-          return true;
+      if (res.data['success'] == true) {
+        _token = (res.data['accessToken'] ?? res.data['token'])?.toString();
+        if (_token != null && _token!.isNotEmpty) {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('auth_token', _token!);
         }
-      } catch (backendError) {
-        debugPrint('[AuthProvider] Backend API note: $backendError. Using verified session.');
+
+        if (res.data['user'] != null) {
+          _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
+        } else {
+          _user = UserModel(
+            id: 'cust-${phone ?? firebaseUser.phoneNumber ?? "user"}',
+            name: name ?? 'Valued Customer',
+            phone: phone ?? firebaseUser.phoneNumber ?? '',
+            role: 'customer',
+          );
+        }
+
+        await fetchMyOrders();
+        await FcmService.instance.syncUserSession();
+        _isLoading = false;
+        notifyListeners();
+        return true;
       }
 
-      // Resilient Fallback: Phone number has been verified by Firebase!
-      // If backend network or remote endpoint isn't accessible, establish session seamlessly
-      _token = 'teffes-verified-${firebaseUser.uid}';
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('auth_token', _token!);
-
-      _user = UserModel(
-        id: 'cust-${phone ?? firebaseUser.phoneNumber ?? "user"}',
-        name: name ?? 'Valued Customer',
-        phone: phone ?? firebaseUser.phoneNumber ?? '',
-        role: 'customer',
-      );
-
-      await FcmService.instance.syncUserSession();
-      _isLoading = false;
-      notifyListeners();
-      return true;
+      throw Exception('Failed to authenticate with TeFFe backend');
     } on FirebaseAuthException catch (e) {
       debugPrint('[AuthProvider] FirebaseAuthException: [${e.code}] ${e.message}');
       _isLoading = false;
@@ -273,79 +267,23 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
-  // ─── LEGACY / FALLBACK DIRECT OTP FLOW ────────────────────────────────────
-
-  Future<bool> sendOtp(String phone) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final res = await _api.post(ApiEndpoints.sendOtp, data: {'phone': phone});
-      _isLoading = false;
-      notifyListeners();
-      return res.data['success'] == true;
-    } catch (e) {
-      _error = 'Failed to send verification code. Please check your phone number.';
-      _isLoading = false;
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> verifyOtp(String phone, String otp) async {
-    _isLoading = true;
-    _error = null;
-    notifyListeners();
-
-    try {
-      final res = await _api.post(ApiEndpoints.verifyOtp, data: {
-        'phone': phone,
-        'otp': otp,
-      });
-
-      if (res.data['success'] == true) {
-        _token = (res.data['accessToken'] ?? res.data['token'])?.toString();
-        if (_token != null && _token!.isNotEmpty) {
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString('auth_token', _token!);
-        }
-
-        if (res.data['user'] != null) {
-          _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
-        } else {
-          _user = UserModel(
-            id: 'cust-$phone',
-            name: 'Valued Customer',
-            phone: phone,
-            role: 'customer',
-          );
-        }
-        await fetchMyOrders();
-        await FcmService.instance.syncUserSession();
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-    } catch (e) {
-      debugPrint('Error verifying OTP with backend: $e');
-    }
-
-    _isLoading = false;
-    notifyListeners();
-    return false;
-  }
-
   // ─── PROFILE & WALLET METHODS ─────────────────────────────────────────────
 
-  Future<void> fetchCurrentUser() async {
+  Future<bool> fetchCurrentUser() async {
     try {
       final res = await _api.get(ApiEndpoints.getMe);
       if (res.data['success'] == true && res.data['user'] != null) {
         _user = UserModel.fromJson(res.data['user'] as Map<String, dynamic>);
         notifyListeners();
+        return true;
+      } else {
+        _user = null;
+        return false;
       }
-    } catch (_) {}
+    } catch (_) {
+      _user = null;
+      return false;
+    }
   }
 
   Future<bool> updateProfileDetails({

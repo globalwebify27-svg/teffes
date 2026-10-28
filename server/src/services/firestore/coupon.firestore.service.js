@@ -227,6 +227,19 @@ const deleteCoupon = async (code) => {
   return true;
 };
 
+const getAllCoupons = async (options = {}) => {
+  const coupons = await queryDocs(COLLECTION);
+  return coupons
+    .filter(
+      (c) =>
+        options.includeTest ||
+        (!c.isTest &&
+          !String(c.code || '').startsWith('E2E_') &&
+          !String(c.code || '').startsWith('TEST_'))
+    )
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+};
+
 module.exports = {
   COLLECTION,
   normalizeCode,
@@ -235,9 +248,11 @@ module.exports = {
   calculateDiscount,
   getCouponByCode,
   getActiveCoupons,
+  getAllCoupons,
   getSuperOffer,
   validateCouponEligibility,
   createCoupon,
   updateCoupon,
   deleteCoupon,
 };
+

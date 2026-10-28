@@ -5,22 +5,25 @@ let isConnected = false;
 const connectDB = async () => {
   if (isConnected) return;
 
+  if (!process.env.MONGO_URI) {
+    console.log('ℹ️  MongoDB disabled. TeFFe runs 100% purely on Google Cloud Firestore.');
+    return;
+  }
+
   try {
     const conn = await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 3000,
     });
 
     isConnected = true;
-    console.log(`✅ MongoDB connected: ${conn.connection.host}`);
+    console.log(`✅ MongoDB optional replica connected: ${conn.connection.host}`);
   } catch (error) {
-    console.error(`❌ MongoDB connection failed: ${error.message}`);
-    process.exit(1);
+    console.warn(`⚠️  MongoDB connection skipped (${error.message}). TeFFe operates 100% on Cloud Firestore.`);
   }
 };
 
 mongoose.connection.on('disconnected', () => {
   isConnected = false;
-  console.warn('⚠️  MongoDB disconnected');
 });
 
 module.exports = { connectDB };

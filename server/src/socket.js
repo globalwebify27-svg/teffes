@@ -1,5 +1,5 @@
 const { Server } = require('socket.io');
-const Order = require('./models/Order');
+const { updateDoc } = require('./lib/firestore');
 
 let io = null;
 
@@ -37,6 +37,10 @@ const initSocket = (httpServer) => {
         const room = storeId.startsWith('store:') ? storeId : `store:${storeId}`;
         socket.join(room);
         console.log(`[Socket.IO] Socket ${socket.id} joined store room ${room}`);
+        if (storeId === 'S004' || storeId === 'S002') {
+          socket.join('store:S004');
+          socket.join('store:S002');
+        }
       }
     });
 
@@ -119,16 +123,12 @@ const initSocket = (httpServer) => {
         io.to(room).emit('rider:location:update', locationPayload);
         io.to(room).emit('rider:location_changed', locationPayload);
 
-        // Persist rider coordinates in Order document
-        await Order.findOneAndUpdate(
-          { orderId },
-          {
-            $set: {
-              'rider.lat': Number(finalLat),
-              'rider.lng': Number(finalLng),
-            },
-          }
-        ).catch((err) => console.warn('[Socket.IO] DB location update warn:', err.message));
+        // Persist rider coordinates in Order document in Firestore
+        await updateDoc('orders', orderId, {
+          'rider.lat': Number(finalLat),
+          'rider.lng': Number(finalLng),
+          updatedAt: new Date().toISOString(),
+        }).catch((err) => console.warn('[Socket.IO] Firestore location update warn:', err.message));
       } catch (err) {
         console.error('[Socket.IO] rider location update error:', err);
       }
@@ -197,6 +197,11 @@ const emitOrderCreated = (order) => {
   if (order.storeId) {
     const storeRoom = `store:${order.storeId}`;
     io.to(storeRoom).emit('order:created', payload);
+    if (order.storeId === 'S004') {
+      io.to('store:S002').emit('order:created', payload);
+    } else if (order.storeId === 'S002') {
+      io.to('store:S004').emit('order:created', payload);
+    }
   }
 
   // Super Admin room emission

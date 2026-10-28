@@ -35,7 +35,7 @@ const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
 // ─── Available Stores Filter (Firestore-backed) ─────────────────────────────
 const getAvailableStoresHandler = async (req, res, next) => {
   try {
-    const type = (req.body?.type || req.query?.type || 'delivery').toLowerCase();
+    const type = (req.body?.type || req.body?.fulfillmentType || req.query?.type || req.query?.fulfillmentType || 'delivery').toLowerCase();
     let items = req.body?.items;
     if (!items && req.query?.items) {
       try {

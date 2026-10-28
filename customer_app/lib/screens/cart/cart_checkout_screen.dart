@@ -187,9 +187,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         isAvailable: true,
       ),
       const StoreModel(
-        storeId: 'S002',
+        storeId: 'S004',
         name: "TeFFe's — Doranda Hub",
-        address: 'Doranda Bazar, Near High Court, Ranchi, Jharkhand 834002',
+        address: 'North office pada doranda, Ranchi, Jharkhand 834002',
         city: 'Ranchi',
         phone: '+91 9279682955',
         status: 'Active',
@@ -197,19 +197,6 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         deliveryEnabled: true,
         timings: '08:00 AM - 08:00 PM',
         distance: '1.6 km away',
-        isAvailable: true,
-      ),
-      const StoreModel(
-        storeId: 'S004',
-        name: 'Teffes - Doranda store',
-        address: 'North office pada doranda, Ranchi',
-        city: 'Ranchi',
-        phone: '1234567891',
-        status: 'Active',
-        pickupEnabled: true,
-        deliveryEnabled: true,
-        timings: '08:00 AM - 08:00 PM',
-        distance: '2.4 km away',
         isAvailable: true,
       ),
     ];
@@ -243,6 +230,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       }).toList();
 
       final payload = {
+        'type': _fulfillmentType,
         'fulfillmentType': _fulfillmentType,
         'lat': lat,
         'lng': lng,
@@ -273,18 +261,31 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               suggestedId = (res.data['suggestedStore']['storeId'] ?? res.data['suggestedStore']['id'])?.toString();
             }
 
-            final currentSel = _stores.where((s) => s.storeId == _selectedStoreId).isNotEmpty
-                ? _stores.firstWhere((s) => s.storeId == _selectedStoreId)
-                : null;
+            final firstAvail = _stores.where((s) => s.isAvailable).isNotEmpty
+                ? _stores.firstWhere((s) => s.isAvailable)
+                : _stores.first;
 
-            if (currentSel == null || !currentSel.isAvailable) {
+            final isPickup = _fulfillmentType == 'pickup';
+
+            if (!isPickup) {
+              // In Home Delivery: strictly auto-select nearest suggested store from server
               if (suggestedId != null && _stores.any((s) => s.storeId == suggestedId)) {
                 _selectedStoreId = suggestedId;
               } else {
-                final firstAvail = _stores.where((s) => s.isAvailable).isNotEmpty
-                    ? _stores.firstWhere((s) => s.isAvailable)
-                    : _stores.first;
                 _selectedStoreId = firstAvail.storeId;
+              }
+            } else {
+              // In Store Pickup: keep user selection if valid and available; otherwise default to suggested
+              final currentSel = _stores.where((s) => s.storeId == _selectedStoreId).isNotEmpty
+                  ? _stores.firstWhere((s) => s.storeId == _selectedStoreId)
+                  : null;
+
+              if (currentSel == null || !currentSel.isAvailable) {
+                if (suggestedId != null && _stores.any((s) => s.storeId == suggestedId)) {
+                  _selectedStoreId = suggestedId;
+                } else {
+                  _selectedStoreId = firstAvail.storeId;
+                }
               }
             }
           });
@@ -480,8 +481,18 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
             );
           }
           return;
+        } else if (res.data != null && res.data['success'] == false) {
+          final msg = res.data['message']?.toString() ?? 'Unable to complete order';
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
+            );
+          }
+          return;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Create order post error: $e');
+      }
 
       final createdOrder = OrderModel(
         id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
@@ -1043,8 +1054,18 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
             );
           }
           return;
+        } else if (res.data != null && res.data['success'] == false) {
+          final msg = res.data['message']?.toString() ?? 'Unable to place order';
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
+            );
+          }
+          return;
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Place order post error: $e');
+      }
 
       // Add to AuthProvider live orders list (fallback if offline)
       final createdOrder = OrderModel(

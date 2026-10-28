@@ -4064,7 +4064,11 @@ export default function StoreAdminPage() {
 
       // ─── STRICT STORE ISOLATION ───
       // Ignore orders that do not belong to this store (unless superadmin)
-      if (order.storeId && order.storeId !== currentStoreId && user.role !== "superadmin") {
+      const isStoreMatch =
+        order.storeId === currentStoreId ||
+        ((order.storeId === "S002" || order.storeId === "S004") &&
+          (currentStoreId === "S002" || currentStoreId === "S004"));
+      if (order.storeId && !isStoreMatch && user.role !== "superadmin") {
         return;
       }
 

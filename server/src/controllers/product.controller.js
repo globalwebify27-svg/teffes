@@ -1,6 +1,24 @@
-const mongoose = require('mongoose');
-const Category = require('../models/Category');
-const Product = require('../models/Product');
+/**
+ * Categories and Products Controller (Firestore-backed)
+ * Zero dependency on MongoDB. Full Super Admin CRUD + Public Catalog endpoints.
+ */
+
+const {
+  getAllCategories,
+  getActiveCategories,
+  getCategoryBySlug,
+  createCategory: createCategoryFirestore,
+  updateCategory: updateCategoryFirestore,
+  deleteCategory: deleteCategoryFirestore,
+} = require('../services/firestore/category.firestore.service');
+
+const {
+  getProducts: getProductsFirestore,
+  getProductById: getProductByIdFirestore,
+  createProduct: createProductFirestore,
+  updateProduct: updateProductFirestore,
+  deleteProduct: deleteProductFirestore,
+} = require('../services/firestore/product.firestore.service');
 
 /**
  * GET /api/categories
@@ -8,7 +26,7 @@ const Product = require('../models/Product');
  */
 const getCategories = async (req, res, next) => {
   try {
-    const categories = await Category.find({ isActive: true }).sort({ order: 1 });
+    const categories = await getActiveCategories();
     res.status(200).json({
       success: true,
       count: categories.length,
@@ -36,23 +54,21 @@ const createCategory = async (req, res, next) => {
       slug = slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     }
 
-    const existing = await Category.findOne({ slug });
-    if (existing) {
-      return res.status(400).json({ success: false, message: `Category with slug "${slug}" already exists` });
-    }
-
-    const category = await Category.create({
+    const category = await createCategoryFirestore({
       name: name.trim(),
       slug,
       tagline: tagline || '',
       icon: icon || '🥩',
       image: image || '',
-      order: typeof order === 'number' ? order : 0,
+      order: typeof order === 'number' ? order : Number(order) || 0,
       isActive: typeof isActive === 'boolean' ? isActive : true,
     });
 
     res.status(201).json({ success: true, category });
   } catch (error) {
+    if (error.message && error.message.includes('already exists')) {
+      return res.status(400).json({ success: false, message: error.message });
+    }
     next(error);
   }
 };
@@ -64,15 +80,7 @@ const createCategory = async (req, res, next) => {
 const updateCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const filter = mongoose.Types.ObjectId.isValid(id)
-      ? { $or: [{ slug: id }, { _id: id }] }
-      : { slug: id };
-
-    const category = await Category.findOneAndUpdate(
-      filter,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const category = await updateCategoryFirestore(id, req.body);
     if (!category) {
       return res.status(404).json({ success: false, message: 'Category not found' });
     }
@@ -89,14 +97,7 @@ const updateCategory = async (req, res, next) => {
 const deleteCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const filter = mongoose.Types.ObjectId.isValid(id)
-      ? { $or: [{ slug: id }, { _id: id }] }
-      : { slug: id };
-
-    const category = await Category.findOneAndDelete(filter);
-    if (!category) {
-      return res.status(404).json({ success: false, message: 'Category not found' });
-    }
+    await deleteCategoryFirestore(id);
     res.status(200).json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
     next(error);
@@ -111,51 +112,27 @@ const getProducts = async (req, res, next) => {
   try {
     const { category, search, bestseller, sort, limit = 50, page = 1, all } = req.query;
 
-    const query = {};
-    
+    const filters = {};
     if (all !== 'true') {
-      query.inStock = true;
+      filters.inStock = true;
     }
-
     if (category && category !== 'all') {
-      query.category = category.toLowerCase();
+      filters.category = category.toLowerCase();
     }
-
     if (bestseller === 'true') {
-      query.isBestseller = true;
+      filters.bestseller = true;
     }
-
     if (search && search.trim()) {
-      query.$or = [
-        { name: { $regex: search.trim(), $options: 'i' } },
-        { hindiName: { $regex: search.trim(), $options: 'i' } },
-        { description: { $regex: search.trim(), $options: 'i' } },
-        { category: { $regex: search.trim(), $options: 'i' } },
-      ];
+      filters.search = search.trim();
     }
 
-    let sortOption = {};
-    if (sort === 'price-asc' || sort === 'price_asc') {
-      sortOption = { price: 1 };
-    } else if (sort === 'price-desc' || sort === 'price_desc') {
-      sortOption = { price: -1 };
-    } else if (sort === 'name-asc' || sort === 'name_asc') {
-      sortOption = { name: 1 };
-    } else if (sort === 'name-desc' || sort === 'name_desc') {
-      sortOption = { name: -1 };
-    } else if (sort === 'rating') {
-      sortOption = { rating: -1 };
-    } else {
-      sortOption = { isBestseller: -1, createdAt: -1 };
-    }
+    const options = {
+      sort: sort || 'bestseller',
+      limit: parseInt(limit, 10) || 50,
+      page: parseInt(page, 10) || 1,
+    };
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    const products = await Product.find(query)
-      .sort(sortOption)
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const total = await Product.countDocuments(query);
+    const products = await getProductsFirestore(filters, options);
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -163,7 +140,7 @@ const getProducts = async (req, res, next) => {
     res.status(200).json({
       success: true,
       count: products.length,
-      total,
+      total: products.length,
       products,
     });
   } catch (error) {
@@ -173,24 +150,25 @@ const getProducts = async (req, res, next) => {
 
 /**
  * GET /api/products/:id
- * Retrieve product by ID or slug with related products
+ * Retrieve product by ID with related products
  */
 const getProductById = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const product = await Product.findOne({
-      $or: [{ id: id }, { _id: id.match(/^[0-9a-fA-F]{24}$/) ? id : null }],
-    });
+    const product = await getProductByIdFirestore(id);
 
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
 
     // Get up to 4 related products in same category
-    const related = await Product.find({
-      category: product.category,
-      id: { $ne: product.id },
-    }).limit(4);
+    let related = [];
+    try {
+      if (product.category) {
+        const catProducts = await getProductsFirestore({ category: product.category }, { limit: 5 });
+        related = catProducts.filter((p) => p.id !== product.id && p._id !== product._id).slice(0, 4);
+      }
+    } catch (_) {}
 
     res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.set('Pragma', 'no-cache');
@@ -224,7 +202,7 @@ const createProduct = async (req, res, next) => {
     data.price = Number(data.price);
 
     if (Array.isArray(data.images)) {
-      data.images = data.images.map(s => String(s).trim()).filter(Boolean);
+      data.images = data.images.map((s) => String(s).trim()).filter(Boolean);
       if (!data.image && data.images.length > 0) {
         data.image = data.images[0];
       }
@@ -235,7 +213,7 @@ const createProduct = async (req, res, next) => {
     if (typeof data.videoURLs === 'string') {
       data.videoURLs = data.videoURLs.trim() ? [data.videoURLs.trim()] : [];
     } else if (Array.isArray(data.videoURLs)) {
-      data.videoURLs = data.videoURLs.map(s => String(s).trim()).filter(Boolean);
+      data.videoURLs = data.videoURLs.map((s) => String(s).trim()).filter(Boolean);
     }
 
     if (!data.image || !data.image.trim()) {
@@ -253,7 +231,7 @@ const createProduct = async (req, res, next) => {
     }
 
     if (!data.categoryLabel && data.category) {
-      const catObj = await Category.findOne({ slug: data.category });
+      const catObj = await getCategoryBySlug(data.category);
       data.categoryLabel = catObj ? catObj.name : data.category.charAt(0).toUpperCase() + data.category.slice(1);
     }
     if (!data.netWeight || !data.netWeight.trim()) {
@@ -267,9 +245,9 @@ const createProduct = async (req, res, next) => {
       data.seoDescription = data.seoDescription.trim();
     }
     if (typeof data.seoKeywords === 'string') {
-      data.seoKeywords = data.seoKeywords.split(',').map(k => k.trim()).filter(Boolean);
+      data.seoKeywords = data.seoKeywords.split(',').map((k) => k.trim()).filter(Boolean);
     } else if (Array.isArray(data.seoKeywords)) {
-      data.seoKeywords = data.seoKeywords.map(k => String(k).trim()).filter(Boolean);
+      data.seoKeywords = data.seoKeywords.map((k) => String(k).trim()).filter(Boolean);
     }
 
     if (typeof data.isBestseller !== 'undefined') {
@@ -279,11 +257,11 @@ const createProduct = async (req, res, next) => {
       data.isRecommended = data.isRecommended === true || data.isRecommended === 'true';
     }
 
-    const product = await Product.create(data);
+    const product = await createProductFirestore(data);
     res.status(201).json({ success: true, product });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ success: false, message: 'A product with this ID or name already exists' });
+    if (error.message && error.message.includes('already exists')) {
+      return res.status(400).json({ success: false, message: error.message });
     }
     next(error);
   }
@@ -296,11 +274,10 @@ const createProduct = async (req, res, next) => {
 const updateProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const isMongoId = mongoose.Types.ObjectId.isValid(id);
     const updates = { ...req.body };
 
     if (Array.isArray(updates.images)) {
-      updates.images = updates.images.map(s => String(s).trim()).filter(Boolean);
+      updates.images = updates.images.map((s) => String(s).trim()).filter(Boolean);
       if (!updates.image && updates.images.length > 0) {
         updates.image = updates.images[0];
       }
@@ -308,11 +285,11 @@ const updateProduct = async (req, res, next) => {
     if (typeof updates.videoURLs === 'string') {
       updates.videoURLs = updates.videoURLs.trim() ? [updates.videoURLs.trim()] : [];
     } else if (Array.isArray(updates.videoURLs)) {
-      updates.videoURLs = updates.videoURLs.map(s => String(s).trim()).filter(Boolean);
+      updates.videoURLs = updates.videoURLs.map((s) => String(s).trim()).filter(Boolean);
     }
 
     if (updates.category) {
-      const catObj = await Category.findOne({ slug: updates.category });
+      const catObj = await getCategoryBySlug(updates.category);
       updates.categoryLabel = catObj ? catObj.name : updates.category.charAt(0).toUpperCase() + updates.category.slice(1);
     }
     if (typeof updates.price !== 'undefined' && updates.price !== '') {
@@ -329,9 +306,9 @@ const updateProduct = async (req, res, next) => {
       updates.seoDescription = updates.seoDescription.trim();
     }
     if (typeof updates.seoKeywords === 'string') {
-      updates.seoKeywords = updates.seoKeywords.split(',').map(k => k.trim()).filter(Boolean);
+      updates.seoKeywords = updates.seoKeywords.split(',').map((k) => k.trim()).filter(Boolean);
     } else if (Array.isArray(updates.seoKeywords)) {
-      updates.seoKeywords = updates.seoKeywords.map(k => String(k).trim()).filter(Boolean);
+      updates.seoKeywords = updates.seoKeywords.map((k) => String(k).trim()).filter(Boolean);
     }
 
     if (typeof updates.isBestseller !== 'undefined') {
@@ -341,11 +318,7 @@ const updateProduct = async (req, res, next) => {
       updates.isRecommended = updates.isRecommended === true || updates.isRecommended === 'true';
     }
 
-    const product = await Product.findOneAndUpdate(
-      { $or: [{ id }, ...(isMongoId ? [{ _id: id }] : [])] },
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
+    const product = await updateProductFirestore(id, updates);
     if (!product) {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
@@ -365,14 +338,8 @@ const updateProduct = async (req, res, next) => {
 const deleteProduct = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const isMongoId = mongoose.Types.ObjectId.isValid(id);
-    const product = await Product.findOneAndDelete({
-      $or: [{ id }, ...(isMongoId ? [{ _id: id }] : [])],
-    });
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    res.status(200).json({ success: true, message: 'Product deleted' });
+    await deleteProductFirestore(id);
+    res.status(200).json({ success: true, message: 'Product deleted successfully' });
   } catch (error) {
     next(error);
   }

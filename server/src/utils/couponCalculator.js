@@ -1,4 +1,9 @@
-const Order = require('../models/Order');
+/**
+ * Authoritative Coupon Calculator (Pure Cloud Firestore Backend)
+ * 100% Zero MongoDB dependency - Fully migrated to Google Cloud Firestore
+ */
+
+const { getUserOrders } = require('../services/firestore/order.firestore.service');
 
 /**
  * Helper to check if a coupon date has passed
@@ -7,7 +12,6 @@ const isCouponExpired = (validTill) => {
   if (!validTill) return false;
   const parsed = new Date(validTill);
   if (!isNaN(parsed.getTime())) {
-    // Treat date as valid until end of specified day (23:59:59.999)
     const endOfDay = new Date(parsed);
     endOfDay.setHours(23, 59, 59, 999);
     return endOfDay < new Date();
@@ -44,22 +48,16 @@ const calculateDiscount = (coupon, orderAmount) => {
       discount = Math.min(discount, maxCap);
     }
   } else if (coupon.discountType === 'free_delivery') {
-    discount = 40; // Standard express delivery fee
+    discount = 40;
   } else {
-    // Default: fixed amount discount
     discount = value;
   }
 
-  // Never allow discount to exceed the order amount
   return Math.min(Math.max(0, discount), orderAmount);
 };
 
 /**
  * Full backend coupon validation against business rules.
- * @param {Object} coupon - Mongoose Coupon document
- * @param {number} orderAmount - Actual cart/order subtotal
- * @param {Object|null} user - Authenticated user object (if available)
- * @returns {{ isValid: boolean, error?: string, discount?: number }}
  */
 const validateCouponEligibility = async (coupon, orderAmount, user = null) => {
   if (!coupon) {
@@ -96,42 +94,27 @@ const validateCouponEligibility = async (coupon, orderAmount, user = null) => {
 
   // 6. First order only check
   if (coupon.firstOrderOnly) {
-    if (!user || !user._id) {
+    if (!user || (!user._id && !user.id)) {
       return { isValid: false, error: 'This coupon is valid only for your first order. Please login to apply.' };
     }
-    const userFirstOrderConditions = [{ 'customer.userId': user._id }];
-    if (user.phone) {
-      userFirstOrderConditions.push({ 'customer.phone': user.phone });
-    }
-    const completedOrders = await Order.countDocuments({
-      $or: userFirstOrderConditions,
-      status: { $ne: 'Cancelled' },
-    });
-    if (completedOrders > 0) {
+    const userId = String(user._id || user.id);
+    const userOrders = await getUserOrders(userId);
+    const completedOrders = userOrders.filter((o) => o.status !== 'Cancelled');
+    if (completedOrders.length > 0) {
       return { isValid: false, error: 'This coupon is valid only for your first order.' };
     }
   }
 
   // 7. Single use per customer check
-  if (user && user._id) {
-    const userOrConditions = [{ 'customer.userId': user._id }];
-    if (user.phone) {
-      userOrConditions.push({ 'customer.phone': user.phone });
-    }
-    const previousOrderWithCoupon = await Order.findOne({
-      $and: [
-        { $or: userOrConditions },
-        {
-          $or: [
-            { couponCode: coupon.code },
-            { 'coupon.code': coupon.code },
-          ],
-        },
-        { status: { $ne: 'Cancelled' } },
-      ],
-    });
-
-    if (previousOrderWithCoupon) {
+  if (user && (user._id || user.id)) {
+    const userId = String(user._id || user.id);
+    const userOrders = await getUserOrders(userId);
+    const alreadyUsed = userOrders.some(
+      (o) =>
+        o.status !== 'Cancelled' &&
+        (o.couponCode === coupon.code || o.coupon?.code === coupon.code)
+    );
+    if (alreadyUsed) {
       return { isValid: false, error: 'You have already used this coupon.' };
     }
   }
