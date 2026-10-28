@@ -4179,7 +4179,7 @@ function CustomersTab() {
             </thead>
             <tbody>
               {customers.map((c, i) => (
-                <tr key={c.phone || i} style={{ borderBottom: i < customers.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < customers.length - 1 ? "1px solid #ede8e0" : "none" }}>
                   <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name || "Customer"}</td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
                   <td style={{ padding: "14px 16px", color: "#059669", fontWeight: "bold" }}>₹{c.walletBalance || 0}</td>
