@@ -408,18 +408,25 @@ const FileUploadButton = ({
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
+let cachedStoreDashboardData: { kpis: any[]; latestOrders: any[] } | null = null;
+
 function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
-  const [kpis, setKpis] = useState<any[]>([]);
-  const [latestOrders, setLatestOrders] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.kpis || []);
+  const [latestOrders, setLatestOrders] = useState<any[]>(cachedStoreDashboardData?.latestOrders || []);
+  const [loading, setLoading] = useState(!cachedStoreDashboardData);
 
   const loadData = () => {
-    setLoading(true);
+    if (!cachedStoreDashboardData) {
+      setLoading(true);
+    }
     api.get<{ success: boolean; kpis: any[]; latestOrders: any[] }>("/store-admin/dashboard")
       .then(res => {
         if (res.data.success) {
-          setKpis(res.data.kpis || []);
-          setLatestOrders(res.data.latestOrders || []);
+          const freshKpis = res.data.kpis || [];
+          const freshOrders = res.data.latestOrders || [];
+          cachedStoreDashboardData = { kpis: freshKpis, latestOrders: freshOrders };
+          setKpis(freshKpis);
+          setLatestOrders(freshOrders);
         }
       })
       .catch(err => console.warn("Failed to load store-admin dashboard:", err))
@@ -442,19 +449,19 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
     };
   }, []);
 
-  const defaultKpis = [
-    { icon: "inventory_2", label: "Pending Orders", value: "2", sub: "Awaiting cutting or dispatch", color: "#941717", tab: "orders" },
-    { icon: "check_circle", label: "Delivered Today", value: "2", sub: "Successfully completed", color: "#059669", tab: "orders" },
-    { icon: "payments", label: "Today's Revenue", value: "₹449", sub: "From completed orders", color: "#c28114", tab: "orders" },
-    { icon: "restaurant", label: "Chicken Stock", value: "98 kg", sub: "Fresh morning batch", color: "#7c3aed", tab: "inventory" },
-    { icon: "kebab_dining", label: "Mutton Stock", value: "42 kg", sub: "Young goat — fresh stock", color: "#d97706", tab: "inventory" },
-    { icon: "two_wheeler", label: "Active Riders", value: "4", sub: "Available in Ranchi", color: "#0284c7", tab: "riders" },
+  const placeholderKpis = [
+    { icon: "inventory_2", label: "Orders to Prepare", value: "—", sub: "Awaiting cutting or dispatch", color: "#941717", tab: "orders" },
+    { icon: "check_circle", label: "Delivered Today", value: "—", sub: "Successfully completed", color: "#059669", tab: "orders" },
+    { icon: "restaurant", label: "Chicken Stock", value: "—", sub: "Fresh stock available", color: "#7c3aed", tab: "inventory" },
+    { icon: "kebab_dining", label: "Mutton Stock", value: "—", sub: "Young goat — fresh batch", color: "#d97706", tab: "inventory" },
+    { icon: "two_wheeler", label: "Active Riders", value: "—", sub: "Available in Ranchi", color: "#0284c7", tab: "riders" },
   ];
 
-  const displayKpis = kpis.length > 0 ? kpis : defaultKpis;
+  const displayKpis = kpis.length > 0 ? kpis : placeholderKpis;
 
   const labelToTab: Record<string, string> = {
     "Pending Orders": "orders",
+    "Orders to Prepare": "orders",
     "Delivered Today": "orders",
     "Today's Revenue": "orders",
     "Chicken Stock": "inventory",
@@ -486,7 +493,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
       </div>
 
       {/* Live order summary mini-list */}
-      <SectionTitle title="Latest Incoming Orders" sub="Live queue from MongoDB Atlas" />
+      <SectionTitle title="Latest Incoming Orders" sub="Live queue from Cloud Firestore" />
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading live orders from server…</div>
@@ -917,7 +924,7 @@ function ProductsStockTab() {
   return (
     <div>
       {loading ? (
-        <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading products from MongoDB Atlas…</div>
+        <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading products from Cloud Firestore…</div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {products.map(p => (

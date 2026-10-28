@@ -38,7 +38,7 @@ export function WishlistProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Load wishlist from localStorage & MongoDB Atlas
+  // Load wishlist from localStorage & Cloud Firestore
   useEffect(() => {
     let localIds: string[] = [];
     try {

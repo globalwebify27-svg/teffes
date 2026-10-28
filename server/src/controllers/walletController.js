@@ -1,7 +1,7 @@
 const Razorpay = require('razorpay');
 const crypto = require('crypto');
-const User = require('../models/User');
-const WalletTransaction = require('../models/WalletTransaction');
+const { getDoc, createDoc, updateDoc, queryDocs } = require('../lib/firestore');
+const { getUserById } = require('../services/firestore/user.firestore.service');
 
 const getRazorpayInstance = () => {
   const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder';
@@ -9,19 +9,23 @@ const getRazorpayInstance = () => {
   return new Razorpay({ key_id, key_secret });
 };
 
-// Get wallet balance and transactions
+// Get wallet balance and transactions (Pure Firestore)
 exports.getWalletDetails = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select('walletBalance');
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const transactions = await WalletTransaction.find({ userId: req.user._id }).sort({ createdAt: -1 });
+    const transactions = await queryDocs('wallet_transactions', (ref) =>
+      ref.where('userId', '==', userId)
+    );
+    transactions.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 
     res.status(200).json({
       success: true,
-      balance: user.walletBalance,
+      balance: user.walletBalance || 0,
       transactions,
     });
   } catch (error) {
@@ -29,37 +33,46 @@ exports.getWalletDetails = async (req, res, next) => {
   }
 };
 
-// Add money to wallet (for promotional or refund purposes by admin, or user top-up)
-// This is a basic implementation for now.
+// Add money to wallet (user top-up or refund) (Pure Firestore)
 exports.addMoney = async (req, res, next) => {
   try {
     const { amount, description, orderId } = req.body;
-    
     const numAmount = Number(amount);
     if (!numAmount || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Valid amount is required' });
     }
 
-    const user = await User.findById(req.user._id);
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.walletBalance = (user.walletBalance || 0) + numAmount;
-    await user.save();
+    const newBalance = Math.round(((user.walletBalance || 0) + numAmount) * 100) / 100;
+    const now = new Date().toISOString();
+    await updateDoc('users', userId, {
+      walletBalance: newBalance,
+      updatedAt: now,
+    });
 
-    const transaction = await WalletTransaction.create({
-      userId: user._id,
+    const txnId = `txn_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const transaction = {
+      id: txnId,
+      _id: txnId,
+      userId,
       type: 'Credit',
       amount: numAmount,
+      balanceAfter: newBalance,
       description: description || 'Money added to wallet',
       orderId: orderId || null,
-      status: 'Success'
-    });
+      status: 'Success',
+      createdAt: now,
+    };
+    await createDoc('wallet_transactions', txnId, transaction);
 
     try {
       const { emitWalletUpdate } = require('../socket');
-      emitWalletUpdate(user._id, user.walletBalance, transaction);
+      emitWalletUpdate(userId, newBalance, transaction);
     } catch (socketErr) {
       console.warn('[Socket.IO] Wallet update emit warn:', socketErr.message);
     }
@@ -67,42 +80,54 @@ exports.addMoney = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: 'Money added successfully',
-      balance: user.walletBalance,
+      balance: newBalance,
       transaction,
     });
   } catch (error) {
     next(error);
   }
 };
-// Super Admin adding money to a specific user
+
+// Super Admin adding money to a specific user (Pure Firestore)
 exports.addMoneyToUser = async (req, res, next) => {
   try {
     const { userId, amount, description } = req.body;
     const numAmount = Number(amount);
-    
+
     if (!userId || !numAmount || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Valid userId and amount are required' });
     }
 
-    const user = await User.findById(userId);
+    const targetUserId = String(userId);
+    const user = await getUserById(targetUserId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.walletBalance = (user.walletBalance || 0) + numAmount;
-    await user.save();
+    const newBalance = Math.round(((user.walletBalance || 0) + numAmount) * 100) / 100;
+    const now = new Date().toISOString();
+    await updateDoc('users', targetUserId, {
+      walletBalance: newBalance,
+      updatedAt: now,
+    });
 
-    const transaction = await WalletTransaction.create({
-      userId: user._id,
+    const txnId = `txn_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const transaction = {
+      id: txnId,
+      _id: txnId,
+      userId: targetUserId,
       type: 'Credit',
       amount: numAmount,
+      balanceAfter: newBalance,
       description: description || 'Money added by Super Admin',
-      status: 'Success'
-    });
+      status: 'Success',
+      createdAt: now,
+    };
+    await createDoc('wallet_transactions', txnId, transaction);
 
     try {
       const { emitWalletUpdate } = require('../socket');
-      emitWalletUpdate(user._id, user.walletBalance, transaction);
+      emitWalletUpdate(targetUserId, newBalance, transaction);
     } catch (socketErr) {
       console.warn('[Socket.IO] Wallet update emit warn:', socketErr.message);
     }
@@ -110,7 +135,7 @@ exports.addMoneyToUser = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `Successfully added ₹${numAmount} to ${user.name || 'User'}`,
-      balance: user.walletBalance,
+      balance: newBalance,
       transaction,
     });
   } catch (error) {
@@ -132,7 +157,6 @@ exports.createWalletTopupOrder = async (req, res, next) => {
 
     const amountInPaise = Math.round(numAmount * 100);
     const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder';
-    const key_secret = process.env.RAZORPAY_KEY_SECRET || 'rzp_secret_placeholder';
 
     let razorpayOrder;
     let isLiveOrTestWorking = false;
@@ -145,7 +169,7 @@ exports.createWalletTopupOrder = async (req, res, next) => {
           receipt: `wal_${Date.now()}`,
           notes: {
             type: 'wallet_topup',
-            userId: req.user._id.toString(),
+            userId: String(req.user?.id || req.user?._id),
           },
         });
         isLiveOrTestWorking = true;
@@ -155,7 +179,6 @@ exports.createWalletTopupOrder = async (req, res, next) => {
     }
 
     if (!razorpayOrder) {
-      // Fallback simulated order id for testing / development
       razorpayOrder = {
         id: `order_wal_dev_${Date.now()}`,
         amount: amountInPaise,
@@ -177,7 +200,7 @@ exports.createWalletTopupOrder = async (req, res, next) => {
 
 /**
  * POST /api/wallet/verify-topup
- * Verify Razorpay payment signature and credit wallet balance
+ * (Pure Firestore)
  */
 exports.verifyWalletTopup = async (req, res, next) => {
   try {
@@ -189,8 +212,6 @@ exports.verifyWalletTopup = async (req, res, next) => {
     }
 
     const secret = process.env.RAZORPAY_KEY_SECRET;
-
-    // Verify Razorpay signature if live secret is available
     if (secret && razorpay_signature && !secret.includes('placeholder')) {
       const generatedSignature = crypto
         .createHmac('sha256', secret)
@@ -202,25 +223,36 @@ exports.verifyWalletTopup = async (req, res, next) => {
       }
     }
 
-    const user = await User.findById(req.user._id);
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.walletBalance = (user.walletBalance || 0) + numAmount;
-    await user.save();
+    const newBalance = Math.round(((user.walletBalance || 0) + numAmount) * 100) / 100;
+    const now = new Date().toISOString();
+    await updateDoc('users', userId, {
+      walletBalance: newBalance,
+      updatedAt: now,
+    });
 
-    const transaction = await WalletTransaction.create({
-      userId: user._id,
+    const txnId = `txn_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const transaction = {
+      id: txnId,
+      _id: txnId,
+      userId,
       type: 'Credit',
       amount: numAmount,
+      balanceAfter: newBalance,
       description: `Online Wallet Recharge via Razorpay (${razorpay_payment_id || 'UPI/Card'})`,
       status: 'Success',
-    });
+      createdAt: now,
+    };
+    await createDoc('wallet_transactions', txnId, transaction);
 
     try {
       const { emitWalletUpdate } = require('../socket');
-      emitWalletUpdate(user._id, user.walletBalance, transaction);
+      emitWalletUpdate(userId, newBalance, transaction);
     } catch (socketErr) {
       console.warn('[Socket.IO] Wallet topup emit warn:', socketErr.message);
     }
@@ -228,7 +260,7 @@ exports.verifyWalletTopup = async (req, res, next) => {
     res.status(200).json({
       success: true,
       message: `₹${numAmount} successfully added to your wallet!`,
-      balance: user.walletBalance,
+      balance: newBalance,
       transaction,
     });
   } catch (error) {

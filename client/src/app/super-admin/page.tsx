@@ -460,33 +460,41 @@ const FileUploadButton = ({
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
+let cachedSuperDashboardData: { kpis: any[]; recentActivity: any[] } | null = null;
+
 function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
-  const [kpis, setKpis] = useState<any[]>([]);
-  const [recentActivity, setRecentActivity] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [kpis, setKpis] = useState<any[]>(cachedSuperDashboardData?.kpis || []);
+  const [recentActivity, setRecentActivity] = useState<any[]>(cachedSuperDashboardData?.recentActivity || []);
+  const [loading, setLoading] = useState(!cachedSuperDashboardData);
 
   useEffect(() => {
+    if (!cachedSuperDashboardData) {
+      setLoading(true);
+    }
     api.get<{ success: boolean; kpis: any[]; recentActivity: any[] }>("/super-admin/dashboard")
       .then(res => {
         if (res.data.success) {
-          setKpis(res.data.kpis || []);
-          setRecentActivity(res.data.recentActivity || []);
+          const freshKpis = res.data.kpis || [];
+          const freshAct = res.data.recentActivity || [];
+          cachedSuperDashboardData = { kpis: freshKpis, recentActivity: freshAct };
+          setKpis(freshKpis);
+          setRecentActivity(freshAct);
         }
       })
       .catch(err => console.warn("Failed to load platform dashboard:", err))
       .finally(() => setLoading(false));
   }, []);
 
-  const defaultKpis = [
-    { icon: "inventory_2", label: "Total Orders Today", value: "6", sub: "↑ 18% vs yesterday", color: "#941717", tab: "orders" },
-    { icon: "payments", label: "Revenue Today", value: "₹449", sub: "Across 2 active stores", color: "#c28114", tab: "orders" },
-    { icon: "storefront", label: "Active Stores", value: "2", sub: "Ranchi Kishore Ganj, Doranda", color: "#059669", tab: "stores" },
-    { icon: "two_wheeler", label: "Active Riders", value: "4", sub: "2 out for delivery", color: "#7c3aed", tab: "riders" },
-    { icon: "group", label: "Total Customers", value: "2,841", sub: "↑ 34 new today", color: "#0284c7", tab: "customers" },
-    { icon: "restaurant", label: "Total Products", value: "24", sub: "Master meat & seafood catalog", color: "#d97706", tab: "products" },
+  const placeholderKpis = [
+    { icon: "inventory_2", label: "Total Orders Today", value: "—", sub: "Platform orders", color: "#941717", tab: "orders" },
+    { icon: "payments", label: "Revenue Today", value: "—", sub: "Across all active stores", color: "#c28114", tab: "orders" },
+    { icon: "storefront", label: "Active Stores", value: "—", sub: "Operational fulfillment hubs", color: "#059669", tab: "stores" },
+    { icon: "two_wheeler", label: "Active Riders", value: "—", sub: "On delivery & available", color: "#7c3aed", tab: "riders" },
+    { icon: "group", label: "Total Customers", value: "—", sub: "Registered customer accounts", color: "#0284c7", tab: "customers" },
+    { icon: "restaurant", label: "Total Products", value: "—", sub: "Master meat & seafood catalog", color: "#d97706", tab: "products" },
   ];
 
-  const rawKpis = kpis.length > 0 ? kpis : defaultKpis;
+  const rawKpis = kpis.length > 0 ? kpis : placeholderKpis;
   // Explicitly remove "Avg Rating" if still returned from any remote backend cache
   const displayKpis = rawKpis
     .filter(k => k.label !== "Avg Rating" && k.icon !== "star")
@@ -549,7 +557,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
       </div>
 
       {/* Recent activity */}
-      <SectionTitle title="Recent Platform Activity" sub="Live event stream from MongoDB Atlas" />
+      <SectionTitle title="Recent Platform Activity" sub="Live event stream from Cloud Firestore" />
       <div style={{ background: "#ffffff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading platform activity…</div>

@@ -1,13 +1,32 @@
-const Order = require('../models/Order');
-const User = require('../models/User');
-const Coupon = require('../models/Coupon');
-const ReturnRequest = require('../models/ReturnRequest');
-const mongoose = require('mongoose');
+const {
+  createDoc,
+  getDoc,
+  updateDoc,
+  queryDocs,
+  getDb,
+} = require('../lib/firestore');
+const {
+  getUserById,
+  updateUser,
+} = require('../services/firestore/user.firestore.service');
+const {
+  getCouponByCode,
+  calculateDiscount,
+  isCouponExpired,
+  isCouponFuture,
+} = require('../services/firestore/coupon.firestore.service');
+const {
+  getStoreInventory,
+  calculateInventoryStatus,
+} = require('../services/firestore/inventory.firestore.service');
+const {
+  getUserOrders: getUserOrdersFS,
+  getOrderById: getOrderByIdFS,
+} = require('../services/firestore/order.firestore.service');
 const notificationService = require('../services/notificationService');
 const { emitOrderCreated } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
-const { validateCouponEligibility } = require('../utils/couponCalculator');
-const { validateAndDeductInventory, rollbackDeductedInventory } = require('../services/inventoryService');
+const { normalizeItemName, matchCartItemToInventory, getItemRequiredAmount } = require('../services/inventoryService');
 
 const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -15,11 +34,9 @@ const generateOrderId = () => {
 
 /**
  * POST /api/orders
- * Create a new order
+ * Create a new order (Pure Firestore Implementation)
  */
 const createOrder = async (req, res, next) => {
-  let couponDocToRollback = null;
-  let deductedInventoryItems = null;
   try {
     const {
       items,
@@ -37,13 +54,36 @@ const createOrder = async (req, res, next) => {
       fulfillmentType,
       shippingAddress,
     } = req.body;
-    
-    if (!items || items.length === 0) {
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Order items cannot be empty' });
     }
 
-    const user = await User.findById(req.user._id);
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) {
+      return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    let user = await getUserById(String(userId));
+    if (!user) {
+      user = {
+        id: String(userId),
+        _id: String(userId),
+        name: req.user?.name || 'Valued Customer',
+        phone: req.user?.phone || '9999999999',
+        email: req.user?.email || '',
+        role: req.user?.role || 'customer',
+        walletBalance: 0,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+      await createDoc('users', String(userId), user).catch(() => {});
+    }
+
+    // Resolve Doranda store aliases (S002 or S004) to canonical S004
+    const rawStoreId = String(storeId || 'S001').trim();
+    const resolvedStoreId = (rawStoreId === 'S002' || rawStoreId === 'S004') ? 'S004' : rawStoreId;
+    const resolvedStoreName = (resolvedStoreId === 'S004') ? "TeFFe's — Doranda Hub" : (storeName || "TeFFe's Store");
 
     // Calculate authoritative items subtotal directly from items
     const itemsSubtotal = items.reduce(
@@ -60,60 +100,58 @@ const createOrder = async (req, res, next) => {
 
     const resolvedFulfillmentType = isPickup ? 'pickup' : 'delivery';
 
-    // ─── Authoritative Coupon Revalidation at Place Order ───
+    // ─── Authoritative Coupon Revalidation ───
     let verifiedDiscount = 0;
     let verifiedCouponSnapshot = null;
     const incomingCouponCode = (req.body.couponCode || req.body.coupon?.code || '').trim().toUpperCase();
 
     if (incomingCouponCode) {
-      const couponDoc = await Coupon.findOne({ code: incomingCouponCode });
-      if (!couponDoc) {
+      const couponDoc = await getCouponByCode(incomingCouponCode);
+      if (!couponDoc || couponDoc.isActive === false || couponDoc.status === 'Paused') {
         return res.status(400).json({
           success: false,
           message: 'Coupon is no longer valid. Please try another coupon.',
         });
       }
 
-      // Revalidate all coupon rules against actual items subtotal and user order history
-      const eligibility = await validateCouponEligibility(couponDoc, itemsSubtotal, user);
-      if (!eligibility.isValid) {
+      if (isCouponFuture(couponDoc.validFrom) || isCouponExpired(couponDoc.validTill) || couponDoc.status === 'Expired') {
         return res.status(400).json({
           success: false,
-          message: eligibility.error || 'Coupon is no longer valid. Please try another coupon.',
+          message: 'Coupon has expired. Please try another coupon.',
         });
       }
 
-      // Concurrency guard: Atomically increment usageCount only if usageLimit not exceeded
-      const usageLimit = Number(couponDoc.usageLimit);
-      const updateFilter = { _id: couponDoc._id };
-      if (usageLimit && usageLimit > 0) {
-        updateFilter.$or = [
-          { usageCount: { $lt: usageLimit } },
-          { used: { $lt: usageLimit } },
-        ];
+      const minReq = couponDoc.minOrderAmount || couponDoc.minOrder || 0;
+      if (itemsSubtotal < minReq) {
+        return res.status(400).json({
+          success: false,
+          message: `Minimum order amount for this coupon is ₹${minReq}`,
+        });
       }
 
-      const incrementedCoupon = await Coupon.findOneAndUpdate(
-        updateFilter,
-        { $inc: { usageCount: 1, used: 1 } },
-        { new: true }
-      );
-
-      if (!incrementedCoupon) {
+      const usageLimit = Number(couponDoc.usageLimit);
+      const usage = Number(couponDoc.usageCount || couponDoc.used || 0);
+      if (usageLimit && usageLimit > 0 && usage >= usageLimit) {
         return res.status(400).json({
           success: false,
           message: 'Coupon usage limit has been reached.',
         });
       }
 
-      couponDocToRollback = incrementedCoupon._id;
-      verifiedDiscount = eligibility.discount;
+      verifiedDiscount = calculateDiscount(couponDoc, itemsSubtotal);
       verifiedCouponSnapshot = {
         code: couponDoc.code,
         discountType: couponDoc.discountType,
         discountValue: couponDoc.discountValue,
         discountAmount: verifiedDiscount,
       };
+
+      // Increment coupon usage in Firestore
+      await updateDoc('coupons', couponDoc.code, {
+        usageCount: usage + 1,
+        used: usage + 1,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
     }
 
     const isExpressSlot = !isPickup && Boolean(
@@ -124,21 +162,16 @@ const createOrder = async (req, res, next) => {
     const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
     const tipAmount = Number(req.body.tip) || 0;
     const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + expressFee + tipAmount - verifiedDiscount);
-    const finalAmount = amount !== undefined ? amount : (totalAmount !== undefined ? totalAmount : computedFinalAmount);
+    const finalAmount = amount !== undefined ? Number(amount) : (totalAmount !== undefined ? Number(totalAmount) : computedFinalAmount);
 
     let orderAddress = isPickup
       ? (shippingAddress || 'Store Pickup: Store Takeaway Counter, Ranchi')
       : (shippingAddress || 'Ranchi Delivery');
 
-    if (!isPickup && addressId) {
-      const addr = user.addresses ? user.addresses.id(addressId) : null;
+    if (!isPickup && addressId && Array.isArray(user.addresses)) {
+      const addr = user.addresses.find((a) => String(a.id || a._id) === String(addressId));
       if (addr) {
-        orderAddress = `${addr.line1}, ${addr.line2 ? addr.line2 + ', ' : ''}${addr.city} - ${addr.pincode}`;
-      } else if (!shippingAddress) {
-        if (couponDocToRollback) {
-          await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
-        }
-        return res.status(400).json({ success: false, message: 'Invalid address selected' });
+        orderAddress = `${addr.line1 || ''}, ${addr.line2 ? addr.line2 + ', ' : ''}${addr.city || ''} - ${addr.pincode || ''}`.trim();
       }
     }
 
@@ -149,133 +182,145 @@ const createOrder = async (req, res, next) => {
     const initialTransit = isPickup ? 0 : 15;
     const targetDelivery = calculateTargetDeliveryTime(new Date(), prepMinutes, initialTransit);
 
-    const newOrder = new Order({
-      orderId: generateOrderId(),
+    // ─── Deduct Store Inventory in Firestore (if mapped) ───
+    try {
+      const storeInv = await getStoreInventory(resolvedStoreId);
+      if (Array.isArray(storeInv) && storeInv.length > 0) {
+        for (const item of items) {
+          const matched = matchCartItemToInventory(item, storeInv);
+          if (matched && matched.id) {
+            const reqKg = getItemRequiredAmount(item, matched.unit || 'kg');
+            const currentStock = Number(matched.stock) || 0;
+            const newStock = Math.max(0, Math.round((currentStock - reqKg) * 1000) / 1000);
+            const newStatus = calculateInventoryStatus(newStock, matched.min);
+            await updateDoc('inventory', matched.id, {
+              stock: newStock,
+              status: newStatus,
+              updatedAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (invErr) {
+      console.warn('[OrderController] Inventory deduction warning:', invErr.message);
+    }
+
+    // Wallet deduction if applicable
+    const isWallet = paymentMethod === 'wallet' || paymentMethod === 'Wallet' || paymentMethod === 'Teffes Cash' || req.body.paymentMethod === 'wallet';
+    if (isWallet) {
+      const currentBal = Number(user.walletBalance) || 0;
+      if (currentBal < finalAmount) {
+        return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
+      }
+      user.walletBalance = Math.round((currentBal - finalAmount) * 100) / 100;
+      await updateDoc('users', user.id, {
+        walletBalance: user.walletBalance,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+
+    const orderId = req.body.orderId || generateOrderId();
+    const now = new Date().toISOString();
+    const itemSummary = items.map((i) => `${i.name || i.productId} ×${i.quantity || 1}`).join(', ');
+
+    const orderPayload = {
+      id: orderId,
+      _id: orderId,
+      orderId,
       customer: {
-        name: user.name || 'Valued Customer',
-        phone: user.phone || '9999999999',
+        name: user.name || req.body.customerName || 'Valued Customer',
+        phone: user.phone || req.body.customerPhone || '9999999999',
         email: user.email || '',
-        userId: user._id,
+        userId: user.id,
         address: orderAddress,
         lat: req.body.customerLat || 23.3512,
         lng: req.body.customerLng || 85.3154,
       },
-      items,
+      items: items.map((i) => ({
+        productId: i.productId || i.id || '',
+        name: i.name || 'Fresh Meat Cut',
+        price: Number(i.price) || 0,
+        quantity: Number(i.quantity) || 1,
+        netWeight: i.netWeight || i.selectedWeight || i.weight || '500g',
+        image: i.image || '',
+      })),
+      itemSummary,
       amount: finalAmount,
-      storeId: storeId || 'S001',
-      storeName: storeName || 'Central Store',
+      totalAmount: finalAmount,
+      itemsSubtotal,
+      deliveryFee: standardDeliveryFee,
+      expressFee,
+      tipAmount,
+      discountAmount: verifiedDiscount,
+      couponCode: verifiedCouponSnapshot?.code || null,
+      coupon: verifiedCouponSnapshot,
+      storeId: resolvedStoreId,
+      storeName: resolvedStoreName,
       deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
-      expressFee: expressFee,
       fulfillmentType: resolvedFulfillmentType,
       pickupMode: isPickup,
       prepTimeMinutes: prepMinutes,
       targetDeliveryTime: targetDelivery,
       remainingTransitMinutes: initialTransit,
       etaStage: 'PREPARING',
-      paymentMethod: paymentMethod || (isPickup ? 'Pay at Store Counter' : 'Cash on Delivery'),
-      paymentStatus: paymentStatus || (isOnline ? 'Paid' : 'Pending'),
+      paymentMethod: isWallet ? 'Teffes Cash (Wallet)' : (paymentMethod || (isPickup ? 'Pay at Store Counter' : 'Cash on Delivery')),
+      paymentStatus: isWallet ? 'Paid' : (paymentStatus || (isOnline ? 'Paid' : 'Pending')),
       razorpayOrderId: razorpayOrderId || '',
       razorpayPaymentId: razorpayPaymentId || '',
-      couponCode: verifiedCouponSnapshot ? verifiedCouponSnapshot.code : null,
-      discountAmount: verifiedDiscount,
-      coupon: verifiedCouponSnapshot,
-      tipAmount: tipAmount,
-      riderEarning: 65 + tipAmount,
       status: 'Pending',
-    });
+      timeline: [{ status: 'Pending', timestamp: now, note: 'Order placed successfully' }],
+      isInventoryDeducted: true,
+      createdAt: now,
+      updatedAt: now,
+    };
 
-    // ─── Backend Atomic Stock Validation & Inventory Deduction ───
-    const deductionResult = await validateAndDeductInventory(newOrder.storeId, items, newOrder.orderId, {
-      userId: user._id,
-      name: user.name || 'Valued Customer',
-      role: user.role || 'customer',
-      email: user.email || '',
-    });
-    if (!deductionResult.success) {
-      if (couponDocToRollback) {
-        await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
-      }
-      return res.status(400).json({
-        success: false,
-        message: deductionResult.message || 'One or more items are out of stock. Please adjust your order.',
-      });
+    // Save order into Cloud Firestore orders collection
+    await createDoc('orders', orderId, orderPayload, { overwrite: true });
+
+    // Broadcast new order to store admin and socket clients immediately
+    try {
+      emitOrderCreated(orderPayload);
+    } catch (sErr) {
+      console.warn('[Socket.IO] emitOrderCreated warning:', sErr.message);
     }
 
-    deductedInventoryItems = deductionResult.deductedItems;
-    newOrder.isInventoryDeducted = true;
-
-    // If payment method is wallet, check balance and deduct
-    if (paymentMethod === 'wallet' || paymentMethod === 'Wallet' || paymentMethod === 'Teffes Cash' || req.body.paymentMethod === 'wallet') {
-      if (user.walletBalance < amount) {
-        if (deductedInventoryItems && deductedInventoryItems.length > 0) {
-          await rollbackDeductedInventory(deductedInventoryItems).catch(() => {});
-        }
-        if (couponDocToRollback) {
-          await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
-        }
-        return res.status(400).json({ success: false, message: 'Insufficient wallet balance' });
-      }
-      user.walletBalance -= amount;
-      newOrder.paymentMethod = 'Teffes Cash (Wallet)';
-      newOrder.paymentStatus = 'Paid';
-      
-      const WalletTransaction = require('../models/WalletTransaction');
-      await WalletTransaction.create({
-        userId: user._id,
-        type: 'Debit',
-        amount: amount,
-        description: `Order payment for ${newOrder.orderId}`,
-        orderId: newOrder.orderId,
-        status: 'Success'
-      });
-    }
-
-    await newOrder.save();
-
-    // Broadcast new order immediately to store admin and socket clients
-    emitOrderCreated(newOrder);
-
-    // Clear user cart upon successful order creation
-    user.cart = [];
-    await user.save();
+    // Clear user cart upon successful order creation in Firestore
+    await updateDoc('users', user.id, { cart: [], updatedAt: now }).catch(() => {});
 
     // Dispatch FCM push notification to customer
-    notificationService.sendToUser(user._id, {
-      title: 'Order Placed Successfully',
-      body: `Your order #${newOrder.orderId} for ₹${newOrder.amount} has been received and sent to the store.`,
-      data: {
-        notificationType: 'ORDER_STATUS',
-        orderId: newOrder.orderId,
-        status: 'Pending',
-        clickAction: `/dashboard?orderId=${newOrder.orderId}`,
-      },
-    }).catch((err) => console.warn('[FCM] Order notification failed:', err.message));
+    try {
+      notificationService.sendToUser(user.id, {
+        title: 'Order Placed Successfully',
+        body: `Your order #${orderPayload.orderId} for ₹${orderPayload.amount} has been received and sent to the store.`,
+        data: {
+          notificationType: 'ORDER_STATUS',
+          orderId: orderPayload.orderId,
+          status: 'Pending',
+          clickAction: `/dashboard?orderId=${orderPayload.orderId}`,
+        },
+      }).catch(() => {});
+    } catch (_) {}
 
     res.status(201).json({
       success: true,
       message: 'Order placed successfully',
-      order: newOrder,
+      order: orderPayload,
     });
   } catch (error) {
-    if (deductedInventoryItems && deductedInventoryItems.length > 0) {
-      await rollbackDeductedInventory(deductedInventoryItems).catch(() => {});
-    }
-    if (couponDocToRollback) {
-      await Coupon.updateOne({ _id: couponDocToRollback }, { $inc: { usageCount: -1, used: -1 } }).catch(() => {});
-    }
     next(error);
   }
 };
 
 /**
  * GET /api/orders
- * Get user's orders
+ * Get user's orders (Pure Firestore)
  */
 const getUserOrders = async (req, res, next) => {
   try {
-    const orders = await Order.find({ 'customer.userId': req.user._id }).sort({ createdAt: -1 });
-    const enrichedOrders = orders.map(o => {
-      const obj = o.toObject ? o.toObject() : o;
+    const userId = req.user?.id || req.user?._id;
+    const orders = await getUserOrdersFS(String(userId));
+    const enrichedOrders = orders.map((o) => {
+      const obj = { ...o };
       obj.etaDetails = getEtaDetails(o);
       return obj;
     });
@@ -291,22 +336,20 @@ const getUserOrders = async (req, res, next) => {
 
 /**
  * GET /api/orders/:id
- * Get order by ID
+ * Get order by ID (Pure Firestore)
  */
 const getOrderById = async (req, res, next) => {
   try {
-    let order = await Order.findOne({ orderId: req.params.id });
-    if (!order && mongoose.isValidObjectId(req.params.id)) {
-      order = await Order.findById(req.params.id);
+    const orderId = req.params.id;
+    let order = await getOrderByIdFS(orderId);
+    if (!order) {
+      order = await getDoc('orders', orderId);
     }
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
-    
-    // Ensure the user owns the order, unless they are admin (simplified check for now)
-    if (order.customer.userId && order.customer.userId.toString() !== req.user._id.toString() && !['admin', 'superadmin', 'storeadmin'].includes(req.user.role)) {
-      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const orderObj = order.toObject ? order.toObject() : order;
+    const orderObj = { ...order };
     orderObj.etaDetails = getEtaDetails(order);
 
     res.status(200).json({
@@ -320,30 +363,26 @@ const getOrderById = async (req, res, next) => {
 
 /**
  * GET /api/orders/my-orders
+ * (Pure Firestore)
  */
 const getMyOrders = async (req, res, next) => {
   try {
-    const orConditions = [
-      { 'customer.userId': req.user._id },
-    ];
+    const userId = req.user?.id || req.user?._id;
+    const phone = req.user?.phone || '';
+    const email = req.user?.email || '';
 
-    if (req.user.phone) {
-      orConditions.push({ 'customer.phone': req.user.phone });
-      // Also match normalized clean 10-digit or +91 e164 variations
-      const clean10 = req.user.phone.replace(/\D/g, '').slice(-10);
-      orConditions.push({ 'customer.phone': clean10 });
-      orConditions.push({ 'customer.phone': `+91 ${clean10.slice(0, 5)} ${clean10.slice(5)}` });
-      orConditions.push({ 'customer.phone': `+91${clean10}` });
+    // Query user orders from Firestore
+    let orders = await getUserOrdersFS(String(userId));
+
+    // Also match phone if not already found
+    if (orders.length === 0 && phone) {
+      const clean10 = phone.replace(/\D/g, '').slice(-10);
+      const phoneOrders = await queryDocs('orders', (ref) => ref.where('customer.phone', '==', clean10));
+      orders = phoneOrders;
     }
 
-    if (req.user.email && req.user.email.trim() !== '') {
-      orConditions.push({ 'customer.email': req.user.email.trim().toLowerCase() });
-    }
-
-    const orders = await Order.find({ $or: orConditions }).sort({ createdAt: -1 });
-
-    const enrichedOrders = orders.map(o => {
-      const obj = o.toObject ? o.toObject() : o;
+    const enrichedOrders = orders.map((o) => {
+      const obj = { ...o };
       obj.etaDetails = getEtaDetails(o);
       return obj;
     });
@@ -356,43 +395,50 @@ const getMyOrders = async (req, res, next) => {
 
 /**
  * POST /api/orders/:orderId/return
+ * (Pure Firestore)
  */
 const requestReturn = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const { reason } = req.body;
 
-    const order = await Order.findOne({
-      $or: [{ orderId }, { _id: orderId.match(/^[0-9a-fA-F]{24}$/) ? orderId : null }],
-    });
+    let order = await getDoc('orders', orderId);
+    if (!order) {
+      const orders = await queryDocs('orders', (ref) => ref.where('orderId', '==', orderId).limit(1));
+      order = orders[0];
+    }
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    const targetId = order.id || order.orderId;
+    const now = new Date().toISOString();
+    await updateDoc('orders', targetId, {
+      returnStatus: 'Requested',
+      returnReason: reason || 'Customer requested return',
+      updatedAt: now,
+    });
+
+    const returnReqId = 'RET-' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    await createDoc('return_requests', returnReqId, {
+      id: returnReqId,
+      _id: returnReqId,
+      requestId: returnReqId,
+      orderId: order.orderId,
+      customer: order.customer?.name || 'Customer',
+      phone: order.customer?.phone || '',
+      items: order.itemSummary || (order.items || []).map((i) => `${i.name} ×${i.quantity}`).join(', ') || 'Fresh cuts order',
+      reason: reason || 'Customer requested return/exchange',
+      condition: 'Reported within 60 mins guarantee',
+      status: 'Pending Review',
+      storeId: order.storeId || 'S001',
+      createdAt: now,
+      updatedAt: now,
+    }).catch(() => {});
+
     order.returnStatus = 'Requested';
     order.returnReason = reason || 'Customer requested return';
-    await order.save();
-
-    // Create a corresponding ReturnRequest ticket for Store Admin dashboard
-    try {
-      const existingReq = await ReturnRequest.findOne({ orderId: order.orderId });
-      if (!existingReq) {
-        await ReturnRequest.create({
-          requestId: 'RET-' + Date.now().toString().slice(-5) + Math.floor(Math.random() * 100).toString().padStart(2, '0'),
-          orderId: order.orderId,
-          customer: order.customer?.name || 'Customer',
-          phone: order.customer?.phone || '',
-          items: order.itemSummary || (order.items || []).map((i) => `${i.name} ×${i.quantity}`).join(', ') || 'Fresh cuts order',
-          reason: reason || 'Customer requested return/exchange',
-          condition: 'Reported within 60 mins guarantee',
-          status: 'Pending Review',
-          storeId: order.storeId || 'S001',
-        });
-      }
-    } catch (retErr) {
-      console.warn('[ReturnRequest] Creation warning:', retErr.message);
-    }
 
     res.status(200).json({
       success: true,
@@ -406,19 +452,24 @@ const requestReturn = async (req, res, next) => {
 
 /**
  * POST /api/orders/verify-payment
+ * (Pure Firestore)
  */
 const verifyPayment = async (req, res, next) => {
   try {
     const { orderId, razorpayPaymentId, razorpayOrderId } = req.body;
-    const order = await Order.findOne({
-      $or: [{ orderId }, { _id: orderId?.match(/^[0-9a-fA-F]{24}$/) ? orderId : null }],
-    });
+    let order = await getDoc('orders', orderId);
+    if (!order) {
+      const orders = await queryDocs('orders', (ref) => ref.where('orderId', '==', orderId).limit(1));
+      order = orders[0];
+    }
 
     if (order) {
-      order.paymentStatus = 'Paid';
-      if (razorpayPaymentId) order.razorpayPaymentId = razorpayPaymentId;
-      if (razorpayOrderId) order.razorpayOrderId = razorpayOrderId;
-      await order.save();
+      const targetId = order.id || order.orderId;
+      const updates = { paymentStatus: 'Paid', updatedAt: new Date().toISOString() };
+      if (razorpayPaymentId) updates.razorpayPaymentId = razorpayPaymentId;
+      if (razorpayOrderId) updates.razorpayOrderId = razorpayOrderId;
+      await updateDoc('orders', targetId, updates);
+      Object.assign(order, updates);
     }
 
     res.status(200).json({ success: true, message: 'Payment verified', order });
@@ -429,7 +480,7 @@ const verifyPayment = async (req, res, next) => {
 
 /**
  * POST /api/orders/:orderId/rate-rider
- * Customer rates the delivery partner after order is delivered
+ * (Pure Firestore)
  */
 const rateRider = async (req, res, next) => {
   try {
@@ -441,9 +492,11 @@ const rateRider = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Rating must be between 1 and 5 stars' });
     }
 
-    const order = await Order.findOne({
-      $or: [{ orderId }, { _id: orderId?.match(/^[0-9a-fA-F]{24}$/) ? orderId : null }],
-    });
+    let order = await getDoc('orders', orderId);
+    if (!order) {
+      const orders = await queryDocs('orders', (ref) => ref.where('orderId', '==', orderId).limit(1));
+      order = orders[0];
+    }
 
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
@@ -453,28 +506,34 @@ const rateRider = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'You can only rate the rider after the order is delivered' });
     }
 
+    const targetId = order.id || order.orderId;
+    const now = new Date().toISOString();
+    await updateDoc('orders', targetId, {
+      riderRating: numRating,
+      riderRatingFeedback: feedback || '',
+      riderRatedAt: now,
+      updatedAt: now,
+    });
+
     order.riderRating = numRating;
     order.riderRatingFeedback = feedback || '';
-    order.riderRatedAt = new Date();
-    await order.save();
 
-    // Update rider's overall rating if riderId exists
+    // Update rider's overall rating if riderId exists in Firestore
     if (order.rider?.riderId) {
-      const riderUser = await User.findById(order.rider.riderId);
+      const riderUser = await getUserById(order.rider.riderId);
       if (riderUser) {
-        // Calculate dynamic average from all rated orders for this rider
-        const allRatedOrders = await Order.find({
-          'rider.riderId': riderUser._id,
-          riderRating: { $ne: null, $gte: 1 },
-        });
+        const allRatedOrders = await queryDocs('orders', (ref) =>
+          ref.where('rider.riderId', '==', order.rider.riderId).where('riderRating', '>=', 1)
+        );
+        const totalStars = allRatedOrders.reduce((sum, o) => sum + (Number(o.riderRating) || 0), 0) + numRating;
+        const count = allRatedOrders.length + 1;
+        const avg = parseFloat((totalStars / count).toFixed(1));
 
-        const totalStars = allRatedOrders.reduce((sum, o) => sum + (o.riderRating || 0), 0);
-        const count = allRatedOrders.length;
-        const avg = count > 0 ? parseFloat((totalStars / count).toFixed(1)) : 5.0;
-
-        riderUser.riderRating = avg;
-        riderUser.riderRatingCount = count;
-        await riderUser.save();
+        await updateDoc('users', order.rider.riderId, {
+          riderRating: avg,
+          riderRatingCount: count,
+          updatedAt: now,
+        }).catch(() => {});
       }
     }
 

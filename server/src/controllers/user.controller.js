@@ -1,12 +1,14 @@
-const User = require('../models/User');
+const { getDoc, updateDoc } = require('../lib/firestore');
+const { getUserById } = require('../services/firestore/user.firestore.service');
 
 /**
  * GET /api/user/cart
- * Retrieve user's persistent cart from MongoDB Atlas
+ * Retrieve user's persistent cart from Cloud Firestore
  */
 const getCart = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select('cart');
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     res.status(200).json({
       success: true,
       cart: user?.cart || [],
@@ -23,14 +25,16 @@ const getCart = async (req, res, next) => {
  */
 const updateCart = async (req, res, next) => {
   try {
+    const userId = String(req.user?.id || req.user?._id);
     const rawItems = req.body.items || req.body.cart;
-    const user = await User.findById(req.user._id);
+    const user = await getUserById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
+    let updatedCart = [];
     if (Array.isArray(rawItems)) {
-      user.cart = rawItems.map((item) => {
+      updatedCart = rawItems.map((item) => {
         const prod = typeof item.product === 'string' ? { id: item.product, name: item.name || item.product } : (item.product || {});
         return {
           product: prod,
@@ -38,15 +42,17 @@ const updateCart = async (req, res, next) => {
           selectedWeight: item.selectedWeight || '500g',
         };
       });
-    } else {
-      user.cart = [];
     }
-    await user.save();
+
+    await updateDoc('users', userId, {
+      cart: updatedCart,
+      updatedAt: new Date().toISOString(),
+    });
 
     res.status(200).json({
       success: true,
       message: 'Cart updated successfully',
-      cart: user.cart,
+      cart: updatedCart,
     });
   } catch (error) {
     next(error);
@@ -59,11 +65,12 @@ const updateCart = async (req, res, next) => {
  */
 const clearCart = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
-    if (user) {
-      user.cart = [];
-      await user.save();
-    }
+    const userId = String(req.user?.id || req.user?._id);
+    await updateDoc('users', userId, {
+      cart: [],
+      updatedAt: new Date().toISOString(),
+    }).catch(() => {});
+
     res.status(200).json({
       success: true,
       message: 'Cart cleared successfully',
@@ -80,7 +87,8 @@ const clearCart = async (req, res, next) => {
  */
 const getWishlist = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select('wishlist');
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     res.status(200).json({
       success: true,
       wishlist: user?.wishlist || [],
@@ -97,19 +105,23 @@ const getWishlist = async (req, res, next) => {
  */
 const updateWishlist = async (req, res, next) => {
   try {
+    const userId = String(req.user?.id || req.user?._id);
     const { wishlistIds } = req.body;
-    const user = await User.findById(req.user._id);
+    const user = await getUserById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    user.wishlist = Array.isArray(wishlistIds) ? wishlistIds : [];
-    await user.save();
+    const updatedWishlist = Array.isArray(wishlistIds) ? wishlistIds : [];
+    await updateDoc('users', userId, {
+      wishlist: updatedWishlist,
+      updatedAt: new Date().toISOString(),
+    });
 
     res.status(200).json({
       success: true,
       message: 'Wishlist synced successfully',
-      wishlist: user.wishlist,
+      wishlist: updatedWishlist,
     });
   } catch (error) {
     next(error);
@@ -123,29 +135,34 @@ const updateWishlist = async (req, res, next) => {
  */
 const toggleWishlist = async (req, res, next) => {
   try {
+    const userId = String(req.user?.id || req.user?._id);
     const { productId } = req.body;
     if (!productId) {
       return res.status(400).json({ success: false, message: 'productId is required' });
     }
 
-    const user = await User.findById(req.user._id);
+    const user = await getUserById(userId);
     if (!user) {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    const idx = user.wishlist.indexOf(productId);
+    const wishlist = Array.isArray(user.wishlist) ? [...user.wishlist] : [];
+    const idx = wishlist.indexOf(productId);
     if (idx > -1) {
-      user.wishlist.splice(idx, 1);
+      wishlist.splice(idx, 1);
     } else {
-      user.wishlist.push(productId);
+      wishlist.push(productId);
     }
 
-    await user.save();
+    await updateDoc('users', userId, {
+      wishlist,
+      updatedAt: new Date().toISOString(),
+    });
 
     res.status(200).json({
       success: true,
       isInWishlist: idx === -1,
-      wishlist: user.wishlist,
+      wishlist,
     });
   } catch (error) {
     next(error);
@@ -157,7 +174,8 @@ const toggleWishlist = async (req, res, next) => {
  */
 const getAddresses = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id).select('addresses');
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     res.status(200).json({ success: true, addresses: user?.addresses || [] });
   } catch (error) {
     next(error);
@@ -169,18 +187,30 @@ const getAddresses = async (req, res, next) => {
  */
 const addAddress = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    
-    // If this is the first address or marked as default, unset other defaults
-    if (req.body.isDefault || user.addresses.length === 0) {
-      req.body.isDefault = true;
-      user.addresses.forEach(a => (a.isDefault = false));
+
+    const addresses = Array.isArray(user.addresses) ? [...user.addresses] : [];
+    const newAddressId = `addr_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const newAddress = {
+      id: newAddressId,
+      _id: newAddressId,
+      ...req.body,
+    };
+
+    if (newAddress.isDefault || addresses.length === 0) {
+      newAddress.isDefault = true;
+      addresses.forEach((a) => (a.isDefault = false));
     }
-    
-    user.addresses.push(req.body);
-    await user.save();
-    res.status(201).json({ success: true, addresses: user.addresses });
+
+    addresses.push(newAddress);
+    await updateDoc('users', userId, {
+      addresses,
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.status(201).json({ success: true, addresses });
   } catch (error) {
     next(error);
   }
@@ -191,19 +221,31 @@ const addAddress = async (req, res, next) => {
  */
 const updateAddress = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    
-    const address = user.addresses.id(req.params.id);
-    if (!address) return res.status(404).json({ success: false, message: 'Address not found' });
-    
+
+    const addresses = Array.isArray(user.addresses) ? [...user.addresses] : [];
+    const targetIdx = addresses.findIndex((a) => String(a.id || a._id) === String(req.params.id));
+    if (targetIdx === -1) return res.status(404).json({ success: false, message: 'Address not found' });
+
     if (req.body.isDefault) {
-      user.addresses.forEach(a => (a.isDefault = false));
+      addresses.forEach((a) => (a.isDefault = false));
     }
-    
-    address.set(req.body);
-    await user.save();
-    res.status(200).json({ success: true, addresses: user.addresses });
+
+    addresses[targetIdx] = {
+      ...addresses[targetIdx],
+      ...req.body,
+      id: addresses[targetIdx].id || addresses[targetIdx]._id,
+      _id: addresses[targetIdx]._id || addresses[targetIdx].id,
+    };
+
+    await updateDoc('users', userId, {
+      addresses,
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.status(200).json({ success: true, addresses });
   } catch (error) {
     next(error);
   }
@@ -214,18 +256,23 @@ const updateAddress = async (req, res, next) => {
  */
 const deleteAddress = async (req, res, next) => {
   try {
-    const user = await User.findById(req.user._id);
+    const userId = String(req.user?.id || req.user?._id);
+    const user = await getUserById(userId);
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    
-    user.addresses.pull(req.params.id);
-    
-    // If the default address was deleted, make the first one default
-    if (user.addresses.length > 0 && !user.addresses.some(a => a.isDefault)) {
-      user.addresses[0].isDefault = true;
+
+    let addresses = Array.isArray(user.addresses) ? [...user.addresses] : [];
+    addresses = addresses.filter((a) => String(a.id || a._id) !== String(req.params.id));
+
+    if (addresses.length > 0 && !addresses.some((a) => a.isDefault)) {
+      addresses[0].isDefault = true;
     }
-    
-    await user.save();
-    res.status(200).json({ success: true, addresses: user.addresses });
+
+    await updateDoc('users', userId, {
+      addresses,
+      updatedAt: new Date().toISOString(),
+    });
+
+    res.status(200).json({ success: true, addresses });
   } catch (error) {
     next(error);
   }

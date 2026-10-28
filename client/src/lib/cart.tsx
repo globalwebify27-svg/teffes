@@ -67,7 +67,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const [couponError, setCouponError] = useState<string>("");
   const [isApplyingCoupon, setIsApplyingCoupon] = useState<boolean>(false);
 
-  // Load from localStorage & MongoDB Atlas if logged in
+  // Load from localStorage & Cloud Firestore if logged in
   useEffect(() => {
     let localItems: CartItem[] = [];
     try {
@@ -80,7 +80,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       // ignore
     }
 
-    // If user is authenticated, fetch persistent cart from MongoDB Atlas
+    // If user is authenticated, fetch persistent cart from Cloud Firestore
     if (isAuthenticated()) {
       api.get<{ success: boolean; cart: CartItem[] }>("/user/cart")
         .then((res) => {
@@ -106,7 +106,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
               // Sync back merged cart
               api.put("/user/cart", { items: merged }).catch(() => {});
             } else if (localItems.length > 0) {
-              // Upload local cart to Atlas
+              // Upload local cart to Cloud Firestore
               api.put("/user/cart", { items: localItems }).catch(() => {});
             }
           }
@@ -118,7 +118,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // Save to localStorage & MongoDB Atlas
+  // Save to localStorage & Cloud Firestore
   useEffect(() => {
     if (isInitialized) {
       try {
@@ -127,7 +127,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         // ignore
       }
 
-      // Sync to Atlas if authenticated
+      // Sync to Cloud Firestore if authenticated
       if (isAuthenticated()) {
         const timer = setTimeout(() => {
           api.put("/user/cart", { items }).catch((err) =>
