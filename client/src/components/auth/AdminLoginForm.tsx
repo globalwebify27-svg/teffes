@@ -221,6 +221,35 @@ export default function AdminLoginForm() {
             </>
           )}
         </button>
+
+        {/* Quick Demo Fill Buttons */}
+        <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col gap-2">
+          <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider text-center">
+            Quick Fill Admin Accounts
+          </span>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setForm({ email: "superadmin@teffes.com", password: "Super@12345" });
+                setError("");
+              }}
+              className="py-1.5 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[12px] font-semibold text-slate-700 transition-colors cursor-pointer text-center"
+            >
+              Super Admin
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setForm({ email: "storeadmin@teffes.com", password: "Store@12345" });
+                setError("");
+              }}
+              className="py-1.5 px-2.5 rounded-lg border border-slate-200 bg-slate-50 hover:bg-slate-100 text-[12px] font-semibold text-slate-700 transition-colors cursor-pointer text-center"
+            >
+              Store Admin
+            </button>
+          </div>
+        </div>
       </form>
 
       {/* ─── FORGOT PASSWORD MODAL ─── */}

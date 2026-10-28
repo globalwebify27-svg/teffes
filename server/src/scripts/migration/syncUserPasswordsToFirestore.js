@@ -5,7 +5,10 @@
 
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-require('dotenv').config({ path: './server/.env' });
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '../../../.env') });
+require('dotenv').config({ path: path.resolve(process.cwd(), '.env') });
+require('dotenv').config({ path: path.resolve(process.cwd(), 'server/.env') });
 const { getDb } = require('../../lib/firestore');
 
 async function syncPasswords() {

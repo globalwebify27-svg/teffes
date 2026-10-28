@@ -1743,6 +1743,18 @@ function InventoryTab() {
       });
       if (res.data?.success) {
         toast.success(res.data.message || `Moved ${parsedMoveQty} ${moveModalItem.unit} to Fresh Inventory`, "Stock Transferred");
+        // Immediately reflect update on the card
+        setItems(prev => prev.map(it => {
+          const matchId = (it.itemId || it.id) === (moveModalItem.itemId || moveModalItem.id) || it.id === moveModalItem.id || it.itemId === moveModalItem.itemId;
+          if (matchId) {
+            return {
+              ...it,
+              stock: res.data.stock !== undefined ? res.data.stock : Math.round(((Number(it.stock) || 0) + parsedMoveQty) * 1000) / 1000,
+              defreezeStock: res.data.defreezeStock !== undefined ? res.data.defreezeStock : Math.max(0, Math.round(((Number(it.defreezeStock) || 0) - parsedMoveQty) * 1000) / 1000),
+            };
+          }
+          return it;
+        }));
         setMoveModalItem(null);
         setMoveQty("");
         setMoveNotes("");
@@ -1782,6 +1794,19 @@ function InventoryTab() {
       });
       if (res.data?.success) {
         toast.success(res.data.message || `Recorded ${parsedWasteQty} ${wasteModalItem.unit} as waste`, "Waste Recorded");
+        // Immediately reflect update on the card
+        setItems(prev => prev.map(it => {
+          const matchId = (it.itemId || it.id) === (wasteModalItem.itemId || wasteModalItem.id) || it.id === wasteModalItem.id || it.itemId === wasteModalItem.itemId;
+          if (matchId) {
+            return {
+              ...it,
+              stock: wasteSource === "fresh" ? (res.data.remainingSourceStock !== undefined ? res.data.remainingSourceStock : Math.max(0, Math.round(((Number(it.stock) || 0) - parsedWasteQty) * 1000) / 1000)) : it.stock,
+              defreezeStock: wasteSource === "defreeze" ? (res.data.remainingSourceStock !== undefined ? res.data.remainingSourceStock : Math.max(0, Math.round(((Number(it.defreezeStock) || 0) - parsedWasteQty) * 1000) / 1000)) : it.defreezeStock,
+              wasteStock: res.data.wasteStock !== undefined ? res.data.wasteStock : Math.round(((Number(it.wasteStock) || 0) + parsedWasteQty) * 1000) / 1000,
+            };
+          }
+          return it;
+        }));
         setWasteModalItem(null);
         setWasteQty("");
         setWasteNotes("");
@@ -1822,15 +1847,39 @@ function InventoryTab() {
     setSubmittingAdjust(true);
     try {
       const id = adjustModalItem.itemId || adjustModalItem.id;
-      const res = await api.patch(`/store-admin/inventory/${id}`, {
+      const payload: any = {
         classification: adjustClass,
         operation: adjustOp,
         quantity: parsedAdjustQty,
-        min: adjustClass === "fresh" ? adjustMin : undefined,
         reason: adjustReason.trim(),
-      });
+      };
+      if (adjustClass === "fresh") {
+        payload.stock = projectedAdjustResult;
+        if (adjustMin !== undefined && adjustMin !== "") {
+          payload.min = Math.max(0, Number(adjustMin) || 0);
+        }
+      } else if (adjustClass === "defreeze") {
+        payload.defreezeStock = projectedAdjustResult;
+      }
+
+      const res = await api.patch(`/store-admin/inventory/${id}`, payload);
       if (res.data?.success) {
         toast.success("Inventory stock adjusted successfully", "Stock Updated");
+        const updatedItem = res.data.item;
+        // Immediately reflect update on the card
+        setItems(prev => prev.map(it => {
+          const matchId = (it.itemId || it.id) === id || it.id === adjustModalItem.id || it.itemId === adjustModalItem.itemId;
+          if (matchId) {
+            return {
+              ...it,
+              ...(updatedItem || {}),
+              stock: adjustClass === "fresh" ? projectedAdjustResult : (updatedItem?.stock !== undefined ? updatedItem.stock : it.stock),
+              defreezeStock: adjustClass === "defreeze" ? projectedAdjustResult : (updatedItem?.defreezeStock !== undefined ? updatedItem.defreezeStock : it.defreezeStock),
+              min: adjustClass === "fresh" && adjustMin !== "" ? Number(adjustMin) : (updatedItem?.min !== undefined ? updatedItem.min : it.min),
+            };
+          }
+          return it;
+        }));
         setAdjustModalItem(null);
         setAdjustQty("");
         setAdjustReason("");
@@ -2188,7 +2237,7 @@ function InventoryTab() {
         </div>
       ) : (
         /* ─── CARDS GRID VIEW ─── */
-        <div>
+        <div style={{ width: "100%" }}>
           {loading ? (
             <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading live inventory…</div>
           ) : filteredItems.length === 0 ? (
@@ -2200,7 +2249,7 @@ function InventoryTab() {
               </div>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(290px, 1fr))", gap: "16px" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px", width: "100%" }}>
               {filteredItems.map(item => {
                 const freshStock = Number(item.stock || 0);
                 const defreezeStock = Number(item.defreezeStock || 0);

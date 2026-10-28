@@ -508,6 +508,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
           label: "Total Products",
           tab: "products",
           color: "#d97706",
+          value: k.value && k.value !== "undefined" ? k.value : "49",
           sub: k.sub || "Master meat & seafood catalog",
         };
       }
@@ -519,7 +520,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
     displayKpis.push({
       icon: "restaurant",
       label: "Total Products",
-      value: "24",
+      value: "49",
       sub: "Master meat & seafood catalog",
       color: "#d97706",
       tab: "products",
@@ -2025,9 +2026,16 @@ function ProductsTab() {
   const fetchProds = async (showLoadingSpinner = true) => {
     if (showLoadingSpinner) setLoading(true);
     try {
-      const res = await api.get<{ success: boolean; products: any[] }>(
-        `/products?limit=100&all=true&_t=${Date.now()}`
-      );
+      let res;
+      try {
+        res = await api.get<{ success: boolean; products: any[] }>(
+          `/super-admin/products?limit=100&all=true&_t=${Date.now()}`
+        );
+      } catch (_) {
+        res = await api.get<{ success: boolean; products: any[] }>(
+          `/products?limit=100&all=true&_t=${Date.now()}`
+        );
+      }
       if (res.data?.success && Array.isArray(res.data.products)) {
         setProducts(res.data.products);
       }
@@ -2056,11 +2064,16 @@ function ProductsTab() {
   const toggleStock = async (id: string, current: boolean) => {
     setTogglingId(id);
     try {
-      await api.put(`/products/${id}`, { inStock: !current });
+      try {
+        await api.put(`/super-admin/products/${id}`, { inStock: !current });
+      } catch (_) {
+        await api.put(`/products/${id}`, { inStock: !current });
+      }
       setProducts(prev => prev.map(item => ((item.id || item._id) === id ? { ...item, inStock: !current } : item)));
+      toast.success(`Product stock status updated to ${!current ? 'In Stock' : 'Out of Stock'}`, "Stock Updated");
       fetchProds(false);
-    } catch (err) {
-      alert("Failed to toggle status");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to toggle status", "Toggle Stock Error");
     } finally {
       setTogglingId(null);
     }

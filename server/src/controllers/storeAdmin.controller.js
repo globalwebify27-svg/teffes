@@ -303,12 +303,60 @@ const updateInventoryItem = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
     const { id } = req.params;
-    const { stock, defreezeStock, min, reason } = req.body;
+    const {
+      stock,
+      defreezeStock,
+      wasteStock,
+      min,
+      reason,
+      classification,
+      operation,
+      quantity,
+    } = req.body;
+
+    // Load existing record to allow relative operation adjustments
+    const existing = await getInventoryItem(storeId, id);
+    if (!existing) {
+      return res.status(404).json({ success: false, message: `Inventory item "${id}" not found in store "${storeId}"` });
+    }
 
     const updates = {};
+
+    // 1. Handle classification + operation (add / reduce / set) from frontend modal
+    if (classification && operation) {
+      const qty = Number(quantity);
+      if (!isNaN(qty)) {
+        if (classification === 'defreeze') {
+          const currentDefreeze = Number(existing.defreezeStock) || 0;
+          let newDefreeze = currentDefreeze;
+          if (operation === 'add') newDefreeze = Math.round((currentDefreeze + qty) * 1000) / 1000;
+          else if (operation === 'reduce') newDefreeze = Math.max(0, Math.round((currentDefreeze - qty) * 1000) / 1000);
+          else if (operation === 'set') newDefreeze = Math.max(0, qty);
+          updates.defreezeStock = newDefreeze;
+        } else if (classification === 'waste') {
+          const currentWaste = Number(existing.wasteStock) || 0;
+          let newWaste = currentWaste;
+          if (operation === 'add') newWaste = Math.round((currentWaste + qty) * 1000) / 1000;
+          else if (operation === 'reduce') newWaste = Math.max(0, Math.round((currentWaste - qty) * 1000) / 1000);
+          else if (operation === 'set') newWaste = Math.max(0, qty);
+          updates.wasteStock = newWaste;
+        } else {
+          // Default to fresh stock
+          const currentFresh = Number(existing.stock) || 0;
+          let newFresh = currentFresh;
+          if (operation === 'add') newFresh = Math.round((currentFresh + qty) * 1000) / 1000;
+          else if (operation === 'reduce') newFresh = Math.max(0, Math.round((currentFresh - qty) * 1000) / 1000);
+          else if (operation === 'set') newFresh = Math.max(0, qty);
+          updates.stock = newFresh;
+        }
+      }
+    }
+
+    // 2. Direct overrides if provided explicitly
     if (stock !== undefined) updates.stock = Math.max(0, Number(stock));
     if (defreezeStock !== undefined) updates.defreezeStock = Math.max(0, Number(defreezeStock));
-    if (min !== undefined) updates.min = Math.max(0, Number(min));
+    if (wasteStock !== undefined) updates.wasteStock = Math.max(0, Number(wasteStock));
+    if (min !== undefined && min !== '' && min !== null) updates.min = Math.max(0, Number(min));
     updates.lastRestocked = `Today ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 
     const updated = await updateInventoryItemFS(storeId, id, updates, req.user, reason);
