@@ -75,6 +75,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         if (mounted) {
           setState(() {
             _serverOrder = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
+            if (_serverOrder?.rider == null || _serverOrder?.rider?.name?.trim().isEmpty == true) {
+              _riderLat = null;
+              _riderLng = null;
+              _liveEtaMinutes = null;
+              _liveRoadDistanceKm = null;
+            }
           });
         }
       }
@@ -875,54 +881,72 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
               const SizedBox(height: AppDimensions.spaceMd),
 
               // 4-Digit Delivery Code Card (for customer to share with rider at doorstep)
-              if (order.deliveryOtp != null && status == 'Out for Delivery' && !order.isPickup) ...[
+              if (order.deliveryOtp != null &&
+                  order.deliveryOtp!.trim().isNotEmpty &&
+                  !order.isPickup &&
+                  (status == 'Out for Delivery' || isRiderDispatched)) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFEF3C7),
                     borderRadius: AppDimensions.roundedLg,
-                    border: Border.all(color: const Color(0xFFFDE68A)),
+                    border: Border.all(color: const Color(0xFFFDE68A), width: 1.5),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.amber.withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
                   ),
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(10),
                         decoration: const BoxDecoration(
                           color: Color(0xFFD97706),
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.pin_rounded, color: Colors.white, size: 18),
+                        child: const Icon(Icons.pin_rounded, color: Colors.white, size: 20),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 14),
                       const Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Doorstep Delivery Code',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Color(0xFF92400E)),
+                              'Doorstep Delivery OTP',
+                              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: Color(0xFF92400E)),
                             ),
-                            SizedBox(height: 2),
+                            SizedBox(height: 3),
                             Text(
-                              'Share this code with your delivery partner upon arrival',
-                              style: TextStyle(fontSize: 10, color: Color(0xFFB45309)),
+                              'Share this 4-digit code with your rider upon arrival to confirm delivery',
+                              style: TextStyle(fontSize: 11, color: Color(0xFFB45309), height: 1.2),
                             ),
                           ],
                         ),
                       ),
+                      const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFFF59E0B)),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFF59E0B), width: 1.5),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.amber.withOpacity(0.2),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: Text(
                           order.deliveryOtp!,
                           style: const TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.w900,
-                            letterSpacing: 3,
+                            letterSpacing: 4,
                             color: Color(0xFF92400E),
                           ),
                         ),

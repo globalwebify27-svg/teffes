@@ -561,6 +561,13 @@ function LiveOrdersTab() {
   const [loading, setLoading] = useState(true);
   const [printModalOrder, setPrintModalOrder] = useState<any>(null);
 
+  // In-Place Assign Rider & Dispatch Modal state
+  const [assignModalOrder, setAssignModalOrder] = useState<any>(null);
+  const [availableRiders, setAvailableRiders] = useState<any[]>([]);
+  const [loadingRiders, setLoadingRiders] = useState(false);
+  const [selectedRiderId, setSelectedRiderId] = useState("");
+  const [assigningRider, setAssigningRider] = useState(false);
+
   const fetchOrders = () => {
     setLoading(true);
     const q = filter === "All" ? "" : `?status=${filter}`;
@@ -574,6 +581,56 @@ function LiveOrdersTab() {
       .finally(() => setLoading(false));
   };
 
+  const openAssignRiderModal = (order: any) => {
+    setAssignModalOrder(order);
+    setSelectedRiderId("");
+    setLoadingRiders(true);
+    api.get<{ success: boolean; riders: any[] }>("/store-admin/riders")
+      .then(res => {
+        if (res.data.success && Array.isArray(res.data.riders)) {
+          setAvailableRiders(res.data.riders);
+          const firstAvailable = res.data.riders.find(r => r.riderStatus === "Available");
+          if (firstAvailable) {
+            setSelectedRiderId(firstAvailable.id || firstAvailable._id);
+          }
+        }
+      })
+      .catch(err => {
+        console.warn("Failed to fetch riders:", err);
+        toast.error("Failed to load active riders", "Rider Error");
+      })
+      .finally(() => setLoadingRiders(false));
+  };
+
+  const handleConfirmAssignRider = async () => {
+    if (!assignModalOrder || !selectedRiderId) {
+      toast.error("Please select an active delivery partner", "Rider Required");
+      return;
+    }
+    setAssigningRider(true);
+    try {
+      const orderId = assignModalOrder.orderId || assignModalOrder.id;
+      const res = await api.patch<{ success: boolean; message: string; rider?: any }>(
+        `/store-admin/orders/${orderId}/assign-rider`,
+        { riderId: selectedRiderId }
+      );
+      if (res.data.success) {
+        const riderName = res.data.rider?.name || "Rider";
+        toast.success(
+          `Rider ${riderName} assigned! Order #${orderId} is now Out for Delivery.`,
+          "Rider Dispatched"
+        );
+        setAssignModalOrder(null);
+        setSelectedRiderId("");
+        fetchOrders();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to assign rider", "Dispatch Error");
+    } finally {
+      setAssigningRider(false);
+    }
+  };
+
   useEffect(() => {
     fetchOrders();
   }, [filter]);
@@ -583,11 +640,24 @@ function LiveOrdersTab() {
     const handleRefresh = () => {
       fetchOrders();
     };
+    const handleOrderDeclined = (data: any) => {
+      const orderId = data?.orderId || data?.id;
+      const riderName = data?.riderName || "Rider";
+      toast.warning(
+        `Rider ${riderName} declined Order #${orderId}. Reverted to Ready stage for reassignment.`,
+        "Rider Declined Delivery"
+      );
+      fetchOrders();
+    };
     socket.on("orders:refreshed", handleRefresh);
     socket.on("order:created", handleRefresh);
+    socket.on("store:order:declined", handleOrderDeclined);
+    socket.on("order:declined", handleOrderDeclined);
     return () => {
       socket.off("orders:refreshed", handleRefresh);
       socket.off("order:created", handleRefresh);
+      socket.off("store:order:declined", handleOrderDeclined);
+      socket.off("order:declined", handleOrderDeclined);
     };
   }, [filter]);
 
@@ -611,12 +681,21 @@ function LiveOrdersTab() {
     }
     if (!next) return;
 
+    // Intercept: Home delivery orders at Ready MUST be assigned a rider via Modal
+    if (next === "Out for Delivery" && !isPickup) {
+      const targetOrder = orders.find(o => (o.orderId || o.id) === orderId);
+      if (targetOrder) {
+        openAssignRiderModal(targetOrder);
+        return;
+      }
+    }
+
     try {
       await api.patch(`/store-admin/orders/${orderId}/status`, { status: next });
       toast.success(`Order advanced to: ${next}`, "Order Updated");
       fetchOrders();
-    } catch (err) {
-      toast.error("Failed to advance order status", "Order Error");
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to advance order status", "Order Error");
     }
   };
 
@@ -632,7 +711,7 @@ function LiveOrdersTab() {
     const deliveryLabels: Record<string, string> = {
       "Pending": "Mark Cutting",
       "Cutting": "Mark Ready",
-      "Ready": "Out for Delivery",
+      "Ready": "Assign Rider & Dispatch",
       "Out for Delivery": "Mark Delivered",
     };
     return deliveryLabels[status];
@@ -841,15 +920,32 @@ function LiveOrdersTab() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
                   <OrderStatusPipeline status={o.status} />
                   <div style={{ display: "flex", gap: "8px" }}>
+                    {o.rider?.name && (
+                      <div style={{
+                        fontSize: "0.75rem",
+                        color: "#0369a1",
+                        background: "#f0f9ff",
+                        border: "1px solid #bae6fd",
+                        borderRadius: "6px",
+                        padding: "4px 8px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontWeight: 700,
+                      }}>
+                        <span className="material-symbols-outlined text-[14px]">two_wheeler</span>
+                        <span>Rider: {o.rider.name}</span>
+                      </div>
+                    )}
                     {nextLabel && (
                       <button
                         onClick={() => advanceStatus(o.orderId || o.id, o.status, isPickup)}
                         style={{
-                          background: "rgba(148, 23, 23, 0.08)",
-                          border: "1.5px solid rgba(148, 23, 23, 0.25)",
+                          background: o.status === "Ready" && !isPickup ? "#941717" : "rgba(148, 23, 23, 0.08)",
+                          color: o.status === "Ready" && !isPickup ? "#fff" : "#941717",
+                          border: o.status === "Ready" && !isPickup ? "1.5px solid #941717" : "1.5px solid rgba(148, 23, 23, 0.25)",
                           borderRadius: "8px",
                           padding: "7px 15px",
-                          color: "#941717",
                           fontSize: "0.8rem",
                           fontWeight: 700,
                           cursor: "pointer",
@@ -857,17 +953,12 @@ function LiveOrdersTab() {
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "6px",
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = "rgba(148, 23, 23, 0.16)";
-                          e.currentTarget.style.borderColor = "rgba(148, 23, 23, 0.4)";
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = "rgba(148, 23, 23, 0.08)";
-                          e.currentTarget.style.borderColor = "rgba(148, 23, 23, 0.25)";
+                          boxShadow: o.status === "Ready" && !isPickup ? "0 2px 6px rgba(148, 23, 23, 0.25)" : "none",
                         }}
                       >
-                        <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                        <span className="material-symbols-outlined text-[16px]">
+                          {o.status === "Ready" && !isPickup ? "two_wheeler" : "check_circle"}
+                        </span>
                         <span>{nextLabel}</span>
                       </button>
                     )}
@@ -907,6 +998,246 @@ function LiveOrdersTab() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ─── IN-PLACE ASSIGN RIDER & DISPATCH MODAL ─── */}
+      {assignModalOrder && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0, 0, 0, 0.55)",
+          backdropFilter: "blur(3px)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          zIndex: 1000,
+          padding: "16px",
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "18px",
+            width: "100%",
+            maxWidth: "460px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            overflow: "hidden",
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: "#faf8f5",
+              borderBottom: "1px solid #ede8e0",
+              padding: "16px 20px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{
+                  width: "36px",
+                  height: "36px",
+                  borderRadius: "10px",
+                  background: "#941717",
+                  color: "#fff",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                  <span className="material-symbols-outlined text-[20px]">two_wheeler</span>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "#171410" }}>
+                    Assign Rider & Dispatch
+                  </h3>
+                  <p style={{ margin: 0, fontSize: "0.75rem", color: "#73695b" }}>
+                    Order #{assignModalOrder.orderId || assignModalOrder.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setAssignModalOrder(null)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  color: "#73695b",
+                  cursor: "pointer",
+                  padding: "4px",
+                  borderRadius: "6px",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "20px" }}>
+              {/* Customer / Order Summary */}
+              <div style={{
+                background: "#faf8f5",
+                border: "1px solid #ede8e0",
+                borderRadius: "12px",
+                padding: "12px 14px",
+                marginBottom: "16px",
+              }}>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
+                  <span style={{ fontWeight: 800, color: "#171410", fontSize: "0.85rem" }}>
+                    {assignModalOrder.customer?.name || "Customer"}
+                  </span>
+                  <span style={{ fontWeight: 800, color: "#941717", fontSize: "0.85rem" }}>
+                    ₹{assignModalOrder.amount || assignModalOrder.totalAmount}
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#73695b", marginBottom: "4px" }}>
+                  📍 {assignModalOrder.customer?.address || "Ranchi Delivery"}
+                </div>
+                <div style={{ fontSize: "0.75rem", color: "#423b32", fontWeight: 600 }}>
+                  Items: {assignModalOrder.itemSummary || assignModalOrder.items?.map((it: any) => `${it.name} ×${it.quantity}`).join(", ") || "Fresh Meat Cuts"}
+                </div>
+              </div>
+
+              {/* Rider Selection Header */}
+              <div style={{ marginBottom: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <label style={{ fontSize: "0.82rem", fontWeight: 800, color: "#171410" }}>
+                  Select Delivery Partner:
+                </label>
+                {availableRiders.length > 0 && (
+                  <span style={{ fontSize: "0.72rem", color: "#059669", fontWeight: 700, background: "#ecfdf5", padding: "2px 8px", borderRadius: "99px" }}>
+                    {availableRiders.filter(r => r.riderStatus === "Available").length} Online
+                  </span>
+                )}
+              </div>
+
+              {/* Riders List */}
+              {loadingRiders ? (
+                <div style={{ padding: "30px", textAlign: "center", color: "#73695b", fontSize: "0.82rem" }}>
+                  Loading active fleet partners…
+                </div>
+              ) : availableRiders.length === 0 ? (
+                <div style={{
+                  padding: "18px",
+                  background: "#fffbeb",
+                  border: "1px solid #fde68a",
+                  borderRadius: "10px",
+                  color: "#92400e",
+                  fontSize: "0.8rem",
+                  textAlign: "center",
+                }}>
+                  No registered delivery riders found for this store.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "240px", overflowY: "auto", paddingRight: "4px" }}>
+                  {availableRiders.map((r: any) => {
+                    const rId = r.id || r._id;
+                    const isSelected = selectedRiderId === rId;
+                    const isAvailable = r.riderStatus === "Available";
+                    return (
+                      <div
+                        key={rId}
+                        onClick={() => setSelectedRiderId(rId)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          border: isSelected ? "2px solid #941717" : "1px solid #ede8e0",
+                          background: isSelected ? "#fff5f5" : "#fff",
+                          cursor: "pointer",
+                          transition: "all 120ms ease",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <input
+                            type="radio"
+                            name="selectedRiderLive"
+                            checked={isSelected}
+                            onChange={() => setSelectedRiderId(rId)}
+                            style={{ accentColor: "#941717", cursor: "pointer" }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.85rem", display: "flex", alignItems: "center", gap: "6px" }}>
+                              <span>{r.name}</span>
+                              <span style={{ fontSize: "0.7rem", color: "#d97706", fontWeight: 700 }}>
+                                ★ {(r.riderRating || "4.9").toString().replace("★", "").trim()}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: "0.72rem", color: "#73695b" }}>
+                              {r.phone} • {r.vehicleNumber || "Fleet Bike"}
+                            </div>
+                          </div>
+                        </div>
+
+                        <span style={{
+                          fontSize: "0.7rem",
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: "99px",
+                          background: isAvailable ? "#ecfdf5" : r.riderStatus === "On Delivery" ? "#eff6ff" : "#f3f4f6",
+                          color: isAvailable ? "#059669" : r.riderStatus === "On Delivery" ? "#2563eb" : "#6b7280",
+                        }}>
+                          {r.riderStatus || "Available"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              background: "#faf8f5",
+              borderTop: "1px solid #ede8e0",
+              padding: "14px 20px",
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "10px",
+            }}>
+              <button
+                type="button"
+                onClick={() => setAssignModalOrder(null)}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #ede8e0",
+                  borderRadius: "8px",
+                  padding: "8px 16px",
+                  color: "#423b32",
+                  fontSize: "0.82rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmAssignRider}
+                disabled={assigningRider || !selectedRiderId}
+                style={{
+                  background: !selectedRiderId ? "#d1d5db" : "#941717",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "8px 18px",
+                  color: "#fff",
+                  fontSize: "0.82rem",
+                  fontWeight: 800,
+                  cursor: !selectedRiderId ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: !selectedRiderId ? "none" : "0 2px 6px rgba(148, 23, 23, 0.3)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[16px]">two_wheeler</span>
+                <span>{assigningRider ? "Dispatching…" : "Assign & Dispatch"}</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1919,7 +2250,7 @@ function InventoryTab() {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
       {/* ─── Top Metrics Bar ────────────────────────────────────────────────────── */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: "12px" }}>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 w-full">
         <div style={{
           background: "#fff",
           borderRadius: "14px",
@@ -2249,7 +2580,7 @@ function InventoryTab() {
               </div>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))", gap: "16px", width: "100%" }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 w-full">
               {filteredItems.map(item => {
                 const freshStock = Number(item.stock || 0);
                 const defreezeStock = Number(item.defreezeStock || 0);
@@ -2382,7 +2713,9 @@ function InventoryTab() {
                         }}
                       >
                         <span className="material-symbols-outlined text-[16px]">sync_alt</span>
-                        <span>{defreezeStock > 0 ? `Move De-Freeze to Fresh (${defreezeStock} ${item.unit})` : `De-Freeze Pool Empty (0 ${item.unit})`}</span>
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {defreezeStock > 0 ? `Move De-Freeze to Fresh (${defreezeStock} ${item.unit})` : `De-Freeze Pool Empty (0 ${item.unit})`}
+                        </span>
                       </button>
 
                       {/* Secondary Actions Row: Record Waste & Adjust Stock */}
@@ -2401,14 +2734,16 @@ function InventoryTab() {
                             color: "#dc2626",
                             border: "1px solid #fca5a5",
                             borderRadius: "8px",
-                            padding: "6px 8px",
-                            fontSize: "0.76rem",
+                            padding: "7px 10px",
+                            fontSize: "0.78rem",
                             fontWeight: 700,
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            gap: "4px",
+                            gap: "5px",
+                            whiteSpace: "nowrap",
+                            transition: "background 120ms ease",
                           }}
                         >
                           <span className="material-symbols-outlined text-[15px]">delete_sweep</span>
@@ -2430,14 +2765,16 @@ function InventoryTab() {
                             color: "#423b32",
                             border: "1px solid #d1cbbf",
                             borderRadius: "8px",
-                            padding: "6px 8px",
-                            fontSize: "0.76rem",
+                            padding: "7px 10px",
+                            fontSize: "0.78rem",
                             fontWeight: 700,
                             cursor: "pointer",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            gap: "4px",
+                            gap: "5px",
+                            whiteSpace: "nowrap",
+                            transition: "background 120ms ease",
                           }}
                         >
                           <span className="material-symbols-outlined text-[15px]">tune</span>

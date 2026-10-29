@@ -45,6 +45,9 @@ const getOrderById = async (req, res, next) => {
       return res.status(403).json({ success: false, message: 'Unauthorized to view this order' });
     }
 
+    if (orderCtrl.ensureOrderDeliveryOtp) {
+      await orderCtrl.ensureOrderDeliveryOtp(order);
+    }
     const sanitized = orderCtrl.sanitizeOrderDates ? orderCtrl.sanitizeOrderDates(order) : order;
     return res.status(200).json({ success: true, order: sanitized });
   } catch (err) {
@@ -56,6 +59,9 @@ const getMyOrders = async (req, res, next) => {
   try {
     const userId = req.user._id || req.user.id;
     const orders = await getUserOrders(userId);
+    if (orderCtrl.ensureOrderDeliveryOtp) {
+      await Promise.all(orders.map((o) => orderCtrl.ensureOrderDeliveryOtp(o)));
+    }
     const sanitizedOrders = orders.map((o) => (orderCtrl.sanitizeOrderDates ? orderCtrl.sanitizeOrderDates(o) : o));
     return res.status(200).json({
       success: true,

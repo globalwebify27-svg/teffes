@@ -65,18 +65,6 @@ class _DoorstepDeliveryScreenState extends State<DoorstepDeliveryScreen> {
     });
   }
 
-  void _fillOtp(String code) {
-    final clean = code.replaceAll(RegExp(r'\D'), '');
-    if (clean.length >= 4) {
-      _box1.text = clean[0];
-      _box2.text = clean[1];
-      _box3.text = clean[2];
-      _box4.text = clean[3];
-      _fn4.requestFocus();
-      setState(() {});
-    }
-  }
-
   Future<void> _handleCompleteDelivery() async {
     final otp = _currentOtp;
     if (otp.length < 4) {
@@ -444,57 +432,6 @@ class _DoorstepDeliveryScreenState extends State<DoorstepDeliveryScreen> {
                       _buildOtpSquare(controller: _box4, focusNode: _fn4, prevFocus: _fn3),
                     ],
                   ),
-                  const SizedBox(height: 16),
-
-                  // Quick OTP Helper for Testing / Demo
-                  if (order.deliveryOtp != null && order.deliveryOtp!.isNotEmpty)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: AppColors.deliveryAmberBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.vpn_key_rounded, size: 14, color: AppColors.deliveryAmber),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Order OTP: ${order.deliveryOtp}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w800,
-                              color: AppColors.deliveryAmber,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          GestureDetector(
-                            onTap: () => _fillOtp(order.deliveryOtp!),
-                            child: const Text(
-                              'Auto Fill',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.primaryMaroon,
-                                decoration: TextDecoration.underline,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    GestureDetector(
-                      onTap: () => _fillOtp('1234'),
-                      child: const Text(
-                        'Demo OTP: 1234 (Tap to Fill)',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryMaroon,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),

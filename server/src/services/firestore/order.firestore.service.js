@@ -32,7 +32,13 @@ const generateOrderId = () => {
 const getOrderById = async (orderId) => {
   if (!orderId || typeof orderId !== 'string') return null;
   const cleanId = orderId.trim();
-  const order = await getDoc(ORDERS_COLLECTION, cleanId);
+  let order = await getDoc(ORDERS_COLLECTION, cleanId);
+  if (!order) {
+    const list = await queryDocs(ORDERS_COLLECTION, (ref) => ref.where('orderId', '==', cleanId).limit(1));
+    if (list && list.length > 0) {
+      order = list[0];
+    }
+  }
   return order;
 };
  
