@@ -141,8 +141,9 @@ class OrderModel {
       status: json['status'] ?? 'Pending',
       amount: (json['totalAmount'] as num?)?.toDouble() ?? (json['amount'] as num?)?.toDouble() ?? 0.0,
       placedAt: json['createdAt'] ?? json['placedAt'] ?? 'Recently',
-      items: json['items'] is List ? json['items'] : [],
-      rider: json['rider'] is Map<String, dynamic> ? OrderRiderModel.fromJson(json['rider']) : null,
+      rider: (json['rider'] is Map<String, dynamic> && (json['rider']['name']?.toString().trim().isNotEmpty == true))
+          ? OrderRiderModel.fromJson(json['rider'])
+          : null,
       returnRider: json['returnRider'] is Map<String, dynamic> ? OrderRiderModel.fromJson(json['returnRider']) : null,
       returnStatus: json['returnStatus'],
       returnReason: json['returnReason'],

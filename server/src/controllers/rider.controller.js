@@ -199,6 +199,10 @@ const getAvailableOrders = async (req, res, next) => {
     const allOrders = await getAllOrders();
     const orders = allOrders.filter((o) => {
       if (o.fulfillmentType === 'pickup') return false;
+      const oDeclinedBy = Array.isArray(o.declinedBy) ? o.declinedBy.map(String) : [];
+      if (oDeclinedBy.includes(String(riderId)) || (rider?.id && oDeclinedBy.includes(String(rider.id)))) {
+        return false;
+      }
       const oRiderId = o.rider?.riderId || o.rider?.id;
       const oRiderPhone = (o.rider?.phone || '').replace(/\D/g, '');
 
@@ -215,10 +219,16 @@ const getAvailableOrders = async (req, res, next) => {
       return false;
     });
 
+    const sanitizedOrders = orders.map((o) => {
+      const copy = { ...o };
+      delete copy.deliveryOtp;
+      return copy;
+    });
+
     res.status(200).json({
       success: true,
-      count: orders.length,
-      orders,
+      count: sanitizedOrders.length,
+      orders: sanitizedOrders,
     });
   } catch (error) {
     next(error);
@@ -267,10 +277,13 @@ const acceptOrder = async (req, res, next) => {
     const updatedOrder = { ...order, ...updatePayload };
     emitOrderStatusUpdate(order.orderId || id, updatedOrder);
 
+    const riderOrderResponse = { ...updatedOrder };
+    delete riderOrderResponse.deliveryOtp;
+
     res.status(200).json({
       success: true,
       message: 'Order accepted successfully. 4-digit OTP generated for customer.',
-      order: updatedOrder,
+      order: riderOrderResponse,
     });
   } catch (error) {
     next(error);
@@ -279,7 +292,7 @@ const acceptOrder = async (req, res, next) => {
 
 /**
  * POST /api/rider/orders/:id/reject
- * Reject/pass an order
+ * Reject/decline an order assignment
  */
 const rejectOrder = async (req, res, next) => {
   try {
@@ -288,24 +301,79 @@ const rejectOrder = async (req, res, next) => {
     const rider = await getRiderDoc(riderId);
 
     const order = await getOrderByIdFS(id);
-    if (order) {
-      await updateDoc('orders', id, {
-        status: 'Ready',
-        rider: { name: '', phone: '', vehicleNumber: '', lat: 23.3441, lng: 85.3096 },
-        updatedAt: new Date().toISOString(),
-      });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
     }
+
+    const now = new Date().toISOString();
+    const currentDeclined = Array.isArray(order.declinedBy) ? order.declinedBy : [];
+    const updatedDeclined = Array.from(
+      new Set([...currentDeclined, String(riderId), String(rider?.id || '')].filter(Boolean))
+    );
+
+    const updatedTimeline = Array.isArray(order.timeline) ? [...order.timeline] : [];
+    updatedTimeline.push({
+      status: 'Ready',
+      timestamp: now,
+      note: `Delivery partner ${rider?.name || 'Rider'} declined assignment. Reverted to Ready for new partner assignment.`,
+    });
+
+    const updatePayload = {
+      status: 'Ready',
+      rider: null,
+      declinedBy: updatedDeclined,
+      remainingTransitMinutes: 15,
+      etaStage: 'PREPARING',
+      timeline: updatedTimeline,
+      updatedAt: now,
+    };
+
+    await updateDoc('orders', id, updatePayload);
 
     if (rider) {
       await updateDoc('users', rider.id || riderId, {
         riderStatus: 'Available',
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
       });
+    }
+
+    const updatedOrder = { ...order, ...updatePayload };
+
+    // Broadcast live to customer app & web
+    emitOrderStatusUpdate(order.orderId || id, updatedOrder);
+
+    // Broadcast live to store admin
+    try {
+      const { getIO } = require('../socket');
+      const io = getIO();
+      if (io) {
+        const alertPayload = {
+          orderId: order.orderId || id,
+          id,
+          riderName: rider?.name || 'Rider',
+          riderPhone: rider?.phone || '',
+          status: 'Ready',
+          timestamp: now,
+          message: `Rider ${rider?.name || 'Rider'} declined Order #${order.orderId || id}. Please assign a new delivery partner.`,
+        };
+        io.emit('store:order:declined', alertPayload);
+        io.emit('order:declined', alertPayload);
+        io.emit('orders:refreshed');
+        io.emit('order:status_changed', {
+          orderId: order.orderId || id,
+          id,
+          status: 'Ready',
+          rider: null,
+        });
+      }
+    } catch (sockErr) {
+      console.warn('[Socket.IO] rejectOrder broadcast error:', sockErr.message);
     }
 
     res.status(200).json({
       success: true,
-      message: 'Order rejected/passed',
+      message: 'Order declined successfully. Status reverted to Ready and unassigned.',
+      order: updatedOrder,
     });
   } catch (error) {
     next(error);
@@ -358,10 +426,13 @@ const confirmPickup = async (req, res, next) => {
       }).catch((err) => console.warn('[FCM] Confirm pickup push error:', err.message));
     }
 
+    const riderOrderResponse = { ...updatedOrder };
+    delete riderOrderResponse.deliveryOtp;
+
     res.status(200).json({
       success: true,
       message: 'Hub pickup confirmed. Order is now out for delivery.',
-      order: updatedOrder,
+      order: riderOrderResponse,
     });
   } catch (error) {
     next(error);
@@ -444,10 +515,10 @@ const completeDelivery = async (req, res, next) => {
     const cleanEnteredOtp = (otp || '').toString().trim();
     const cleanStoredOtp = (order.deliveryOtp || '').toString().trim();
 
-    if (cleanStoredOtp && cleanEnteredOtp !== cleanStoredOtp && cleanEnteredOtp !== '1234') {
+    if (!cleanStoredOtp || cleanEnteredOtp !== cleanStoredOtp) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid 4-digit delivery OTP code. Please ask the customer for the code shown in their app.',
+        message: 'Invalid 4-digit delivery OTP code. Please ask the customer for the correct code shown in their app.',
       });
     }
 
@@ -615,7 +686,7 @@ const getOrders = async (req, res, next) => {
   try {
     const riderId = req.user?._id || req.user?.id;
     const rider = await getRiderDoc(riderId);
-    const { filter } = req.query;
+    const { filter } = req.query || {};
     const rPhone = (rider?.phone || '').replace(/\D/g, '');
 
     const allOrders = await getAllOrders();

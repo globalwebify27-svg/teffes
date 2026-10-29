@@ -159,10 +159,44 @@ export default function DashboardPage() {
     socket.emit("join:order", orderId);
 
     const handleStatusChanged = (data: any) => {
-      if (data.orderId === orderId) {
-        setTrackingOrder((prev: any) => (prev ? { ...prev, status: data.status } : null));
+      if (data.orderId === orderId || data.id === orderId) {
+        const newStatus = data.status || data.order?.status;
+        const rawRider = data.rider !== undefined ? data.rider : (data.order?.rider !== undefined ? data.order.rider : undefined);
+        const newDeliveryOtp = data.deliveryOtp || data.order?.deliveryOtp;
+        if (rawRider === null) {
+          setLiveRiderCoords(null);
+        }
+        const formattedRider = rawRider ? {
+          isAssigned: true,
+          name: rawRider.name || "",
+          phone: rawRider.phone || "",
+          vehicle: rawRider.vehicle || rawRider.vehicleNumber || "Insulated Cold Box (Fleet)",
+          lat: Number(rawRider.lat) || 23.3441,
+          lng: Number(rawRider.lng) || 85.3096,
+          rating: (rawRider.rating || rawRider.riderRating || "4.9").toString(),
+          deliveriesCount: rawRider.deliveriesCount || "Fleet Partner",
+          bagTemp: rawRider.bagTemp || "Fresh-Lock Insulated Box",
+        } : null;
+
+        setTrackingOrder((prev: any) => {
+          if (!prev) return null;
+          const updated = { ...prev };
+          if (newStatus) updated.status = newStatus;
+          if (rawRider !== undefined) updated.rider = formattedRider;
+          if (newDeliveryOtp) updated.deliveryOtp = newDeliveryOtp;
+          return updated;
+        });
         setLiveOrders((prev: any[]) =>
-          prev.map((o) => (o.orderId === orderId || o.id === orderId ? { ...o, status: data.status } : o))
+          prev.map((o) => {
+            if (o.orderId === orderId || o.id === orderId) {
+              const updated = { ...o };
+              if (newStatus) updated.status = newStatus;
+              if (rawRider !== undefined) updated.rider = rawRider;
+              if (newDeliveryOtp) updated.deliveryOtp = newDeliveryOtp;
+              return updated;
+            }
+            return o;
+          })
         );
       }
     };
@@ -178,11 +212,13 @@ export default function DashboardPage() {
     };
 
     socket.on("order:status_changed", handleStatusChanged);
+    socket.on("order:status_updated", handleStatusChanged);
     socket.on("rider:location_changed", handleLocationChanged);
 
     return () => {
       socket.emit("leave:order", orderId);
       socket.off("order:status_changed", handleStatusChanged);
+      socket.off("order:status_updated", handleStatusChanged);
       socket.off("rider:location_changed", handleLocationChanged);
     };
   }, [trackingOrder]);
@@ -267,6 +303,30 @@ export default function DashboardPage() {
     // Fetch user's saved addresses
     fetchAddresses();
   }, [router]);
+
+  // Real-time socket sync for active customer orders
+  useEffect(() => {
+    const socket = getSocket();
+    const handleOrderSync = () => {
+      api.get<{ success: boolean; orders: any[] }>("/orders/my-orders")
+        .then((res) => {
+          if (res.data.success && res.data.orders) {
+            setLiveOrders(res.data.orders);
+          }
+        })
+        .catch(() => {});
+    };
+
+    socket.on("orders:refreshed", handleOrderSync);
+    socket.on("order:status_changed", handleOrderSync);
+    socket.on("order:status_updated", handleOrderSync);
+
+    return () => {
+      socket.off("orders:refreshed", handleOrderSync);
+      socket.off("order:status_changed", handleOrderSync);
+      socket.off("order:status_updated", handleOrderSync);
+    };
+  }, []);
 
   const handleLogout = () => {
     clearAuth();

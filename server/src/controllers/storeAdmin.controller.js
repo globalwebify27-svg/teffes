@@ -183,6 +183,17 @@ const updateOrderStatus = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    // Safeguard: Delivery orders cannot be marked Out for Delivery without an assigned rider
+    if (status === 'Out for Delivery' && order.fulfillmentType !== 'pickup' && !order.pickupMode) {
+      const hasRider = Boolean(order.rider?.riderId || (order.rider?.name && order.rider.name.trim().length > 0));
+      if (!hasRider) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot mark order Out for Delivery without assigning a delivery partner. Please assign a rider.',
+        });
+      }
+    }
+
     const updatedResult = await updateOrderStatusFS(id, status, {
       id: req.user?._id || req.user?.id,
       name: req.user?.name || 'Store Admin',
@@ -191,6 +202,12 @@ const updateOrderStatus = async (req, res, next) => {
 
     const updatedOrder = updatedResult.order || order;
     updatedOrder.status = status;
+
+    if (status === 'Out for Delivery' && !updatedOrder.deliveryOtp && updatedOrder.fulfillmentType !== 'pickup') {
+      const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
+      await updateDoc('orders', id, { deliveryOtp: generatedOtp }).catch(() => {});
+      updatedOrder.deliveryOtp = generatedOtp;
+    }
 
     emitOrderStatusUpdate(id, updatedOrder);
 
@@ -703,9 +720,13 @@ const assignRiderToOrder = async (req, res, next) => {
       lng: 85.3096,
     };
 
-    await updateDoc('orders', id, {
+    const randomOtp = order.deliveryOtp || Math.floor(1000 + Math.random() * 9000).toString();
+    const docId = order.id || order._id || id;
+
+    await updateDoc('orders', docId, {
       status: 'Out for Delivery',
       rider: riderInfo,
+      deliveryOtp: randomOtp,
       updatedAt: new Date().toISOString(),
     });
 
@@ -716,8 +737,12 @@ const assignRiderToOrder = async (req, res, next) => {
 
     order.status = 'Out for Delivery';
     order.rider = riderInfo;
+    order.deliveryOtp = randomOtp;
 
     emitOrderStatusUpdate(order.orderId || id, order);
+    if (docId !== (order.orderId || id)) {
+      emitOrderStatusUpdate(docId, order);
+    }
 
     // Push notification to rider
     notificationService.sendToRider(rider.id || riderId, {

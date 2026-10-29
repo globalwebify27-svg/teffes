@@ -227,11 +227,13 @@ const createOrder = async (req, res, next) => {
     const orderId = req.body.orderId || generateOrderId();
     const now = new Date().toISOString();
     const itemSummary = items.map((i) => `${i.name || i.productId} ×${i.quantity || 1}`).join(', ');
+    const deliveryOtp = isPickup ? null : Math.floor(1000 + Math.random() * 9000).toString();
 
     const orderPayload = {
       id: orderId,
       _id: orderId,
       orderId,
+      deliveryOtp,
       customer: {
         name: user.name || req.body.customerName || 'Valued Customer',
         phone: user.phone || req.body.customerPhone || '9999999999',
@@ -308,7 +310,7 @@ const createOrder = async (req, res, next) => {
 
     res.status(201).json({
       success: true,
-      message: 'Order placed successfully',
+      message: 'Order created successfully',
       order: orderPayload,
     });
   } catch (error) {
@@ -332,6 +334,26 @@ const sanitizeOrderDates = (order) => {
 };
 
 /**
+ * Helper to ensure active delivery orders have a 4-digit confirmation OTP
+ */
+const ensureOrderDeliveryOtp = async (order) => {
+  if (!order) return order;
+  const isPickup = order.pickupMode === true || order.fulfillmentType === 'pickup' || order.isPickup === true;
+  if (!order.deliveryOtp && !isPickup && order.status !== 'Delivered' && order.status !== 'Cancelled') {
+    const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
+    const docId = order.id || order._id || order.orderId;
+    if (docId) {
+      await updateDoc('orders', docId, {
+        deliveryOtp: generatedOtp,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
+    }
+    order.deliveryOtp = generatedOtp;
+  }
+  return order;
+};
+
+/**
  * GET /api/orders
  * Get user's orders (Pure Firestore)
  */
@@ -339,11 +361,12 @@ const getUserOrders = async (req, res, next) => {
   try {
     const userId = req.user?.id || req.user?._id;
     const orders = await getUserOrdersFS(String(userId));
-    const enrichedOrders = orders.map((o) => {
+    const enrichedOrders = await Promise.all(orders.map(async (o) => {
+      await ensureOrderDeliveryOtp(o);
       const obj = sanitizeOrderDates(o);
       obj.etaDetails = getEtaDetails(obj);
       return obj;
-    });
+    }));
 
     res.status(200).json({
       success: true,
@@ -369,6 +392,7 @@ const getOrderById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    await ensureOrderDeliveryOtp(order);
     const orderObj = sanitizeOrderDates(order);
     orderObj.etaDetails = getEtaDetails(orderObj);
 
@@ -401,11 +425,12 @@ const getMyOrders = async (req, res, next) => {
       orders = phoneOrders;
     }
 
-    const enrichedOrders = orders.map((o) => {
+    const enrichedOrders = await Promise.all(orders.map(async (o) => {
+      await ensureOrderDeliveryOtp(o);
       const obj = sanitizeOrderDates(o);
       obj.etaDetails = getEtaDetails(obj);
       return obj;
-    });
+    }));
 
     res.status(200).json({ success: true, count: enrichedOrders.length, orders: enrichedOrders });
   } catch (error) {
@@ -555,4 +580,5 @@ module.exports = {
   verifyPayment,
   rateRider,
   sanitizeOrderDates,
+  ensureOrderDeliveryOtp,
 };
