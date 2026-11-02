@@ -438,18 +438,20 @@ export default function PromotionalPopupsTab() {
                     position: "relative",
                     width: "100%",
                     height: "160px",
-                    background: "linear-gradient(135deg, #1f1b18 0%, #2e2621 100%)",
+                    background: "#fbf9f6",
+                    borderBottom: "1px solid #ede8e0",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
                     overflow: "hidden",
+                    padding: "6px",
                   }}
                 >
                   {p.imageUrl ? (
                     <img
                       src={p.imageUrl}
                       alt={p.title}
-                      style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                      style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                       onError={(e) => {
                         (e.target as HTMLElement).style.display = "none";
                       }}
@@ -979,14 +981,18 @@ export default function PromotionalPopupsTab() {
                       borderRadius: "10px",
                       overflow: "hidden",
                       border: "1px solid #cbd5e1",
-                      background: "#181412",
-                      maxHeight: "200px",
+                      background: "#fbf9f6",
+                      height: "190px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      padding: "8px",
                     }}
                   >
                     <img
                       src={formData.imageUrl}
                       alt="Uploaded Banner Preview"
-                      style={{ width: "100%", height: "180px", objectFit: "cover", display: "block" }}
+                      style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
                     />
 
                     {/* Action buttons overlay */}
@@ -1458,11 +1464,29 @@ export default function PromotionalPopupsTab() {
 
             {/* Banner Image */}
             {previewingPopup.imageUrl && (
-              <div style={{ width: "100%", height: "220px", background: "#1a1210", position: "relative" }}>
+              <div
+                style={{
+                  width: "100%",
+                  maxHeight: "360px",
+                  background: "#fbf9f6",
+                  borderBottom: "1px solid #ede8e0",
+                  position: "relative",
+                  overflow: "hidden",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
                 <img
                   src={previewingPopup.imageUrl}
                   alt={previewingPopup.title}
-                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                  style={{
+                    width: "100%",
+                    height: "auto",
+                    maxHeight: "360px",
+                    objectFit: "contain",
+                    display: "block",
+                  }}
                 />
               </div>
             )}
