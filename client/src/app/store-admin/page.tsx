@@ -5666,6 +5666,7 @@ function ReturnsTab() {
   const [riders, setRiders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedRiderMap, setSelectedRiderMap] = useState<Record<string, string>>({});
+  const [editingRiderMap, setEditingRiderMap] = useState<Record<string, boolean>>({});
   const [otpInputMap, setOtpInputMap] = useState<Record<string, string>>({});
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
@@ -5715,6 +5716,7 @@ function ReturnsTab() {
     try {
       await api.patch(`/store-admin/returns/${requestId}/assign-rider`, { riderId });
       toast.success("Rider assigned for reverse pickup successfully", "Rider Dispatched");
+      setEditingRiderMap(prev => ({ ...prev, [requestId]: false }));
       fetchReturns();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to assign rider", "Assignment Error");
@@ -5792,9 +5794,20 @@ function ReturnsTab() {
 
                 {/* Assigned Rider Info */}
                 {r.rider && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "6px 12px", marginBottom: "12px", fontSize: "0.825rem", color: "#166534" }}>
-                    <FontAwesomeIcon icon={faMotorcycle} style={{ color: "#16a34a" }} />
-                    <span>Pickup Partner: <strong>{r.rider.name}</strong> ({r.rider.phone || r.rider.vehicleNumber || "Insulated Partner"})</span>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "8px", background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "8px 12px", marginBottom: "12px", fontSize: "0.825rem", color: "#166534" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                      <FontAwesomeIcon icon={faMotorcycle} style={{ color: "#16a34a" }} />
+                      <span>Pickup Partner: <strong>{r.rider.name}</strong> ({r.rider.phone || r.rider.vehicleNumber || "Insulated Partner"})</span>
+                    </div>
+                    {r.status !== "Completed" && (
+                      <button
+                        type="button"
+                        onClick={() => setEditingRiderMap(prev => ({ ...prev, [reqId]: !prev[reqId] }))}
+                        style={{ background: "transparent", border: "none", color: "#0284c7", cursor: "pointer", fontSize: "0.75rem", fontWeight: 600, textDecoration: "underline" }}
+                      >
+                        {editingRiderMap[reqId] ? "Cancel" : "Change Partner"}
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -5829,27 +5842,30 @@ function ReturnsTab() {
                 {/* Action Row for Approved / Pickup Assigned: Assign Rider or Verify OTP */}
                 {(r.status === "Approved" || r.status === "Pickup Assigned") && (
                   <div style={{ marginTop: "12px", display: "flex", flexDirection: "column", gap: "10px" }}>
-                    <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
-                      <select
-                        value={selectedRiderMap[reqId] || ""}
-                        onChange={(e) => setSelectedRiderMap(prev => ({ ...prev, [reqId]: e.target.value }))}
-                        style={{ border: "1px solid #cbd5e1", borderRadius: "8px", padding: "7px 12px", fontSize: "0.825rem", background: "#fff", minWidth: "220px", color: "#334155" }}
-                      >
-                        <option value="">-- Select Rider for Pickup --</option>
-                        {riders.map(rd => (
-                          <option key={rd._id || rd.id} value={rd._id || rd.id}>
-                            {rd.name} ({rd.phone || rd.riderStatus || "Available"})
-                          </option>
-                        ))}
-                      </select>
-                      <button
-                        onClick={() => assignRider(reqId)}
-                        style={{ background: "#0284c7", border: "none", borderRadius: "8px", padding: "8px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
-                      >
-                        <FontAwesomeIcon icon={faMotorcycle} />
-                        Assign Pickup Partner
-                      </button>
-                    </div>
+                    {/* Rider selection dropdown and assign button: hidden once rider is selected unless admin clicks Change */}
+                    {(!r.rider || editingRiderMap[reqId]) && r.status !== "Completed" && (
+                      <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap" }}>
+                        <select
+                          value={selectedRiderMap[reqId] || ""}
+                          onChange={(e) => setSelectedRiderMap(prev => ({ ...prev, [reqId]: e.target.value }))}
+                          style={{ border: "1px solid #cbd5e1", borderRadius: "8px", padding: "7px 12px", fontSize: "0.825rem", background: "#fff", minWidth: "220px", color: "#334155" }}
+                        >
+                          <option value="">-- Select Rider for Pickup --</option>
+                          {riders.map(rd => (
+                            <option key={rd._id || rd.id} value={rd._id || rd.id}>
+                              {rd.name} ({rd.phone || rd.riderStatus || "Available"})
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => assignRider(reqId)}
+                          style={{ background: "#0284c7", border: "none", borderRadius: "8px", padding: "8px 16px", color: "#fff", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: "6px" }}
+                        >
+                          <FontAwesomeIcon icon={faMotorcycle} />
+                          Assign Pickup Partner
+                        </button>
+                      </div>
+                    )}
 
                     {/* Verify 4-digit OTP handover box */}
                     <div style={{ display: "flex", gap: "8px", alignItems: "center", flexWrap: "wrap", paddingTop: "8px", borderTop: "1px dashed #e2e8f0" }}>

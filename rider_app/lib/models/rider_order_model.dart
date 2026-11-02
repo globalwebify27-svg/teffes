@@ -71,6 +71,8 @@ class RiderOrderModel {
   final DateTime? deliveredAt;
   final double? riderLat;
   final double? riderLng;
+  final bool isReturn;
+  final String? returnStatus;
 
   String get orderNumber => orderId.isNotEmpty ? orderId : id;
   String get customerName => customer.name;
@@ -109,6 +111,8 @@ class RiderOrderModel {
     this.deliveredAt,
     this.riderLat,
     this.riderLng,
+    this.isReturn = false,
+    this.returnStatus,
   });
 
   factory RiderOrderModel.fromJson(Map<String, dynamic> json) {
@@ -131,6 +135,17 @@ class RiderOrderModel {
       };
     }
 
+    final bool isReturnOrder = json['isReturn'] == true ||
+        json['orderType'] == 'return' ||
+        json['type'] == 'return' ||
+        (json['returnStatus'] != null &&
+            json['returnStatus'].toString().isNotEmpty &&
+            json['returnStatus'] != 'Not Requested') ||
+        (json['orderId'] != null &&
+            json['orderId'].toString().toUpperCase().startsWith('RET-')) ||
+        (json['id'] != null &&
+            json['id'].toString().toUpperCase().startsWith('RET-'));
+
     return RiderOrderModel(
       id: json['_id'] ?? json['id'] ?? '',
       orderId: json['orderId'] ?? json['id'] ?? '',
@@ -150,6 +165,8 @@ class RiderOrderModel {
       deliveredAt: json['deliveredAt'] != null ? DateTime.tryParse(json['deliveredAt']) : null,
       riderLat: (json['rider']?['lat'] as num?)?.toDouble(),
       riderLng: (json['rider']?['lng'] as num?)?.toDouble(),
+      isReturn: isReturnOrder,
+      returnStatus: json['returnStatus']?.toString(),
     );
   }
 }
