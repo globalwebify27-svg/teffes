@@ -6,6 +6,7 @@ const {
   deleteDoc,
   queryDocs,
   runTransaction,
+  parseDateMillis,
 } = require('../../lib/firestore');
 const { calculateInventoryStatus, getInventoryDocId } = require('./inventory.firestore.service');
 const { calculateDiscount, isCouponExpired, isCouponFuture } = require('./coupon.firestore.service');
@@ -60,7 +61,7 @@ const getUserOrders = async (userId, options = {}) => {
   if (!options.includeTest) {
     orders = orders.filter((o) => !isTestOrderRecord(o));
   }
-  return orders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  return orders.sort((a, b) => parseDateMillis(b.createdAt) - parseDateMillis(a.createdAt));
 };
 
 /**
@@ -90,7 +91,7 @@ const getStoreOrders = async (storeId, status = null, options = {}) => {
   if (status && status !== 'all') {
     orders = orders.filter((o) => o.status === status);
   }
-  return orders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  return orders.sort((a, b) => parseDateMillis(b.createdAt) - parseDateMillis(a.createdAt));
 };
 
 /**
@@ -638,6 +639,31 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
       userSnap = await transaction.get(userRef);
     }
 
+    // Delivery Batch reads (if order is part of an active multi-order batch)
+    let batchSnap = null;
+    let batchRef = null;
+    let batchRiderRef = null;
+    let batchRiderSnap = null;
+    if (orderData.batchId) {
+      batchRef = db.collection('delivery_batches').doc(String(orderData.batchId).trim());
+      batchSnap = await transaction.get(batchRef);
+      if (batchSnap.exists) {
+        const bData = batchSnap.data();
+        if (bData.riderId) {
+          batchRiderRef = db.collection(USERS_COLLECTION).doc(String(bData.riderId).trim());
+          batchRiderSnap = await transaction.get(batchRiderRef);
+          if (!batchRiderSnap.exists) {
+            const altRef = db.collection('riders').doc(String(bData.riderId).trim());
+            const altSnap = await transaction.get(altRef);
+            if (altSnap.exists) {
+              batchRiderRef = altRef;
+              batchRiderSnap = altSnap;
+            }
+          }
+        }
+      }
+    }
+
     // ── PHASE B: ALL WRITES AFTER READS ──
     // 1. Restore Inventory Stock
     for (const entry of inventorySnaps) {
@@ -714,6 +740,48 @@ const cancelOrderTransactional = async (orderId, reason = 'Order cancelled', act
       updatedAt: now,
     });
 
+    // 4. Update Delivery Batch if order was part of an active batch
+    if (batchSnap && batchSnap.exists && batchRef) {
+      const bData = batchSnap.data();
+      const actualOrderId = orderData.orderId || cleanOrderId;
+      const cancelledList = Array.from(new Set([
+        ...(bData.cancelledOrderIds || []),
+        actualOrderId,
+        cleanOrderId,
+      ]));
+      const completedList = bData.completedOrderIds || [];
+      const allOrderIds = bData.orderIds || [];
+
+      const remainingIds = allOrderIds.filter((id) => !completedList.includes(id) && !cancelledList.includes(id));
+      const batchPatch = {
+        cancelledOrderIds: cancelledList,
+        updatedAt: now,
+      };
+
+      let isBatchFinished = false;
+      if (remainingIds.length === 0) {
+        isBatchFinished = true;
+        batchPatch.status = completedList.length > 0 ? 'Completed' : 'Cancelled';
+        batchPatch.completedAt = now;
+        batchPatch.activeOrderId = null;
+      } else if (bData.activeOrderId === actualOrderId || bData.activeOrderId === cleanOrderId) {
+        // If the cancelled order was the current active stop, immediately advance to the next stop
+        batchPatch.activeOrderId = remainingIds[0];
+        batchPatch.currentSequence = allOrderIds.indexOf(remainingIds[0]) + 1;
+      }
+
+      transaction.update(batchRef, batchPatch);
+
+      // If the batch has no remaining deliveries, free the rider
+      if (isBatchFinished && batchRiderRef && batchRiderSnap && batchRiderSnap.exists) {
+        transaction.update(batchRiderRef, {
+          riderStatus: 'Available',
+          activeBatchId: null,
+          updatedAt: now,
+        });
+      }
+    }
+
     return {
       success: true,
       message: 'Order cancelled, inventory restored, and wallet refunded if applicable',
@@ -730,7 +798,7 @@ const getAllOrders = async (options = {}) => {
   if (!options.includeTest) {
     orders = orders.filter((o) => !isTestOrderRecord(o));
   }
-  return orders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  return orders.sort((a, b) => parseDateMillis(b.createdAt) - parseDateMillis(a.createdAt));
 };
 
 /**

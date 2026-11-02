@@ -47,7 +47,9 @@ const calculateRiderCashInHand = async (riderId, riderPhone = '') => {
   });
 
   const totalCollected = riderDeliveredCodOrders.reduce((sum, o) => {
-    return sum + Number(o.cashCollected || o.amount || 0);
+    const rawVal = o.cashCollected != null ? o.cashCollected : (o.amount != null ? o.amount : (o.total != null ? o.total : o.totalAmount));
+    const val = Number(rawVal) || 0;
+    return sum + val;
   }, 0);
 
   // 2. Fetch confirmed remittances for this rider
@@ -56,9 +58,10 @@ const calculateRiderCashInHand = async (riderId, riderPhone = '') => {
   );
 
   const confirmedRemittances = remittances.filter((r) => r.status === 'Confirmed');
-  const totalRemitted = confirmedRemittances.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const totalRemitted = confirmedRemittances.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
-  return Math.max(0, parseFloat((totalCollected - totalRemitted).toFixed(2)));
+  const net = (Number(totalCollected) || 0) - (Number(totalRemitted) || 0);
+  return Math.max(0, parseFloat((net || 0).toFixed(2)));
 };
 
 /**
@@ -123,7 +126,18 @@ const submitRemittance = async ({ rider, amount, notes = '', storeName = '', sto
  * Confirm physical cash remittance in a transaction.
  * Concurrency guard: Prevents double-settlement or concurrent confirmation of the same record.
  */
-const confirmRemittanceTransactional = async ({ remittanceId, adminUser, notes = '' }) => {
+const confirmRemittanceTransactional = async (arg1, arg2, arg3) => {
+  let remittanceId, adminUser, notes;
+  if (typeof arg1 === 'object' && arg1 !== null && arg1.remittanceId) {
+    remittanceId = arg1.remittanceId;
+    adminUser = arg1.adminUser;
+    notes = arg1.notes || '';
+  } else {
+    remittanceId = arg1;
+    adminUser = arg2;
+    notes = arg3 || '';
+  }
+
   if (!remittanceId || typeof remittanceId !== 'string') {
     throw new Error('Valid remittanceId is required');
   }

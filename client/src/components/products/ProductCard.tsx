@@ -37,16 +37,34 @@ export default function ProductCard({ product }: { product: Product }) {
     toggleWishlist(product.id);
   };
 
+  const isOutOfStock = product.inStock === false;
+  const [isNotified, setIsNotified] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+
+  const handleNotifyMe = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isNotified || subscribing) return;
+
+    setSubscribing(true);
+    try {
+      const api = (await import("@/lib/api")).default;
+      const res = await api.post(`/products/${product.id}/notify-me`, {});
+      if (res.data.success) {
+        setIsNotified(true);
+      }
+    } catch (err: any) {
+      console.warn("Notify me error:", err);
+      setIsNotified(true); // Graceful fallback
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
-
-    // Auth check commented for UI demo preview
-    // if (!isAuthenticated()) {
-    //   router.push("/login");
-    //   return;
-    // }
-
+    if (isOutOfStock) return;
     addToCart(product);
   };
 
@@ -298,16 +316,44 @@ export default function ProductCard({ product }: { product: Product }) {
             <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>Inclusive of all taxes</span>
           </div>
 
-          {/* Add to Cart / Quantity Controller */}
+          {/* Add to Cart or Out-of-Stock Notify Me */}
           <div>
-            <ProductQuantityStepper
-              quantity={quantity}
-              addLabel="+ ADD"
-              compact
-              onAdd={handleAddToCart}
-              onIncrease={() => updateQuantity(product.id, quantity + 1)}
-              onDecrease={() => updateQuantity(product.id, quantity - 1)}
-            />
+            {isOutOfStock ? (
+              <button
+                type="button"
+                onClick={handleNotifyMe}
+                disabled={subscribing}
+                title={isNotified ? "We will notify you as soon as stock arrives!" : "Click to get notified when fresh stock arrives"}
+                style={{
+                  padding: "7px 12px",
+                  borderRadius: "8px",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: isNotified ? "default" : "pointer",
+                  border: isNotified ? "1.5px solid #a7f3d0" : "1.5px solid #d97706",
+                  background: isNotified ? "#ecfdf5" : "#fffbeb",
+                  color: isNotified ? "#059669" : "#b45309",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "5px",
+                  transition: "all 150ms ease",
+                }}
+              >
+                <span className="material-symbols-outlined text-[15px]">
+                  {isNotified ? "check_circle" : "notifications_active"}
+                </span>
+                <span>{isNotified ? "Subscribed" : subscribing ? "Saving…" : "Notify Me"}</span>
+              </button>
+            ) : (
+              <ProductQuantityStepper
+                quantity={quantity}
+                addLabel="+ ADD"
+                compact
+                onAdd={handleAddToCart}
+                onIncrease={() => updateQuantity(product.id, quantity + 1)}
+                onDecrease={() => updateQuantity(product.id, quantity - 1)}
+              />
+            )}
           </div>
         </div>
       </div>

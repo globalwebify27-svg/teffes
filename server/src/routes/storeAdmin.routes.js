@@ -23,6 +23,11 @@ const {
   updateStoreStatus,
   getStoreRemittances,
   confirmRemittance,
+  collectRiderCash,
+  checkBatchFeasibility,
+  createDeliveryBatch,
+  getStoreBatchSettings,
+  updateStoreBatchSettings,
 } = require('../controllers/storeAdmin.controller');
 
 const router = Router();
@@ -37,11 +42,17 @@ router.patch('/store-status', updateStoreStatus);
 // 1. Dashboard
 router.get('/dashboard', getDashboardOverview);
 
-// 2. Orders
+// 2. Orders & Delivery Batches
 router.get('/orders', getOrders);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.post('/orders/:id/delay-prep', delayPrepTime);
 router.patch('/orders/:id/assign-rider', assignRiderToOrder);
+
+// Multi-Order Delivery Batches
+router.post('/batches/check-feasibility', checkBatchFeasibility);
+router.post('/batches/assign', createDeliveryBatch);
+router.get('/batches/settings', getStoreBatchSettings);
+router.patch('/batches/settings', updateStoreBatchSettings);
 
 // 3. Inventory
 router.get('/inventory', getInventory);
@@ -66,6 +77,7 @@ router.post('/returns/:id/verify-otp', verifyReturnOtp);
 // 7. Riders & Fleet Remittances
 router.get('/riders', getRiders);
 router.get('/remittances', getStoreRemittances);
+router.post('/remittances/collect', collectRiderCash);
 router.patch('/remittances/:id/confirm', confirmRemittance);
 
 // 8. Cross-Selling Items Management
@@ -81,5 +93,8 @@ router.post('/cross-sell', createCrossSellItem);
 router.put('/cross-sell/:id', updateCrossSellItem);
 router.patch('/cross-sell/:id', updateCrossSellItem);
 router.delete('/cross-sell/:id', deleteCrossSellItem);
+
+// 9. Store-to-Store Inventory Transfers
+router.use('/transfers', require('./transfer.routes'));
 
 module.exports = router;

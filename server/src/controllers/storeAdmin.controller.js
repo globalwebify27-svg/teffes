@@ -47,10 +47,19 @@ const {
 const {
   getStoreRemittances: getStoreRemittancesFS,
   confirmRemittanceTransactional,
+  calculateRiderCashInHand,
+  submitRemittance,
 } = require('../services/firestore/remittance.firestore.service');
 
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate, emitInventoryUpdate } = require('../socket');
+
+const {
+  getStoreBatchConfig,
+  updateStoreBatchConfig,
+  evaluateRouteFeasibility,
+  createDeliveryBatchTransactional,
+} = require('../services/firestore/batch.firestore.service');
 
 /**
  * Normalizes store ID (maps S002 ↔ S004 for Doranda hub)
@@ -378,6 +387,41 @@ const updateInventoryItem = async (req, res, next) => {
 
     const updated = await updateInventoryItemFS(storeId, id, updates, req.user, reason);
 
+    // Notify waiting customers if fresh stock was replenished and is now > 0
+    if (updated && Number(updated.stock) > 0) {
+      (async () => {
+        try {
+          const { queryDocs, updateDoc } = require('../lib/firestore');
+          const notificationService = require('../services/notificationService');
+          const productId = updated.productId || id;
+          const pendingSubs = await queryDocs('stock_notifications', (ref) =>
+            ref.where('productId', '==', productId).where('status', '==', 'pending')
+          );
+
+          for (const sub of pendingSubs) {
+            await updateDoc('stock_notifications', sub.id, {
+              status: 'notified',
+              notifiedAt: new Date().toISOString(),
+            });
+
+            if (sub.userId) {
+              notificationService.sendToUser(sub.userId, {
+                title: 'Back in Stock: ' + (sub.productName || 'Fresh Item'),
+                body: `Great news! ${sub.productName || 'Your saved cut'} is now freshly in stock at our hub. Order now before it runs out!`,
+                data: {
+                  notificationType: 'STOCK_RESTOCKED',
+                  productId: sub.productId,
+                  clickAction: `/product/${sub.productId}`,
+                },
+              }).catch(() => {});
+            }
+          }
+        } catch (subErr) {
+          console.warn('[StockNotificationAlert Error]:', subErr.message);
+        }
+      })();
+    }
+
     try {
       emitInventoryUpdate(storeId, [updated]);
     } catch (_) {}
@@ -485,25 +529,61 @@ const getStoreCustomers = async (req, res, next) => {
     const map = new Map();
 
     for (const o of orders) {
-      const phone = o.customer?.phone || 'Unknown';
-      if (!map.has(phone)) {
-        map.set(phone, {
-          id: `CUST-${phone.slice(-4)}`,
+      // Exclude cancelled and failed payment orders
+      if (o.status === 'Cancelled' || o.paymentStatus === 'Failed') continue;
+
+      const rawPhone = o.customer?.phone || '';
+      const cleanPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
+      const key = cleanPhone || rawPhone || 'Unknown';
+
+      const amt = Number(o.amount != null ? o.amount : o.totalAmount) || 0;
+      const orderDate = o.createdAt ? new Date(o.createdAt) : new Date();
+
+      if (!map.has(key)) {
+        map.set(key, {
+          id: `CUST-${cleanPhone ? cleanPhone.slice(-4) : (o.customer?.userId || '0000')}`,
           name: o.customer?.name || 'Customer',
-          phone: phone,
+          phone: cleanPhone ? `+91 ${cleanPhone}` : (rawPhone || 'Unknown'),
           address: o.customer?.address || o.shippingAddress?.address || 'Ranchi',
           orders: 1,
-          totalSpent: Number(o.amount) || 0,
+          totalOrders: 1,
+          totalSpent: amt,
           lastOrder: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : 'Today',
+          _lastOrderDate: orderDate,
         });
       } else {
-        const entry = map.get(phone);
+        const entry = map.get(key);
         entry.orders += 1;
-        entry.totalSpent += Number(o.amount) || 0;
+        entry.totalOrders = entry.orders;
+        entry.totalSpent = Math.round((entry.totalSpent + amt) * 100) / 100;
+
+        // Keep most descriptive name if current name is generic
+        const genericNames = ['verified gourmet user', 'valued customer', 'customer'];
+        const currentNameLower = (entry.name || '').trim().toLowerCase();
+        const orderName = (o.customer?.name || '').trim();
+        if (orderName && (!entry.name || genericNames.includes(currentNameLower))) {
+          entry.name = orderName;
+        }
+
+        // Keep latest address and order date
+        if (orderDate >= entry._lastOrderDate) {
+          entry._lastOrderDate = orderDate;
+          entry.lastOrder = o.createdAt ? new Date(o.createdAt).toLocaleDateString() : 'Today';
+          if (o.customer?.address || o.shippingAddress?.address) {
+            entry.address = o.customer?.address || o.shippingAddress?.address;
+          }
+        }
       }
     }
 
-    const customers = Array.from(map.values());
+    const customers = Array.from(map.values()).map((c) => {
+      delete c._lastOrderDate;
+      c.totalSpent = Math.round(c.totalSpent * 100) / 100;
+      return c;
+    });
+
+    customers.sort((a, b) => (b.totalOrders || b.orders || 0) - (a.totalOrders || a.orders || 0));
+
     res.status(200).json({
       success: true,
       count: customers.length,
@@ -682,6 +762,8 @@ const getRiders = async (req, res, next) => {
           await updateDoc('users', idStr, { riderStatus: 'Available' });
           copy.riderStatus = 'Available';
         }
+
+        copy.cashInHand = await calculateRiderCashInHand(idStr, r.phone);
         return copy;
       })
     );
@@ -711,37 +793,24 @@ const assignRiderToOrder = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
-    const riderInfo = {
-      riderId: rider.id || riderId,
-      name: rider.name,
-      phone: rider.phone,
-      vehicleNumber: rider.vehicleNumber || 'JH01-EC-1234',
-      lat: 23.3441,
-      lng: 85.3096,
-    };
+    const storeId = getEffectiveStoreId(req);
+    const result = await createDeliveryBatchTransactional({
+      orderIds: [id],
+      riderId,
+      storeId,
+      actor: {
+        id: req.user?.id || req.user?._id,
+        name: req.user?.name || 'Store Admin',
+        role: req.user?.role || 'store_admin',
+      },
+    });
 
-    const randomOtp = order.deliveryOtp || Math.floor(1000 + Math.random() * 9000).toString();
     const docId = order.id || order._id || id;
+    const updatedOrder = await getOrderByIdFS(id);
 
-    await updateDoc('orders', docId, {
-      status: 'Out for Delivery',
-      rider: riderInfo,
-      deliveryOtp: randomOtp,
-      updatedAt: new Date().toISOString(),
-    });
-
-    await updateDoc('users', riderId, {
-      riderStatus: 'On Delivery',
-      updatedAt: new Date().toISOString(),
-    });
-
-    order.status = 'Out for Delivery';
-    order.rider = riderInfo;
-    order.deliveryOtp = randomOtp;
-
-    emitOrderStatusUpdate(order.orderId || id, order);
+    emitOrderStatusUpdate(order.orderId || id, updatedOrder || order);
     if (docId !== (order.orderId || id)) {
-      emitOrderStatusUpdate(docId, order);
+      emitOrderStatusUpdate(docId, updatedOrder || order);
     }
 
     // Push notification to rider
@@ -850,6 +919,191 @@ const confirmRemittance = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/store-admin/remittances/collect
+ * Store admin directly receives and settles cash from a rider at the counter
+ */
+const collectRiderCash = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const { riderId, amount, notes } = req.body;
+    if (!riderId) return res.status(400).json({ success: false, message: 'Rider ID is required' });
+    const numAmount = Number(amount);
+    if (isNaN(numAmount) || numAmount <= 0) {
+      return res.status(400).json({ success: false, message: 'Valid deposit amount greater than zero is required' });
+    }
+
+    const rider = await getDoc('users', riderId);
+    if (!rider) return res.status(404).json({ success: false, message: 'Rider not found' });
+
+    // 1. Submit remittance record
+    const { remittance } = await submitRemittance({
+      rider,
+      amount: numAmount,
+      notes: notes || 'Counter cash settlement collected by Store Admin',
+      storeId,
+      storeName: req.user?.storeName || `Store ${storeId}`,
+    });
+
+    // 2. Confirm it immediately
+    const confirmed = await confirmRemittanceTransactional({
+      remittanceId: remittance.remittanceId || remittance.id,
+      adminUser: req.user,
+      notes: notes || 'Cash received and verified at counter',
+    });
+
+    const newCashInHand = await calculateRiderCashInHand(rider.id, rider.phone);
+
+    res.status(200).json({
+      success: true,
+      message: `₹${numAmount.toFixed(2)} cash collected from ${rider.name} and settled successfully.`,
+      remittance: confirmed,
+      remainingCashInHand: newCashInHand,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/store-admin/batches/check-feasibility
+ * Evaluate route feasibility for a candidate set of orders
+ */
+const checkBatchFeasibility = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const { orderIds } = req.body;
+
+    if (!Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'orderIds array is required' });
+    }
+
+    const store = await getStoreById(storeId);
+    const storeCoords = {
+      lat: store?.lat || 23.3441,
+      lng: store?.lng || 85.3096,
+    };
+
+    const orders = [];
+    for (const id of orderIds) {
+      const o = await getOrderByIdFS(String(id).trim());
+      if (o) orders.push(o);
+    }
+
+    if (orders.length !== orderIds.length) {
+      return res.status(404).json({ success: false, message: 'One or more orders could not be found' });
+    }
+
+    const result = await evaluateRouteFeasibility({
+      storeId,
+      storeCoords,
+      orders,
+    });
+
+    res.status(200).json({
+      success: true,
+      ...result,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/store-admin/batches/assign
+ * Create and dispatch a delivery batch atomically
+ */
+const createDeliveryBatch = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const { riderId, orderIds } = req.body;
+
+    if (!riderId || !Array.isArray(orderIds) || orderIds.length === 0) {
+      return res.status(400).json({ success: false, message: 'riderId and orderIds array are required' });
+    }
+
+    const result = await createDeliveryBatchTransactional({
+      storeId,
+      riderId,
+      orderIds,
+      adminUser: req.user,
+    });
+
+    const { batch, orders, rider } = result;
+
+    for (const item of orders) {
+      const ord = await getOrderByIdFS(item.orderId);
+      if (ord) {
+        emitOrderStatusUpdate(ord.orderId || ord.id, ord);
+        if (ord.customer?.userId) {
+          notificationService.sendToUser(ord.customer.userId, {
+            title: 'Order Dispatched',
+            body: `${rider.name} has picked up your order and is out for delivery.`,
+            data: {
+              notificationType: 'ORDER_STATUS',
+              orderId: ord.orderId || ord.id,
+              status: 'Out for Delivery',
+              clickAction: `/dashboard?orderId=${ord.orderId || ord.id}`,
+            },
+          }).catch((err) => console.warn('[FCM] Customer rider push error:', err.message));
+        }
+      }
+    }
+
+    notificationService.sendToRider(rider.id || riderId, {
+      title: 'New Delivery Batch Assigned',
+      body: `You have been assigned ${orders.length} deliveries. Deliver to #${orders[0].orderId} first.`,
+      data: {
+        notificationType: 'DELIVERY_BATCH_ASSIGNMENT',
+        batchId: batch.batchId,
+        clickAction: `/rider/orders/${orders[0].orderId}`,
+      },
+    }).catch((err) => console.warn('[FCM] Rider assignment push error:', err.message));
+
+    res.status(200).json({
+      success: true,
+      message: `Batch of ${orders.length} orders assigned to ${rider.name} successfully.`,
+      batch,
+      orders,
+      rider,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/store-admin/batches/settings
+ * Retrieve configurable batch limits for this store
+ */
+const getStoreBatchSettings = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const config = await getStoreBatchConfig(storeId);
+    res.status(200).json({ success: true, config });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/store-admin/batches/settings
+ * Update configurable batch limits for this store
+ */
+const updateStoreBatchSettings = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const config = await updateStoreBatchConfig(storeId, req.body);
+    res.status(200).json({
+      success: true,
+      message: 'Batch settings updated successfully.',
+      config,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getDashboardOverview,
   getOrders,
@@ -873,4 +1127,9 @@ module.exports = {
   updateStoreStatus,
   getStoreRemittances,
   confirmRemittance,
+  collectRiderCash,
+  checkBatchFeasibility,
+  createDeliveryBatch,
+  getStoreBatchSettings,
+  updateStoreBatchSettings,
 };

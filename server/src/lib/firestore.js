@@ -13,6 +13,25 @@ const getDb = () => {
   return db;
 };
 
+const parseDateMillis = (val) => {
+  if (!val) return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const t = new Date(val).getTime();
+    return isNaN(t) ? 0 : t;
+  }
+  if (typeof val.toDate === 'function') {
+    return val.toDate().getTime();
+  }
+  if (typeof val._seconds === 'number') {
+    return val._seconds * 1000 + (val._nanoseconds || 0) / 1000000;
+  }
+  if (val instanceof Date) {
+    return val.getTime();
+  }
+  return 0;
+};
+
 /**
  * Format a single Firestore DocumentSnapshot safely.
  *
@@ -29,8 +48,24 @@ const formatDocument = (docSnapshot) => {
     return null;
   }
   const data = docSnapshot.data() || {};
+  let createdAt = data.createdAt;
+  if (createdAt && typeof createdAt.toDate === 'function') {
+    createdAt = createdAt.toDate().toISOString();
+  } else if (createdAt && typeof createdAt._seconds === 'number') {
+    createdAt = new Date(createdAt._seconds * 1000).toISOString();
+  }
+
+  let updatedAt = data.updatedAt;
+  if (updatedAt && typeof updatedAt.toDate === 'function') {
+    updatedAt = updatedAt.toDate().toISOString();
+  } else if (updatedAt && typeof updatedAt._seconds === 'number') {
+    updatedAt = new Date(updatedAt._seconds * 1000).toISOString();
+  }
+
   return {
     ...data,
+    ...(createdAt !== undefined ? { createdAt } : {}),
+    ...(updatedAt !== undefined ? { updatedAt } : {}),
     _id: docSnapshot.id,
     id: docSnapshot.id,
   };
@@ -306,6 +341,7 @@ module.exports = {
   getDb,
   formatDocument,
   formatQuerySnapshot,
+  parseDateMillis,
   getDoc,
   createDoc,
   updateDoc,

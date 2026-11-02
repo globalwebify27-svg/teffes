@@ -9,6 +9,7 @@ export interface User {
   isVerified: boolean;
   storeId?: string;
   storeName?: string;
+  tier?: string;
 }
 
 // ─── Storage Helpers ──────────────────────────────────────────────────────────

@@ -6,6 +6,7 @@ const {
   deleteDoc,
   queryDocs,
   runTransaction,
+  parseDateMillis,
 } = require('../../lib/firestore');
 
 const INVENTORY_COLLECTION = 'inventory';
@@ -748,11 +749,68 @@ const getInventoryHistory = async (storeId = null, options = {}) => {
   let entries = await queryDocs(HISTORY_COLLECTION, queryBuilder);
   const storeNames = await getStoreNameMap();
 
-  // Enrich missing storeName
-  entries = entries.map((e) => ({
-    ...e,
-    storeName: e.storeName || storeNames[e.storeId] || e.storeId || 'Dark Store',
-  }));
+  // Enrich missing storeName and defensively normalize all fields for backwards/legacy compatibility
+  entries = entries.map((e) => {
+    const rawQty = e.quantity != null ? e.quantity : (e.quantityChanged != null ? Math.abs(e.quantityChanged) : 0);
+    const parsedQty = typeof rawQty === 'number' ? rawQty : (parseFloat(rawQty) || 0);
+    const quantity = Math.round(parsedQty * 1000) / 1000;
+    const unit = e.unit || 'kg';
+
+    const productName = e.productName || e.itemName || 'Product Cut';
+    const category = e.category || '';
+
+    const prevRaw = e.previousQuantity != null ? e.previousQuantity : (e.previousStock != null ? e.previousStock : null);
+    const previousQuantity = prevRaw != null && !isNaN(Number(prevRaw)) ? Number(prevRaw) : null;
+
+    const resRaw = e.resultingQuantity != null ? e.resultingQuantity : (e.newStock != null ? e.newStock : null);
+    const resultingQuantity = resRaw != null && !isNaN(Number(resRaw)) ? Number(resRaw) : null;
+
+    const reason = e.reason || e.notes || '';
+    const notes = e.notes || e.reason || '';
+
+    let actor = e.actor;
+    if (!actor || typeof actor !== 'object') {
+      const actorName = typeof e.performedBy === 'object' && e.performedBy
+        ? (e.performedBy.name || 'System')
+        : (e.performedBy ? String(e.performedBy) : 'System');
+      const actorRole = typeof e.performedBy === 'object' && e.performedBy
+        ? (e.performedBy.role || 'system')
+        : 'system';
+      actor = {
+        userId: e.performedById || null,
+        name: actorName,
+        role: actorRole,
+      };
+    } else {
+      actor = {
+        userId: actor.userId || null,
+        name: actor.name || 'System',
+        role: actor.role || 'system',
+        email: actor.email || '',
+      };
+    }
+
+    let actionType = e.actionType || 'stock_adjustment';
+    if (actionType === 'transfer_store_credit') actionType = 'transfer_in';
+    if (actionType === 'transfer_store_deduct') actionType = 'transfer_out';
+
+    return {
+      ...e,
+      id: e.id || e._id || e.historyId || '',
+      _id: e._id || e.id || e.historyId || '',
+      quantity,
+      unit,
+      productName,
+      category,
+      previousQuantity,
+      resultingQuantity,
+      reason,
+      notes,
+      actor,
+      actionType,
+      storeName: e.storeName || storeNames[e.storeId] || e.storeId || 'Dark Store',
+    };
+  });
 
   // Filtering by itemId
   if (itemId && itemId.trim()) {
@@ -817,7 +875,7 @@ const getInventoryHistory = async (storeId = null, options = {}) => {
   }
 
   // Sort latest first
-  entries.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+  entries.sort((a, b) => parseDateMillis(b.createdAt) - parseDateMillis(a.createdAt));
 
   const total = entries.length;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);

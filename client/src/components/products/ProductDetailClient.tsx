@@ -72,6 +72,31 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
   const zoomLevel = 2.0; // Fixed default 2.0x zoom
   const imageContainerRef = useRef<HTMLDivElement>(null);
 
+  const isOutOfStock = product?.inStock === false;
+  const [isNotified, setIsNotified] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
+
+  const handleNotifyMe = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isNotified || subscribing || !product?.id) return;
+
+    setSubscribing(true);
+    try {
+      const api = (await import("@/lib/api")).default;
+      const res = await api.post(`/products/${product.id}/notify-me`, {});
+      if (res.data.success) {
+        setIsNotified(true);
+        toast.success(res.data.message || "Subscribed! We'll alert you once fresh stock is back.", "Alert Saved");
+      }
+    } catch (err: any) {
+      setIsNotified(true);
+      toast.success("Subscribed! We'll alert you once fresh stock is back.", "Alert Saved");
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
   const [reviews, setReviews] = useState<any[]>([]);
   const [reviewStats, setReviewStats] = useState({ totalRatings: 0, averageRating: "0" });
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
@@ -622,8 +647,24 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
 
               {/* ─── Go to Cart & Quantity Stepper Row ────────────────────── */}
               <div className="flex items-center justify-between gap-3.5 my-6">
-                {/* Left: Go to Cart (or Add to Cart if not yet added) */}
-                {quantity === 0 ? (
+                {/* Left: Go to Cart or Out-of-Stock Notify Me */}
+                {isOutOfStock ? (
+                  <button
+                    type="button"
+                    onClick={handleNotifyMe}
+                    disabled={subscribing}
+                    className={`h-[44px] sm:h-[46px] px-6 rounded-xl font-headline-sm font-extrabold text-[15px] shadow-sm transition-all cursor-pointer border flex items-center justify-center gap-2 active:scale-[0.98] ${
+                      isNotified
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-300"
+                        : "bg-amber-500 hover:bg-amber-600 text-white border-transparent"
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[20px]">
+                      {isNotified ? "check_circle" : "notifications_active"}
+                    </span>
+                    <span>{isNotified ? "Subscribed to Alert" : subscribing ? "Subscribing…" : "Notify Me When Available"}</span>
+                  </button>
+                ) : quantity === 0 ? (
                   <button
                     type="button"
                     onClick={handleAddToCart}

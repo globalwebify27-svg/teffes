@@ -28,9 +28,10 @@ const uploadFile = async (fileBuffer, originalName, mimeType, folder = 'general'
   try {
     const firebaseApp = initFirebase();
     if (firebaseApp && isFirebaseReady()) {
-      const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
+      let rawBucket = process.env.FIREBASE_STORAGE_BUCKET || 'teffes-app.firebasestorage.app';
+      const cleanBucketName = rawBucket.replace(/^gs:\/\//, '').trim();
       const storage = getStorage(firebaseApp);
-      const bucket = bucketName ? storage.bucket(bucketName) : storage.bucket();
+      const bucket = storage.bucket(cleanBucketName);
 
       if (bucket && bucket.name) {
         const file = bucket.file(uniqueName);

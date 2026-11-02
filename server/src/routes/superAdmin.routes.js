@@ -90,6 +90,21 @@ router.post('/banners', createBanner);
 router.put('/banners/:id', updateBanner);
 router.delete('/banners/:id', deleteBanner);
 
+// 9b. Promotional Pop-ups & Announcements
+const {
+  getAllPopups,
+  getPopupById,
+  createPopup,
+  updatePopup,
+  deletePopup,
+} = require('../controllers/popup.controller');
+
+router.get('/popups', getAllPopups);
+router.get('/popups/:id', getPopupById);
+router.post('/popups', createPopup);
+router.put('/popups/:id', updatePopup);
+router.delete('/popups/:id', deletePopup);
+
 // 10. Categories & Products
 const {
   getCategories,
@@ -113,5 +128,8 @@ router.get('/products/:id', getProductById);
 router.post('/products', createProduct);
 router.put('/products/:id', updateProduct);
 router.delete('/products/:id', deleteProduct);
+
+// 11. Store Transfers
+router.use('/transfers', require('./transfer.routes'));
 
 module.exports = router;
