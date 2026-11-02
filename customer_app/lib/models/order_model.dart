@@ -80,7 +80,7 @@ class OrderModel {
     required this.status,
     required this.amount,
     required this.placedAt,
-    required this.items,
+    this.items = const [],
     this.rider,
     this.returnRider,
     this.returnStatus,
@@ -141,6 +141,7 @@ class OrderModel {
       status: json['status'] ?? 'Pending',
       amount: (json['totalAmount'] as num?)?.toDouble() ?? (json['amount'] as num?)?.toDouble() ?? 0.0,
       placedAt: json['createdAt'] ?? json['placedAt'] ?? 'Recently',
+      items: json['items'] is List ? (json['items'] as List) : const [],
       rider: (json['rider'] is Map<String, dynamic> && (json['rider']['name']?.toString().trim().isNotEmpty == true))
           ? OrderRiderModel.fromJson(json['rider'])
           : null,
