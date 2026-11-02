@@ -31,7 +31,7 @@ const INITIAL_POPUP: PopupItem = {
   message: "",
   imageUrl: "",
   ctaText: "Shop Now",
-  ctaLink: "/categories",
+  ctaLink: "/category",
   couponCode: "",
   targetAudience: "ALL",
   startDate: "",
@@ -509,10 +509,10 @@ export default function PromotionalPopupsTab() {
                     {p.targetAudience === "ALL"
                       ? "All Visitors"
                       : p.targetAudience === "GUEST"
-                      ? "Guests Only"
-                      : p.targetAudience === "LOGGED_IN"
-                      ? "Logged-in Users"
-                      : `${p.targetAudience} Tier Only`}
+                        ? "Guests Only"
+                        : p.targetAudience === "LOGGED_IN"
+                          ? "Logged-in Users"
+                          : `${p.targetAudience} Tier Only`}
                   </div>
                 </div>
 
@@ -578,8 +578,8 @@ export default function PromotionalPopupsTab() {
                       {p.frequency === "ONCE_PER_DAY"
                         ? "Once / Day"
                         : p.frequency === "ONCE_PER_SESSION"
-                        ? "Once / Session"
-                        : "Every Visit"}
+                          ? "Once / Session"
+                          : "Every Visit"}
                     </span>
 
                     {p.priority !== undefined && (
