@@ -26,6 +26,7 @@ import { isYouTubeUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 import SuperAdminInventoryLogsTab from "@/components/super-admin/InventoryLogsTab";
 import PromotionalPopupsTab from "@/components/super-admin/PromotionalPopupsTab";
+import Pagination from "@/components/common/Pagination";
 
 // ─── Icon helpers ──────────────────────────────────────────────────────────────
 const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
@@ -3571,6 +3572,8 @@ function OrdersTab() {
   const [statusFilter, setStatusFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
 
   useEffect(() => {
     api.get<{ success: boolean; orders: any[] }>("/super-admin/orders")
@@ -3582,6 +3585,11 @@ function OrdersTab() {
       .catch(err => console.warn("Failed to fetch all orders:", err))
       .finally(() => setLoading(false));
   }, []);
+
+  // Reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, areaFilter, dateFilter]);
 
   const availableAreas = useMemo(() => {
     const set = new Set<string>();
@@ -3616,6 +3624,11 @@ function OrdersTab() {
       return true;
     });
   }, [orders, statusFilter, areaFilter, dateFilter]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, page, pageSize]);
 
   return (
     <div>
@@ -3751,7 +3764,7 @@ function OrdersTab() {
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.map((o, i) => {
+              {paginatedOrders.map((o, i) => {
                 const isPickup =
                   o.fulfillmentType === "pickup" ||
                   o.pickupMode === true ||
@@ -3759,7 +3772,7 @@ function OrdersTab() {
                   o.customer?.address?.toLowerCase().includes("pickup");
 
                 return (
-                  <tr key={o.orderId || i} style={{ borderBottom: i < filteredOrders.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                  <tr key={o.orderId || i} style={{ borderBottom: i < paginatedOrders.length - 1 ? "1px solid #ede8e0" : "none" }}>
                     <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>#{o.orderId}</td>
                     <td style={{ padding: "14px 16px" }}>
                       {isPickup ? (
@@ -3794,6 +3807,14 @@ function OrdersTab() {
           </table>
         )}
       </div>
+
+      <Pagination
+        currentPage={page}
+        totalItems={filteredOrders.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        itemLabel="orders"
+      />
     </div>
   );
 }
@@ -3827,6 +3848,11 @@ function RidersTab() {
   const [submittingEdit, setSubmittingEdit] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+
   const fetchRiders = () => {
     setLoading(true);
     api.get<{ success: boolean; riders: any[] }>("/super-admin/riders")
@@ -3842,6 +3868,32 @@ function RidersTab() {
   useEffect(() => {
     fetchRiders();
   }, []);
+
+  // Reset page when search or status filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, statusFilter]);
+
+  const filteredRiders = useMemo(() => {
+    return riders.filter(r => {
+      if (statusFilter !== "All" && (r.riderStatus || "Available") !== statusFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesName = (r.name || "").toLowerCase().includes(q);
+        const matchesPhone = (r.phone || "").toLowerCase().includes(q);
+        const matchesEmail = (r.email || "").toLowerCase().includes(q);
+        const matchesVehicle = (r.vehicleNumber || "").toLowerCase().includes(q);
+        const matchesStore = (r.storeName || r.storeId || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesPhone && !matchesEmail && !matchesVehicle && !matchesStore) return false;
+      }
+      return true;
+    });
+  }, [riders, searchQuery, statusFilter]);
+
+  const paginatedRiders = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRiders.slice(start, start + pageSize);
+  }, [filteredRiders, page, pageSize]);
 
   const handleAddRider = async () => {
     if (!newRider.name.trim() || !newRider.email.trim() || !newRider.phone.trim()) {
@@ -3955,9 +4007,51 @@ function RidersTab() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" }}>
+        {/* Search & Status Filter */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", flex: 1 }}>
+          <input
+            type="text"
+            placeholder="Search rider name, phone, vehicle, store..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: "8px 14px",
+              borderRadius: "8px",
+              border: "1px solid #ede8e0",
+              background: "#fff",
+              fontSize: "0.825rem",
+              minWidth: "260px",
+              outline: "none",
+            }}
+          />
+
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            {["All", "Available", "On Delivery", "Offline"].map(s => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => setStatusFilter(s)}
+                style={{
+                  padding: "6px 12px",
+                  borderRadius: "99px",
+                  border: "1.5px solid #ede8e0",
+                  background: statusFilter === s ? "#941717" : "#fff",
+                  color: statusFilter === s ? "#fff" : "#423b32",
+                  fontSize: "0.78rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button onClick={() => setShowAddRiderModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Add Rider</button>
       </div>
+
       {/* Responsive styles for rider actions and layout */}
       <style>{`
         @media (max-width: 1260px) {
@@ -3991,13 +4085,13 @@ function RidersTab() {
               </tr>
             </thead>
             <tbody>
-              {riders.length === 0 ? (
+              {filteredRiders.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>No delivery riders registered yet. Click &quot;+ Add Rider&quot; above.</td>
+                  <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>No delivery riders found matching your filters.</td>
                 </tr>
               ) : (
-                riders.map((r, i) => (
-                  <tr key={r._id || r.phone || i} style={{ borderBottom: i < riders.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                paginatedRiders.map((r, i) => (
+                  <tr key={r._id || r.phone || i} style={{ borderBottom: i < paginatedRiders.length - 1 ? "1px solid #ede8e0" : "none" }}>
                     <td style={{ padding: "14px 16px" }}>
                       <div style={{ fontWeight: 700, color: "#171410" }}>{r.name}</div>
                       <div style={{ fontSize: "0.78rem", color: "#73695b", marginTop: "2px", fontFamily: "monospace" }}>{r.email || "No email set"}</div>
@@ -4033,6 +4127,14 @@ function RidersTab() {
           </table>
         )}
       </div>
+
+      <Pagination
+        currentPage={page}
+        totalItems={filteredRiders.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        itemLabel="riders"
+      />
 
       {/* ─── ADD RIDER MODAL ─── */}
       {showAddRiderModal && (
@@ -4310,6 +4412,9 @@ function RidersTab() {
 function CustomersTab() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
 
   // Modal State for Adding Balance to Customer
   const [balanceModalUser, setBalanceModalUser] = useState<{ id: string; name: string; phone: string; balance: number } | null>(null);
@@ -4332,6 +4437,30 @@ function CustomersTab() {
   useEffect(() => {
     fetchCustomers();
   }, []);
+
+  // Reset pagination on search query change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery.trim()) return customers;
+    const q = searchQuery.toLowerCase().trim();
+    return customers.filter(c => {
+      const name = (c.name || "").toLowerCase();
+      const phone = (c.phone || "").toLowerCase();
+      const addr = (c.address || "").toLowerCase();
+      const addressesMatch = c.addresses && c.addresses.some((a: any) =>
+        (a.line1 || "").toLowerCase().includes(q) || (a.city || "").toLowerCase().includes(q)
+      );
+      return name.includes(q) || phone.includes(q) || addr.includes(q) || addressesMatch;
+    });
+  }, [customers, searchQuery]);
+
+  const paginatedCustomers = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredCustomers.slice(start, start + pageSize);
+  }, [filteredCustomers, page, pageSize]);
 
   const openBalanceModal = (customer: any) => {
     setBalanceModalUser({
@@ -4394,6 +4523,58 @@ function CustomersTab() {
 
   return (
     <div>
+      {/* Search Toolbar */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        marginBottom: "16px",
+        background: "#faf8f5",
+        padding: "12px 16px",
+        borderRadius: "12px",
+        border: "1px solid #ede8e0",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "420px" }}>
+          <span className="material-symbols-outlined text-[18px] text-gray-500">search</span>
+          <input
+            type="text"
+            placeholder="Search customer by name, phone, or address..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: "7px 12px",
+              borderRadius: "8px",
+              border: "1px solid #d1d5db",
+              fontSize: "0.825rem",
+              background: "#fff",
+              width: "100%",
+              outline: "none",
+            }}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#73695b",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: "0.8rem", color: "#73695b", fontWeight: 600 }}>
+          Total Registered: <strong style={{ color: "#941717" }}>{filteredCustomers.length}</strong>
+        </div>
+      </div>
+
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading customers…</div>
@@ -4407,46 +4588,62 @@ function CustomersTab() {
               </tr>
             </thead>
             <tbody>
-              {customers.map((c, i) => (
-                <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < customers.length - 1 ? "1px solid #ede8e0" : "none" }}>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name || "Customer"}</td>
-                  <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.totalOrders ?? 0}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
-                  <td style={{ padding: "14px 16px", color: "#059669", fontWeight: "bold" }}>₹{c.walletBalance || 0}</td>
-                  <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>
-                    {c.addresses && c.addresses.length > 0 && c.addresses[0].line1 ? `${c.addresses[0].line1}${c.addresses[0].city ? `, ${c.addresses[0].city}` : ""}` : (c.address || "Ranchi")}
-                  </td>
-                  <td style={{ padding: "14px 16px" }}>
-                    <button
-                      type="button"
-                      onClick={() => openBalanceModal(c)}
-                      style={{
-                        padding: "7px 14px",
-                        background: "#91000a",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "8px",
-                        fontSize: "0.75rem",
-                        fontWeight: "bold",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>add_card</span>
-                      <span>Add Balance</span>
-                    </button>
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={7} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>
+                    No customer accounts found matching your search.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedCustomers.map((c, i) => (
+                  <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < paginatedCustomers.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name || "Customer"}</td>
+                    <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.totalOrders ?? 0}</td>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
+                    <td style={{ padding: "14px 16px", color: "#059669", fontWeight: "bold" }}>₹{c.walletBalance || 0}</td>
+                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>
+                      {c.addresses && c.addresses.length > 0 && c.addresses[0].line1 ? `${c.addresses[0].line1}${c.addresses[0].city ? `, ${c.addresses[0].city}` : ""}` : (c.address || "Ranchi")}
+                    </td>
+                    <td style={{ padding: "14px 16px" }}>
+                      <button
+                        type="button"
+                        onClick={() => openBalanceModal(c)}
+                        style={{
+                          padding: "7px 14px",
+                          background: "#91000a",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "8px",
+                          fontSize: "0.75rem",
+                          fontWeight: "bold",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          boxShadow: "0 1px 2px rgba(0,0,0,0.1)",
+                          transition: "all 0.2s"
+                        }}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: "15px" }}>add_card</span>
+                        <span>Add Balance</span>
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         )}
       </div>
+
+      <Pagination
+        currentPage={page}
+        totalItems={filteredCustomers.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        itemLabel="customers"
+      />
 
       {/* Super Admin Add Balance Modal */}
       {balanceModalUser && (
@@ -5644,7 +5841,7 @@ function BannersTab() {
                   style={{
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover",
+                    objectFit: "contain",
                   }}
                   onError={(e) => {
                     (e.target as HTMLElement).style.display = "none";

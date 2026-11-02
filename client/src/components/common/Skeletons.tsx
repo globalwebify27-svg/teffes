@@ -6,7 +6,7 @@ import React from "react";
  */
 export function BannerSkeleton() {
   return (
-    <div className="relative w-full aspect-[2.4/1] sm:aspect-[3.1/1] md:aspect-[3.4/1] min-h-[220px] max-h-[460px] rounded-3xl overflow-hidden skeleton-shimmer-dark border border-neutral-800/80 shadow-md">
+    <div className="relative w-full aspect-[3.25/1] rounded-3xl overflow-hidden skeleton-shimmer-dark border border-neutral-800/80 shadow-md">
       {/* Decorative Shimmer Highlights */}
       <div className="absolute inset-0 flex flex-col justify-between p-6 sm:p-10 md:p-12 pointer-events-none">
         {/* Top Tag & Indicator Mock */}

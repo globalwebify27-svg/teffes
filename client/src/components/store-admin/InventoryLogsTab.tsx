@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
+import Pagination from "@/components/common/Pagination";
 
 interface InventoryLogActor {
   userId?: string | null;
@@ -126,7 +127,7 @@ export default function StoreAdminInventoryLogsTab() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const [limit, setLimit] = useState(25);
+  const [limit, setLimit] = useState(50);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -145,6 +146,11 @@ export default function StoreAdminInventoryLogsTab() {
     }, 350);
     return () => clearTimeout(handler);
   }, [search]);
+
+  // Reset page when other filters change
+  useEffect(() => {
+    setPage(1);
+  }, [startDate, endDate, actionType]);
 
   const fetchLogs = useCallback(async () => {
     setLoading(true);
@@ -738,72 +744,15 @@ export default function StoreAdminInventoryLogsTab() {
         )}
 
         {/* Pagination Section */}
-        {!loading && !error && totalPages > 1 && (
-          <div
-            style={{
-              padding: "14px 20px",
-              borderTop: "1px solid #ede8e0",
-              background: "#faf8f5",
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: "12px",
-            }}
-          >
-            <div style={{ fontSize: "0.8rem", color: "#64748b" }}>
-              Showing {Math.min((page - 1) * limit + 1, total)} to {Math.min(page * limit, total)} of {total} records
-            </div>
-
-            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-              <button
-                type="button"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                style={{
-                  background: page <= 1 ? "#f1f5f9" : "#fff",
-                  color: page <= 1 ? "#94a3b8" : "#1e293b",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "6px",
-                  padding: "6px 12px",
-                  fontSize: "0.78rem",
-                  fontWeight: 600,
-                  cursor: page <= 1 ? "not-allowed" : "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                <span className="material-symbols-outlined text-[16px]">chevron_left</span>
-                <span>Previous</span>
-              </button>
-
-              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#1e293b", margin: "0 4px" }}>
-                Page {page} of {totalPages}
-              </span>
-
-              <button
-                type="button"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                style={{
-                  background: page >= totalPages ? "#f1f5f9" : "#fff",
-                  color: page >= totalPages ? "#94a3b8" : "#1e293b",
-                  border: "1px solid #cbd5e1",
-                  borderRadius: "6px",
-                  padding: "6px 12px",
-                  fontSize: "0.78rem",
-                  fontWeight: 600,
-                  cursor: page >= totalPages ? "not-allowed" : "pointer",
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "4px",
-                }}
-              >
-                <span>Next</span>
-                <span className="material-symbols-outlined text-[16px]">chevron_right</span>
-              </button>
-            </div>
+        {!loading && !error && total > 0 && (
+          <div style={{ padding: "0 16px 16px 16px" }}>
+            <Pagination
+              currentPage={page}
+              totalItems={total}
+              pageSize={limit}
+              onPageChange={setPage}
+              itemLabel="inventory logs"
+            />
           </div>
         )}
       </div>

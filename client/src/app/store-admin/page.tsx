@@ -27,6 +27,7 @@ import StoreStatusModal from "@/components/store-admin/StoreStatusModal";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 import StoreAdminInventoryLogsTab from "@/components/store-admin/InventoryLogsTab";
 import StoreTransfersSection from "@/components/store-admin/StoreTransfersSection";
+import Pagination from "@/components/common/Pagination";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
@@ -561,6 +562,8 @@ function LiveOrdersTab() {
   const [filter, setFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
   const [loading, setLoading] = useState(true);
   const [printModalOrder, setPrintModalOrder] = useState<any>(null);
 
@@ -583,6 +586,11 @@ function LiveOrdersTab() {
       .catch(err => console.warn("Failed to fetch store orders:", err))
       .finally(() => setLoading(false));
   };
+
+  // Reset pagination to page 1 whenever filters change
+  useEffect(() => {
+    setPage(1);
+  }, [filter, areaFilter, dateFilter]);
 
   // Detected areas / pincodes from orders
   const availableAreas = useMemo(() => {
@@ -619,6 +627,11 @@ function LiveOrdersTab() {
       return true;
     });
   }, [orders, areaFilter, dateFilter]);
+
+  const paginatedOrders = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredOrders.slice(start, start + pageSize);
+  }, [filteredOrders, page, pageSize]);
 
   const openAssignRiderModal = (order: any) => {
     setAssignModalOrder(order);
@@ -971,7 +984,7 @@ function LiveOrdersTab() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {filteredOrders.map((o: any) => {
+          {paginatedOrders.map((o: any) => {
             const isPickup =
               o.fulfillmentType === "pickup" ||
               o.pickupMode === true ||
@@ -1263,6 +1276,14 @@ function LiveOrdersTab() {
           })}
         </div>
       )}
+
+      <Pagination
+        currentPage={page}
+        totalItems={filteredOrders.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        itemLabel="orders"
+      />
 
       {/* ─── IN-PLACE ASSIGN RIDER & DISPATCH MODAL ─── */}
       {assignModalOrder && (
@@ -4095,6 +4116,9 @@ function InventoryTab() {
 function CustomersTab() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
 
   useEffect(() => {
     api.get<{ success: boolean; customers: any[] }>("/store-admin/customers")
@@ -4107,8 +4131,81 @@ function CustomersTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  // Reset page when search changes
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery]);
+
+  const filteredCustomers = useMemo(() => {
+    if (!searchQuery.trim()) return customers;
+    const q = searchQuery.toLowerCase().trim();
+    return customers.filter(c => {
+      const name = (c.name || "").toLowerCase();
+      const phone = (c.phone || "").toLowerCase();
+      const addr = (c.address || "").toLowerCase();
+      return name.includes(q) || phone.includes(q) || addr.includes(q);
+    });
+  }, [customers, searchQuery]);
+
+  const paginatedCustomers = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredCustomers.slice(start, start + pageSize);
+  }, [filteredCustomers, page, pageSize]);
+
   return (
     <div>
+      {/* Search Toolbar */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        marginBottom: "16px",
+        background: "#faf8f5",
+        padding: "12px 16px",
+        borderRadius: "12px",
+        border: "1px solid #ede8e0",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "420px" }}>
+          <span className="material-symbols-outlined text-[18px] text-gray-500">search</span>
+          <input
+            type="text"
+            placeholder="Search customer by name, phone, or address..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: "7px 12px",
+              borderRadius: "8px",
+              border: "1px solid #d1d5db",
+              fontSize: "0.825rem",
+              background: "#fff",
+              width: "100%",
+              outline: "none",
+            }}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#73695b",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div style={{ fontSize: "0.8rem", color: "#73695b", fontWeight: 600 }}>
+          Store Customers: <strong style={{ color: "#941717" }}>{filteredCustomers.length}</strong>
+        </div>
+      </div>
+
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading customers…</div>
@@ -4122,20 +4219,36 @@ function CustomersTab() {
               </tr>
             </thead>
             <tbody>
-              {customers.map((c, i) => (
-                <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < customers.length - 1 ? "1px solid #ede8e0" : "none" }}>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name}</td>
-                  <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.totalOrders ?? c.orders ?? 0}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
-                  <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.address}</td>
-                  <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.lastOrder}</td>
+              {filteredCustomers.length === 0 ? (
+                <tr>
+                  <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>
+                    No customer accounts found matching your search.
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedCustomers.map((c, i) => (
+                  <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < paginatedCustomers.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name}</td>
+                    <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.totalOrders ?? c.orders ?? 0}</td>
+                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
+                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.address}</td>
+                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.lastOrder}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         )}
       </div>
+
+      <Pagination
+        currentPage={page}
+        totalItems={filteredCustomers.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        itemLabel="customers"
+      />
     </div>
   );
 }
@@ -4148,6 +4261,41 @@ function RidersTab() {
   const [selectedOrder, setSelectedOrder] = useState<any | null>(null);
   const [selectedRiderId, setSelectedRiderId] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Pagination & Filtering
+  const [riderSearch, setRiderSearch] = useState("");
+  const [riderStatusFilter, setRiderStatusFilter] = useState("All");
+  const [riderPage, setRiderPage] = useState(1);
+  const [dispatchPage, setDispatchPage] = useState(1);
+  const pageSize = 50;
+
+  useEffect(() => {
+    setRiderPage(1);
+  }, [riderSearch, riderStatusFilter]);
+
+  const filteredPoolRiders = useMemo(() => {
+    return riders.filter(r => {
+      if (riderStatusFilter !== "All" && (r.riderStatus || "Available") !== riderStatusFilter) return false;
+      if (riderSearch.trim()) {
+        const q = riderSearch.toLowerCase().trim();
+        const matchesName = (r.name || "").toLowerCase().includes(q);
+        const matchesPhone = (r.phone || "").toLowerCase().includes(q);
+        const matchesVehicle = (r.vehicleNumber || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesPhone && !matchesVehicle) return false;
+      }
+      return true;
+    });
+  }, [riders, riderSearch, riderStatusFilter]);
+
+  const paginatedPoolRiders = useMemo(() => {
+    const start = (riderPage - 1) * pageSize;
+    return filteredPoolRiders.slice(start, start + pageSize);
+  }, [filteredPoolRiders, riderPage, pageSize]);
+
+  const paginatedReadyOrders = useMemo(() => {
+    const start = (dispatchPage - 1) * pageSize;
+    return readyOrders.slice(start, start + pageSize);
+  }, [readyOrders, dispatchPage, pageSize]);
 
   // Dynamic Rider Compensation Rates & Daily Target
   const [baseDeliveryPay, setBaseDeliveryPay] = useState<number>(65);
@@ -4615,13 +4763,83 @@ function RidersTab() {
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px", marginBottom: "24px" }}>
-        {riders.length === 0 && !loading && (
+      {/* Rider Pool Filters */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "10px",
+        marginBottom: "14px",
+        background: "#faf8f5",
+        padding: "10px 14px",
+        borderRadius: "10px",
+        border: "1px solid #ede8e0",
+      }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "340px" }}>
+          <span className="material-symbols-outlined text-[16px] text-gray-500">search</span>
+          <input
+            type="text"
+            placeholder="Search rider by name, phone, vehicle..."
+            value={riderSearch}
+            onChange={(e) => setRiderSearch(e.target.value)}
+            style={{
+              padding: "6px 10px",
+              borderRadius: "6px",
+              border: "1px solid #cbd5e1",
+              fontSize: "0.8rem",
+              background: "#fff",
+              width: "100%",
+              outline: "none",
+            }}
+          />
+          {riderSearch && (
+            <button
+              type="button"
+              onClick={() => setRiderSearch("")}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#73695b",
+                cursor: "pointer",
+                fontSize: "0.75rem",
+                fontWeight: 700,
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {["All", "Available", "On Delivery", "Offline"].map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setRiderStatusFilter(s)}
+              style={{
+                padding: "4px 10px",
+                borderRadius: "99px",
+                border: "1px solid #ede8e0",
+                background: riderStatusFilter === s ? "#941717" : "#fff",
+                color: riderStatusFilter === s ? "#fff" : "#423b32",
+                fontSize: "0.74rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px", marginBottom: "16px" }}>
+        {filteredPoolRiders.length === 0 && !loading && (
           <div style={{ padding: "24px", background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", color: "#73695b", fontSize: "0.85rem", textAlign: "center", gridColumn: "1 / -1" }}>
-            No riders registered or assigned to this store hub yet.
+            No riders found matching your search.
           </div>
         )}
-        {riders.map(r => {
+        {paginatedPoolRiders.map(r => {
           const cashOnHand = Number(r.cashInHand) || 0;
           const riderPendingRemit = pendingRemittances.find(
             (p: any) => p.riderId === (r.id || r._id) || (p.riderPhone && r.phone && p.riderPhone.replace(/\D/g, '') === r.phone.replace(/\D/g, ''))
@@ -4705,6 +4923,16 @@ function RidersTab() {
             </div>
           );
         })}
+      </div>
+
+      <div style={{ marginBottom: "24px" }}>
+        <Pagination
+          currentPage={riderPage}
+          totalItems={filteredPoolRiders.length}
+          pageSize={pageSize}
+          onPageChange={setRiderPage}
+          itemLabel="active riders"
+        />
       </div>
 
       {/* ─── PENDING RIDER DEPOSIT REQUESTS (ONLY DISPLAYED IF ACTION IS REQUIRED) ─── */}
@@ -4802,7 +5030,7 @@ function RidersTab() {
               No orders are currently waiting for dispatch.
             </div>
           )}
-          {readyOrders.map(o => (
+          {paginatedReadyOrders.map(o => (
             <div key={o.orderId || o.id} style={{
               background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "18px 20px"
             }}>
@@ -4843,6 +5071,14 @@ function RidersTab() {
           ))}
         </div>
       )}
+
+      <Pagination
+        currentPage={dispatchPage}
+        totalItems={readyOrders.length}
+        pageSize={pageSize}
+        onPageChange={setDispatchPage}
+        itemLabel="orders pending dispatch"
+      />
 
       {/* ─── ASSIGN RIDER MODAL ─── */}
       {showAssignModal && selectedOrder && (
@@ -5670,6 +5906,11 @@ function ReturnsTab() {
   const [otpInputMap, setOtpInputMap] = useState<Record<string, string>>({});
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
 
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const pageSize = 50;
+
   const fetchReturns = () => {
     setLoading(true);
     api.get<{ success: boolean; returns: any[] }>("/store-admin/returns")
@@ -5696,6 +5937,31 @@ function ReturnsTab() {
     fetchReturns();
     fetchRiders();
   }, []);
+
+  // Reset pagination when status or search filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [statusFilter, searchQuery]);
+
+  const filteredRequests = useMemo(() => {
+    return requests.filter(r => {
+      if (statusFilter !== "All" && r.status !== statusFilter) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matchesCustomer = (r.customer || "").toLowerCase().includes(q);
+        const matchesPhone = (r.phone || "").toLowerCase().includes(q);
+        const matchesOrder = String(r.orderId || "").toLowerCase().includes(q);
+        const matchesReq = String(r.requestId || r.id || "").toLowerCase().includes(q);
+        if (!matchesCustomer && !matchesPhone && !matchesOrder && !matchesReq) return false;
+      }
+      return true;
+    });
+  }, [requests, statusFilter, searchQuery]);
+
+  const paginatedRequests = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRequests.slice(start, start + pageSize);
+  }, [filteredRequests, page, pageSize]);
 
   const updateStatus = async (requestId: string, status: string) => {
     try {
@@ -5750,15 +6016,88 @@ function ReturnsTab() {
         </div>
       </div>
 
+      {/* Filter toolbar */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        marginBottom: "16px",
+        background: "#faf8f5",
+        padding: "12px 16px",
+        borderRadius: "12px",
+        border: "1px solid #ede8e0",
+      }}>
+        {/* Status filter pills */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {["All", "Pending Review", "Approved", "Pickup Assigned", "Completed", "Rejected"].map(s => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setStatusFilter(s)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "99px",
+                border: "1.5px solid #ede8e0",
+                background: statusFilter === s ? "#941717" : "#fff",
+                color: statusFilter === s ? "#fff" : "#423b32",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Search input */}
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "260px" }}>
+          <span className="material-symbols-outlined text-[18px] text-gray-500">search</span>
+          <input
+            type="text"
+            placeholder="Search return by order, customer, phone..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              padding: "7px 12px",
+              borderRadius: "8px",
+              border: "1px solid #d1d5db",
+              fontSize: "0.825rem",
+              background: "#fff",
+              width: "100%",
+              outline: "none",
+            }}
+          />
+          {searchQuery && (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "#73695b",
+                cursor: "pointer",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+              }}
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      </div>
+
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Loading returns…</div>
-      ) : requests.length === 0 ? (
+      ) : filteredRequests.length === 0 ? (
         <div style={{ background: "#fff", padding: "40px", textAlign: "center", borderRadius: "14px", border: "1px solid #ede8e0" }}>
-          No pending return or exchange tickets.
+          No return or exchange tickets found matching your filters.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-          {requests.map(r => {
+          {paginatedRequests.map(r => {
             const reqId = r.requestId || r.id;
             return (
               <div key={reqId} style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "18px 20px" }}>
@@ -5896,6 +6235,14 @@ function ReturnsTab() {
           })}
         </div>
       )}
+
+      <Pagination
+        currentPage={page}
+        totalItems={filteredRequests.length}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        itemLabel="returns"
+      />
     </div>
   );
 }

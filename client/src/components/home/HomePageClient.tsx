@@ -127,7 +127,7 @@ export default function HomePageClient() {
             <BannerSkeleton />
           ) : heroBanners.length === 0 ? (
             <div
-              className="relative w-full aspect-[2.4/1] sm:aspect-[3.1/1] md:aspect-[3.4/1] min-h-[220px] max-h-[460px] overflow-hidden flex items-center justify-between p-6 sm:p-10 md:p-12 bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-white cursor-pointer select-none"
+              className="relative w-full aspect-[3.25/1] overflow-hidden flex items-center justify-between p-6 sm:p-10 md:p-12 bg-gradient-to-br from-neutral-950 via-neutral-900 to-neutral-950 text-white cursor-pointer select-none"
               onClick={() => router.push("/category?type=all")}
             >
               <div className="max-w-xl z-10 space-y-2.5 sm:space-y-4">
@@ -157,7 +157,7 @@ export default function HomePageClient() {
               </div>
             </div>
           ) : (
-            <div className="relative w-full aspect-[2.4/1] sm:aspect-[3.1/1] md:aspect-[3.4/1] min-h-[220px] max-h-[460px] overflow-hidden">
+            <div className="relative w-full aspect-[3.25/1] overflow-hidden">
               <div
                 className="flex w-full h-full transition-transform duration-500 ease-out"
                 style={{
@@ -190,14 +190,19 @@ export default function HomePageClient() {
                   return (
                     <div
                       key={banner.id || banner._id || index}
-                      className="w-full h-full shrink-0 relative overflow-hidden flex items-center justify-center bg-neutral-950"
+                      className="w-full h-full shrink-0 relative overflow-hidden flex items-center justify-center bg-[#171410]"
                       style={{ cursor: banner.link ? "pointer" : "default" }}
                       onClick={handleClick}
                     >
+                      {/* Ambient Blurred Backdrop for non-standard aspect ratios */}
+                      <div
+                        className="absolute inset-0 bg-cover bg-center filter blur-lg opacity-30 scale-110 pointer-events-none"
+                        style={{ backgroundImage: `url(${banner.image})` }}
+                      />
                       <img
                         src={banner.image}
                         alt={banner.title || "Teffes Fresh Meat Hero"}
-                        className="w-full h-full object-cover object-center select-none"
+                        className="w-full h-full object-contain object-center relative z-1 select-none block"
                         draggable={false}
                       />
                     </div>

@@ -183,9 +183,13 @@ export default function PromotionalPopupModal() {
             style={{
               position: "relative",
               width: "100%",
-              height: "220px",
-              background: "#181412",
+              maxHeight: "360px",
+              background: "#fbf9f6",
+              borderBottom: "1px solid #ede8e0",
               overflow: "hidden",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
           >
             <img
@@ -193,21 +197,13 @@ export default function PromotionalPopupModal() {
               alt={activePopup.title}
               style={{
                 width: "100%",
-                height: "100%",
-                objectFit: "cover",
+                height: "auto",
+                maxHeight: "360px",
+                objectFit: "contain",
                 display: "block",
               }}
               onError={(e) => {
                 (e.target as HTMLElement).style.display = "none";
-              }}
-            />
-            {/* Subtle Gradient Shadow into text */}
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                background: "linear-gradient(180deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0) 50%, rgba(0,0,0,0.4) 100%)",
-                pointerEvents: "none",
               }}
             />
           </div>
