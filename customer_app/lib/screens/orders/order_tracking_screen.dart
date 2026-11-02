@@ -1442,7 +1442,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               ? 'Show Order #${order.orderId} at the store counter'
                               : 'Temperature-controlled doorstep delivery',
                       isCompleted: status == 'Delivered',
-                      isActive: status == 'Delivered',
+                      isActive: false,
                       showLine: false,
                     ),
                   ],
@@ -1767,11 +1767,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 13,
-                  color: isActive
-                      ? Colors.amber.shade900
-                      : isCompleted
-                          ? AppColors.textPrimary
-                          : AppColors.textMuted,
+                  color: (stepNumber == 4 && isCompleted)
+                      ? AppColors.hygieneDark
+                      : isActive
+                          ? Colors.amber.shade900
+                          : isCompleted
+                              ? AppColors.textPrimary
+                              : AppColors.textMuted,
                 ),
               ),
               const SizedBox(height: 2),
@@ -1779,7 +1781,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                 desc,
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: isActive ? Colors.amber.shade900 : AppColors.textSecondary,
+                  color: (stepNumber == 4 && isCompleted)
+                      ? AppColors.hygieneEmerald
+                      : isActive ? Colors.amber.shade900 : AppColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 12),

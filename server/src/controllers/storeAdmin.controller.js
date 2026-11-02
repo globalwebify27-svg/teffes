@@ -686,6 +686,28 @@ const assignRiderToReturnRequest = async (req, res, next) => {
       adminUser: req.user,
     });
 
+    // Notify rider via FCM push notification
+    notificationService.sendToRider(riderId, {
+      title: 'Return Meat Pickup Request',
+      body: `Reverse pickup #${returnReq.requestId || id} assigned. Collect meat from customer and return to store.`,
+      data: {
+        notificationType: 'RETURN_ASSIGNMENT',
+        isReturn: 'true',
+        orderId: returnReq.orderId || id,
+        requestId: returnReq.requestId || id,
+        clickAction: `/rider/orders/${returnReq.orderId || id}`,
+      },
+    }).catch((err) => console.warn('[FCM] Rider return push error:', err.message));
+
+    if (returnReq.orderId) {
+      emitOrderStatusUpdate(returnReq.orderId, {
+        orderId: returnReq.orderId,
+        returnStatus: 'Pickup Assigned',
+        isReturn: true,
+        rider: returnReq.rider,
+      });
+    }
+
     res.status(200).json({ success: true, returnRequest: returnReq });
   } catch (error) {
     next(error);

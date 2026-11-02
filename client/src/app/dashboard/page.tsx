@@ -2170,8 +2170,8 @@ export default function DashboardPage() {
                           {isDelivered ? "check_circle" : "radio_button_unchecked"}
                         </span>
                         <div>
-                          <span className="font-bold text-gray-900 block">Delivered to Doorstep</span>
-                          <span className="text-slate-500 text-[11px]">
+                          <span className={`font-bold block ${isDelivered ? "text-emerald-700" : "text-gray-900"}`}>Delivered to Doorstep</span>
+                          <span className={`text-[11px] ${isDelivered ? "text-emerald-600 font-medium" : "text-slate-500"}`}>
                             {isDelivered
                               ? "Handed over fresh & verified"
                               : trackingOrder.targetDeliveryTime

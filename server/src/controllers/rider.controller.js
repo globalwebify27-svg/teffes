@@ -252,16 +252,69 @@ const getAvailableOrders = async (req, res, next) => {
       return false;
     });
 
+    // Also fetch return requests assigned to this rider for reverse pickup
+    let returnRequests = [];
+    try {
+      returnRequests = await queryDocs('returnRequests', (ref) =>
+        ref.where('status', '==', 'Pickup Assigned')
+      );
+    } catch (err) {
+      console.warn('[Rider] Failed to fetch returnRequests:', err.message);
+    }
+
+    const myReturnOrders = (returnRequests || []).filter((r) => {
+      const oDeclinedBy = Array.isArray(r.declinedBy) ? r.declinedBy.map(String) : [];
+      if (oDeclinedBy.includes(String(riderId)) || (rider?.id && oDeclinedBy.includes(String(rider.id)))) {
+        return false;
+      }
+      const rRiderId = r.rider?.riderId || r.rider?.id;
+      const rRiderPhone = (r.rider?.phone || '').replace(/\D/g, '');
+      return (
+        (rRiderId && String(rRiderId) === String(riderId)) ||
+        (rPhone && rRiderPhone && rPhone === rRiderPhone)
+      );
+    }).map((r) => {
+      const custObj = r.customer || {};
+      return {
+        id: r.requestId || r.id,
+        _id: r.requestId || r.id,
+        orderId: r.requestId || r.orderId || r.id,
+        status: 'Pickup Assigned',
+        isReturn: true,
+        orderType: 'return',
+        returnStatus: 'Pickup Assigned',
+        amount: r.refundAmount || 0,
+        totalAmount: r.refundAmount || 0,
+        riderEarning: 65,
+        items: r.items || [],
+        paymentMethod: 'Return Pickup (Inspection)',
+        paymentStatus: 'Handover Pending',
+        customer: {
+          name: custObj.name || 'Customer',
+          phone: custObj.phone || '',
+          address: custObj.address || 'Customer Address',
+        },
+        storeName: rider.storeName || "TeFFe's Store",
+        storeAddress: rider.storeAddress || 'Harmu Road, Ranchi',
+        createdAt: r.createdAt || new Date().toISOString(),
+      };
+    });
+
     const sanitizedOrders = orders.map((o) => {
       const copy = { ...o };
       delete copy.deliveryOtp;
+      if (copy.returnStatus && copy.returnStatus !== 'Not Requested') {
+        copy.isReturn = true;
+      }
       return copy;
     });
 
+    const combined = [...myReturnOrders, ...sanitizedOrders];
+
     res.status(200).json({
       success: true,
-      count: sanitizedOrders.length,
-      orders: sanitizedOrders,
+      count: combined.length,
+      orders: combined,
     });
   } catch (error) {
     next(error);
@@ -279,8 +332,35 @@ const acceptOrder = async (req, res, next) => {
     const rider = await getRiderDoc(riderId);
     if (!rider) return res.status(404).json({ success: false, message: 'Rider not found' });
 
-    const order = await getOrderByIdFS(id);
-    if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+    let order = await getOrderByIdFS(id);
+    let isReturnTicket = false;
+
+    if (!order) {
+      // Check if this is a return request ticket
+      const retDoc = await getDoc('returnRequests', id.trim());
+      if (retDoc) {
+        isReturnTicket = true;
+        const custObj = retDoc.customer || {};
+        order = {
+          id: retDoc.requestId || retDoc.id,
+          orderId: retDoc.requestId || retDoc.orderId || id,
+          status: 'Pickup Assigned',
+          isReturn: true,
+          orderType: 'return',
+          items: retDoc.items || [],
+          amount: retDoc.refundAmount || 0,
+          customer: {
+            name: custObj.name || 'Customer',
+            phone: custObj.phone || '',
+            address: custObj.address || 'Customer Address',
+          },
+          storeName: rider.storeName || "TeFFe's Store",
+          storeAddress: rider.storeAddress || 'Harmu Road, Ranchi',
+        };
+      }
+    }
+
+    if (!order) return res.status(404).json({ success: false, message: 'Order or return ticket not found' });
 
     const randomOtp = Math.floor(1000 + Math.random() * 9000).toString();
 
@@ -292,6 +372,27 @@ const acceptOrder = async (req, res, next) => {
       lat: req.body.lat || 23.3512,
       lng: req.body.lng || 85.3154,
     };
+
+    if (isReturnTicket) {
+      await updateDoc('returnRequests', id.trim(), {
+        rider: riderInfo,
+        pickupAcceptedAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      });
+      await updateDoc('users', rider.id || riderId, {
+        riderStatus: 'On Delivery',
+        updatedAt: new Date().toISOString(),
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Return pickup accepted successfully.',
+        order: {
+          ...order,
+          rider: riderInfo,
+        },
+      });
+    }
 
     const updatePayload = {
       status: 'Out for Delivery',

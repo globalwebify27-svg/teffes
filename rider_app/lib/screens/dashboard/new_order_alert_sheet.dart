@@ -115,13 +115,15 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: AppColors.dutyOnlineBg,
+                    color: order.isReturn ? const Color(0xFFEFF6FF) : AppColors.dutyOnlineBg,
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.dutyOnline.withOpacity(0.3)),
+                    border: Border.all(
+                      color: order.isReturn ? const Color(0xFF3B82F6) : AppColors.dutyOnline.withOpacity(0.3),
+                    ),
                   ),
-                  child: const Icon(
-                    Icons.notifications_active_rounded,
-                    color: AppColors.dutyOnline,
+                  child: Icon(
+                    order.isReturn ? Icons.assignment_return_rounded : Icons.notifications_active_rounded,
+                    color: order.isReturn ? const Color(0xFF2563EB) : AppColors.dutyOnline,
                     size: 22,
                   ),
                 ),
@@ -130,16 +132,18 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'New Delivery Assigned!',
-                        style: TextStyle(
+                      Text(
+                        order.isReturn
+                            ? 'Return Meat Pickup Request'
+                            : 'New Delivery Assigned!',
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w800,
                           color: AppColors.textPrimary,
                         ),
                       ),
                       Text(
-                        'Order #${order.orderNumber}',
+                        '${order.isReturn ? "Return Ticket" : "Order"} #${order.orderNumber}',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -236,15 +240,23 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Route points: Store Hub -> Customer Address
+            // Route points: For delivery (Store -> Customer), for return (Customer -> Store)
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Column(
                   children: [
-                    const Icon(Icons.circle, size: 12, color: AppColors.primaryMaroon),
-                    Container(width: 2, height: 36, color: AppColors.borderHairline),
-                    const Icon(Icons.location_on, size: 14, color: AppColors.dutyOnline),
+                    Icon(
+                      order.isReturn ? Icons.person_pin_circle_rounded : Icons.circle,
+                      size: order.isReturn ? 16 : 12,
+                      color: AppColors.primaryMaroon,
+                    ),
+                    Container(width: 2, height: 38, color: AppColors.borderHairline),
+                    Icon(
+                      order.isReturn ? Icons.storefront_rounded : Icons.location_on,
+                      size: 16,
+                      color: AppColors.dutyOnline,
+                    ),
                   ],
                 ),
                 const SizedBox(width: 12),
@@ -252,16 +264,32 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        order.storeName,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          if (order.isReturn)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              margin: const EdgeInsets.only(right: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF2F2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('PICKUP', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: AppColors.primaryMaroon)),
+                            ),
+                          Expanded(
+                            child: Text(
+                              order.isReturn ? order.customerName : order.storeName,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       Text(
-                        order.storeAddress,
+                        order.isReturn ? order.customerAddress : order.storeAddress,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -270,16 +298,32 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
                         ),
                       ),
                       const SizedBox(height: 18),
-                      Text(
-                        order.customerName,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textPrimary,
-                        ),
+                      Row(
+                        children: [
+                          if (order.isReturn)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                              margin: const EdgeInsets.only(right: 6),
+                              decoration: BoxDecoration(
+                                color: AppColors.dutyOnlineBg,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('RETURN TO STORE', style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, color: AppColors.dutyOnline)),
+                            ),
+                          Expanded(
+                            child: Text(
+                              order.isReturn ? order.storeName : order.customerName,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                       Text(
-                        order.customerAddress,
+                        order.isReturn ? order.storeAddress : order.customerAddress,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
@@ -294,7 +338,7 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
             ),
             const SizedBox(height: 16),
 
-            // Items and Payment Badge
+            // Items and Payment / Return Badge
             Row(
               children: [
                 Container(
@@ -316,15 +360,21 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: order.isCod ? AppColors.deliveryAmberBg : AppColors.dutyOnlineBg,
+                    color: order.isReturn
+                        ? const Color(0xFFEFF6FF)
+                        : (order.isCod ? AppColors.deliveryAmberBg : AppColors.dutyOnlineBg),
                     borderRadius: BorderRadius.circular(6),
                   ),
                   child: Text(
-                    order.isCod ? 'Cash on Delivery (${CurrencyFormatter.format(order.totalAmount)})' : 'Prepaid Online',
+                    order.isReturn
+                        ? 'Return Handover (Quality Check)'
+                        : (order.isCod ? 'Cash on Delivery (${CurrencyFormatter.format(order.totalAmount)})' : 'Prepaid Online'),
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
-                      color: order.isCod ? AppColors.deliveryAmber : AppColors.dutyOnline,
+                      color: order.isReturn
+                          ? const Color(0xFF1D4ED8)
+                          : (order.isCod ? AppColors.deliveryAmber : AppColors.dutyOnline),
                     ),
                   ),
                 ),
@@ -382,9 +432,9 @@ class _NewOrderAlertSheetState extends State<NewOrderAlertSheet> {
                                 valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                               ),
                             )
-                          : const Text(
-                              'Accept Delivery',
-                              style: TextStyle(
+                          : Text(
+                              order.isReturn ? 'Accept Pickup' : 'Accept Delivery',
+                              style: const TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.w800,
                               ),
