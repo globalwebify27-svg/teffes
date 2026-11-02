@@ -5841,7 +5841,7 @@ function BannersTab() {
                   style={{
                     width: "100%",
                     height: "100%",
-                    objectFit: "cover",
+                    objectFit: "contain",
                   }}
                   onError={(e) => {
                     (e.target as HTMLElement).style.display = "none";
