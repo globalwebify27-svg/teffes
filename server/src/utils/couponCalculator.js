@@ -4,6 +4,7 @@
  */
 
 const { getUserOrders } = require('../services/firestore/order.firestore.service');
+const { calculateCustomerMonthlyTier } = require('./tierCalculator');
 
 /**
  * Helper to check if a coupon date has passed
@@ -119,7 +120,33 @@ const validateCouponEligibility = async (coupon, orderAmount, user = null) => {
     }
   }
 
-  // 8. Calculate authoritative discount
+  // 8. Monthly Loyalty Tier eligibility check
+  const rawTargetTiers = Array.isArray(coupon.targetTiers)
+    ? coupon.targetTiers.map((t) => String(t).toLowerCase().trim())
+    : (coupon.targetTier ? [String(coupon.targetTier).toLowerCase().trim()] : ['general']);
+
+  const isGeneral = rawTargetTiers.length === 0 || rawTargetTiers.includes('general');
+
+  if (!isGeneral) {
+    if (!user || (!user._id && !user.id)) {
+      const allowedStr = rawTargetTiers.map((t) => t.charAt(0).toUpperCase() + t.slice(1)).join(' / ');
+      return {
+        isValid: false,
+        error: `This coupon is exclusively reserved for ${allowedStr} tier members. Please login to apply.`,
+      };
+    }
+
+    const { tier: customerTier } = await calculateCustomerMonthlyTier(user);
+    if (!rawTargetTiers.includes(customerTier.toLowerCase())) {
+      const allowedStr = rawTargetTiers.map((t) => t.charAt(0).toUpperCase() + t.slice(1)).join(' & ');
+      return {
+        isValid: false,
+        error: `This exclusive offer is reserved for ${allowedStr} tier members. Your current monthly tier is ${customerTier}.`,
+      };
+    }
+  }
+
+  // 9. Calculate authoritative discount
   const discount = calculateDiscount(coupon, orderAmount);
 
   return {

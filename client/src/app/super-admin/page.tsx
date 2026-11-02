@@ -16,6 +16,8 @@ import {
   faTriangleExclamation,
   faCircleInfo,
   faCrown,
+  faEye,
+  faEyeSlash,
 } from "@fortawesome/free-solid-svg-icons";
 import api from "@/lib/api";
 import axios from "axios";
@@ -23,6 +25,7 @@ import { toast } from "@/lib/toast";
 import { isYouTubeUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 import SuperAdminInventoryLogsTab from "@/components/super-admin/InventoryLogsTab";
+import PromotionalPopupsTab from "@/components/super-admin/PromotionalPopupsTab";
 
 // ─── Icon helpers ──────────────────────────────────────────────────────────────
 const Icon = ({ emoji, size = "1.2rem" }: { emoji: string; size?: string }) => (
@@ -42,6 +45,7 @@ const TABS = [
   { key: "customers", label: "Customers", icon: "group", sub: "Registered customer directory and order history across Ranchi" },
   { key: "coupons", label: "Coupons & Offers", icon: "sell", sub: "Platform promo engine for discount codes, first-order deals, and banners" },
   { key: "banners", label: "Hero Banners", icon: "view_carousel", sub: "Promotional hero carousels and marketing banners on the home screen" },
+  { key: "popups", label: "Promotional Pop-ups", icon: "campaign", sub: "Marketing alerts, modal pop-ups, and targeted announcements for storefront" },
   { key: "seo", label: "Homepage SEO", icon: "travel_explore", sub: "Search engine metadata, Open Graph tags, canonical URL, and JSON-LD structured data" },
 ];
 
@@ -1123,7 +1127,9 @@ function StoreAdminsTab() {
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newAdmin, setNewAdmin] = useState({ name: "", email: "", phone: "", storeId: "", password: "" });
+  const [showCreatePassword, setShowCreatePassword] = useState(false);
   const [editingAdmin, setEditingAdmin] = useState<any | null>(null);
+  const [showEditPassword, setShowEditPassword] = useState(false);
   const [adminToDelete, setAdminToDelete] = useState<any | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -1188,7 +1194,7 @@ function StoreAdminsTab() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px" }}>
-        <button onClick={() => setShowCreateModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Create Admin</button>
+        <button onClick={() => { setShowCreateModal(true); setShowCreatePassword(false); }} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Create Admin</button>
       </div>
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
         {loading ? (
@@ -1214,7 +1220,7 @@ function StoreAdminsTab() {
                   <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
                     <div style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
                       <AdminEditButton
-                        onClick={() => setEditingAdmin({ ...a, password: "" })}
+                        onClick={() => { setEditingAdmin({ ...a, password: "" }); setShowEditPassword(false); }}
                         title="Edit Admin"
                       />
                       <AdminDeleteButton
@@ -1255,7 +1261,36 @@ function StoreAdminsTab() {
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Password</label>
-                <input type="password" placeholder="Leave empty for 'Store@12345'" value={newAdmin.password} onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })} style={{ padding: "10px", borderRadius: "8px", border: "1px solid #ccc", width: "100%", boxSizing: "border-box" }} />
+                <div style={{ position: "relative", width: "100%" }}>
+                  <input
+                    type={showCreatePassword ? "text" : "password"}
+                    placeholder="Leave empty for 'Store@12345'"
+                    value={newAdmin.password}
+                    onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })}
+                    style={{ padding: "10px 40px 10px 10px", borderRadius: "8px", border: "1px solid #ccc", width: "100%", boxSizing: "border-box" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowCreatePassword(prev => !prev)}
+                    title={showCreatePassword ? "Hide password" : "Show password"}
+                    style={{
+                      position: "absolute",
+                      right: "10px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#73695b",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <FontAwesomeIcon icon={showCreatePassword ? faEyeSlash : faEye} style={{ fontSize: "15px" }} />
+                  </button>
+                </div>
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>Assign to Store *</label>
@@ -1307,7 +1342,36 @@ function StoreAdminsTab() {
               </div>
               <div>
                 <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>New Password</label>
-                <input type="password" placeholder="Leave empty to keep current" value={editingAdmin.password} onChange={e => setEditingAdmin({ ...editingAdmin, password: e.target.value })} style={{ padding: "10px", borderRadius: "8px", border: "1px solid #ccc", width: "100%", boxSizing: "border-box" }} />
+                <div style={{ position: "relative", width: "100%" }}>
+                  <input
+                    type={showEditPassword ? "text" : "password"}
+                    placeholder="Leave empty to keep current"
+                    value={editingAdmin.password}
+                    onChange={e => setEditingAdmin({ ...editingAdmin, password: e.target.value })}
+                    style={{ padding: "10px 40px 10px 10px", borderRadius: "8px", border: "1px solid #ccc", width: "100%", boxSizing: "border-box" }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEditPassword(prev => !prev)}
+                    title={showEditPassword ? "Hide password" : "Show password"}
+                    style={{
+                      position: "absolute",
+                      right: "10px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      color: "#73695b",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <FontAwesomeIcon icon={showEditPassword ? faEyeSlash : faEye} style={{ fontSize: "15px" }} />
+                  </button>
+                </div>
               </div>
               <div style={{ marginTop: "8px" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "0.85rem", cursor: "pointer", color: "#423b32" }}>
@@ -3504,6 +3568,9 @@ function CategoriesTab() {
 function OrdersTab() {
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [areaFilter, setAreaFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("");
 
   useEffect(() => {
     api.get<{ success: boolean; orders: any[] }>("/super-admin/orders")
@@ -3516,11 +3583,164 @@ function OrdersTab() {
       .finally(() => setLoading(false));
   }, []);
 
+  const availableAreas = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach(o => {
+      const addr = o.shippingAddress?.address || o.customer?.address || "";
+      const pincode = o.shippingAddress?.pincode || o.customer?.pincode;
+      if (pincode) set.add(String(pincode));
+      const knownLocalities = ["Kishore Ganj", "Doranda", "Harmu", "Lalpur", "Argora", "Booty More", "Kantatoli", "Ratu Road", "Bariatu", "Morabadi", "Hinoo"];
+      knownLocalities.forEach(loc => {
+        if (addr.toLowerCase().includes(loc.toLowerCase())) {
+          set.add(loc);
+        }
+      });
+    });
+    return Array.from(set).sort();
+  }, [orders]);
+
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (statusFilter !== "All" && o.status !== statusFilter) return false;
+      if (areaFilter !== "All") {
+        const addr = (o.shippingAddress?.address || o.customer?.address || "").toLowerCase();
+        const pin = String(o.shippingAddress?.pincode || o.customer?.pincode || "");
+        const target = areaFilter.toLowerCase();
+        const matchesArea = addr.includes(target) || pin.includes(target);
+        if (!matchesArea) return false;
+      }
+      if (dateFilter) {
+        const orderDate = (o.createdAt || "").substring(0, 10);
+        if (orderDate !== dateFilter) return false;
+      }
+      return true;
+    });
+  }, [orders, statusFilter, areaFilter, dateFilter]);
+
   return (
     <div>
+      {/* Filter toolbar: Status pills + Area/Pincode selector + Date filter */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        marginBottom: "16px",
+        background: "#faf8f5",
+        padding: "12px 16px",
+        borderRadius: "12px",
+        border: "1px solid #ede8e0",
+      }}>
+        {/* Status filter pills */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"].map(s => (
+            <button
+              key={s}
+              onClick={() => setStatusFilter(s)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: "99px",
+                border: "1.5px solid #ede8e0",
+                background: statusFilter === s ? "#941717" : "#fff",
+                color: statusFilter === s ? "#fff" : "#423b32",
+                fontSize: "0.78rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Locality / Pincode Dropdown & Date Picker */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span className="material-symbols-outlined text-[18px] text-gray-500">pin_drop</span>
+            <input
+              list="super-area-suggestions"
+              type="text"
+              placeholder="Search area or pincode..."
+              value={areaFilter === "All" ? "" : areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "0.8rem",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#374151",
+                width: "190px",
+              }}
+            />
+            <datalist id="super-area-suggestions">
+              {availableAreas.map((a: string) => (
+                <option key={a} value={a} />
+              ))}
+            </datalist>
+            {areaFilter && areaFilter !== "All" && (
+              <button
+                onClick={() => setAreaFilter("All")}
+                title="Clear area filter"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#941717",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span className="material-symbols-outlined text-[18px] text-gray-500">calendar_today</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              style={{
+                padding: "5px 10px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "0.8rem",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#374151",
+              }}
+            />
+            {dateFilter && (
+              <button
+                onClick={() => setDateFilter("")}
+                title="Clear date"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#941717",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading platform orders…</div>
+        ) : filteredOrders.length === 0 ? (
+          <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>
+            No orders match the selected filters.
+          </div>
         ) : (
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
             <thead>
@@ -3531,7 +3751,7 @@ function OrdersTab() {
               </tr>
             </thead>
             <tbody>
-              {orders.map((o, i) => {
+              {filteredOrders.map((o, i) => {
                 const isPickup =
                   o.fulfillmentType === "pickup" ||
                   o.pickupMode === true ||
@@ -3539,7 +3759,7 @@ function OrdersTab() {
                   o.customer?.address?.toLowerCase().includes("pickup");
 
                 return (
-                  <tr key={o.orderId || i} style={{ borderBottom: i < orders.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                  <tr key={o.orderId || i} style={{ borderBottom: i < filteredOrders.length - 1 ? "1px solid #ede8e0" : "none" }}>
                     <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>#{o.orderId}</td>
                     <td style={{ padding: "14px 16px" }}>
                       {isPickup ? (
@@ -3555,8 +3775,17 @@ function OrdersTab() {
                     <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.customer?.name} ({o.customer?.phone})</td>
                     <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.storeName || o.storeId}</td>
                     <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>₹{o.amount}</td>
-                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{o.deliverySlot}</td>
-                    <td style={{ padding: "14px 16px", color: "#423b32" }}>{o.paymentMethod}</td>
+                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.82rem" }}>
+                      {o.deliverySlot || o.slot || "—"}
+                    </td>
+                    <td style={{ padding: "14px 16px", color: "#423b32" }}>
+                      <div>{o.paymentMethod}</div>
+                      {o.changeCreditedToWallet > 0 && (
+                        <div style={{ fontSize: "0.72rem", color: "#059669", fontWeight: 700, marginTop: "2px" }}>
+                          +₹{o.changeCreditedToWallet} to wallet
+                        </div>
+                      )}
+                    </td>
                     <td style={{ padding: "14px 16px" }}><Badge label={o.status} color={o.status === "Delivered" ? "#059669" : o.status === "Pending" ? "#941717" : "#d97706"} /></td>
                   </tr>
                 );
@@ -4172,7 +4401,7 @@ function CustomersTab() {
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
-                {["Name", "Phone", "Wallet", "Role", "Verified", "Default Address", "Actions"].map(h => (
+                {["Name", "Phone", "Total Orders", "Total Spent", "Wallet", "Default Address", "Actions"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "#423b32", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -4182,11 +4411,11 @@ function CustomersTab() {
                 <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < customers.length - 1 ? "1px solid #ede8e0" : "none" }}>
                   <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name || "Customer"}</td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.totalOrders ?? 0}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
                   <td style={{ padding: "14px 16px", color: "#059669", fontWeight: "bold" }}>₹{c.walletBalance || 0}</td>
-                  <td style={{ padding: "14px 16px", color: "#73695b" }}>Customer</td>
-                  <td style={{ padding: "14px 16px" }}><Badge label={c.isVerified ? "Verified" : "Pending"} color={c.isVerified ? "#059669" : "#d97706"} /></td>
                   <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>
-                    {c.addresses && c.addresses.length > 0 ? `${c.addresses[0].line1}, ${c.addresses[0].city}` : "Ranchi"}
+                    {c.addresses && c.addresses.length > 0 && c.addresses[0].line1 ? `${c.addresses[0].line1}${c.addresses[0].city ? `, ${c.addresses[0].city}` : ""}` : (c.address || "Ranchi")}
                   </td>
                   <td style={{ padding: "14px 16px" }}>
                     <button
@@ -4531,6 +4760,7 @@ function CouponsTab() {
     description: "",
     isSuperOffer: false,
     isActive: true,
+    targetTiers: ["general"] as string[],
   };
 
   const [formData, setFormData] = useState(defaultCouponForm);
@@ -4576,6 +4806,7 @@ function CouponsTab() {
       description: coupon.description || coupon.discount || "",
       isSuperOffer: Boolean(coupon.isSuperOffer),
       isActive: coupon.isActive !== false && coupon.status !== "Paused",
+      targetTiers: Array.isArray(coupon.targetTiers) && coupon.targetTiers.length > 0 ? coupon.targetTiers : ["general"],
     });
     setShowModal(true);
   };
@@ -4642,6 +4873,7 @@ function CouponsTab() {
         isSuperOffer: Boolean(formData.isSuperOffer),
         isActive: Boolean(formData.isActive),
         status: formData.isActive ? "Active" : "Paused",
+        targetTiers: formData.targetTiers && formData.targetTiers.length > 0 ? formData.targetTiers : ["general"],
       };
 
       if (editingCoupon) {
@@ -4831,6 +5063,38 @@ function CouponsTab() {
                           marginTop: "2px"
                         }}>
                           <FontAwesomeIcon icon={faCrown} style={{ color: "#d97706", fontSize: "11px" }} /> Super Offer
+                        </div>
+                      )}
+                      {Array.isArray(c.targetTiers) && c.targetTiers.length > 0 && !c.targetTiers.includes("general") ? (
+                        <div style={{
+                          background: "#f3e8ff",
+                          color: "#6b21a8",
+                          border: "1px solid #e9d5ff",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.7rem",
+                          fontWeight: 800,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          marginTop: "2px",
+                          textTransform: "capitalize"
+                        }}>
+                          Tier: {c.targetTiers.join(", ")}
+                        </div>
+                      ) : (
+                        <div style={{
+                          background: "#f1ede6",
+                          color: "#574e42",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.7rem",
+                          fontWeight: 600,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          marginTop: "2px"
+                        }}>
+                          All Customers
                         </div>
                       )}
                     </div>
@@ -5059,6 +5323,70 @@ function CouponsTab() {
                 </div>
               </div>
 
+              {/* Target Customer Loyalty Tier Selection */}
+              <div style={{ marginTop: "6px", padding: "14px", background: "#faf8f5", borderRadius: "10px", border: "1.5px solid #ede8e0" }}>
+                <label style={{ display: "block", fontSize: "0.85rem", fontWeight: 800, color: "#171410", marginBottom: "8px" }}>
+                  Target Customer Loyalty Tier (Monthly Spend)
+                </label>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "8px" }}>
+                  {[
+                    { key: "general", label: "General / All Customers" },
+                    { key: "bronze", label: "Bronze (₹0 - ₹800/mo)" },
+                    { key: "silver", label: "Silver (₹800 - ₹2,000/mo)" },
+                    { key: "gold", label: "Gold (₹2,000 - ₹4,000/mo)" },
+                    { key: "platinum", label: "Platinum (> ₹4,000/mo)" },
+                  ].map((t) => {
+                    const isChecked = formData.targetTiers?.includes(t.key);
+                    return (
+                      <label
+                        key={t.key}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          fontSize: "0.82rem",
+                          fontWeight: isChecked ? 700 : 500,
+                          color: isChecked ? "#941717" : "#423b32",
+                          cursor: "pointer",
+                          background: isChecked ? "#fff" : "transparent",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: isChecked ? "1.5px solid #941717" : "1px solid #e5e0d8",
+                          transition: "all 150ms ease",
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            let updated = [...(formData.targetTiers || [])];
+                            if (t.key === "general") {
+                              updated = e.target.checked ? ["general"] : [];
+                            } else {
+                              updated = updated.filter((x) => x !== "general");
+                              if (e.target.checked) {
+                                updated.push(t.key);
+                              } else {
+                                updated = updated.filter((x) => x !== t.key);
+                              }
+                              if (updated.length === 0) {
+                                updated = ["general"];
+                              }
+                            }
+                            setFormData({ ...formData, targetTiers: updated });
+                          }}
+                          style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                        />
+                        <span>{t.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "8px" }}>
+                  Select "General" to make this coupon available to everyone, or select specific tiers (e.g. Gold &amp; Platinum) to restrict visibility and checkout to top customers based on their current monthly spend.
+                </div>
+              </div>
+
               {/* Toggles: First order only, Super Offer, Active/Enabled */}
               <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "4px" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, color: "#423b32" }}>
@@ -5066,19 +5394,22 @@ function CouponsTab() {
                     type="checkbox"
                     checked={formData.firstOrderOnly}
                     onChange={e => setFormData({ ...formData, firstOrderOnly: e.target.checked })}
-                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer", margin: 0 }}
                   />
                   <span>Only for first order (verified against user's actual order history)</span>
                 </label>
 
-                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, color: "#92400e", background: "#fffbeb", padding: "8px 10px", borderRadius: "8px", border: "1px solid #fef3c7" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, color: "#92400e" }}>
                   <input
                     type="checkbox"
                     checked={formData.isSuperOffer}
                     onChange={e => setFormData({ ...formData, isSuperOffer: e.target.checked })}
-                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                    style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer", margin: 0 }}
                   />
-                  <span><FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} /> Set as Super Offer (Feature on Top Bar, Home Banner &amp; Offers Page)</span>
+                  <span style={{ display: "inline-flex", alignItems: "center", gap: "6px", background: "#fffbeb", border: "1px solid #fef3c7", padding: "4px 8px", borderRadius: "6px" }}>
+                    <FontAwesomeIcon icon={faStar} style={{ color: "#f59e0b" }} />
+                    <span>Set as Super Offer (Feature on Top Bar, Home Banner &amp; Offers Page)</span>
+                  </span>
                 </label>
 
                 <label style={{ display: "flex", alignItems: "center", gap: "8px", cursor: "pointer", fontSize: "0.82rem", fontWeight: 700, color: "#15803d" }}>
@@ -5086,7 +5417,7 @@ function CouponsTab() {
                     type="checkbox"
                     checked={formData.isActive}
                     onChange={e => setFormData({ ...formData, isActive: e.target.checked })}
-                    style={{ width: "16px", height: "16px", accentColor: "#15803d", cursor: "pointer" }}
+                    style={{ width: "16px", height: "16px", accentColor: "#15803d", cursor: "pointer", margin: 0 }}
                   />
                   <span>Coupon Active / Enabled</span>
                 </label>
@@ -6688,6 +7019,7 @@ export default function SuperAdminPage() {
     customers: <CustomersTab />,
     coupons: <CouponsTab />,
     banners: <BannersTab />,
+    popups: <PromotionalPopupsTab />,
     seo: <HomepageSeoTab />,
   };
 

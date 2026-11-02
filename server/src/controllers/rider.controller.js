@@ -29,6 +29,11 @@ const {
   triggerSosAlert: triggerSosAlertFS,
 } = require('../services/firestore/sos.firestore.service');
 
+const {
+  getActiveBatchForRider,
+  BATCHES_COLLECTION,
+} = require('../services/firestore/batch.firestore.service');
+
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate } = require('../socket');
 const { getRoadDistanceAndDuration } = require('../services/googleMapsService');
@@ -110,9 +115,36 @@ const getDashboard = async (req, res, next) => {
 
     const cashInHand = await calculateRiderCashInHand(riderId, rider.phone);
 
-    const activeOrder = riderOrders.find(
-      (o) => ['Cutting', 'Ready', 'Out for Delivery'].includes(o.status) && o.fulfillmentType !== 'pickup'
-    ) || null;
+    let activeBatch = null;
+    let activeOrder = null;
+
+    // Check if rider has an active delivery batch
+    const activeBatchDoc = await getActiveBatchForRider(riderId);
+    if (activeBatchDoc && activeBatchDoc.status === 'In-Transit') {
+      const activeId = activeBatchDoc.activeOrderId;
+      activeOrder = riderOrders.find((o) => (o.orderId === activeId || o.id === activeId || o._id === activeId)) || null;
+
+      const completedCountInBatch = (activeBatchDoc.completedOrderIds || []).length;
+      const cancelledCountInBatch = (activeBatchDoc.cancelledOrderIds || []).length;
+      const totalInBatch = (activeBatchDoc.orderIds || []).length;
+
+      activeBatch = {
+        batchId: activeBatchDoc.batchId,
+        currentSequence: activeBatchDoc.currentSequence || (completedCountInBatch + 1),
+        totalOrders: totalInBatch,
+        completedCount: completedCountInBatch,
+        remainingCount: Math.max(0, totalInBatch - completedCountInBatch - cancelledCountInBatch),
+        orderIds: activeBatchDoc.orderIds || [],
+        activeOrderId: activeBatchDoc.activeOrderId,
+      };
+    }
+
+    // Fallback to single active order if no batch is active
+    if (!activeOrder) {
+      activeOrder = riderOrders.find(
+        (o) => ['Cutting', 'Ready', 'Out for Delivery'].includes(o.status) && o.fulfillmentType !== 'pickup'
+      ) || null;
+    }
 
     res.status(200).json({
       success: true,
@@ -152,6 +184,7 @@ const getDashboard = async (req, res, next) => {
         targetCount: rider.dailyTarget || store?.defaultRiderDailyTarget || 16,
       },
       activeOrder,
+      activeBatch,
     });
   } catch (error) {
     next(error);
@@ -506,11 +539,26 @@ const updateLocation = async (req, res, next) => {
 const completeDelivery = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { otp, cashReceived } = req.body;
+    const { otp, cashReceived, cashCollected } = req.body;
+    const received = cashReceived != null ? cashReceived : cashCollected;
     const riderId = req.user?._id || req.user?.id;
 
     const order = await getOrderByIdFS(id);
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
+
+    if (order.status === 'Cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: 'This order was cancelled and cannot be delivered.',
+      });
+    }
+
+    if (order.status === 'Delivered') {
+      return res.status(400).json({
+        success: false,
+        message: 'This order has already been completed and delivered.',
+      });
+    }
 
     const cleanEnteredOtp = (otp || '').toString().trim();
     const cleanStoredOtp = (order.deliveryOtp || '').toString().trim();
@@ -531,19 +579,143 @@ const completeDelivery = async (req, res, next) => {
       updatedAt: new Date().toISOString(),
     };
 
-    if (cashReceived) {
-      updatePayload.cashCollected = Number(cashReceived);
+    const orderAmount = Number(order.amount != null ? order.amount : order.totalAmount) || 0;
+    let excessCash = 0;
+
+    if (received != null) {
+      const numCashReceived = Number(received);
+      updatePayload.cashCollected = numCashReceived;
+      if (numCashReceived > orderAmount) {
+        excessCash = Math.round((numCashReceived - orderAmount) * 100) / 100;
+        updatePayload.changeCreditedToWallet = excessCash;
+      }
     } else if (order.paymentMethod && /cash|cod/i.test(order.paymentMethod) && !order.cashCollected) {
-      updatePayload.cashCollected = Number(order.amount) || 0;
+      updatePayload.cashCollected = orderAmount;
     }
 
     await updateDoc('orders', id, updatePayload);
 
+    // Auto-credit excess COD change to customer wallet if applicable
+    if (excessCash > 0 && order.customer?.userId) {
+      try {
+        const customerUser = await getDoc('users', order.customer.userId);
+        if (customerUser) {
+          const currentBal = Number(customerUser.walletBalance) || 0;
+          const newBal = Math.round((currentBal + excessCash) * 100) / 100;
+          const nowStr = new Date().toISOString();
+
+          await updateDoc('users', order.customer.userId, {
+            walletBalance: newBal,
+            updatedAt: nowStr,
+          });
+
+          const txnId = `txn_cod_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+          const transactionDoc = {
+            id: txnId,
+            _id: txnId,
+            userId: order.customer.userId,
+            type: 'Credit',
+            source: 'COD_EXCESS_CHANGE',
+            amount: excessCash,
+            balanceAfter: newBal,
+            description: `COD change for Order #${order.orderId || id} (Received: ₹${updatePayload.cashCollected}, Bill: ₹${orderAmount})`,
+            orderId: order.orderId || id,
+            status: 'Success',
+            createdAt: nowStr,
+          };
+          await createDoc('wallet_transactions', txnId, transactionDoc);
+
+          try {
+            const { emitWalletUpdate } = require('../socket');
+            emitWalletUpdate(order.customer.userId, newBal, transactionDoc);
+          } catch (sockErr) {
+            console.warn('[Socket] Wallet update emit warn:', sockErr.message);
+          }
+
+          // Push alert to customer informing wallet balance credit
+          notificationService.sendToUser(order.customer.userId, {
+            title: '₹' + excessCash + ' Added to Your Wallet',
+            body: `Change for Order #${order.orderId || id} has been credited to your Teffe's wallet balance.`,
+            data: {
+              notificationType: 'WALLET_CREDIT',
+              orderId: order.orderId || id,
+              amount: String(excessCash),
+            },
+          }).catch((err) => console.warn('[FCM] Wallet credit push error:', err.message));
+        }
+      } catch (walletErr) {
+        console.error('[COD Wallet Adjustment Error]:', walletErr);
+      }
+    }
+
+    let isBatchComplete = true;
+    let nextBatchOrder = null;
+
+    if (order.batchId) {
+      const db = getDb();
+      const batchRef = db.collection('delivery_batches').doc(String(order.batchId).trim());
+      const batchSnap = await batchRef.get();
+
+      if (batchSnap.exists) {
+        const bData = batchSnap.data();
+        const actualOrderId = order.orderId || id;
+        const completedList = Array.from(new Set([...(bData.completedOrderIds || []), actualOrderId]));
+        const cancelledList = bData.cancelledOrderIds || [];
+        const allOrderIds = bData.orderIds || [];
+
+        const remainingIds = allOrderIds.filter((oid) => !completedList.includes(oid) && !cancelledList.includes(oid));
+
+        if (remainingIds.length === 0) {
+          isBatchComplete = true;
+          await updateDoc('delivery_batches', order.batchId, {
+            completedOrderIds: completedList,
+            status: 'Completed',
+            completedAt: new Date().toISOString(),
+            activeOrderId: null,
+            updatedAt: new Date().toISOString(),
+          });
+        } else {
+          isBatchComplete = false;
+          const nextOrderId = remainingIds[0];
+          const nextSeq = allOrderIds.indexOf(nextOrderId) + 1;
+
+          await updateDoc('delivery_batches', order.batchId, {
+            completedOrderIds: completedList,
+            activeOrderId: nextOrderId,
+            currentSequence: nextSeq,
+            updatedAt: new Date().toISOString(),
+          });
+
+          nextBatchOrder = await getOrderByIdFS(nextOrderId);
+        }
+      }
+    }
+
     if (riderId) {
-      await updateDoc('users', riderId, {
-        riderStatus: 'Available',
-        updatedAt: new Date().toISOString(),
-      });
+      if (isBatchComplete) {
+        await updateDoc('users', riderId, {
+          riderStatus: 'Available',
+          activeBatchId: null,
+          updatedAt: new Date().toISOString(),
+        });
+      } else {
+        await updateDoc('users', riderId, {
+          riderStatus: 'On Delivery',
+          updatedAt: new Date().toISOString(),
+        });
+
+        if (nextBatchOrder) {
+          notificationService.sendToRider(riderId, {
+            title: 'Proceed to Next Delivery',
+            body: `Stop completed! Next stop: Order #${nextBatchOrder.orderId || nextBatchOrder.id}.`,
+            data: {
+              notificationType: 'NEXT_BATCH_STOP',
+              orderId: nextBatchOrder.orderId || nextBatchOrder.id,
+              clickAction: `/rider/orders/${nextBatchOrder.orderId || nextBatchOrder.id}`,
+            },
+          }).catch((err) => console.warn('[FCM] Next stop push error:', err.message));
+        }
+      }
     }
 
     const updatedOrder = { ...order, ...updatePayload };

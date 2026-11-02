@@ -10,6 +10,8 @@ const {
   createProduct,
   updateProduct,
   deleteProduct,
+  subscribeProductStockNotification,
+  getCustomerStockSubscriptions,
 } = require('../controllers/product.controller');
 
 const router = Router();
@@ -17,6 +19,8 @@ const router = Router();
 // Public routes
 router.get('/categories', getCategories);
 router.get('/products', getProducts);
+router.get('/products/my-stock-subscriptions', getCustomerStockSubscriptions);
+router.post('/products/:id/notify-me', subscribeProductStockNotification);
 router.get('/products/:id', getProductById);
 
 // Protected routes (Super Admin & Store Admin)

@@ -15,6 +15,7 @@ const {
   isCouponExpired,
   isCouponFuture,
 } = require('../services/firestore/coupon.firestore.service');
+const { validateCouponEligibility } = require('../utils/couponCalculator');
 const {
   getStoreInventory,
   calculateInventoryStatus,
@@ -112,38 +113,22 @@ const createOrder = async (req, res, next) => {
 
     if (incomingCouponCode) {
       const couponDoc = await getCouponByCode(incomingCouponCode);
-      if (!couponDoc || couponDoc.isActive === false || couponDoc.status === 'Paused') {
+      if (!couponDoc) {
         return res.status(400).json({
           success: false,
-          message: 'Coupon is no longer valid. Please try another coupon.',
+          message: 'Coupon not found or is no longer valid.',
         });
       }
 
-      if (isCouponFuture(couponDoc.validFrom) || isCouponExpired(couponDoc.validTill) || couponDoc.status === 'Expired') {
+      const eligibility = await validateCouponEligibility(couponDoc, itemsSubtotal, user);
+      if (!eligibility.isValid) {
         return res.status(400).json({
           success: false,
-          message: 'Coupon has expired. Please try another coupon.',
+          message: eligibility.error,
         });
       }
 
-      const minReq = couponDoc.minOrderAmount || couponDoc.minOrder || 0;
-      if (itemsSubtotal < minReq) {
-        return res.status(400).json({
-          success: false,
-          message: `Minimum order amount for this coupon is ₹${minReq}`,
-        });
-      }
-
-      const usageLimit = Number(couponDoc.usageLimit);
-      const usage = Number(couponDoc.usageCount || couponDoc.used || 0);
-      if (usageLimit && usageLimit > 0 && usage >= usageLimit) {
-        return res.status(400).json({
-          success: false,
-          message: 'Coupon usage limit has been reached.',
-        });
-      }
-
-      verifiedDiscount = calculateDiscount(couponDoc, itemsSubtotal);
+      verifiedDiscount = eligibility.discount !== undefined ? eligibility.discount : calculateDiscount(couponDoc, itemsSubtotal);
       verifiedCouponSnapshot = {
         code: couponDoc.code,
         discountType: couponDoc.discountType,
@@ -151,6 +136,7 @@ const createOrder = async (req, res, next) => {
         discountAmount: verifiedDiscount,
       };
 
+      const usage = Number(couponDoc.usageCount || couponDoc.used || 0);
       // Increment coupon usage in Firestore
       await updateDoc('coupons', couponDoc.code, {
         usageCount: usage + 1,

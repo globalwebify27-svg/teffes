@@ -12,6 +12,7 @@ import api from "@/lib/api";
 import RegisteredShopsSection from "@/components/home/RegisteredShopsSection";
 import { BannerSkeleton, ProductGridSkeleton, CategoryBarSkeleton } from "@/components/common/Skeletons";
 import ProductQuantityStepper from "@/components/products/ProductQuantityStepper";
+import PromotionalPopupModal from "@/components/common/PromotionalPopupModal";
 
 export default function HomePageClient() {
   const router = useRouter();
@@ -1225,6 +1226,9 @@ export default function HomePageClient() {
           </div>
         </aside>
       )}
+
+      {/* Promotional Pop-up Announcement Modal */}
+      <PromotionalPopupModal />
     </div>
   );
 }

@@ -6,18 +6,43 @@ const {
   isCouponFuture,
 } = require('../services/firestore/coupon.firestore.service');
 const { validateCouponEligibility } = require('../utils/couponCalculator');
+const { calculateCustomerMonthlyTier } = require('../utils/tierCalculator');
 
 /**
  * GET /api/coupons/active
- * Retrieve all currently active, non-expired coupons within their validity window
+ * Retrieve all currently active, non-expired coupons visible for the user's tier.
  */
 exports.getActiveCoupons = async (req, res, next) => {
   try {
-    const activeCoupons = await getActiveCouponsFS();
+    const allActive = await getActiveCouponsFS();
+    let userTier = 'bronze';
+
+    if (req.user) {
+      const tierInfo = await calculateCustomerMonthlyTier(req.user);
+      userTier = (tierInfo.tier || 'bronze').toLowerCase();
+    }
+
+    // Filter coupons: must be 'general' OR match user's monthly tier
+    const visibleCoupons = allActive.filter((c) => {
+      const rawTargetTiers = Array.isArray(c.targetTiers)
+        ? c.targetTiers.map((t) => String(t).toLowerCase().trim())
+        : (c.targetTier ? [String(c.targetTier).toLowerCase().trim()] : ['general']);
+
+      if (rawTargetTiers.length === 0 || rawTargetTiers.includes('general')) {
+        return true;
+      }
+
+      if (!req.user) {
+        return false;
+      }
+
+      return rawTargetTiers.includes(userTier);
+    });
+
     res.status(200).json({
       success: true,
-      count: activeCoupons.length,
-      coupons: activeCoupons,
+      count: visibleCoupons.length,
+      coupons: visibleCoupons,
     });
   } catch (error) {
     next(error);
@@ -30,17 +55,66 @@ exports.getActiveCoupons = async (req, res, next) => {
  */
 exports.getSuperOffer = async (req, res, next) => {
   try {
-    const activeCoupons = await getActiveCouponsFS();
-    if (activeCoupons.length === 0) {
+    const allActive = await getActiveCouponsFS();
+    if (allActive.length === 0) {
       return res.status(200).json({ success: true, superOffer: null });
     }
 
-    let superOffer = activeCoupons.find((c) => c.isSuperOffer === true);
+    let userTier = 'bronze';
+    if (req.user) {
+      const tierInfo = await calculateCustomerMonthlyTier(req.user);
+      userTier = (tierInfo.tier || 'bronze').toLowerCase();
+    }
+
+    // Filter visible coupons
+    const visibleCoupons = allActive.filter((c) => {
+      const rawTargetTiers = Array.isArray(c.targetTiers)
+        ? c.targetTiers.map((t) => String(t).toLowerCase().trim())
+        : (c.targetTier ? [String(c.targetTier).toLowerCase().trim()] : ['general']);
+
+      if (rawTargetTiers.length === 0 || rawTargetTiers.includes('general')) return true;
+      if (!req.user) return false;
+      return rawTargetTiers.includes(userTier);
+    });
+
+    if (visibleCoupons.length === 0) {
+      return res.status(200).json({ success: true, superOffer: null });
+    }
+
+    let superOffer = visibleCoupons.find((c) => c.isSuperOffer === true);
     if (!superOffer) {
-      superOffer = activeCoupons[0];
+      superOffer = visibleCoupons[0];
     }
 
     res.status(200).json({ success: true, superOffer });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/coupons/my-tier
+ * Retrieve authenticated customer's monthly loyalty tier and spend metrics
+ */
+exports.getMyTier = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return res.status(200).json({
+        success: true,
+        tierInfo: {
+          monthlySpend: 0,
+          tier: 'Bronze',
+          nextTier: 'Silver',
+          spendNeededForNextTier: 800,
+        },
+      });
+    }
+
+    const tierInfo = await calculateCustomerMonthlyTier(req.user);
+    res.status(200).json({
+      success: true,
+      tierInfo,
+    });
   } catch (error) {
     next(error);
   }
@@ -79,45 +153,16 @@ exports.applyCoupon = async (req, res, next) => {
       });
     }
 
-    if (coupon.isActive === false || coupon.status === 'Paused') {
+    // Comprehensive eligibility check (dates, status, min order, usage limits, first order, loyalty tier)
+    const eligibility = await validateCouponEligibility(coupon, amount, req.user);
+    if (!eligibility.isValid) {
       return res.status(400).json({
         success: false,
-        message: 'Coupon is currently inactive.',
+        message: eligibility.error,
       });
     }
 
-    if (isCouponFuture(coupon.validFrom)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Coupon is not active yet.',
-      });
-    }
-
-    if (isCouponExpired(coupon.validTill) || coupon.status === 'Expired') {
-      return res.status(400).json({
-        success: false,
-        message: 'Coupon has expired.',
-      });
-    }
-
-    const minReq = coupon.minOrderAmount || coupon.minOrder || 0;
-    if (amount < minReq) {
-      return res.status(400).json({
-        success: false,
-        message: `Minimum order amount for this coupon is ₹${minReq}`,
-      });
-    }
-
-    const usageLimit = Number(coupon.usageLimit);
-    const usage = Number(coupon.usageCount || coupon.used || 0);
-    if (usageLimit && usageLimit > 0 && usage >= usageLimit) {
-      return res.status(400).json({
-        success: false,
-        message: 'Coupon usage limit has been reached.',
-      });
-    }
-
-    const discount = calculateDiscount(coupon, amount);
+    const discount = eligibility.discount !== undefined ? eligibility.discount : calculateDiscount(coupon, amount);
     const payableAmount = Math.max(0, amount - discount);
 
     res.status(200).json({
@@ -139,6 +184,7 @@ exports.applyCoupon = async (req, res, next) => {
         maxDiscountAmount: coupon.maxDiscountAmount,
         description: coupon.description || coupon.discount,
         isSuperOffer: coupon.isSuperOffer,
+        targetTiers: coupon.targetTiers || ['general'],
       },
     });
   } catch (error) {

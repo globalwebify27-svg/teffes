@@ -11,6 +11,7 @@ const {
   updateDoc,
   deleteDoc,
   queryDocs,
+  parseDateMillis,
 } = require('../lib/firestore');
 
 const {
@@ -652,13 +653,142 @@ const deleteRider = async (req, res, next) => {
  */
 const getPlatformCustomers = async (req, res, next) => {
   try {
-    const customers = await queryDocs('users', (ref) => ref.where('role', '==', 'customer'));
-    const safeCustomers = customers.map((c) => {
-      const copy = { ...c };
+    const [users, allOrders] = await Promise.all([
+      queryDocs('users', (ref) => ref.where('role', '==', 'customer')),
+      getAllOrdersFS({ includeTest: false }),
+    ]);
+
+    // Exclude test users from platform directory
+    const activeUsers = users.filter((u) => !u.isTest && u.role === 'customer');
+
+    // Filter valid orders: exclude cancelled and failed payments
+    const validOrders = allOrders.filter(
+      (o) => !o.isTest && o.status !== 'Cancelled' && o.paymentStatus !== 'Failed'
+    );
+
+    const customerMap = new Map();
+    const userIdToKeyMap = new Map();
+
+    const genericNames = ['verified gourmet user', 'valued customer', 'customer'];
+
+    // 1. Index registered users
+    for (const u of activeUsers) {
+      const copy = { ...u };
       delete copy.password;
-      return copy;
+      const cleanPhone = String(copy.phone || '').replace(/\D/g, '').slice(-10);
+      const uId = String(copy.id || copy._id || '').trim();
+
+      const key = cleanPhone || uId;
+      if (!key) continue;
+
+      if (uId) {
+        userIdToKeyMap.set(uId, key);
+      }
+
+      if (customerMap.has(key)) {
+        const existing = customerMap.get(key);
+        if (genericNames.includes((existing.name || '').trim().toLowerCase())) {
+          if (copy.name && !genericNames.includes(copy.name.trim().toLowerCase())) {
+            existing.name = copy.name;
+          }
+        }
+      } else {
+        const defaultAddress = (copy.addresses && copy.addresses.length > 0)
+          ? `${copy.addresses[0].line1 || ''}, ${copy.addresses[0].city || 'Ranchi'}`
+          : (copy.address || 'Ranchi');
+
+        customerMap.set(key, {
+          ...copy,
+          id: copy.id || copy._id || `cust_${key}`,
+          phone: cleanPhone ? `+91 ${cleanPhone}` : (copy.phone || 'Unknown'),
+          address: defaultAddress,
+          addresses: copy.addresses && copy.addresses.length > 0 ? copy.addresses : [{ line1: defaultAddress, city: 'Ranchi', isDefault: true }],
+          walletBalance: Number(copy.walletBalance) || 0,
+          totalOrders: 0,
+          orders: 0,
+          totalSpent: 0,
+          _orderIds: new Set(),
+        });
+      }
+    }
+
+    // 2. Unify with all orders across all stores
+    for (const o of validOrders) {
+      const oId = String(o.orderId || o.id || o._id || '');
+      const amt = Number(o.amount != null ? o.amount : o.totalAmount) || 0;
+      const rawPhone = o.customer?.phone || '';
+      const oPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
+      const oUserId = o.customer?.userId ? String(o.customer.userId).trim() : null;
+
+      let key = oPhone;
+      if (!key && oUserId && userIdToKeyMap.has(oUserId)) {
+        key = userIdToKeyMap.get(oUserId);
+      } else if (!key && oUserId) {
+        key = oUserId;
+      }
+
+      if (!key) continue;
+
+      let entry = customerMap.get(key);
+      if (!entry) {
+        const orderAddress = o.customer?.address || o.shippingAddress?.address || 'Ranchi';
+        entry = {
+          id: oUserId || `cust_${key}`,
+          name: o.customer?.name || 'Customer',
+          phone: oPhone ? `+91 ${oPhone}` : (rawPhone || 'Unknown'),
+          email: o.customer?.email || '',
+          address: orderAddress,
+          addresses: [{ line1: orderAddress, city: 'Ranchi', isDefault: true }],
+          walletBalance: 0,
+          totalOrders: 0,
+          orders: 0,
+          totalSpent: 0,
+          _orderIds: new Set(),
+          createdAt: o.createdAt || new Date().toISOString(),
+        };
+        customerMap.set(key, entry);
+      }
+
+      // Name resolution: prefer real checkout name over generic placeholder
+      const currentNameLower = (entry.name || '').trim().toLowerCase();
+      const orderName = (o.customer?.name || '').trim();
+      if (orderName && (!entry.name || genericNames.includes(currentNameLower))) {
+        entry.name = orderName;
+      }
+
+      // Address resolution: update if address is default 'Ranchi'
+      if ((!entry.address || entry.address === 'Ranchi') && (o.customer?.address || o.shippingAddress?.address)) {
+        const addr = o.customer?.address || o.shippingAddress?.address;
+        entry.address = addr;
+        if (!entry.addresses || entry.addresses.length === 0 || entry.addresses[0].line1 === 'Ranchi') {
+          entry.addresses = [{ line1: addr, city: 'Ranchi', isDefault: true }];
+        }
+      }
+
+      // Mathematical order & spent calculation (strictly de-duplicated by order ID)
+      if (!entry._orderIds.has(oId)) {
+        entry._orderIds.add(oId);
+        entry.totalOrders = entry._orderIds.size;
+        entry.orders = entry.totalOrders;
+        entry.totalSpent = Math.round((entry.totalSpent + amt) * 100) / 100;
+      }
+    }
+
+    const safeCustomers = Array.from(customerMap.values()).map((c) => {
+      delete c._orderIds;
+      c.totalSpent = Math.round((Number(c.totalSpent) || 0) * 100) / 100;
+      return c;
     });
-    safeCustomers.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    // Sort customers with orders first, then totalOrders desc, totalSpent desc
+    safeCustomers.sort((a, b) => {
+      const orderDiff = (b.totalOrders || 0) - (a.totalOrders || 0);
+      if (orderDiff !== 0) return orderDiff;
+      const spentDiff = (b.totalSpent || 0) - (a.totalSpent || 0);
+      if (spentDiff !== 0) return spentDiff;
+      return parseDateMillis(b.createdAt) - parseDateMillis(a.createdAt);
+    });
+
     res.status(200).json({ success: true, count: safeCustomers.length, customers: safeCustomers });
   } catch (error) {
     next(error);
@@ -699,6 +829,7 @@ const createCoupon = async (req, res, next) => {
       discount,
       isSuperOffer,
       isActive,
+      targetTiers,
     } = req.body;
 
     if (!code || typeof code !== 'string' || !code.trim()) {
@@ -716,6 +847,13 @@ const createCoupon = async (req, res, next) => {
     const tillDate = validTill ? new Date(validTill).toISOString() : new Date('2026-12-31T23:59:59.999Z').toISOString();
 
     const desc = (description || discount || `${val}% off`).trim();
+
+    let sanitizedTiers = ['general'];
+    if (Array.isArray(targetTiers) && targetTiers.length > 0) {
+      sanitizedTiers = targetTiers.map((t) => String(t).toLowerCase().trim()).filter(Boolean);
+    } else if (typeof targetTiers === 'string' && targetTiers.trim()) {
+      sanitizedTiers = [targetTiers.toLowerCase().trim()];
+    }
 
     if (isSuperOffer) {
       const allCoupons = await getAllCoupons();
@@ -742,6 +880,7 @@ const createCoupon = async (req, res, next) => {
       isSuperOffer: Boolean(isSuperOffer),
       isActive: isActive !== undefined ? Boolean(isActive) : true,
       status: (isActive !== undefined && !isActive) ? 'Paused' : 'Active',
+      targetTiers: sanitizedTiers,
     };
 
     const created = await createCouponFS(couponData);
@@ -760,6 +899,16 @@ const updateCoupon = async (req, res, next) => {
     const { id } = req.params;
     const cleanId = id.trim().toUpperCase();
     const updates = { ...req.body };
+
+    if (updates.targetTiers !== undefined) {
+      if (Array.isArray(updates.targetTiers) && updates.targetTiers.length > 0) {
+        updates.targetTiers = updates.targetTiers.map((t) => String(t).toLowerCase().trim()).filter(Boolean);
+      } else if (typeof updates.targetTiers === 'string' && updates.targetTiers.trim()) {
+        updates.targetTiers = [updates.targetTiers.toLowerCase().trim()];
+      } else {
+        updates.targetTiers = ['general'];
+      }
+    }
 
     if (updates.isSuperOffer) {
       const allCoupons = await getAllCoupons();

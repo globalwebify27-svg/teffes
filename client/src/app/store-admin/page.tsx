@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useMemo } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
@@ -26,6 +26,7 @@ import ThermalKOTModal from "@/components/store-admin/ThermalKOTModal";
 import StoreStatusModal from "@/components/store-admin/StoreStatusModal";
 import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 import StoreAdminInventoryLogsTab from "@/components/store-admin/InventoryLogsTab";
+import StoreTransfersSection from "@/components/store-admin/StoreTransfersSection";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
@@ -558,6 +559,8 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
 function LiveOrdersTab() {
   const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
+  const [areaFilter, setAreaFilter] = useState("All");
+  const [dateFilter, setDateFilter] = useState("");
   const [loading, setLoading] = useState(true);
   const [printModalOrder, setPrintModalOrder] = useState<any>(null);
 
@@ -580,6 +583,42 @@ function LiveOrdersTab() {
       .catch(err => console.warn("Failed to fetch store orders:", err))
       .finally(() => setLoading(false));
   };
+
+  // Detected areas / pincodes from orders
+  const availableAreas = useMemo(() => {
+    const set = new Set<string>();
+    orders.forEach(o => {
+      const addr = o.shippingAddress?.address || o.customer?.address || "";
+      const pincode = o.shippingAddress?.pincode || o.customer?.pincode;
+      if (pincode) set.add(String(pincode));
+      // Extract common Ranchi localities if mentioned in address
+      const knownLocalities = ["Kishore Ganj", "Doranda", "Harmu", "Lalpur", "Argora", "Booty More", "Kantatoli", "Ratu Road", "Bariatu", "Morabadi", "Hinoo"];
+      knownLocalities.forEach(loc => {
+        if (addr.toLowerCase().includes(loc.toLowerCase())) {
+          set.add(loc);
+        }
+      });
+    });
+    return Array.from(set).sort();
+  }, [orders]);
+
+  // Filtered orders applying Area/Pincode and Date filters
+  const filteredOrders = useMemo(() => {
+    return orders.filter(o => {
+      if (areaFilter !== "All") {
+        const addr = (o.shippingAddress?.address || o.customer?.address || "").toLowerCase();
+        const pin = String(o.shippingAddress?.pincode || o.customer?.pincode || "");
+        const target = areaFilter.toLowerCase();
+        const matchesArea = addr.includes(target) || pin.includes(target);
+        if (!matchesArea) return false;
+      }
+      if (dateFilter) {
+        const orderDate = (o.createdAt || "").substring(0, 10);
+        if (orderDate !== dateFilter) return false;
+      }
+      return true;
+    });
+  }, [orders, areaFilter, dateFilter]);
 
   const openAssignRiderModal = (order: any) => {
     setAssignModalOrder(order);
@@ -628,6 +667,83 @@ function LiveOrdersTab() {
       toast.error(err.response?.data?.message || "Failed to assign rider", "Dispatch Error");
     } finally {
       setAssigningRider(false);
+    }
+  };
+
+  // Multi-Order Batch Dispatch state
+  const [selectedBatchOrderIds, setSelectedBatchOrderIds] = useState<string[]>([]);
+  const [showBatchModal, setShowBatchModal] = useState(false);
+  const [batchFeasibility, setBatchFeasibility] = useState<any>(null);
+  const [checkingFeasibility, setCheckingFeasibility] = useState(false);
+  const [batchRiderId, setBatchRiderId] = useState("");
+  const [dispatchingBatch, setDispatchingBatch] = useState(false);
+
+  const toggleSelectOrderForBatch = (orderId: string) => {
+    setSelectedBatchOrderIds(prev =>
+      prev.includes(orderId) ? prev.filter(id => id !== orderId) : [...prev, orderId]
+    );
+  };
+
+  const openBatchModal = async () => {
+    if (selectedBatchOrderIds.length === 0) return;
+    setShowBatchModal(true);
+    setCheckingFeasibility(true);
+    setBatchFeasibility(null);
+    setBatchRiderId("");
+
+    api.get<{ success: boolean; riders: any[] }>("/store-admin/riders")
+      .then(res => {
+        if (res.data.success && Array.isArray(res.data.riders)) {
+          setAvailableRiders(res.data.riders);
+          const firstAvailable = res.data.riders.find(r => r.riderStatus === "Available");
+          if (firstAvailable) {
+            setBatchRiderId(firstAvailable.id || firstAvailable._id);
+          }
+        }
+      })
+      .catch(err => console.warn("Failed to fetch riders:", err));
+
+    try {
+      const res = await api.post<{ success: boolean; isFeasible: boolean; reason?: string; optimalSequence?: string[]; totalDistanceKm?: number; estimatedDurationMinutes?: number }>(
+        "/store-admin/batches/check-feasibility",
+        { orderIds: selectedBatchOrderIds }
+      );
+      setBatchFeasibility(res.data);
+    } catch (err: any) {
+      setBatchFeasibility({
+        isFeasible: false,
+        reason: err.response?.data?.message || "Route feasibility check failed",
+      });
+    } finally {
+      setCheckingFeasibility(false);
+    }
+  };
+
+  const handleConfirmBatchDispatch = async () => {
+    if (!batchRiderId || selectedBatchOrderIds.length === 0) {
+      toast.error("Please select an active delivery partner", "Rider Required");
+      return;
+    }
+    setDispatchingBatch(true);
+    try {
+      const res = await api.post<{ success: boolean; message: string; batch: any; rider: any }>(
+        "/store-admin/batches/assign",
+        {
+          riderId: batchRiderId,
+          orderIds: selectedBatchOrderIds,
+        }
+      );
+      if (res.data.success) {
+        toast.success(res.data.message || `Batch dispatched successfully`, "Batch Dispatched");
+        setShowBatchModal(false);
+        setSelectedBatchOrderIds([]);
+        setBatchFeasibility(null);
+        fetchOrders();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to dispatch batch", "Dispatch Error");
+    } finally {
+      setDispatchingBatch(false);
     }
   };
 
@@ -737,54 +853,184 @@ function LiveOrdersTab() {
 
   return (
     <div>
-      {/* Status filter pills */}
-      <div style={{ display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" }}>
-        {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"].map(s => (
-          <button
-            key={s}
-            onClick={() => setFilter(s)}
-            style={{
-              padding: "6px 14px", borderRadius: "99px", border: "1.5px solid #ede8e0",
-              background: filter === s ? "#941717" : "#fff", color: filter === s ? "#fff" : "#423b32",
-              fontSize: "0.8rem", fontWeight: 700, cursor: "pointer"
-            }}
-          >
-            {s}
-          </button>
-        ))}
+      {/* Filter toolbar: Status pills + Area/Pincode selector + Date filter */}
+      <div style={{
+        display: "flex",
+        justifyContent: "space-between",
+        alignItems: "center",
+        flexWrap: "wrap",
+        gap: "12px",
+        marginBottom: "20px",
+        background: "#faf8f5",
+        padding: "12px 16px",
+        borderRadius: "12px",
+        border: "1px solid #ede8e0",
+      }}>
+        {/* Status filter pills */}
+        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+          {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"].map(s => (
+            <button
+              key={s}
+              onClick={() => setFilter(s)}
+              style={{
+                padding: "6px 12px", borderRadius: "99px", border: "1.5px solid #ede8e0",
+                background: filter === s ? "#941717" : "#fff", color: filter === s ? "#fff" : "#423b32",
+                fontSize: "0.78rem", fontWeight: 700, cursor: "pointer"
+              }}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Locality / Pincode Dropdown & Date Picker */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span className="material-symbols-outlined text-[18px] text-gray-500">pin_drop</span>
+            <input
+              list="store-area-suggestions"
+              type="text"
+              placeholder="Search area or pincode..."
+              value={areaFilter === "All" ? "" : areaFilter}
+              onChange={(e) => setAreaFilter(e.target.value)}
+              style={{
+                padding: "6px 10px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "0.8rem",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#374151",
+                width: "190px",
+              }}
+            />
+            <datalist id="store-area-suggestions">
+              {availableAreas.map((a: string) => (
+                <option key={a} value={a} />
+              ))}
+            </datalist>
+            {areaFilter && areaFilter !== "All" && (
+              <button
+                onClick={() => setAreaFilter("All")}
+                title="Clear area filter"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#941717",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <span className="material-symbols-outlined text-[18px] text-gray-500">calendar_today</span>
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              style={{
+                padding: "5px 10px",
+                borderRadius: "8px",
+                border: "1px solid #d1d5db",
+                fontSize: "0.8rem",
+                background: "#fff",
+                fontWeight: 600,
+                color: "#374151",
+              }}
+            />
+            {dateFilter && (
+              <button
+                onClick={() => setDateFilter("")}
+                title="Clear date"
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#941717",
+                  fontSize: "0.75rem",
+                  fontWeight: 700,
+                }}
+              >
+                Clear
+              </button>
+            )}
+          </div>
+        </div>
       </div>
 
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Fetching live orders from database…</div>
-      ) : orders.length === 0 ? (
+      ) : filteredOrders.length === 0 ? (
         <div style={{ background: "#fff", padding: "40px", textAlign: "center", borderRadius: "14px", border: "1px solid #ede8e0" }}>
-          No orders found for &ldquo;{filter}&rdquo; status.
+          No orders found matching the selected filters.
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {orders.map(o => {
+          {filteredOrders.map((o: any) => {
             const isPickup =
               o.fulfillmentType === "pickup" ||
               o.pickupMode === true ||
               o.deliverySlot?.toLowerCase().includes("pickup") ||
               o.customer?.address?.toLowerCase().includes("pickup");
             const nextLabel = getNextStatusLabel(o.status, isPickup);
+            const canBatch = !isPickup && (o.status === "Ready" || o.status === "Packed");
+            const orderKey = o.orderId || o.id;
 
             return (
               <div
-                key={o.orderId || o.id}
+                key={orderKey}
                 style={{
                   background: "#fff",
-                  border: isPickup ? "1.5px solid #f59e0b" : "1px solid #ede8e0",
+                  border: isPickup
+                    ? "1.5px solid #f59e0b"
+                    : selectedBatchOrderIds.includes(orderKey)
+                    ? "2px solid #941717"
+                    : "1px solid #ede8e0",
                   borderRadius: "14px",
                   padding: "18px 20px",
-                  boxShadow: isPickup ? "0 2px 10px rgba(245, 158, 11, 0.08)" : "none",
+                  boxShadow: isPickup
+                    ? "0 2px 10px rgba(245, 158, 11, 0.08)"
+                    : selectedBatchOrderIds.includes(orderKey)
+                    ? "0 4px 14px rgba(148, 23, 23, 0.12)"
+                    : "none",
+                  transition: "border 150ms ease",
                 }}
               >
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
                   <div>
                     <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
-                      <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.95rem" }}>#{o.orderId || o.id}</div>
+                      {canBatch && (
+                        <input
+                          type="checkbox"
+                          checked={selectedBatchOrderIds.includes(orderKey)}
+                          onChange={() => toggleSelectOrderForBatch(orderKey)}
+                          style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                          title="Select order for multi-delivery batch dispatch"
+                        />
+                      )}
+                      <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.95rem" }}>#{orderKey}</div>
+                      {o.batchId && (
+                        <span style={{
+                          background: "#fdf4ff",
+                          color: "#86198f",
+                          border: "1px solid #f0abfc",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}>
+                          <span className="material-symbols-outlined text-[13px]">local_shipping</span>
+                          Batch #{String(o.batchId).slice(-6)} • Stop {o.deliverySequence || 1}
+                        </span>
+                      )}
                       {isPickup ? (
                         <span style={{
                           background: "#fef3c7",
@@ -989,10 +1235,27 @@ function LiveOrdersTab() {
                       padding: "7px 14px",
                       color: "#423b32",
                       fontSize: "0.8rem",
-                      cursor: "pointer",
+                      cursor: "default",
                     }}>
                       {o.paymentStatus} ({o.paymentMethod})
                     </button>
+                    {o.changeCreditedToWallet > 0 && (
+                      <div style={{
+                        fontSize: "0.75rem",
+                        color: "#059669",
+                        background: "#ecfdf5",
+                        border: "1px solid #a7f3d0",
+                        borderRadius: "6px",
+                        padding: "4px 8px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
+                        fontWeight: 700,
+                      }} title={`Cash Received: ₹${o.cashCollected} | Bill: ₹${o.amount} | Credited to Wallet: ₹${o.changeCreditedToWallet}`}>
+                        <span className="material-symbols-outlined text-[14px]">account_balance_wallet</span>
+                        <span>₹{o.changeCreditedToWallet} Change to Wallet</span>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1235,6 +1498,301 @@ function LiveOrdersTab() {
               >
                 <span className="material-symbols-outlined text-[16px]">two_wheeler</span>
                 <span>{assigningRider ? "Dispatching…" : "Assign & Dispatch"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Batch Dispatch Action Bar */}
+      {selectedBatchOrderIds.length > 0 && (
+        <div style={{
+          position: "fixed",
+          bottom: "24px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          background: "#171410",
+          color: "#fff",
+          padding: "12px 24px",
+          borderRadius: "16px",
+          boxShadow: "0 10px 30px rgba(0,0,0,0.35)",
+          display: "flex",
+          alignItems: "center",
+          gap: "24px",
+          zIndex: 100,
+          border: "1px solid rgba(255,255,255,0.15)",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span className="material-symbols-outlined text-[24px]" style={{ color: "#f59e0b" }}>local_shipping</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "0.92rem" }}>
+                {selectedBatchOrderIds.length} Orders Selected for Multi-Order Delivery
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "#a89f91" }}>
+                Combine compatible nearby orders into a single delivery run
+              </div>
+            </div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button
+              type="button"
+              onClick={() => setSelectedBatchOrderIds([])}
+              style={{
+                background: "rgba(255,255,255,0.12)",
+                border: "none",
+                borderRadius: "8px",
+                padding: "8px 14px",
+                color: "#fff",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={openBatchModal}
+              style={{
+                background: "#941717",
+                border: "none",
+                borderRadius: "8px",
+                padding: "8px 18px",
+                color: "#fff",
+                fontSize: "0.82rem",
+                fontWeight: 800,
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                boxShadow: "0 2px 8px rgba(148, 23, 23, 0.4)",
+              }}
+            >
+              <span className="material-symbols-outlined text-[16px]">alt_route</span>
+              <span>Check Feasibility &amp; Dispatch</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: MULTI-ORDER BATCH DISPATCH ─── */}
+      {showBatchModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0,0,0,0.6)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 110,
+          padding: "20px",
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "600px",
+            overflow: "hidden",
+            boxShadow: "0 10px 40px rgba(0,0,0,0.2)",
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              background: "#941717",
+              color: "#fff",
+              padding: "16px 20px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span className="material-symbols-outlined text-[24px]">local_shipping</span>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1rem", fontWeight: 800 }}>Dispatch Multi-Order Delivery Batch</h3>
+                  <div style={{ fontSize: "0.74rem", opacity: 0.9 }}>{selectedBatchOrderIds.length} orders queued for simultaneous dispatch</div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchModal(false)}
+                style={{ background: "none", border: "none", color: "#fff", cursor: "pointer" }}
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "20px", overflowY: "auto", display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Feasibility Evaluation Card */}
+              {checkingFeasibility ? (
+                <div style={{ padding: "20px", textAlign: "center", background: "#f8fafc", borderRadius: "10px" }}>
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-3 border-[#941717] border-t-transparent" />
+                  <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#475569", marginTop: "8px" }}>
+                    Evaluating road detour &amp; cold-chain freshness window…
+                  </div>
+                </div>
+              ) : batchFeasibility ? (
+                <div style={{
+                  padding: "14px 16px",
+                  borderRadius: "12px",
+                  border: batchFeasibility.isFeasible ? "1.5px solid #a7f3d0" : "1.5px solid #fecaca",
+                  background: batchFeasibility.isFeasible ? "#ecfdf5" : "#fef2f2",
+                }}>
+                  <div style={{ display: "flex", alignItems: "flex-start", gap: "10px" }}>
+                    <span className="material-symbols-outlined text-[22px]" style={{ color: batchFeasibility.isFeasible ? "#059669" : "#dc2626" }}>
+                      {batchFeasibility.isFeasible ? "verified" : "error"}
+                    </span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 800, fontSize: "0.88rem", color: batchFeasibility.isFeasible ? "#065f46" : "#991b1b" }}>
+                        {batchFeasibility.isFeasible ? "Route Feasible & Optimized" : "Batch Rejected by Safety Feasibility Engine"}
+                      </div>
+                      <div style={{ fontSize: "0.78rem", color: batchFeasibility.isFeasible ? "#047857" : "#b91c1c", marginTop: "3px" }}>
+                        {batchFeasibility.isFeasible ? (
+                          <>
+                            Estimated route distance: <strong>{batchFeasibility.totalDistanceKm} km</strong> • Delivery window: <strong>~{batchFeasibility.estimatedDurationMinutes} mins</strong>.
+                          </>
+                        ) : (
+                          batchFeasibility.reason
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {batchFeasibility.isFeasible && Array.isArray(batchFeasibility.optimalSequence) && (
+                    <div style={{ marginTop: "12px", paddingTop: "10px", borderTop: "1px dashed #a7f3d0" }}>
+                      <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#065f46", marginBottom: "6px" }}>
+                        Optimized Stop Sequence:
+                      </div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", alignItems: "center" }}>
+                        {batchFeasibility.optimalSequence.map((seqId: string, idx: number) => (
+                          <span
+                            key={seqId}
+                            style={{
+                              background: "#fff",
+                              border: "1px solid #a7f3d0",
+                              color: "#065f46",
+                              padding: "2px 8px",
+                              borderRadius: "6px",
+                              fontSize: "0.74rem",
+                              fontWeight: 800,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                            }}
+                          >
+                            <span>Stop {idx + 1}:</span>
+                            <span style={{ color: "#171410" }}>#{seqId}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Rider Selection */}
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 800, color: "#171410", marginBottom: "8px" }}>
+                  Select Delivery Partner
+                </label>
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px", maxHeight: "200px", overflowY: "auto" }}>
+                  {availableRiders.map((r: any) => {
+                    const rId = r.id || r._id;
+                    const isSelected = batchRiderId === rId;
+                    const isAvail = r.riderStatus === "Available";
+                    return (
+                      <div
+                        key={rId}
+                        onClick={() => setBatchRiderId(rId)}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "10px 14px",
+                          borderRadius: "10px",
+                          border: isSelected ? "2px solid #941717" : "1px solid #ede8e0",
+                          background: isSelected ? "#fff5f5" : "#fff",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                          <input
+                            type="radio"
+                            name="batchRiderSelect"
+                            checked={isSelected}
+                            onChange={() => setBatchRiderId(rId)}
+                            style={{ accentColor: "#941717", cursor: "pointer" }}
+                          />
+                          <div>
+                            <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.85rem" }}>{r.name}</div>
+                            <div style={{ fontSize: "0.72rem", color: "#73695b" }}>{r.phone} • {r.vehicleNumber || "Fleet Bike"}</div>
+                          </div>
+                        </div>
+                        <span style={{
+                          fontSize: "0.7rem",
+                          fontWeight: 700,
+                          padding: "2px 8px",
+                          borderRadius: "99px",
+                          background: isAvail ? "#ecfdf5" : "#eff6ff",
+                          color: isAvail ? "#059669" : "#2563eb",
+                        }}>
+                          {r.riderStatus || "Available"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              background: "#faf8f5",
+              borderTop: "1px solid #ede8e0",
+              padding: "14px 20px",
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "10px",
+            }}>
+              <button
+                type="button"
+                onClick={() => setShowBatchModal(false)}
+                style={{
+                  background: "#fff",
+                  border: "1px solid #ede8e0",
+                  borderRadius: "8px",
+                  padding: "8px 16px",
+                  color: "#423b32",
+                  fontSize: "0.82rem",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBatchDispatch}
+                disabled={dispatchingBatch || !batchRiderId || !batchFeasibility?.isFeasible}
+                style={{
+                  background: !batchRiderId || !batchFeasibility?.isFeasible ? "#d1d5db" : "#941717",
+                  border: "none",
+                  borderRadius: "8px",
+                  padding: "8px 18px",
+                  color: "#fff",
+                  fontSize: "0.82rem",
+                  fontWeight: 800,
+                  cursor: !batchRiderId || !batchFeasibility?.isFeasible ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: !batchRiderId || !batchFeasibility?.isFeasible ? "none" : "0 2px 6px rgba(148, 23, 23, 0.3)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[16px]">local_shipping</span>
+                <span>{dispatchingBatch ? "Dispatching…" : `Confirm Dispatch (${selectedBatchOrderIds.length} Orders)`}</span>
               </button>
             </div>
           </div>
@@ -1995,8 +2553,9 @@ function CrossSellTab() {
 function InventoryTab() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<"all" | "fresh" | "defreeze" | "waste" | "history">("all");
+  const [activeFilter, setActiveFilter] = useState<"all" | "fresh" | "defreeze" | "waste" | "transfers" | "history">("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const currentUser = getStoredUser();
 
   // History state
   const [historyList, setHistoryList] = useState<any[]>([]);
@@ -2355,6 +2914,7 @@ function InventoryTab() {
             { key: "fresh", label: "Fresh Stock", icon: "eco" },
             { key: "defreeze", label: "De-Freeze Pool", icon: "ac_unit" },
             { key: "waste", label: "Damage & Waste", icon: "delete_sweep" },
+            { key: "transfers", label: "Inter-Store Transfers", icon: "swap_horiz" },
             { key: "history", label: "Movement History", icon: "history" },
           ].map(t => {
             const isActive = activeFilter === t.key;
@@ -2424,8 +2984,15 @@ function InventoryTab() {
         </div>
       </div>
 
-      {/* ─── BODY CONTENT: CARDS GRID OR HISTORY VIEW ────────────────────────────── */}
-      {activeFilter === "history" ? (
+      {/* ─── BODY CONTENT: TRANSFERS, AUDIT HISTORY, OR CARDS GRID ────────────────── */}
+      {activeFilter === "transfers" ? (
+        <StoreTransfersSection
+          currentStoreId={currentUser?.storeId}
+          currentStoreName={currentUser?.storeName}
+          inventoryItems={items}
+          onInventoryUpdated={fetchInventory}
+        />
+      ) : activeFilter === "history" ? (
         /* ─── AUDIT HISTORY VIEW ─── */
         <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "hidden", boxShadow: "0 2px 6px rgba(0,0,0,0.02)" }}>
           <div style={{ padding: "14px 18px", borderBottom: "1px solid #ede8e0", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
@@ -2443,10 +3010,13 @@ function InventoryTab() {
                 <option value="transfer_defreeze_to_fresh">Transfers (De-Freeze → Fresh)</option>
                 <option value="order_deduction">Customer Order Deductions</option>
                 <option value="record_waste">Damage &amp; Waste Records</option>
+                <option value="return_waste">Customer Return Waste</option>
                 <option value="add_stock">Stock Received (Add)</option>
                 <option value="reduce_stock">Stock Reduced</option>
                 <option value="set_stock">Stock Set Exact</option>
                 <option value="order_restock">Order Restocks (Cancellations)</option>
+                <option value="transfer_in">Inter-Store Inbound (Transfers)</option>
+                <option value="transfer_out">Inter-Store Outbound (Transfers)</option>
               </select>
               <button
                 type="button"
@@ -2497,66 +3067,112 @@ function InventoryTab() {
                 </thead>
                 <tbody>
                   {historyList.map(h => {
+                    const actionType = h.actionType || "updated";
                     const actionBadge = (() => {
-                      switch (h.actionType) {
+                      switch (actionType) {
                         case "transfer_defreeze_to_fresh":
                           return <Badge label="De-Freeze → Fresh" color="#2563eb" />;
                         case "order_deduction":
                           return <Badge label="Order Deduction" color="#d97706" />;
                         case "record_waste":
                           return <Badge label="Damage / Waste" color="#dc2626" />;
+                        case "return_waste":
+                          return <Badge label="Customer Return Waste" color="#be123c" />;
+                        case "fresh_stock_added":
                         case "add_stock":
                           return <Badge label="Stock Added" color="#059669" />;
+                        case "defreeze_stock_added":
+                          return <Badge label="De-Freeze Added" color="#0f766e" />;
                         case "reduce_stock":
                           return <Badge label="Stock Reduced" color="#ea580c" />;
                         case "set_stock":
                           return <Badge label="Stock Reconciled" color="#7c3aed" />;
                         case "order_restock":
                           return <Badge label="Order Restocked" color="#059669" />;
+                        case "transfer_in":
+                        case "transfer_store_credit":
+                          return <Badge label="Transfer Inbound" color="#059669" />;
+                        case "transfer_out":
+                        case "transfer_store_deduct":
+                          return <Badge label="Transfer Outbound" color="#2563eb" />;
+                        case "transfer_store_reversal":
+                          return <Badge label="Transfer Cancelled" color="#7c3aed" />;
                         default:
-                          return <Badge label={h.actionType || "Updated"} color="#73695b" />;
+                          return <Badge label={actionType.replace(/_/g, " ")} color="#73695b" />;
                       }
                     })();
 
-                    const isDeduction = h.actionType === "order_deduction" || h.actionType === "record_waste" || h.actionType === "reduce_stock";
+                    const isDeduction =
+                      actionType === "order_deduction" ||
+                      actionType === "record_waste" ||
+                      actionType === "return_waste" ||
+                      actionType === "reduce_stock" ||
+                      actionType === "transfer_out" ||
+                      actionType === "transfer_store_deduct";
+
+                    const rawQuantity = h.quantity != null ? h.quantity : (h.quantityChanged != null ? Math.abs(h.quantityChanged) : 0);
+                    const numQuantity = !isNaN(Number(rawQuantity)) ? Math.abs(Number(rawQuantity)) : 0;
+                    const safeUnit = h.unit || "kg";
+
+                    const prevRaw = h.previousQuantity != null ? h.previousQuantity : (h.previousStock != null ? h.previousStock : null);
+                    const resRaw = h.resultingQuantity != null ? h.resultingQuantity : (h.newStock != null ? h.newStock : null);
+                    const hasPrev = prevRaw != null && !isNaN(Number(prevRaw));
+                    const hasRes = resRaw != null && !isNaN(Number(resRaw));
+
+                    const dateObj = h.createdAt ? new Date(h.createdAt) : null;
+                    const dateDisplay = dateObj && !isNaN(dateObj.getTime())
+                      ? dateObj.toLocaleDateString([], { month: "short", day: "numeric" })
+                      : "—";
+                    const timeDisplay = dateObj && !isNaN(dateObj.getTime())
+                      ? dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      : "";
+
+                    const actorName = h.actor?.name || (typeof h.performedBy === "string" ? h.performedBy : h.performedBy?.name) || "System";
+                    const actorRole = h.actor?.role || (typeof h.performedBy === "object" ? h.performedBy?.role : "system") || "system";
 
                     return (
-                      <tr key={h._id} style={{ borderBottom: "1px solid #ede8e0" }}>
+                      <tr key={h._id || h.id || Math.random()} style={{ borderBottom: "1px solid #ede8e0" }}>
                         <td style={{ padding: "10px 14px", color: "#73695b", whiteSpace: "nowrap" }}>
-                          {new Date(h.createdAt).toLocaleDateString([], { month: "short", day: "numeric" })}{" "}
-                          <span style={{ fontSize: "0.74rem", color: "#a89f91" }}>
-                            {new Date(h.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-                          </span>
+                          {dateDisplay}{" "}
+                          {timeDisplay && (
+                            <span style={{ fontSize: "0.74rem", color: "#a89f91" }}>
+                              {timeDisplay}
+                            </span>
+                          )}
                         </td>
                         <td style={{ padding: "10px 14px" }}>
-                          <div style={{ fontWeight: 700, color: "#171410" }}>{h.productName}</div>
-                          <div style={{ fontSize: "0.72rem", color: "#73695b" }}>{h.category || h.itemId}</div>
+                          <div style={{ fontWeight: 700, color: "#171410" }}>
+                            {h.productName || h.itemName || "Product Cut"}
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "#73695b" }}>
+                            {h.category || h.itemId || ""}
+                          </div>
                         </td>
                         <td style={{ padding: "10px 14px", whiteSpace: "nowrap" }}>{actionBadge}</td>
                         <td style={{ padding: "10px 14px", fontWeight: 800, color: isDeduction ? "#dc2626" : "#059669", whiteSpace: "nowrap" }}>
-                          {isDeduction ? `-${h.quantity}` : `+${h.quantity}`} {h.unit}
+                          {isDeduction ? `-${numQuantity}` : `+${numQuantity}`} {safeUnit}
                         </td>
                         <td style={{ padding: "10px 14px", color: "#73695b", whiteSpace: "nowrap" }}>
-                          {h.previousQuantity !== null && h.resultingQuantity !== null ? (
-                            <span>{h.previousQuantity} → <strong>{h.resultingQuantity}</strong> {h.unit}</span>
+                          {hasPrev && hasRes ? (
+                            <span>{Number(prevRaw)} → <strong>{Number(resRaw)}</strong> {safeUnit}</span>
                           ) : "—"}
                         </td>
                         <td style={{ padding: "10px 14px", color: "#423b32", maxWidth: "260px" }}>
-                          <div>{h.reason || "—"}</div>
+                          <div>{h.reason || h.notes || "—"}</div>
                           {h.orderId && (
                             <div style={{ fontSize: "0.72rem", color: "#941717", fontWeight: 700 }}>
                               Order #{h.orderId}
                             </div>
                           )}
-                          {h.notes && (
+                          {h.notes && h.notes !== h.reason && (
                             <div style={{ fontSize: "0.72rem", color: "#73695b", fontStyle: "italic" }}>
                               {h.notes}
                             </div>
                           )}
                         </td>
                         <td style={{ padding: "10px 14px", color: "#73695b", whiteSpace: "nowrap" }}>
-                          <div style={{ fontWeight: 600, color: "#171410" }}>{h.actor?.name || "System"}</div>
-                          <div style={{ fontSize: "0.7rem", color: "#a89f91", textTransform: "capitalize" }}>{h.actor?.role || "system"}</div>
+                          <div style={{ fontWeight: 600, color: "#171410" }}>{actorName}</div>
+                          <div style={{ fontSize: "0.7rem", color: "#a89f91", textTransform: "capitalize" }}>{actorRole}</div>
                         </td>
                       </tr>
                     );
@@ -3510,8 +4126,8 @@ function CustomersTab() {
                 <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < customers.length - 1 ? "1px solid #ede8e0" : "none" }}>
                   <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name}</td>
                   <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.orders}</td>
-                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.totalOrders ?? c.orders ?? 0}</td>
+                  <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
                   <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.address}</td>
                   <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.lastOrder}</td>
                 </tr>
@@ -3553,18 +4169,49 @@ function RidersTab() {
     draftRates.peakHourSurge !== peakHourSurge ||
     draftRates.defaultRiderDailyTarget !== defaultRiderDailyTarget;
 
-  // Cash Remittances
+  // Cash Remittances & Fleet Collection
   const [remittances, setRemittances] = useState<any[]>([]);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [showCollectModal, setShowCollectModal] = useState(false);
+  const [collectRider, setCollectRider] = useState<any | null>(null);
+  const [collectAmount, setCollectAmount] = useState<string>("");
+  const [collectNotes, setCollectNotes] = useState<string>("");
+  const [collectingCash, setCollectingCash] = useState(false);
+
+  // Multi-Order Batch Dispatch Configuration
+  const [batchConfig, setBatchConfig] = useState({
+    maxBatchSize: 3,
+    maxDetourKm: 3.5,
+    maxTotalRouteKm: 15.0,
+    maxEstimatedMinutes: 45,
+    maxBatchWeightKg: 10.0,
+  });
+  const [draftBatchConfig, setDraftBatchConfig] = useState({
+    maxBatchSize: 3,
+    maxDetourKm: 3.5,
+    maxTotalRouteKm: 15.0,
+    maxEstimatedMinutes: 45,
+    maxBatchWeightKg: 10.0,
+  });
+  const [showBatchConfigModal, setShowBatchConfigModal] = useState(false);
+  const [savingBatchConfig, setSavingBatchConfig] = useState(false);
+
+  const isBatchConfigDirty =
+    draftBatchConfig.maxBatchSize !== batchConfig.maxBatchSize ||
+    draftBatchConfig.maxDetourKm !== batchConfig.maxDetourKm ||
+    draftBatchConfig.maxTotalRouteKm !== batchConfig.maxTotalRouteKm ||
+    draftBatchConfig.maxEstimatedMinutes !== batchConfig.maxEstimatedMinutes ||
+    draftBatchConfig.maxBatchWeightKg !== batchConfig.maxBatchWeightKg;
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [ridersRes, ordersRes, storeRes, remittancesRes] = await Promise.all([
+      const [ridersRes, ordersRes, storeRes, remittancesRes, batchRes] = await Promise.all([
         api.get<{ success: boolean; riders: any[] }>("/store-admin/riders"),
         api.get<{ success: boolean; orders: any[] }>("/store-admin/orders?status=all"),
         api.get<{ success: boolean; store: any }>("/store-admin/store-status"),
-        api.get<{ success: boolean; remittances: any[] }>("/store-admin/remittances").catch(() => ({ data: { success: false, remittances: [] } }))
+        api.get<{ success: boolean; remittances: any[] }>("/store-admin/remittances").catch(() => ({ data: { success: false, remittances: [] } })),
+        api.get<{ success: boolean; settings: any }>("/store-admin/batches/settings").catch(() => ({ data: { success: false, settings: null } })),
       ]);
       let relevantOrders: any[] = [];
       if (ordersRes.data.success) {
@@ -3610,6 +4257,18 @@ function RidersTab() {
       }
       if (remittancesRes.data?.success && Array.isArray(remittancesRes.data.remittances)) {
         setRemittances(remittancesRes.data.remittances);
+      }
+      if (batchRes.data?.success && batchRes.data?.settings) {
+        const bs = batchRes.data.settings;
+        const cfg = {
+          maxBatchSize: Number(bs.maxBatchSize) || 3,
+          maxDetourKm: Number(bs.maxDetourKm) || 3.5,
+          maxTotalRouteKm: Number(bs.maxTotalRouteKm) || 15.0,
+          maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || 45,
+          maxBatchWeightKg: Number(bs.maxBatchWeightKg) || 10.0,
+        };
+        setBatchConfig(cfg);
+        setDraftBatchConfig(cfg);
       }
     } catch (err) {
       console.warn("Failed to fetch dispatch data:", err);
@@ -3659,6 +4318,34 @@ function RidersTab() {
     }
   };
 
+  const handleSaveBatchConfig = async () => {
+    if (!isBatchConfigDirty) return;
+    setSavingBatchConfig(true);
+    try {
+      const res = await api.patch<{ success: boolean; settings: any; message?: string }>("/store-admin/batches/settings", draftBatchConfig);
+      if (res.data?.success && res.data?.settings) {
+        const bs = res.data.settings;
+        const cfg = {
+          maxBatchSize: Number(bs.maxBatchSize) || 3,
+          maxDetourKm: Number(bs.maxDetourKm) || 3.5,
+          maxTotalRouteKm: Number(bs.maxTotalRouteKm) || 15.0,
+          maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || 45,
+          maxBatchWeightKg: Number(bs.maxBatchWeightKg) || 10.0,
+        };
+        setBatchConfig(cfg);
+        setDraftBatchConfig(cfg);
+        setShowBatchConfigModal(false);
+        toast.success("Multi-order batch limits updated. Feasibility checks will use new thresholds.", "Batch Policy Updated");
+      } else {
+        toast.error(res.data?.message || "Failed to update batch limits", "Settings Error");
+      }
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || "Failed to update batch limits", "Settings Error");
+    } finally {
+      setSavingBatchConfig(false);
+    }
+  };
+
   const handleConfirmRemittance = async (remittanceId: string) => {
     setConfirmingId(remittanceId);
     try {
@@ -3671,6 +4358,41 @@ function RidersTab() {
       toast.error(err.response?.data?.message || "Failed to confirm remittance", "Remittance Error");
     } finally {
       setConfirmingId(null);
+    }
+  };
+
+  const handleOpenCollectModal = (rider: any) => {
+    setCollectRider(rider);
+    setCollectAmount(String(rider.cashInHand || ""));
+    setCollectNotes(`Counter deposit received from ${rider.name || 'Rider'}`);
+    setShowCollectModal(true);
+  };
+
+  const handleConfirmCollectCash = async () => {
+    if (!collectRider || !collectAmount) return;
+    const num = Number(collectAmount);
+    if (isNaN(num) || num <= 0) {
+      toast.error("Please enter a valid deposit amount", "Invalid Amount");
+      return;
+    }
+    setCollectingCash(true);
+    try {
+      const res = await api.post<{ success: boolean; message: string }>("/store-admin/remittances/collect", {
+        riderId: collectRider.id || collectRider._id,
+        amount: num,
+        notes: collectNotes,
+      });
+      if (res.data.success) {
+        toast.success(res.data.message || `Cash collected from ${collectRider.name}`, "Cash Settled");
+        setShowCollectModal(false);
+        setCollectRider(null);
+        setCollectAmount("");
+        fetchData();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to collect cash", "Collection Error");
+    } finally {
+      setCollectingCash(false);
     }
   };
 
@@ -3694,6 +4416,9 @@ function RidersTab() {
   };
 
   const availableRiders = riders.filter(r => r.riderStatus === "Available");
+  const totalFleetCashInHand = riders.reduce((acc, r) => acc + (Number(r.cashInHand) || 0), 0);
+  const pendingRemittances = remittances.filter(r => r.status === "Pending");
+  const confirmedRemittances = remittances.filter(r => r.status === "Confirmed");
 
   return (
     <div>
@@ -3721,27 +4446,53 @@ function RidersTab() {
               Store admin can increase or decrease these delivery compensations any day. Changes reflect live on rider dashboard & trip payouts.
             </p>
           </div>
-          <button
-            onClick={handleOpenRatesModal}
-            style={{
-              background: "#941717",
-              color: "#fff",
-              border: "none",
-              borderRadius: "10px",
-              padding: "9px 18px",
-              fontWeight: 700,
-              cursor: "pointer",
-              fontSize: "0.85rem",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              boxShadow: "0 2px 6px rgba(148,23,23,0.25)",
-              transition: "transform 0.15s ease, background 0.15s ease"
-            }}
-          >
-            <span className="material-symbols-outlined text-[18px]">tune</span>
-            <span>Edit Rates</span>
-          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <button
+              onClick={() => {
+                setDraftBatchConfig({ ...batchConfig });
+                setShowBatchConfigModal(true);
+              }}
+              style={{
+                background: "#0f172a",
+                color: "#fff",
+                border: "none",
+                borderRadius: "10px",
+                padding: "9px 16px",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                boxShadow: "0 2px 6px rgba(15,23,42,0.25)",
+                transition: "transform 0.15s ease, background 0.15s ease"
+              }}
+            >
+              <span className="material-symbols-outlined text-[18px]">alt_route</span>
+              <span>Batch Limits</span>
+            </button>
+            <button
+              onClick={handleOpenRatesModal}
+              style={{
+                background: "#941717",
+                color: "#fff",
+                border: "none",
+                borderRadius: "10px",
+                padding: "9px 18px",
+                fontWeight: 700,
+                cursor: "pointer",
+                fontSize: "0.85rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                boxShadow: "0 2px 6px rgba(148,23,23,0.25)",
+                transition: "transform 0.15s ease, background 0.15s ease"
+              }}
+            >
+              <span className="material-symbols-outlined text-[18px]">tune</span>
+              <span>Edit Rates</span>
+            </button>
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px" }}>
@@ -3797,43 +4548,197 @@ function RidersTab() {
             </span>
           </div>
         </div>
+
+        {/* Multi-Order Batching Live Policy Banner */}
+        <div style={{
+          background: "#f8fafc",
+          border: "1px solid #e2e8f0",
+          borderRadius: "12px",
+          padding: "14px 18px",
+          marginTop: "16px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          flexWrap: "wrap",
+          gap: "12px"
+        }}>
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#0284c7" }}>alt_route</span>
+              <span style={{ fontWeight: 800, fontSize: "0.92rem", color: "#0f172a" }}>Multi-Order Batch Dispatch Policy</span>
+              <span style={{ fontSize: "0.7rem", background: "#e0f2fe", color: "#0369a1", fontWeight: 700, padding: "2px 8px", borderRadius: "99px" }}>
+                Configurable Limits
+              </span>
+            </div>
+            <p style={{ margin: "4px 0 0 0", fontSize: "0.78rem", color: "#64748b" }}>
+              Max {batchConfig.maxBatchSize} orders/trip &bull; Max detour: {batchConfig.maxDetourKm} km &bull; Max route: {batchConfig.maxTotalRouteKm} km &bull; Max time: {batchConfig.maxEstimatedMinutes} min &bull; Max weight: {batchConfig.maxBatchWeightKg} kg
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setDraftBatchConfig({ ...batchConfig });
+              setShowBatchConfigModal(true);
+            }}
+            style={{
+              padding: "7px 14px",
+              borderRadius: "8px",
+              background: "#fff",
+              border: "1px solid #cbd5e1",
+              fontSize: "0.8rem",
+              fontWeight: 700,
+              color: "#334155",
+              cursor: "pointer",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
+            }}
+          >
+            Configure Rules
+          </button>
+        </div>
       </div>
 
-      {/* ─── CASH REMITTANCE APPROVALS (HUB DEPOSIT) ─── */}
-      {remittances.length > 0 && (
-        <div style={{
-          background: "#fff",
-          border: "1px solid #ede8e0",
-          borderRadius: "16px",
-          padding: "20px 24px",
-          marginBottom: "24px"
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-            <div>
-              <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>
-                Cash Remittance Counter (COD Deposits)
-              </h3>
-              <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>
-                Physical cash deposits submitted by riders at the hub closing counter
-              </p>
+      {/* ─── RIDERS POOL ─── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", marginTop: "12px", flexWrap: "wrap", gap: "8px" }}>
+        <div>
+          <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>Active Rider Pool</h3>
+          <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>Delivery partners active in your hub delivery area with live Cash in Hand</p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          {riders.length > 0 && (
+            <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "99px", padding: "4px 12px", fontSize: "0.75rem", color: "#059669", fontWeight: 700 }}>
+              {availableRiders.length} Available for Dispatch
             </div>
-            {remittances.filter(r => r.status === "Pending").length > 0 && (
-              <span style={{ background: "#fef3c7", border: "1px solid #fde68a", color: "#b45309", fontSize: "0.75rem", fontWeight: 800, padding: "3px 10px", borderRadius: "99px" }}>
-                {remittances.filter(r => r.status === "Pending").length} Awaiting Confirmation
-              </span>
-            )}
+          )}
+          <div style={{ background: totalFleetCashInHand > 0 ? "#fef3c7" : "#f5f3ef", border: `1px solid ${totalFleetCashInHand > 0 ? "#fde68a" : "#ede8e0"}`, borderRadius: "99px", padding: "4px 12px", fontSize: "0.75rem", color: totalFleetCashInHand > 0 ? "#b45309" : "#73695b", fontWeight: 800 }}>
+            Fleet Cash in Hand: ₹{totalFleetCashInHand.toFixed(2)}
+          </div>
+        </div>
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: "12px", marginBottom: "24px" }}>
+        {riders.length === 0 && !loading && (
+          <div style={{ padding: "24px", background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", color: "#73695b", fontSize: "0.85rem", textAlign: "center", gridColumn: "1 / -1" }}>
+            No riders registered or assigned to this store hub yet.
+          </div>
+        )}
+        {riders.map(r => {
+          const cashOnHand = Number(r.cashInHand) || 0;
+          const riderPendingRemit = pendingRemittances.find(
+            (p: any) => p.riderId === (r.id || r._id) || (p.riderPhone && r.phone && p.riderPhone.replace(/\D/g, '') === r.phone.replace(/\D/g, ''))
+          );
+
+          return (
+            <div key={r._id || r.id} style={{
+              background: "#fff", border: "1px solid #ede8e0", borderRadius: "12px", padding: "16px",
+              borderLeft: `4px solid ${r.riderStatus === "Available" ? "#059669" : r.riderStatus === "On Delivery" ? "#0284c7" : "#73695b"}`
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                <div style={{ fontWeight: 800, color: "#171410", fontSize: "1rem" }}>{r.name}</div>
+                <Badge label={r.riderStatus || "Unknown"} color={r.riderStatus === "Available" ? "#059669" : r.riderStatus === "On Delivery" ? "#0284c7" : "#73695b"} />
+              </div>
+              <div style={{ fontSize: "0.8rem", color: "#423b32", marginBottom: "3px" }}>Phone: {r.phone}</div>
+              <div style={{ fontSize: "0.75rem", color: "#73695b", marginBottom: "10px" }}>Vehicle: {r.vehicleNumber || "—"}</div>
+
+              {/* Cash in Hand & Collect/Accept Action */}
+              <div style={{
+                background: cashOnHand > 0 ? "#fef3c7" : "#faf8f5",
+                border: `1px solid ${cashOnHand > 0 ? "#fde68a" : "#ede8e0"}`,
+                borderRadius: "8px",
+                padding: "8px 10px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "8px"
+              }}>
+                <div>
+                  <div style={{ fontSize: "0.68rem", fontWeight: 700, color: cashOnHand > 0 ? "#92400e" : "#73695b", textTransform: "uppercase" }}>
+                    Cash in Hand
+                  </div>
+                  <div style={{ fontSize: "0.95rem", fontWeight: 800, color: cashOnHand > 0 ? "#b45309" : "#059669" }}>
+                    ₹{cashOnHand.toFixed(2)}
+                  </div>
+                </div>
+
+                {riderPendingRemit ? (
+                  <button
+                    onClick={() => handleConfirmRemittance(riderPendingRemit.remittanceId || riderPendingRemit._id)}
+                    disabled={confirmingId === (riderPendingRemit.remittanceId || riderPendingRemit._id)}
+                    style={{
+                      background: "#059669",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "6px 10px",
+                      fontSize: "0.72rem",
+                      fontWeight: 800,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "4px"
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                    <span>{confirmingId === (riderPendingRemit.remittanceId || riderPendingRemit._id) ? "Confirming…" : "Accept Cash"}</span>
+                  </button>
+                ) : cashOnHand > 0 ? (
+                  <button
+                    onClick={() => handleOpenCollectModal(r)}
+                    style={{
+                      background: "#941717",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "5px 10px",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Collect Cash
+                  </button>
+                ) : (
+                  <span style={{ fontSize: "0.72rem", color: "#059669", fontWeight: 700 }}>
+                    Settled
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ─── PENDING RIDER DEPOSIT REQUESTS (ONLY DISPLAYED IF ACTION IS REQUIRED) ─── */}
+      {pendingRemittances.length > 0 && (
+        <div style={{
+          background: "#fffbeb",
+          border: "1.5px solid #fde68a",
+          borderRadius: "14px",
+          padding: "16px 20px",
+          marginBottom: "24px",
+          boxShadow: "0 2px 6px rgba(245, 158, 11, 0.1)"
+        }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px", flexWrap: "wrap", gap: "8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <span className="material-symbols-outlined text-[20px]" style={{ color: "#b45309" }}>notifications_active</span>
+              <h4 style={{ fontSize: "0.95rem", fontWeight: 800, color: "#92400e", margin: 0 }}>
+                {pendingRemittances.length} Rider Cash Deposit Awaiting Counter Acceptance
+              </h4>
+            </div>
+            <span style={{ fontSize: "0.75rem", color: "#92400e", fontWeight: 700 }}>
+              Verify physical banknotes before accepting
+            </span>
           </div>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
-            {remittances.slice(0, 10).map((rem) => (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {pendingRemittances.map((rem: any) => (
               <div key={rem._id || rem.remittanceId} style={{
                 display: "flex",
                 justifyContent: "space-between",
                 alignItems: "center",
                 padding: "12px 16px",
-                background: "#faf8f5",
+                background: "#fff",
                 borderRadius: "10px",
-                border: "1px solid #ede8e0",
+                border: "1px solid #fde68a",
                 flexWrap: "wrap",
                 gap: "8px"
               }}>
@@ -3842,83 +4747,44 @@ function RidersTab() {
                     <span style={{ fontWeight: 800, color: "#171410", fontSize: "0.95rem" }}>
                       {rem.riderName || "Rider Partner"} ({rem.riderPhone})
                     </span>
-                    <Badge
-                      label={rem.status}
-                      color={rem.status === "Confirmed" ? "#059669" : "#d97706"}
-                    />
+                    <Badge label="Awaiting Confirmation" color="#d97706" />
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "#73695b", marginTop: "2px" }}>
-                    Ref: #{rem.remittanceId} · {new Date(rem.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
-                    {rem.confirmedByName && ` · Confirmed by ${rem.confirmedByName}`}
+                    Ref: #{rem.remittanceId} · Submitted: {new Date(rem.createdAt).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}
+                    {rem.notes && ` · Notes: ${rem.notes}`}
                   </div>
                 </div>
 
-                <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
-                  <span style={{ fontSize: "1.1rem", fontWeight: 800, color: "#059669" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <span style={{ fontSize: "1.15rem", fontWeight: 900, color: "#941717" }}>
                     ₹{Number(rem.amount).toFixed(2)}
                   </span>
-                  {rem.status === "Pending" && (
-                    <button
-                      onClick={() => handleConfirmRemittance(rem.remittanceId || rem._id)}
-                      disabled={confirmingId === (rem.remittanceId || rem._id)}
-                      style={{
-                        background: "#059669",
-                        color: "#fff",
-                        border: "none",
-                        borderRadius: "8px",
-                        padding: "7px 14px",
-                        fontSize: "0.8rem",
-                        fontWeight: 700,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "4px"
-                      }}
-                    >
-                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
-                      <span>{confirmingId === (rem.remittanceId || rem._id) ? "Confirming…" : "Accept Cash"}</span>
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleConfirmRemittance(rem.remittanceId || rem._id)}
+                    disabled={confirmingId === (rem.remittanceId || rem._id)}
+                    style={{
+                      background: "#059669",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "8px",
+                      padding: "7px 14px",
+                      fontSize: "0.82rem",
+                      fontWeight: 700,
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "6px"
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                    <span>{confirmingId === (rem.remittanceId || rem._id) ? "Confirming…" : "Accept Cash"}</span>
+                  </button>
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
-
-      {/* ─── RIDERS POOL ─── */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", marginTop: "12px" }}>
-        <div>
-          <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>Active Rider Pool</h3>
-          <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>Delivery partners active in your hub delivery area</p>
-        </div>
-        {riders.length > 0 && (
-          <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "99px", padding: "4px 12px", fontSize: "0.75rem", color: "#059669", fontWeight: 700 }}>
-            {availableRiders.length} Available for Dispatch
-          </div>
-        )}
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: "12px", marginBottom: "32px" }}>
-        {riders.length === 0 && !loading && (
-          <div style={{ padding: "24px", background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", color: "#73695b", fontSize: "0.85rem", textAlign: "center", gridColumn: "1 / -1" }}>
-            No riders registered or assigned to this store hub yet.
-          </div>
-        )}
-        {riders.map(r => (
-          <div key={r._id || r.id} style={{
-            background: "#fff", border: "1px solid #ede8e0", borderRadius: "12px", padding: "16px",
-            borderLeft: `4px solid ${r.riderStatus === "Available" ? "#059669" : r.riderStatus === "On Delivery" ? "#0284c7" : "#73695b"}`
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-              <div style={{ fontWeight: 800, color: "#171410", fontSize: "1rem" }}>{r.name}</div>
-              <Badge label={r.riderStatus || "Unknown"} color={r.riderStatus === "Available" ? "#059669" : r.riderStatus === "On Delivery" ? "#0284c7" : "#73695b"} />
-            </div>
-            <div style={{ fontSize: "0.8rem", color: "#423b32", marginBottom: "4px" }}>Phone: {r.phone}</div>
-            <div style={{ fontSize: "0.75rem", color: "#73695b" }}>Vehicle: {r.vehicleNumber}</div>
-          </div>
-        ))}
-      </div>
 
       {/* ─── ORDERS READY FOR DISPATCH ─── */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
@@ -4299,6 +5165,493 @@ function RidersTab() {
               >
                 <span className="material-symbols-outlined text-[18px]">save</span>
                 <span>{savingPayout ? "Saving…" : "Save New Rates"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ─── CONFIGURE MULTI-ORDER BATCH LIMITS MODAL ─── */}
+      {showBatchConfigModal && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)",
+          display: "flex", justifyContent: "center", alignItems: "center",
+          zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "20px",
+            width: "100%",
+            maxWidth: "540px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            overflow: "hidden"
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: "20px 24px",
+              borderBottom: "1px solid #ede8e0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "#faf8f5"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{
+                  width: "38px",
+                  height: "38px",
+                  borderRadius: "10px",
+                  background: "#f0f9ff",
+                  border: "1px solid #bae6fd",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}>
+                  <span className="material-symbols-outlined text-[20px]" style={{ color: "#0284c7" }}>alt_route</span>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "1.15rem", fontWeight: 800, color: "#171410" }}>
+                    Configure Multi-Order Batch Limits
+                  </h3>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "0.75rem", color: "#73695b" }}>
+                    Set dynamic route thresholds, detour tolerance, and cold-chain safety limits
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowBatchConfigModal(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  cursor: "pointer",
+                  color: "#8a7f72",
+                  padding: "6px",
+                  borderRadius: "8px",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "18px", maxHeight: "75vh", overflowY: "auto" }}>
+              {/* Field 1: Max Batch Size */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Max Orders per Batch</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: {batchConfig.maxBatchSize} Orders</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    min={2}
+                    max={5}
+                    value={draftBatchConfig.maxBatchSize}
+                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxBatchSize: Math.max(2, Math.min(5, Number(e.target.value) || 2)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "#73695b", fontSize: "0.9rem", paddingRight: "4px" }}>Orders</span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Maximum ready orders clubbed into a single rider dispatch (range: 2 to 5)
+                </span>
+              </div>
+
+              {/* Field 2: Max Detour Km */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Max Detour Distance</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: {batchConfig.maxDetourKm} km</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    step="0.1"
+                    min={0.5}
+                    max={10.0}
+                    value={draftBatchConfig.maxDetourKm}
+                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxDetourKm: Math.max(0.5, Math.min(10.0, Number(e.target.value) || 1.0)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "#73695b", fontSize: "0.9rem", paddingRight: "4px" }}>km</span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Max route deviation allowed per stop vs direct trip to maintain delivery speed
+                </span>
+              </div>
+
+              {/* Field 3: Max Total Route Km */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Max Total Route Distance</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: {batchConfig.maxTotalRouteKm} km</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min={5.0}
+                    max={30.0}
+                    value={draftBatchConfig.maxTotalRouteKm}
+                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxTotalRouteKm: Math.max(5.0, Math.min(30.0, Number(e.target.value) || 5.0)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "#73695b", fontSize: "0.9rem", paddingRight: "4px" }}>km</span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Upper limit on cumulative circuit mileage from hub through all customers
+                </span>
+              </div>
+
+              {/* Field 4: Max Estimated Minutes */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Max Cold-Chain Route Time</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: {batchConfig.maxEstimatedMinutes} min</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    step="5"
+                    min={20}
+                    max={90}
+                    value={draftBatchConfig.maxEstimatedMinutes}
+                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxEstimatedMinutes: Math.max(20, Math.min(90, Number(e.target.value) || 20)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "#73695b", fontSize: "0.9rem", paddingRight: "4px" }}>min</span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Strict time window to guarantee fresh temperature retention in thermal delivery bags
+                </span>
+              </div>
+
+              {/* Field 5: Max Weight Kg */}
+              <div>
+                <label style={{ display: "flex", justifyContent: "space-between", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  <span>Max Batch Weight</span>
+                  <span style={{ fontSize: "0.75rem", color: "#73695b", fontWeight: 600 }}>Current: {batchConfig.maxBatchWeightKg} kg</span>
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min={2.0}
+                    max={25.0}
+                    value={draftBatchConfig.maxBatchWeightKg}
+                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxBatchWeightKg: Math.max(2.0, Math.min(25.0, Number(e.target.value) || 2.0)) })}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.05rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                  <span style={{ fontWeight: 800, color: "#73695b", fontSize: "0.9rem", paddingRight: "4px" }}>kg</span>
+                </div>
+                <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
+                  Maximum aggregate weight allowed in rider delivery box for safe transport
+                </span>
+              </div>
+
+              {/* Dirty State Indicator */}
+              <div style={{
+                padding: "12px 14px",
+                borderRadius: "10px",
+                background: isBatchConfigDirty ? "#f0fdf4" : "#faf8f5",
+                border: isBatchConfigDirty ? "1px solid #bbf7d0" : "1px solid #ede8e0",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                fontSize: "0.78rem",
+                color: isBatchConfigDirty ? "#166534" : "#73695b",
+                fontWeight: 600
+              }}>
+                <span className="material-symbols-outlined text-[18px]">
+                  {isBatchConfigDirty ? "check_circle" : "info"}
+                </span>
+                <span>
+                  {isBatchConfigDirty
+                    ? "Changes detected. Click 'Save Batch Limits' to apply immediately to dispatch checks."
+                    : "No changes made yet. Edit any limit above to update store policy."}
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: "16px 24px",
+              background: "#faf8f5",
+              borderTop: "1px solid #ede8e0",
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "10px"
+            }}>
+              <button
+                type="button"
+                disabled={savingBatchConfig}
+                onClick={() => setShowBatchConfigModal(false)}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: "10px",
+                  background: "#fff",
+                  border: "1px solid #ede8e0",
+                  color: "#423b32",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!isBatchConfigDirty || savingBatchConfig}
+                onClick={handleSaveBatchConfig}
+                style={{
+                  padding: "9px 20px",
+                  borderRadius: "10px",
+                  background: !isBatchConfigDirty || savingBatchConfig ? "#e2e8f0" : "#0f172a",
+                  color: !isBatchConfigDirty || savingBatchConfig ? "#94a3b8" : "#fff",
+                  border: "none",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: !isBatchConfigDirty || savingBatchConfig ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: !isBatchConfigDirty || savingBatchConfig ? "none" : "0 2px 6px rgba(15,23,42,0.25)",
+                  transition: "all 0.15s ease"
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">save</span>
+                <span>{savingBatchConfig ? "Saving…" : "Save Batch Limits"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ─── DIRECT COUNTER CASH COLLECTION MODAL ─── */}
+      {showCollectModal && collectRider && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)",
+          display: "flex", justifyContent: "center", alignItems: "center",
+          zIndex: 1000, padding: "16px"
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "20px",
+            width: "100%",
+            maxWidth: "460px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            overflow: "hidden"
+          }}>
+            {/* Header */}
+            <div style={{
+              padding: "20px 24px",
+              borderBottom: "1px solid #ede8e0",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              background: "#faf8f5"
+            }}>
+              <div>
+                <h3 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>
+                  Collect COD Cash at Counter
+                </h3>
+                <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>
+                  Record physical cash received from {collectRider.name}
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowCollectModal(false); setCollectRider(null); }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#73695b" }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{
+                background: "#fef3c7",
+                border: "1px solid #fde68a",
+                borderRadius: "10px",
+                padding: "12px 16px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}>
+                <div>
+                  <div style={{ fontSize: "0.72rem", color: "#92400e", fontWeight: 700, textTransform: "uppercase" }}>
+                    Verified Cash with Rider
+                  </div>
+                  <div style={{ fontSize: "0.85rem", color: "#78350f" }}>
+                    {collectRider.name} ({collectRider.phone})
+                  </div>
+                </div>
+                <div style={{ fontSize: "1.35rem", fontWeight: 900, color: "#b45309" }}>
+                  ₹{(Number(collectRider.cashInHand) || 0).toFixed(2)}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  Physical Cash Amount Received (₹)
+                </label>
+                <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                  <span style={{ position: "absolute", left: "14px", fontWeight: 800, color: "#171410", fontSize: "1.1rem" }}>₹</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={Number(collectRider.cashInHand) || 99999}
+                    value={collectAmount}
+                    onChange={(e) => setCollectAmount(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "10px 14px 10px 32px",
+                      borderRadius: "10px",
+                      border: "1.5px solid #d4cdc5",
+                      fontWeight: 800,
+                      fontSize: "1.1rem",
+                      color: "#171410",
+                      background: "#fff",
+                      outline: "none"
+                    }}
+                  />
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: "4px" }}>
+                  <span style={{ fontSize: "0.72rem", color: "#8a7f72" }}>
+                    Enter banknotes handed over at counter
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCollectAmount(String(collectRider.cashInHand || 0))}
+                    style={{ background: "none", border: "none", color: "#941717", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer" }}
+                  >
+                    Deposit Full Amount
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.82rem", fontWeight: 700, color: "#423b32", marginBottom: "6px" }}>
+                  Counter Receipt Notes / Shift Notes
+                </label>
+                <input
+                  type="text"
+                  value={collectNotes}
+                  onChange={(e) => setCollectNotes(e.target.value)}
+                  placeholder="e.g. Evening shift closing cash deposit"
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1.5px solid #d4cdc5",
+                    fontSize: "0.85rem",
+                    color: "#171410",
+                    background: "#fff",
+                    outline: "none"
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div style={{
+              padding: "16px 24px",
+              background: "#faf8f5",
+              borderTop: "1px solid #ede8e0",
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "10px"
+            }}>
+              <button
+                type="button"
+                disabled={collectingCash}
+                onClick={() => { setShowCollectModal(false); setCollectRider(null); }}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: "10px",
+                  background: "#fff",
+                  border: "1px solid #ede8e0",
+                  color: "#423b32",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: "pointer"
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={collectingCash || !collectAmount || Number(collectAmount) <= 0}
+                onClick={handleConfirmCollectCash}
+                style={{
+                  padding: "9px 20px",
+                  borderRadius: "10px",
+                  background: collectingCash || !collectAmount || Number(collectAmount) <= 0 ? "#e5e7eb" : "#059669",
+                  color: collectingCash || !collectAmount || Number(collectAmount) <= 0 ? "#9ca3af" : "#fff",
+                  border: "none",
+                  fontWeight: 700,
+                  fontSize: "0.85rem",
+                  cursor: collectingCash || !collectAmount || Number(collectAmount) <= 0 ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px"
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">check_circle</span>
+                <span>{collectingCash ? "Settling…" : "Confirm Cash Receipt"}</span>
               </button>
             </div>
           </div>

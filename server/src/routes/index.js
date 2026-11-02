@@ -276,6 +276,8 @@ router.use('/location', require('./location.routes'));
 router.use('/notifications', require('./notification.routes'));
 router.use('/payment', require('./payment.routes'));
 router.use('/wallet', require('./wallet.routes'));
+router.use('/transfers', require('./transfer.routes'));
+router.use('/popups', require('./popup.routes'));
 
 // ─── Staging Namespace (Retained for Test Harness & Backward Compatibility) ───
 router.use('/staging', require('./staging/staging.routes'));

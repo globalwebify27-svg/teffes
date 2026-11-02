@@ -100,12 +100,33 @@ const ACTION_TYPE_LABELS: Record<string, { label: string; icon: string; bg: stri
     text: "#15803d",
     border: "#bbf7d0",
   },
+  transfer_store_credit: {
+    label: "Store Transfer In",
+    icon: "input",
+    bg: "#f0fdf4",
+    text: "#15803d",
+    border: "#bbf7d0",
+  },
   transfer_out: {
     label: "Store Transfer Out",
     icon: "output",
     bg: "#fefce8",
     text: "#854d0e",
     border: "#fef08a",
+  },
+  transfer_store_deduct: {
+    label: "Store Transfer Out",
+    icon: "output",
+    bg: "#fefce8",
+    text: "#854d0e",
+    border: "#fef08a",
+  },
+  transfer_store_reversal: {
+    label: "Transfer Cancelled / Reversal",
+    icon: "restore",
+    bg: "#faf5ff",
+    text: "#6b21a8",
+    border: "#e9d5ff",
   },
 };
 
@@ -733,7 +754,7 @@ export default function SuperAdminInventoryLogsTab() {
                       {/* Quantity */}
                       <td style={{ padding: "12px 16px", whiteSpace: "nowrap" }}>
                         <span style={{ fontWeight: 800, color: "#171410", fontSize: "0.9rem" }}>
-                          {log.quantity}
+                          {!isNaN(Number(log.quantity)) ? Math.abs(Number(log.quantity)) : (!isNaN(Number((log as any).quantityChanged)) ? Math.abs(Number((log as any).quantityChanged)) : 0)}
                         </span>{" "}
                         <span style={{ color: "#64748b", fontWeight: 600, fontSize: "0.8rem" }}>
                           {log.unit || "kg"}

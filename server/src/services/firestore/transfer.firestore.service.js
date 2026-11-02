@@ -17,7 +17,7 @@ const {
 const STORE_TRANSFERS_COLLECTION = 'store_transfers';
 const STORES_COLLECTION = 'stores';
 
-const VALID_TRANSFER_STATUSES = ['Pending', 'Approved', 'Rejected', 'Completed', 'Cancelled'];
+const VALID_TRANSFER_STATUSES = ['Pending', 'In-Transit', 'Approved', 'Rejected', 'Completed', 'Cancelled'];
 
 /**
  * Generate unique Store Transfer ID (TRF-XXXXXX).
@@ -79,8 +79,11 @@ const requestStoreTransfer = async ({ fromStoreId, toStoreId, items, user, notes
   const requestedBy = String(user.id || user._id || user.firebaseUid);
   const requestedByName = user.name || 'Store Admin';
   const transferId = generateTransferId();
+  const now = new Date().toISOString();
 
   const transferDoc = {
+    id: transferId,
+    _id: transferId,
     transferId,
     fromStoreId: cleanFrom,
     toStoreId: cleanTo,
@@ -90,13 +93,20 @@ const requestStoreTransfer = async ({ fromStoreId, toStoreId, items, user, notes
     requestedByName,
     approvedBy: null,
     approvedByName: null,
+    dispatchedBy: null,
+    dispatchedByName: null,
+    dispatchedAt: null,
+    receivedBy: null,
+    receivedByName: null,
+    receivedAt: null,
     completedAt: null,
     notes: (notes || '').trim(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
   };
 
-  return createDoc(STORE_TRANSFERS_COLLECTION, transferId, transferDoc);
+  await createDoc(STORE_TRANSFERS_COLLECTION, transferId, transferDoc);
+  return transferDoc;
 };
 
 /**
@@ -104,7 +114,13 @@ const requestStoreTransfer = async ({ fromStoreId, toStoreId, items, user, notes
  */
 const getStoreTransfer = async (transferId) => {
   if (!transferId || typeof transferId !== 'string') return null;
-  return getDoc(STORE_TRANSFERS_COLLECTION, transferId.trim());
+  const cleanId = transferId.trim();
+  let transfer = await getDoc(STORE_TRANSFERS_COLLECTION, cleanId);
+  if (!transfer) {
+    const list = await queryDocs(STORE_TRANSFERS_COLLECTION, (ref) => ref.where('transferId', '==', cleanId).limit(1));
+    if (list.length > 0) transfer = list[0];
+  }
+  return transfer;
 };
 
 /**
@@ -129,65 +145,18 @@ const getStoreTransfers = async (storeId) => {
 };
 
 /**
- * Update the status of a store transfer.
- * Only the source store admin or a superadmin can approve/reject an outbound transfer request.
+ * Retrieve all transfers across the entire platform (Super Admin).
  */
-const updateTransferStatus = async ({ transferId, user, status, notes = '' }) => {
-  if (!transferId || typeof transferId !== 'string') {
-    throw new Error('Valid transferId is required');
-  }
-  if (!status || !VALID_TRANSFER_STATUSES.includes(status)) {
-    throw new Error(`Invalid status '${status}'. Must be one of: ${VALID_TRANSFER_STATUSES.join(', ')}`);
-  }
-  if (!user) {
-    throw new Error('Authenticated user context is required');
-  }
-
-  const existing = await getDoc(STORE_TRANSFERS_COLLECTION, transferId.trim());
-  if (!existing) {
-    throw new Error(`Store transfer '${transferId}' not found`);
-  }
-
-  const role = (user.role || '').toLowerCase();
-  const userStore = user.storeId || '';
-
-  // Authorization: Only source store admin or superadmin can approve/reject outbound transfer
-  if (role !== 'superadmin' && userStore !== existing.fromStoreId) {
-    throw new Error('Forbidden: You can only approve or reject transfer requests outbound from your assigned store');
-  }
-
-  if (existing.status === 'Completed' || existing.status === 'Cancelled' || existing.status === 'Rejected') {
-    throw new Error(`Cannot update transfer in terminal status '${existing.status}'`);
-  }
-
-  const userId = String(user.id || user._id || user.firebaseUid);
-  const userName = user.name || 'Store Admin';
-
-  const updatePayload = {
-    status,
-    notes: notes || existing.notes || '',
-    updatedAt: new Date().toISOString(),
-  };
-
-  if (status === 'Approved' || status === 'Rejected') {
-    updatePayload.approvedBy = userId;
-    updatePayload.approvedByName = userName;
-  }
-
-  return updateDoc(STORE_TRANSFERS_COLLECTION, transferId.trim(), updatePayload);
+const getAllStoreTransfers = async () => {
+  const transfers = await queryDocs(STORE_TRANSFERS_COLLECTION, (ref) => ref);
+  return transfers.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 };
 
 /**
- * Complete a store transfer atomically.
- * Transaction boundaries:
- * 1. Checks transfer is not already completed.
- * 2. Checks sufficient stock exists in source store for every item (prevents negative stock).
- * 3. Atomically deducts quantity from source store inventory.
- * 4. Atomically credits quantity to destination store inventory.
- * 5. Appends audit records to inventory_history.
- * 6. Updates transfer status to 'Completed'.
+ * Dispatch a store transfer (Pending -> In-Transit).
+ * Atomically verifies stock and decrements source store inventory upon physical dispatch.
  */
-const completeStoreTransferTransactional = async ({ transferId, user }) => {
+const dispatchStoreTransferTransactional = async ({ transferId, user, notes = '' }) => {
   if (!transferId || typeof transferId !== 'string') {
     throw new Error('Valid transferId is required');
   }
@@ -198,6 +167,8 @@ const completeStoreTransferTransactional = async ({ transferId, user }) => {
   const targetId = transferId.trim();
   const userId = String(user.id || user._id || user.firebaseUid);
   const userName = user.name || 'Store Admin';
+  const role = (user.role || '').toLowerCase();
+  const userStore = user.storeId || '';
   const db = getDb();
 
   return runTransaction(async (transaction) => {
@@ -210,11 +181,13 @@ const completeStoreTransferTransactional = async ({ transferId, user }) => {
 
     const transferData = transferSnap.data();
 
-    if (transferData.status === 'Completed') {
-      throw new Error(`Transfer '${targetId}' has already been completed`);
+    // Authorization: Only source store admin or superadmin can dispatch
+    if (role !== 'superadmin' && userStore !== transferData.fromStoreId) {
+      throw new Error('Forbidden: Only the source store manager or superadmin can dispatch outbound inventory');
     }
-    if (transferData.status === 'Rejected' || transferData.status === 'Cancelled') {
-      throw new Error(`Cannot complete transfer '${targetId}' in '${transferData.status}' status`);
+
+    if (transferData.status !== 'Pending') {
+      throw new Error(`Cannot dispatch transfer in '${transferData.status}' status (must be 'Pending')`);
     }
 
     const fromStore = transferData.fromStoreId;
@@ -222,26 +195,15 @@ const completeStoreTransferTransactional = async ({ transferId, user }) => {
     const items = transferData.items || [];
     const now = new Date().toISOString();
 
-    // 1. Read all inventory documents upfront (Firestore transaction rule: reads before writes)
+    // 1. Read all source inventory documents upfront (Firestore rule: reads before writes)
     const sourceSnaps = [];
-    const destSnaps = [];
-
     for (const item of items) {
       const srcDocId = getInventoryDocId(fromStore, item.productId);
-      const destDocId = getInventoryDocId(toStore, item.productId);
-
       const srcRef = db.collection(INVENTORY_COLLECTION).doc(srcDocId);
-      const destRef = db.collection(INVENTORY_COLLECTION).doc(destDocId);
-
-      const [srcSnap, destSnap] = await Promise.all([
-        transaction.get(srcRef),
-        transaction.get(destRef),
-      ]);
+      const srcSnap = await transaction.get(srcRef);
 
       if (!srcSnap.exists) {
-        throw new Error(
-          `Item '${item.name}' (${item.productId}) does not exist in source store '${fromStore}'`
-        );
+        throw new Error(`Item '${item.name}' (${item.productId}) does not exist in source store '${fromStore}'`);
       }
 
       const srcData = srcSnap.data();
@@ -253,17 +215,11 @@ const completeStoreTransferTransactional = async ({ transferId, user }) => {
       }
 
       sourceSnaps.push({ ref: srcRef, docId: srcDocId, data: srcData, item });
-      destSnaps.push({ ref: destRef, docId: destDocId, snap: destSnap, item });
     }
 
-    // 2. Perform writes: update source and destination inventories
-    for (let i = 0; i < items.length; i++) {
-      const src = sourceSnaps[i];
-      const dest = destSnaps[i];
-      const item = items[i];
-
-      // Update source store inventory
-      const newSrcStock = (Number(src.data.stock) || 0) - item.quantity;
+    // 2. Perform writes: deduct stock from source store and record audit history
+    for (const src of sourceSnaps) {
+      const newSrcStock = (Number(src.data.stock) || 0) - src.item.quantity;
       const newSrcStatus = calculateInventoryStatus(newSrcStock, src.data.minThreshold || 10);
 
       transaction.update(src.ref, {
@@ -272,33 +228,126 @@ const completeStoreTransferTransactional = async ({ transferId, user }) => {
         updatedAt: now,
       });
 
-      // Audit history for source store deduction
       const srcHistId = 'HIST-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 900 + 100);
       const srcHistRef = db.collection(HISTORY_COLLECTION).doc(srcHistId);
+      const currentSrcStock = Number(src.data.stock) || 0;
+      const unit = src.item.unit || src.data.unit || 'kg';
+      const prodName = src.item.name || src.data.item || 'Product Cut';
+
       transaction.set(srcHistRef, {
+        id: srcHistId,
+        _id: srcHistId,
         historyId: srcHistId,
         storeId: fromStore,
-        itemId: item.productId,
-        itemName: item.name,
-        actionType: 'transfer_store_deduct',
+        itemId: src.item.productId,
+        productName: prodName,
+        itemName: prodName,
+        actionType: 'transfer_out',
         classification: 'transfer',
-        quantityChanged: -item.quantity,
-        previousStock: src.data.stock,
+        quantity: src.item.quantity,
+        quantityChanged: -src.item.quantity,
+        unit,
+        previousQuantity: currentSrcStock,
+        resultingQuantity: newSrcStock,
+        previousStock: currentSrcStock,
         newStock: newSrcStock,
         previousDefreezeStock: src.data.defreezeStock || 0,
         newDefreezeStock: src.data.defreezeStock || 0,
-        notes: `Outbound transfer ${targetId} to store ${toStore}`,
+        reason: `Dispatched outbound transfer ${targetId} to store ${toStore}`,
+        notes: `Dispatched outbound transfer ${targetId} to store ${toStore}`,
+        actor: {
+          userId,
+          name: userName,
+          role: role || 'storeadmin',
+        },
         performedBy: userName,
         performedById: userId,
         createdAt: now,
       });
+    }
 
-      // Update destination store inventory
-      let newDestStock = item.quantity;
+    // 3. Update transfer doc to In-Transit
+    const transferUpdate = {
+      status: 'In-Transit',
+      dispatchedAt: now,
+      dispatchedBy: userId,
+      dispatchedByName: userName,
+      approvedBy: userId,
+      approvedByName: userName,
+      notes: notes || transferData.notes || '',
+      updatedAt: now,
+    };
+
+    transaction.update(transferRef, transferUpdate);
+
+    return {
+      ...transferData,
+      ...transferUpdate,
+    };
+  });
+};
+
+/**
+ * Receive a store transfer (In-Transit -> Completed).
+ * Atomically increments destination store inventory upon physical receipt.
+ */
+const receiveStoreTransferTransactional = async ({ transferId, user, notes = '' }) => {
+  if (!transferId || typeof transferId !== 'string') {
+    throw new Error('Valid transferId is required');
+  }
+  if (!user) {
+    throw new Error('Authenticated user context is required');
+  }
+
+  const targetId = transferId.trim();
+  const userId = String(user.id || user._id || user.firebaseUid);
+  const userName = user.name || 'Store Admin';
+  const role = (user.role || '').toLowerCase();
+  const userStore = user.storeId || '';
+  const db = getDb();
+
+  return runTransaction(async (transaction) => {
+    const transferRef = db.collection(STORE_TRANSFERS_COLLECTION).doc(targetId);
+    const transferSnap = await transaction.get(transferRef);
+
+    if (!transferSnap.exists) {
+      throw new Error(`Store transfer '${targetId}' not found`);
+    }
+
+    const transferData = transferSnap.data();
+
+    // Authorization: Only destination store admin or superadmin can receive
+    if (role !== 'superadmin' && userStore !== transferData.toStoreId) {
+      throw new Error('Forbidden: Only the destination store manager or superadmin can receive inbound inventory');
+    }
+
+    if (transferData.status !== 'In-Transit' && transferData.status !== 'Approved') {
+      throw new Error(`Cannot receive transfer in '${transferData.status}' status (must be 'In-Transit')`);
+    }
+
+    const fromStore = transferData.fromStoreId;
+    const toStore = transferData.toStoreId;
+    const items = transferData.items || [];
+    const now = new Date().toISOString();
+
+    // 1. Read all destination inventory documents upfront
+    const destSnaps = [];
+    for (const item of items) {
+      const destDocId = getInventoryDocId(toStore, item.productId);
+      const destRef = db.collection(INVENTORY_COLLECTION).doc(destDocId);
+      const destSnap = await transaction.get(destRef);
+
+      destSnaps.push({ ref: destRef, docId: destDocId, snap: destSnap, item });
+    }
+
+    // 2. Perform writes: credit destination inventory
+    for (const dest of destSnaps) {
+      let newDestStock = dest.item.quantity;
       let destMinThreshold = 10;
+
       if (dest.snap.exists) {
         const destData = dest.snap.data();
-        newDestStock = (Number(destData.stock) || 0) + item.quantity;
+        newDestStock = (Number(destData.stock) || 0) + dest.item.quantity;
         destMinThreshold = destData.minThreshold || 10;
         const newDestStatus = calculateInventoryStatus(newDestStock, destMinThreshold);
 
@@ -308,18 +357,17 @@ const completeStoreTransferTransactional = async ({ transferId, user }) => {
           updatedAt: now,
         });
       } else {
-        // Initialize inventory doc at destination store if first time stocked
         const newDestStatus = calculateInventoryStatus(newDestStock, destMinThreshold);
         transaction.set(dest.ref, {
           storeId: toStore,
-          itemId: item.productId,
-          item: item.name,
-          category: src.data.category || 'General',
+          itemId: dest.item.productId,
+          item: dest.item.name,
+          category: 'General',
           stock: newDestStock,
-          unit: item.unit || src.data.unit || 'kg',
+          unit: dest.item.unit || 'kg',
           minThreshold: destMinThreshold,
-          costPrice: src.data.costPrice || 0,
-          sellingPrice: src.data.sellingPrice || 0,
+          costPrice: 0,
+          sellingPrice: 0,
           defreezeStock: 0,
           status: newDestStatus,
           createdAt: now,
@@ -327,46 +375,256 @@ const completeStoreTransferTransactional = async ({ transferId, user }) => {
         });
       }
 
-      // Audit history for destination store addition
-      const destHistId = 'HIST-' + (Date.now() + 1).toString().slice(-6) + Math.floor(Math.random() * 900 + 100);
+      // Audit history for destination store credit
+      const destHistId = 'HIST-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 900 + 100);
       const destHistRef = db.collection(HISTORY_COLLECTION).doc(destHistId);
+      const currentDestStock = dest.snap.exists ? (Number(dest.snap.data().stock) || 0) : 0;
+      const unit = dest.item.unit || 'kg';
+      const prodName = dest.item.name || 'Product Cut';
+
       transaction.set(destHistRef, {
+        id: destHistId,
+        _id: destHistId,
         historyId: destHistId,
         storeId: toStore,
-        itemId: item.productId,
-        itemName: item.name,
-        actionType: 'transfer_store_credit',
+        itemId: dest.item.productId,
+        productName: prodName,
+        itemName: prodName,
+        actionType: 'transfer_in',
         classification: 'transfer',
-        quantityChanged: item.quantity,
-        previousStock: dest.snap.exists ? dest.snap.data().stock : 0,
+        quantity: dest.item.quantity,
+        quantityChanged: dest.item.quantity,
+        unit,
+        previousQuantity: currentDestStock,
+        resultingQuantity: newDestStock,
+        previousStock: currentDestStock,
         newStock: newDestStock,
         previousDefreezeStock: 0,
         newDefreezeStock: 0,
-        notes: `Inbound transfer ${targetId} from store ${fromStore}`,
+        reason: `Received inbound transfer ${targetId} from store ${fromStore}`,
+        notes: `Received inbound transfer ${targetId} from store ${fromStore}`,
+        actor: {
+          userId,
+          name: userName,
+          role: role || 'storeadmin',
+        },
         performedBy: userName,
         performedById: userId,
         createdAt: now,
       });
     }
 
-    // Mark transfer Completed
+    // 3. Mark transfer Completed
     const transferUpdate = {
       status: 'Completed',
+      receivedAt: now,
+      receivedBy: userId,
+      receivedByName: userName,
       completedAt: now,
       completedBy: userId,
       completedByName: userName,
+      notes: notes || transferData.notes || '',
       updatedAt: now,
     };
 
     transaction.update(transferRef, transferUpdate);
 
     return {
-      id: targetId,
-      _id: targetId,
       ...transferData,
       ...transferUpdate,
     };
   });
+};
+
+/**
+ * Reject a pending transfer.
+ * Only the source store admin or superadmin can reject. No stock was deducted.
+ */
+const rejectStoreTransfer = async ({ transferId, user, notes = '' }) => {
+  if (!transferId || typeof transferId !== 'string') throw new Error('Valid transferId is required');
+  if (!user) throw new Error('Authenticated user context is required');
+
+  const existing = await getStoreTransfer(transferId.trim());
+  if (!existing) throw new Error(`Store transfer '${transferId}' not found`);
+
+  const role = (user.role || '').toLowerCase();
+  const userStore = user.storeId || '';
+  if (role !== 'superadmin' && userStore !== existing.fromStoreId) {
+    throw new Error('Forbidden: Only the source store manager or superadmin can reject an outbound transfer');
+  }
+
+  if (existing.status !== 'Pending') {
+    throw new Error(`Cannot reject transfer in '${existing.status}' status (must be 'Pending')`);
+  }
+
+  const userId = String(user.id || user._id || user.firebaseUid);
+  const userName = user.name || 'Store Admin';
+  const now = new Date().toISOString();
+
+  const updates = {
+    status: 'Rejected',
+    rejectedBy: userId,
+    rejectedByName: userName,
+    rejectedAt: now,
+    notes: notes || existing.notes || '',
+    updatedAt: now,
+  };
+
+  await updateDoc(STORE_TRANSFERS_COLLECTION, existing.transferId || existing.id, updates);
+  return { ...existing, ...updates };
+};
+
+/**
+ * Cancel a store transfer.
+ * If status is 'In-Transit', refunds stock back to source store in a single atomic transaction.
+ */
+const cancelStoreTransferTransactional = async ({ transferId, user, notes = '' }) => {
+  if (!transferId || typeof transferId !== 'string') throw new Error('Valid transferId is required');
+  if (!user) throw new Error('Authenticated user context is required');
+
+  const targetId = transferId.trim();
+  const userId = String(user.id || user._id || user.firebaseUid);
+  const userName = user.name || 'Store Admin';
+  const role = (user.role || '').toLowerCase();
+  const userStore = user.storeId || '';
+  const db = getDb();
+
+  return runTransaction(async (transaction) => {
+    const transferRef = db.collection(STORE_TRANSFERS_COLLECTION).doc(targetId);
+    const transferSnap = await transaction.get(transferRef);
+
+    if (!transferSnap.exists) {
+      throw new Error(`Store transfer '${targetId}' not found`);
+    }
+
+    const transferData = transferSnap.data();
+
+    // Check terminal statuses
+    if (transferData.status === 'Completed' || transferData.status === 'Cancelled' || transferData.status === 'Rejected') {
+      throw new Error(`Cannot cancel transfer in '${transferData.status}' status`);
+    }
+
+    const now = new Date().toISOString();
+
+    // If transfer was already dispatched (In-Transit), revert source stock
+    if (transferData.status === 'In-Transit' || transferData.status === 'Approved') {
+      const fromStore = transferData.fromStoreId;
+      const items = transferData.items || [];
+
+      // Read source inventory docs
+      const sourceSnaps = [];
+      for (const item of items) {
+        const srcDocId = getInventoryDocId(fromStore, item.productId);
+        const srcRef = db.collection(INVENTORY_COLLECTION).doc(srcDocId);
+        const srcSnap = await transaction.get(srcRef);
+        sourceSnaps.push({ ref: srcRef, docId: srcDocId, snap: srcSnap, item });
+      }
+
+      // Re-credit source store inventory
+      for (const src of sourceSnaps) {
+        let restoredStock = src.item.quantity;
+        let minThresh = 10;
+        if (src.snap.exists) {
+          const sData = src.snap.data();
+          restoredStock = (Number(sData.stock) || 0) + src.item.quantity;
+          minThresh = sData.minThreshold || 10;
+          transaction.update(src.ref, {
+            stock: restoredStock,
+            status: calculateInventoryStatus(restoredStock, minThresh),
+            updatedAt: now,
+          });
+        }
+
+        const revHistId = 'HIST-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 900 + 100);
+        const revHistRef = db.collection(HISTORY_COLLECTION).doc(revHistId);
+        const currentSrcStock = src.snap.exists ? (Number(src.snap.data().stock) || 0) : 0;
+        const unit = src.item.unit || 'kg';
+        const prodName = src.item.name || 'Product Cut';
+
+        transaction.set(revHistRef, {
+          id: revHistId,
+          _id: revHistId,
+          historyId: revHistId,
+          storeId: fromStore,
+          itemId: src.item.productId,
+          productName: prodName,
+          itemName: prodName,
+          actionType: 'transfer_store_reversal',
+          classification: 'transfer',
+          quantity: src.item.quantity,
+          quantityChanged: src.item.quantity,
+          unit,
+          previousQuantity: currentSrcStock,
+          resultingQuantity: restoredStock,
+          previousStock: currentSrcStock,
+          newStock: restoredStock,
+          reason: `Transfer ${targetId} cancelled in-transit. Reverted stock to source store.`,
+          notes: `Transfer ${targetId} cancelled in-transit. Reverted stock to source store.`,
+          actor: {
+            userId,
+            name: userName,
+            role: role || 'storeadmin',
+          },
+          performedBy: userName,
+          performedById: userId,
+          createdAt: now,
+        });
+      }
+    }
+
+    const updates = {
+      status: 'Cancelled',
+      cancelledBy: userId,
+      cancelledByName: userName,
+      cancelledAt: now,
+      notes: notes || transferData.notes || '',
+      updatedAt: now,
+    };
+
+    transaction.update(transferRef, updates);
+    return { ...transferData, ...updates };
+  });
+};
+
+/**
+ * Backward-compatible single-step complete (used by tests / staging endpoints).
+ * If Pending, executes dispatch + receive in one combined transaction.
+ * If In-Transit, completes via receive.
+ */
+const completeStoreTransferTransactional = async ({ transferId, user, notes = '' }) => {
+  const existing = await getStoreTransfer(transferId);
+  if (!existing) throw new Error(`Store transfer '${transferId}' not found`);
+
+  if (existing.status === 'In-Transit' || existing.status === 'Approved') {
+    return receiveStoreTransferTransactional({ transferId, user, notes });
+  }
+
+  if (existing.status === 'Pending') {
+    // Dispatch first, then receive
+    await dispatchStoreTransferTransactional({ transferId, user, notes });
+    return receiveStoreTransferTransactional({ transferId, user, notes });
+  }
+
+  throw new Error(`Cannot complete transfer in '${existing.status}' status`);
+};
+
+/**
+ * Generic status update router (supporting existing controllers).
+ */
+const updateTransferStatus = async ({ transferId, user, status, notes = '' }) => {
+  if (status === 'In-Transit' || status === 'Approved') {
+    return dispatchStoreTransferTransactional({ transferId, user, notes });
+  }
+  if (status === 'Completed') {
+    return receiveStoreTransferTransactional({ transferId, user, notes });
+  }
+  if (status === 'Rejected') {
+    return rejectStoreTransfer({ transferId, user, notes });
+  }
+  if (status === 'Cancelled') {
+    return cancelStoreTransferTransactional({ transferId, user, notes });
+  }
+  throw new Error(`Invalid status '${status}'`);
 };
 
 /**
@@ -386,7 +644,12 @@ module.exports = {
   requestStoreTransfer,
   getStoreTransfer,
   getStoreTransfers,
-  updateTransferStatus,
+  getAllStoreTransfers,
+  dispatchStoreTransferTransactional,
+  receiveStoreTransferTransactional,
+  rejectStoreTransfer,
+  cancelStoreTransferTransactional,
   completeStoreTransferTransactional,
+  updateTransferStatus,
   deleteStoreTransfer,
 };

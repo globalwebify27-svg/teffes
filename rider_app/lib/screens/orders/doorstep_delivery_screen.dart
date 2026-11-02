@@ -89,7 +89,7 @@ class _DoorstepDeliveryScreenState extends State<DoorstepDeliveryScreen> {
         );
         return;
       }
-      cashCollected = widget.order.totalAmount;
+      cashCollected = received;
     }
 
     setState(() => _isSubmitting = true);
@@ -497,7 +497,7 @@ class _DoorstepDeliveryScreenState extends State<DoorstepDeliveryScreen> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Change to Return:',
+                          'Change / Wallet Credit:',
                           style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                         ),
                         Text(
@@ -510,6 +510,14 @@ class _DoorstepDeliveryScreenState extends State<DoorstepDeliveryScreen> {
                         ),
                       ],
                     ),
+                    if (_changeToReturn > 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 6),
+                        child: Text(
+                          'Excess amount will be credited to customer TeFFe wallet if no physical change.',
+                          style: TextStyle(fontSize: 11, color: AppColors.dutyOnline.withOpacity(0.9), fontWeight: FontWeight.w600),
+                        ),
+                      ),
                   ],
                 ),
               )

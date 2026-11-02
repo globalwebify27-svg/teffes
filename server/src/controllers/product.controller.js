@@ -331,6 +331,107 @@ const deleteProduct = async (req, res, next) => {
   }
 };
 
+/**
+ * POST /api/products/:id/notify-me
+ * Customer subscribes to be notified when an out-of-stock product returns
+ */
+const subscribeProductStockNotification = async (req, res, next) => {
+  try {
+    const { id: productId } = req.params;
+    const { phone } = req.body;
+    const userId = req.user?.id || req.user?._id || null;
+
+    const rawPhone = phone || req.user?.phone || '';
+    const cleanPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
+
+    if (!cleanPhone && !userId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Phone number or customer login is required to subscribe for back-in-stock alerts.',
+      });
+    }
+
+    const { getDoc, queryDocs, createDoc } = require('../lib/firestore');
+    const product = await getDoc('products', productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
+
+    // Check if subscription already exists for this phone or userId on this product
+    const existing = await queryDocs('stock_notifications', (ref) =>
+      ref.where('productId', '==', productId).where('status', '==', 'pending')
+    );
+
+    const alreadySubscribed = existing.some((sub) => {
+      if (cleanPhone && sub.phone === cleanPhone) return true;
+      if (userId && sub.userId === userId) return true;
+      return false;
+    });
+
+    if (alreadySubscribed) {
+      return res.status(200).json({
+        success: true,
+        message: 'You are already subscribed. We will notify you as soon as fresh stock arrives!',
+        alreadySubscribed: true,
+      });
+    }
+
+    const subId = `sub_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
+    const newSub = {
+      id: subId,
+      _id: subId,
+      productId,
+      productName: product.name || 'Product',
+      userId: userId || null,
+      phone: cleanPhone || '',
+      status: 'pending',
+      createdAt: new Date().toISOString(),
+    };
+
+    await createDoc('stock_notifications', subId, newSub);
+
+    res.status(201).json({
+      success: true,
+      message: 'Subscription successful! You will receive an instant alert when fresh stock is back.',
+      subscription: newSub,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/products/my-stock-subscriptions
+ * Customer gets list of product IDs they subscribed to
+ */
+const getCustomerStockSubscriptions = async (req, res, next) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    const rawPhone = req.user?.phone || req.query.phone || '';
+    const cleanPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
+
+    if (!userId && !cleanPhone) {
+      return res.status(200).json({ success: true, subscribedProductIds: [] });
+    }
+
+    const { queryDocs } = require('../lib/firestore');
+    const allPending = await queryDocs('stock_notifications', (ref) =>
+      ref.where('status', '==', 'pending')
+    );
+
+    const subscribedProductIds = allPending
+      .filter((sub) => (userId && sub.userId === userId) || (cleanPhone && sub.phone === cleanPhone))
+      .map((sub) => sub.productId);
+
+    res.status(200).json({
+      success: true,
+      subscribedProductIds: Array.from(new Set(subscribedProductIds)),
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getCategories,
   createCategory,
@@ -341,4 +442,6 @@ module.exports = {
   createProduct,
   updateProduct,
   deleteProduct,
+  subscribeProductStockNotification,
+  getCustomerStockSubscriptions,
 };
