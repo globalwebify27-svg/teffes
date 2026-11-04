@@ -6478,7 +6478,7 @@ export default function StoreAdminPage() {
         overflowY: "auto",
         overflowX: "hidden",
       }}>
-        {/* Logo & Store Outlet Context */}
+        {/* Logo */}
         <div style={{ padding: "16px", borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
             <img
@@ -6494,53 +6494,6 @@ export default function StoreAdminPage() {
               }}
             />
           </div>
-          {!sidebarCollapsed && (
-            <div
-              onClick={() => setIsStatusModalOpen(true)}
-              title="Click to view & edit store operational controls"
-              style={{
-                marginTop: "12px",
-                padding: "8px 10px",
-                background: "rgba(255,255,255,0.06)",
-                border: "1px solid rgba(255,255,255,0.12)",
-                borderRadius: "10px",
-                display: "flex",
-                alignItems: "center",
-                gap: "8px",
-                cursor: "pointer",
-                transition: "all 150ms ease",
-              }}
-            >
-              <div
-                style={{
-                  width: "28px",
-                  height: "28px",
-                  borderRadius: "8px",
-                  background: "#941717",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.25)",
-                }}
-              >
-                <span className="material-symbols-outlined text-[15px]" style={{ color: "#fff" }}>
-                  storefront
-                </span>
-              </div>
-              <div style={{ overflow: "hidden", minWidth: 0, flex: 1 }}>
-                <div style={{ fontSize: "0.65rem", color: "rgba(255,255,255,0.55)", textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span>Outlet</span>
-                  <span style={{ background: "rgba(255,255,255,0.12)", padding: "1px 5px", borderRadius: "4px", color: "#fff", fontSize: "0.62rem" }}>
-                    {effectiveStoreId}
-                  </span>
-                </div>
-                <div style={{ fontSize: "0.78rem", fontWeight: 700, color: "#fff", whiteSpace: "nowrap", textOverflow: "ellipsis", overflow: "hidden", marginTop: "1px" }}>
-                  {storeDisplayName}
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Nav Items */}
@@ -6872,60 +6825,6 @@ export default function StoreAdminPage() {
                 )}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-                {/* Active Store Outlet Badge */}
-                <button
-                  type="button"
-                  onClick={() => setIsStatusModalOpen(true)}
-                  title="Active Store Outlet — Click to configure operational control"
-                  style={{
-                    background: "#fef2f2",
-                    border: "1.5px solid #fecdd3",
-                    borderRadius: "10px",
-                    padding: "6px 12px",
-                    fontSize: "0.8rem",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "8px",
-                    cursor: "pointer",
-                    boxShadow: "0 1px 3px rgba(148,23,23,0.06)",
-                    transition: "all 150ms ease",
-                    textAlign: "left",
-                  }}
-                >
-                  <div
-                    style={{
-                      width: "26px",
-                      height: "26px",
-                      borderRadius: "7px",
-                      background: "#941717",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
-                    }}
-                  >
-                    <span className="material-symbols-outlined text-[15px]" style={{ color: "#fff" }}>
-                      storefront
-                    </span>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span style={{ fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.06em", color: "#941717", fontWeight: 800 }}>
-                        Store Outlet
-                      </span>
-                      <span style={{ background: "#fecaca", color: "#941717", fontSize: "0.62rem", fontWeight: 800, padding: "0.5px 4px", borderRadius: "4px" }}>
-                        {effectiveStoreId}
-                      </span>
-                    </div>
-                    <span style={{ fontSize: "0.82rem", fontWeight: 800, color: "#1c1917" }}>
-                      {storeDisplayName}
-                    </span>
-                  </div>
-                  <span className="material-symbols-outlined text-[16px]" style={{ color: "#941717", marginLeft: "2px" }}>
-                    tune
-                  </span>
-                </button>
-
                 <button
                   type="button"
                   onClick={handleTestAlarmSound}
