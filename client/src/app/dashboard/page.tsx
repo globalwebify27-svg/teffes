@@ -366,7 +366,7 @@ export default function DashboardPage() {
     setRechargeFeedback(null);
 
     try {
-      if (rechargeMethod === "payu" || rechargeMethod === "razorpay") {
+      if (rechargeMethod === "payu") {
         const payuRes = await api.post<{ success: boolean; payuParams: any; payuUrl: string }>("/wallet/create-order", {
           amount: amountNum,
           firstname: user?.name || name || 'Customer',
@@ -391,7 +391,7 @@ export default function DashboardPage() {
       // Instant Top-up or fallback mode
       const res = await api.post<{ success: boolean; balance: number }>("/wallet/add", {
         amount: amountNum,
-        description: rechargeMethod === "razorpay" ? "Online Wallet Top-up (Express)" : "Instant Wallet Recharge",
+        description: "Instant Wallet Recharge",
       });
 
       if (res.data.success) {
