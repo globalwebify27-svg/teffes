@@ -8,7 +8,6 @@ import '../../providers/rider_auth_provider.dart';
 import '../../providers/rider_orders_provider.dart';
 import '../orders/hub_pickup_screen.dart';
 import '../orders/delivery_navigation_screen.dart';
-import '../orders/doorstep_delivery_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../support/support_screen.dart';
 import 'new_order_alert_sheet.dart';
@@ -413,43 +412,130 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                           ),
                         ),
                         const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 46,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              final st = activeOrder.status.toUpperCase();
-                              if (st == 'CONFIRMED' || st == 'PACKED' || st == 'ACCEPTED') {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => HubPickupScreen(order: activeOrder)),
-                                );
-                              } else if (st == 'OUT_FOR_DELIVERY' || st == 'PICKED_UP') {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => DeliveryNavigationScreen(order: activeOrder)),
-                                );
-                              } else {
-                                Navigator.of(context).push(
-                                  MaterialPageRoute(builder: (_) => DoorstepDeliveryScreen(order: activeOrder)),
-                                );
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primaryMaroon,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: AppDimensions.roundedMd,
-                              ),
-                            ),
-                            child: Text(
-                              (activeOrder.status.toUpperCase() == 'CONFIRMED' ||
-                                      activeOrder.status.toUpperCase() == 'PACKED' ||
-                                      activeOrder.status.toUpperCase() == 'ACCEPTED')
-                                  ? 'Proceed to Hub Pickup'
-                                  : 'Resume Navigation & Handover',
-                              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                            ),
-                          ),
+                        Builder(
+                          builder: (context) {
+                            final st = activeOrder.status.toUpperCase();
+                            final isInTransit = st == 'OUT_FOR_DELIVERY' || st == 'PICKED_UP' || st == 'IN_TRANSIT';
+
+                            if (isInTransit) {
+                              return SizedBox(
+                                width: double.infinity,
+                                height: 46,
+                                child: ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.of(context).push(
+                                      MaterialPageRoute(builder: (_) => DeliveryNavigationScreen(order: activeOrder)),
+                                    );
+                                  },
+                                  icon: const Icon(Icons.navigation_rounded, size: 18),
+                                  label: const Text(
+                                    'Resume Delivery Navigation',
+                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                                  ),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primaryMaroon,
+                                    foregroundColor: Colors.white,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: AppDimensions.roundedMd,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+
+                            // Order is assigned but not yet picked up from store: Show Decline and Accept & Pickup
+                            return Row(
+                              children: [
+                                Expanded(
+                                  flex: 2,
+                                  child: SizedBox(
+                                    height: 46,
+                                    child: OutlinedButton(
+                                      onPressed: () async {
+                                        final confirmed = await showDialog<bool>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title: const Text('Decline Delivery?'),
+                                            content: Text('Decline Order #${activeOrder.orderNumber}? Store admin will be notified immediately to reassign.'),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(ctx, false),
+                                                child: const Text('Cancel'),
+                                              ),
+                                              TextButton(
+                                                onPressed: () => Navigator.pop(ctx, true),
+                                                style: TextButton.styleFrom(foregroundColor: AppColors.error),
+                                                child: const Text('Decline'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+
+                                        if (confirmed == true && context.mounted) {
+                                          await orders.rejectOrder(activeOrder.id);
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(
+                                                content: Text('Assignment declined. Store admin notified to reassign.'),
+                                                backgroundColor: AppColors.textSecondary,
+                                                behavior: SnackBarBehavior.floating,
+                                              ),
+                                            );
+                                          }
+                                        }
+                                      },
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(color: AppColors.borderSubtle),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: AppDimensions.roundedMd,
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        'Decline',
+                                        style: TextStyle(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w700,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  flex: 3,
+                                  child: SizedBox(
+                                    height: 46,
+                                    child: ElevatedButton.icon(
+                                      onPressed: () async {
+                                        await orders.acceptOrder(activeOrder.id);
+                                        if (context.mounted) {
+                                          final target = orders.activeOrder ?? activeOrder;
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(builder: (_) => HubPickupScreen(order: target)),
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(Icons.storefront_rounded, size: 18),
+                                      label: const Text(
+                                        'Accept & Pickup',
+                                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
+                                      ),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.dutyOnline,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: AppDimensions.roundedMd,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ),

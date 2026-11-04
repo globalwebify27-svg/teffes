@@ -4253,7 +4253,7 @@ function CustomersTab() {
   );
 }
 
-function RidersTab() {
+function RidersTab({ storeId }: { storeId?: string }) {
   const [riders, setRiders] = useState<any[]>([]);
   const [readyOrders, setReadyOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4354,17 +4354,18 @@ function RidersTab() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [ridersRes, ordersRes, storeRes, remittancesRes, batchRes] = await Promise.all([
-        api.get<{ success: boolean; riders: any[] }>("/store-admin/riders"),
-        api.get<{ success: boolean; orders: any[] }>("/store-admin/orders?status=all"),
-        api.get<{ success: boolean; store: any }>("/store-admin/store-status"),
-        api.get<{ success: boolean; remittances: any[] }>("/store-admin/remittances").catch(() => ({ data: { success: false, remittances: [] } })),
-        api.get<{ success: boolean; settings: any }>("/store-admin/batches/settings").catch(() => ({ data: { success: false, settings: null } })),
+      const qStore = storeId ? `?storeId=${storeId}` : "";
+      const [ridersResult, ordersResult, storeResult, remittancesResult, batchResult] = await Promise.allSettled([
+        api.get<{ success: boolean; riders: any[] }>(`/store-admin/riders${qStore}`),
+        api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=all${storeId ? `&storeId=${storeId}` : ""}`),
+        api.get<{ success: boolean; store: any }>(`/store-admin/store-status${qStore}`),
+        api.get<{ success: boolean; remittances: any[] }>(`/store-admin/remittances${qStore}`),
+        api.get<{ success: boolean; settings: any; config: any }>(`/store-admin/batches/settings${qStore}`),
       ]);
+
       let relevantOrders: any[] = [];
-      if (ordersRes.data.success) {
-        // Filter only Ready and Out for Delivery orders that require home delivery (exclude store takeaway)
-        relevantOrders = (ordersRes.data.orders || []).filter((o: any) => {
+      if (ordersResult.status === "fulfilled" && ordersResult.value.data?.success) {
+        relevantOrders = (ordersResult.value.data.orders || []).filter((o: any) => {
           const isPickup =
             o.fulfillmentType === "pickup" ||
             o.pickupMode === true ||
@@ -4374,7 +4375,8 @@ function RidersTab() {
         });
         setReadyOrders(relevantOrders);
       }
-      if (ridersRes.data.success) {
+
+      if (ridersResult.status === "fulfilled" && ridersResult.value.data?.success) {
         const outForDeliveryRiderNames = new Set(
           relevantOrders
             .filter((o: any) => o.status === "Out for Delivery")
@@ -4382,7 +4384,8 @@ function RidersTab() {
             .filter(Boolean)
         );
 
-        const syncedRiders = (ridersRes.data.riders || []).map((r: any) => {
+        const rawRiders = ridersResult.value.data.riders || [];
+        const syncedRiders = rawRiders.map((r: any) => {
           const isBusy = outForDeliveryRiderNames.has(r.name?.trim().toLowerCase());
           if (isBusy && r.riderStatus !== "On Delivery") {
             return { ...r, riderStatus: "On Delivery" };
@@ -4391,8 +4394,9 @@ function RidersTab() {
         });
         setRiders(syncedRiders);
       }
-      if (storeRes.data?.success && storeRes.data?.store) {
-        const s = storeRes.data.store;
+
+      if (storeResult.status === "fulfilled" && storeResult.value.data?.success && storeResult.value.data.store) {
+        const s = storeResult.value.data.store;
         if (s.riderPayoutSettings) {
           const ps = s.riderPayoutSettings;
           if (typeof ps.baseDeliveryPay === "number") setBaseDeliveryPay(ps.baseDeliveryPay);
@@ -4403,20 +4407,24 @@ function RidersTab() {
           setDefaultRiderDailyTarget(s.defaultRiderDailyTarget);
         }
       }
-      if (remittancesRes.data?.success && Array.isArray(remittancesRes.data.remittances)) {
-        setRemittances(remittancesRes.data.remittances);
+
+      if (remittancesResult.status === "fulfilled" && remittancesResult.value.data?.success && Array.isArray(remittancesResult.value.data.remittances)) {
+        setRemittances(remittancesResult.value.data.remittances);
       }
-      if (batchRes.data?.success && batchRes.data?.settings) {
-        const bs = batchRes.data.settings;
-        const cfg = {
-          maxBatchSize: Number(bs.maxBatchSize) || 3,
-          maxDetourKm: Number(bs.maxDetourKm) || 3.5,
-          maxTotalRouteKm: Number(bs.maxTotalRouteKm) || 15.0,
-          maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || 45,
-          maxBatchWeightKg: Number(bs.maxBatchWeightKg) || 10.0,
-        };
-        setBatchConfig(cfg);
-        setDraftBatchConfig(cfg);
+
+      if (batchResult.status === "fulfilled" && batchResult.value.data?.success) {
+        const bs = batchResult.value.data.settings || batchResult.value.data.config;
+        if (bs) {
+          const cfg = {
+            maxBatchSize: Number(bs.maxBatchSize) || 3,
+            maxDetourKm: Number(bs.maxDetourKm) || 3.5,
+            maxTotalRouteKm: Number(bs.maxTotalRouteKm) || 15.0,
+            maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || 45,
+            maxBatchWeightKg: Number(bs.maxBatchWeightKg) || 10.0,
+          };
+          setBatchConfig(cfg);
+          setDraftBatchConfig(cfg);
+        }
       }
     } catch (err) {
       console.warn("Failed to fetch dispatch data:", err);
@@ -4427,7 +4435,7 @@ function RidersTab() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [storeId]);
 
   const handleOpenRatesModal = () => {
     setDraftRates({
@@ -4752,6 +4760,26 @@ function RidersTab() {
           <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>Delivery partners active in your hub delivery area with live Cash in Hand</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={fetchData}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              background: "#fff",
+              border: "1px solid #cbd5e1",
+              borderRadius: "99px",
+              padding: "4px 10px",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              color: "#334155",
+              cursor: "pointer",
+            }}
+          >
+            <span className="material-symbols-outlined text-[15px]">refresh</span>
+            <span>Refresh Pool</span>
+          </button>
           {riders.length > 0 && (
             <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "99px", padding: "4px 12px", fontSize: "0.75rem", color: "#059669", fontWeight: 700 }}>
               {availableRiders.length} Available for Dispatch
@@ -6457,7 +6485,7 @@ export default function StoreAdminPage() {
     inventory: <InventoryTab />,
     inventory_logs: <StoreAdminInventoryLogsTab />,
     customers: <CustomersTab />,
-    riders: <RidersTab />,
+    riders: <RidersTab storeId={effectiveStoreId} />,
     returns: <ReturnsTab />,
   };
 

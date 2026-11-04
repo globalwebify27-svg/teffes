@@ -99,11 +99,17 @@ class RiderOrdersProvider with ChangeNotifier {
     try {
       final res = await _api.post(ApiEndpoints.rejectOrder(orderId));
       if (res.data['success'] == true) {
-        _availableOrders.removeWhere((o) => o.orderId == orderId || o.id == orderId);
-        if (_activeOrder?.orderId == orderId || _activeOrder?.id == orderId) {
+        _availableOrders.removeWhere((o) =>
+            o.orderId == orderId ||
+            o.id == orderId ||
+            o.orderNumber == orderId);
+        if (_activeOrder?.orderId == orderId ||
+            _activeOrder?.id == orderId ||
+            _activeOrder?.orderNumber == orderId) {
           _activeOrder = null;
         }
         notifyListeners();
+        fetchAvailableOrders();
         return true;
       }
       return false;
