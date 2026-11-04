@@ -86,8 +86,12 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     try {
       final storeParam = _selectedStoreId.isNotEmpty ? '?storeId=$_selectedStoreId' : '';
       final res = await ApiClient().get('/cross-sell$storeParam');
-      if (res.data != null && res.data['success'] == true && res.data['data'] is List) {
-        final list = (res.data['data'] as List)
+      final dynamic rawData = res.data;
+      final dynamic rawList = rawData is Map
+          ? (rawData['data'] ?? rawData['items'] ?? rawData['crossSellItems'])
+          : null;
+      if (rawData != null && rawData['success'] == true && rawList is List) {
+        final list = (rawList as List)
             .map((e) => ProductModel.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
         if (mounted) {
@@ -3234,9 +3238,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                   color: AppColors.primaryMaroon,
                                 ),
                               ),
-                              if (item.originalPrice != null && item.originalPrice! > item.price)
+                              if (item.originalPrice > item.price)
                                 Text(
-                                  CurrencyFormatter.format(item.originalPrice!),
+                                  CurrencyFormatter.format(item.originalPrice),
                                   style: const TextStyle(
                                     fontSize: 9,
                                     color: AppColors.textMuted,

@@ -18,7 +18,9 @@ const getPublicCrossSellItems = async (storeId = null) => {
     .filter((item) => {
       if (!item.inStock) return false;
       if (!storeId || storeId === 'all') return true;
-      return item.storeId === 'all' || item.storeId === storeId;
+      const targetStore = (storeId === 'S002' || storeId === 'S004') ? 'S004' : storeId;
+      const itemStore = (item.storeId === 'S002' || item.storeId === 'S004') ? 'S004' : item.storeId;
+      return !item.storeId || item.storeId === 'all' || itemStore === targetStore;
     })
     .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
 };

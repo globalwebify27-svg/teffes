@@ -168,10 +168,11 @@ export default function CartDrawer() {
     if (isOpen) {
       setIsLoadingCrossSell(true);
       const q = selectedStoreId ? `?storeId=${selectedStoreId}` : "";
-      api.get<{ success: boolean; data: CrossSellItemData[] }>(`/cross-sell${q}`)
+      api.get<{ success: boolean; data?: CrossSellItemData[]; items?: CrossSellItemData[]; crossSellItems?: CrossSellItemData[] }>(`/cross-sell${q}`)
         .then((res) => {
-          if (res.data?.success && Array.isArray(res.data.data)) {
-            setCrossSellItems(res.data.data);
+          const list = res.data?.data || res.data?.items || res.data?.crossSellItems;
+          if (res.data?.success && Array.isArray(list)) {
+            setCrossSellItems(list);
           } else {
             setCrossSellItems([]);
           }
