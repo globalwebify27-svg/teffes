@@ -1,10 +1,19 @@
 class AppConfig {
-  /// Plug-and-Play Razorpay Key ID
-  /// Drop client's key in --dart-define=RAZORPAY_KEY_ID=... or edit defaultValue here
-  static const String razorpayKeyId = String.fromEnvironment(
-    'RAZORPAY_KEY_ID',
-    defaultValue: 'rzp_test_TkyiIn9CcaHTah',
+  /// PayU Merchant Key (Test Mode)
+  /// Drop client's key in --dart-define=PAYU_KEY=... or edit defaultValue here
+  static const String payuMerchantKey = String.fromEnvironment(
+    'PAYU_KEY',
+    defaultValue: 'mv5iBR',
   );
+
+  /// PayU Environment - 'test' or 'production'
+  static const String payuEnvironment = String.fromEnvironment(
+    'PAYU_ENV',
+    defaultValue: 'test',
+  );
+
+  /// Legacy alias so any remaining code referencing razorpayKeyId still compiles
+  static const String razorpayKeyId = payuMerchantKey;
 
   /// Plug-and-Play Google Maps API Key
   /// Drop client's key in --dart-define=GOOGLE_MAPS_API_KEY=... or AndroidManifest

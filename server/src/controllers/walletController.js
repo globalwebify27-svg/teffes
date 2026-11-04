@@ -1,13 +1,20 @@
-const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const { getDoc, createDoc, updateDoc, queryDocs } = require('../lib/firestore');
 const { getUserById } = require('../services/firestore/user.firestore.service');
 
-const getRazorpayInstance = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder';
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'rzp_secret_placeholder';
-  return new Razorpay({ key_id, key_secret });
-};
+const PAYU_KEY  = process.env.PAYU_MERCHANT_KEY  || 'mv5iBR';
+const PAYU_SALT = process.env.PAYU_MERCHANT_SALT || 'zfjyRbqXallwBDnRVXBVDIJGnM2sKmK';
+const PAYU_URL  = process.env.PAYU_BASE_URL       || 'https://test.payu.in';
+
+function computePayUHash({ txnid, amount, productinfo, firstname, email }) {
+  const str = `${PAYU_KEY}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${PAYU_SALT}`;
+  return crypto.createHash('sha512').update(str).digest('hex');
+}
+
+function computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status }) {
+  const str = `${PAYU_SALT}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${PAYU_KEY}`;
+  return crypto.createHash('sha512').update(str).digest('hex');
+}
 
 // Get wallet balance and transactions (Pure Firestore)
 exports.getWalletDetails = async (req, res, next) => {
@@ -145,53 +152,39 @@ exports.addMoneyToUser = async (req, res, next) => {
 
 /**
  * POST /api/wallet/create-order
- * Create Razorpay order for wallet top-up
+ * Create PayU order params for wallet top-up
  */
 exports.createWalletTopupOrder = async (req, res, next) => {
   try {
-    const { amount } = req.body;
+    const { amount, firstname = 'Customer', email = 'customer@teffes.com', phone = '9999999999' } = req.body;
     const numAmount = Number(amount);
     if (!numAmount || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Valid recharge amount is required' });
     }
 
-    const amountInPaise = Math.round(numAmount * 100);
-    const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder';
-
-    let razorpayOrder;
-    let isLiveOrTestWorking = false;
-    if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && !process.env.RAZORPAY_KEY_ID.includes('placeholder')) {
-      try {
-        const instance = getRazorpayInstance();
-        razorpayOrder = await instance.orders.create({
-          amount: amountInPaise,
-          currency: 'INR',
-          receipt: `wal_${Date.now()}`,
-          notes: {
-            type: 'wallet_topup',
-            userId: String(req.user?.id || req.user?._id),
-          },
-        });
-        isLiveOrTestWorking = true;
-      } catch (err) {
-        console.warn('[Razorpay Wallet] Live order creation warning:', err.message);
-      }
-    }
-
-    if (!razorpayOrder) {
-      razorpayOrder = {
-        id: `order_wal_dev_${Date.now()}`,
-        amount: amountInPaise,
-        currency: 'INR',
-      };
-    }
+    const txnid       = `WAL${Date.now()}`;
+    const amountStr   = numAmount.toFixed(2);
+    const productinfo = "TeFFe's Wallet Recharge";
+    const hash        = computePayUHash({ txnid, amount: amountStr, productinfo, firstname, email });
 
     res.status(200).json({
       success: true,
-      order: razorpayOrder,
-      keyId: isLiveOrTestWorking ? key_id : null,
-      isSimulation: !isLiveOrTestWorking,
-      amount: numAmount,
+      payuParams: {
+        key:         PAYU_KEY,
+        txnid,
+        amount:      amountStr,
+        productinfo,
+        firstname,
+        email,
+        phone,
+        surl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/payment/wallet-success`,
+        furl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/payment/wallet-failure`,
+        hash,
+      },
+      payuUrl: `${PAYU_URL}/_payment`,
+      keyId:   PAYU_KEY,
+      amount:  numAmount,
+      isSimulation: false,
     });
   } catch (error) {
     next(error);
@@ -200,27 +193,27 @@ exports.createWalletTopupOrder = async (req, res, next) => {
 
 /**
  * POST /api/wallet/verify-topup
- * (Pure Firestore)
+ * Verifies PayU wallet recharge and credits wallet (Pure Firestore)
  */
 exports.verifyWalletTopup = async (req, res, next) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature, amount } = req.body;
+    const { txnid, amount, productinfo, firstname, email, status, hash: receivedHash, mihpayid } = req.body;
     const numAmount = Number(amount);
 
     if (!numAmount || numAmount <= 0) {
       return res.status(400).json({ success: false, message: 'Invalid recharge amount' });
     }
 
-    const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (secret && razorpay_signature && !secret.includes('placeholder')) {
-      const generatedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
-
-      if (generatedSignature !== razorpay_signature) {
+    // Verify PayU reverse hash
+    if (receivedHash) {
+      const expectedHash = computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status });
+      if (expectedHash !== receivedHash) {
         return res.status(400).json({ success: false, message: 'Invalid payment signature' });
       }
+    }
+
+    if (status && status !== 'success') {
+      return res.status(400).json({ success: false, message: `Payment ${status}` });
     }
 
     const userId = String(req.user?.id || req.user?._id);
@@ -244,7 +237,9 @@ exports.verifyWalletTopup = async (req, res, next) => {
       type: 'Credit',
       amount: numAmount,
       balanceAfter: newBalance,
-      description: `Online Wallet Recharge via Razorpay (${razorpay_payment_id || 'UPI/Card'})`,
+      description: `Online Wallet Recharge via PayU (${mihpayid || txnid || 'UPI/Card'})`,
+      transactionId: txnid || null,
+      payuPaymentId: mihpayid || null,
       status: 'Success',
       createdAt: now,
     };

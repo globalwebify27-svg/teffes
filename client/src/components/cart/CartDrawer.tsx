@@ -33,17 +33,21 @@ interface Address {
   lng?: number;
 }
 
-const loadRazorpayScript = (): Promise<boolean> => {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve(false);
-    if ((window as any).Razorpay) return resolve(true);
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.async = true;
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
+// PayU: Submit a hidden form to PayU payment gateway
+const submitPayUForm = (payuParams: Record<string, string>, payuUrl: string) => {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = payuUrl;
+  form.style.display = 'none';
+  Object.entries(payuParams).forEach(([key, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = String(value);
+    form.appendChild(input);
   });
+  document.body.appendChild(form);
+  form.submit();
 };
 
 interface StoreOption {
@@ -226,6 +230,9 @@ export default function CartDrawer() {
           id: i.product.id,
           name: i.product.name,
           quantity: i.quantity,
+          category: i.product.category,
+          badge: i.product.badge,
+          netWeight: i.selectedWeight || i.product.netWeight,
         })),
         customerLat: activeAddr?.lat || currentLocation?.lat || 23.3512,
         customerLng: activeAddr?.lng || currentLocation?.lng || 85.3154,
@@ -446,9 +453,10 @@ export default function CartDrawer() {
         setAddresses(res.data.addresses);
         const newest = res.data.addresses[res.data.addresses.length - 1];
         if (newest) {
-          setSelectedAddressId(newest._id);
+          const addrId = newest._id || (newest as any).id || "";
+          setSelectedAddressId(addrId);
           selectSavedAddress({
-            _id: newest._id,
+            _id: addrId,
             tag: newest.tag,
             line1: newest.line1,
             line2: newest.line2,
@@ -498,17 +506,26 @@ export default function CartDrawer() {
       await fetchAddresses();
 
       // Enforce location selection: cannot proceed if no location or address has been chosen
-      if (!isLocationSet && !selectedAddressId && addresses.length === 0) {
+      if (!isLocationSet && !selectedAddressId && addresses.length === 0 && !activeAddress) {
         toast.warning("Please select or detect your delivery location before proceeding to checkout.", "Location Required");
         openLocationModal();
         return;
       }
 
-      if (addresses.length === 0 && !selectedAddressId) {
+      if (addresses.length === 0 && !selectedAddressId && !activeAddress) {
         toast.warning("Please add a delivery address to proceed.", "Address Required");
         setShowAddAddressForm(true);
         setView("address");
         return;
+      }
+
+      if (!selectedAddressId && activeAddress) {
+        setSelectedAddressId(activeAddress._id || "loc-selected");
+      }
+    } else {
+      if (!selectedStoreId && stores.length > 0) {
+        const eligible = stores.find((s) => s.isAvailable !== false) || stores[0];
+        setSelectedStoreId(eligible.storeId);
       }
     }
 
@@ -600,106 +617,31 @@ export default function CartDrawer() {
         discountAmount: appliedCoupon?.discountValue || 0,
       };
 
-      // Create Razorpay order on backend
-      const rzpRes = await api.post<{ success: boolean; order: any; keyId: string; isSimulation?: boolean }>("/payment/create-order", {
+      // Create PayU order params on backend
+      const payuRes = await api.post<{ success: boolean; payuParams: any; payuUrl: string; keyId: string }>("/payment/create-order", {
         amount: finalPayable,
+        firstname: getStoredUser()?.name || 'Customer',
+        email: getStoredUser()?.email || 'customer@teffes.com',
+        phone: getStoredUser()?.phone?.replace(/\D/g, '').slice(-10) || '9999999999',
       });
 
-      // If backend reports simulation mode, or if keyId is absent or order ID is dev simulated:
-      if (rzpRes.data.isSimulation || !rzpRes.data.keyId || rzpRes.data.order?.id?.startsWith("order_dev_")) {
-        setSimulatedOrderData({
-          orderPayload,
-          rzpOrder: rzpRes.data.order,
-        });
-        setShowSimulatedPaymentModal(true);
-        setIsPlacingOrder(false);
-        return;
+      if (!payuRes.data.success || !payuRes.data.payuParams) {
+        throw new Error('Failed to initiate PayU payment');
       }
 
-      const loaded = await loadRazorpayScript();
-      const storedUser = getStoredUser();
+      // Store order payload in sessionStorage so /payment/success page can create the order
+      sessionStorage.setItem('pendingOrderPayload', JSON.stringify({
+        ...orderPayload,
+        paymentMethod: 'Online Payment (PayU)',
+        paymentStatus: 'Paid',
+        transactionId: payuRes.data.payuParams.txnid,
+      }));
 
-      if (loaded && (window as any).Razorpay && rzpRes.data.keyId) {
-        let isDismissed = false;
-        const options = {
-          key: rzpRes.data.keyId,
-          amount: rzpRes.data.order.amount,
-          currency: "INR",
-          name: "TeFFe's",
-          description: `Order of ${totalItemsCount} item(s)`,
-          order_id: rzpRes.data.order.id,
-          handler: async function (response: any) {
-            isDismissed = true;
-            try {
-              await api.post("/orders", {
-                ...orderPayload,
-                paymentMethod: "Online Payment (Razorpay)",
-                paymentStatus: "Paid",
-                razorpayOrderId: response.razorpay_order_id || rzpRes.data.order.id,
-                razorpayPaymentId: response.razorpay_payment_id,
-              });
-              clearCart();
-              closeCart();
-              window.location.href = "/dashboard";
-            } catch (createErr) {
-              console.error("Order creation error after payment:", createErr);
-              clearCart();
-              closeCart();
-              window.location.href = "/dashboard";
-            } finally {
-              setIsPlacingOrder(false);
-            }
-          },
-          prefill: {
-            name: storedUser?.name || "Valued Customer",
-            contact: storedUser?.phone || "+91 9999999999",
-            email: storedUser?.email || "customer@teffes.com",
-          },
-          theme: {
-            color: "#800020",
-          },
-          modal: {
-            ondismiss: function () {
-              isDismissed = true;
-              setIsPlacingOrder(false);
-            },
-          },
-        };
-
-        try {
-          const rzp = new (window as any).Razorpay(options);
-          rzp.on("payment.failed", function (resp: any) {
-            isDismissed = true;
-            toast.error("Payment failed: " + (resp.error?.description || "Transaction declined"), "Payment Error");
-            setIsPlacingOrder(false);
-          });
-          rzp.open();
-          // Watchdog: If modal fails to launch within 6 seconds, reset isPlacingOrder so button is never stuck
-          setTimeout(() => {
-            if (!isDismissed) {
-              setIsPlacingOrder(false);
-            }
-          }, 6000);
-        } catch (openErr) {
-          console.error("Razorpay instance launch error:", openErr);
-          setIsPlacingOrder(false);
-          setSimulatedOrderData({
-            orderPayload,
-            rzpOrder: rzpRes.data.order,
-          });
-          setShowSimulatedPaymentModal(true);
-        }
-      } else {
-        // Fallback to simulated payment modal
-        setSimulatedOrderData({
-          orderPayload,
-          rzpOrder: rzpRes.data.order,
-        });
-        setShowSimulatedPaymentModal(true);
-        setIsPlacingOrder(false);
-      }
+      // Redirect to PayU payment page via hidden form POST
+      submitPayUForm(payuRes.data.payuParams, payuRes.data.payuUrl);
+      // Note: setIsPlacingOrder stays true — page will redirect
     } catch (err: any) {
-      console.error("Razorpay error:", err);
+      console.error("PayU error:", err);
       toast.error(
         err.response?.data?.message || "Payment initiation failed. Please try again or choose Cash on Delivery.",
         "Payment Failed"
@@ -1005,8 +947,14 @@ export default function CartDrawer() {
                                 <span className="font-headline-sm font-extrabold text-on-surface text-[13px] truncate">
                                   {selectedStore.name}
                                 </span>
-                                <span className="text-[10px] font-extrabold text-emerald-800 bg-emerald-100/90 px-2 py-0.5 rounded-full shrink-0">
-                                  Nearest • In Stock
+                                <span
+                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
+                                    selectedStore.isAvailable !== false
+                                      ? "text-emerald-800 bg-emerald-100/90"
+                                      : "text-red-700 bg-red-100"
+                                  }`}
+                                >
+                                  {selectedStore.isAvailable !== false ? "Nearest • In Stock" : "Out of Stock"}
                                 </span>
                               </div>
                               <p className="text-[11px] text-slate-body truncate mt-0.5">{selectedStore.address}</p>
@@ -2046,49 +1994,69 @@ export default function CartDrawer() {
                     </div>
                   </label>
 
-                  {/* Method B: Razorpay Online Payment (Disabled per client instructions) */}
-                  <div
-                    onClick={() => toast.info("Online payment gateway is temporarily disabled. Please place your order via Cash on Delivery.")}
-                    className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50/90 flex items-center justify-between cursor-not-allowed opacity-60 shadow-2xs transition-all"
+                  {/* Method B: Pay Online (PayU / UPI, Cards, Netbanking) */}
+                  <label
+                    onClick={() => setSelectedPayment("razorpay")}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${
+                      selectedPayment === "razorpay" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center text-gray-500">
+                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
                         <span className="material-symbols-outlined text-[24px]">credit_card</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-600 text-sm">Pay Online (Razorpay)</span>
-                          <span className="text-[9.5px] font-extrabold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded uppercase">Temporarily Disabled</span>
+                          <span className="font-bold text-gray-900 text-sm">Pay Online (PayU)</span>
+                          <span className="text-[9.5px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase">Instant</span>
                         </div>
-                        <span className="text-[11.5px] text-gray-400">
-                          UPI, Cards & Netbanking temporarily paused by store
+                        <span className="text-[11.5px] text-slate-500">
+                          UPI, Debit/Credit Cards & Netbanking via PayU
                         </span>
                       </div>
                     </div>
-                    <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center" />
-                  </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === "razorpay" ? "border-primary" : "border-gray-300"}`}>
+                      {selectedPayment === "razorpay" && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                    </div>
+                  </label>
 
-                  {/* Method C: Teffes Cash / Wallet (Disabled per client instructions) */}
-                  <div
-                    onClick={() => toast.info("Wallet payment is temporarily disabled. Please place your order via Cash on Delivery.")}
-                    className="p-4 rounded-2xl border-2 border-gray-200 bg-gray-50/90 flex items-center justify-between cursor-not-allowed opacity-60 shadow-2xs transition-all"
+                  {/* Method C: Teffes Cash / Wallet */}
+                  <label
+                    onClick={() => {
+                      if (walletBalance < finalPayable) {
+                        toast.warning(`Insufficient wallet balance (₹${walletBalance}). Required: ₹${finalPayable}. Please choose another payment method.`);
+                        return;
+                      }
+                      setSelectedPayment("wallet");
+                    }}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
+                      walletBalance < finalPayable
+                        ? "opacity-60 cursor-not-allowed border-gray-200"
+                        : "cursor-pointer " + (selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300")
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gray-200 flex items-center justify-center text-gray-500">
+                      <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
                         <span className="material-symbols-outlined text-[24px]">account_balance_wallet</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-600 text-sm">Teffes Cash</span>
-                          <span className="text-[9.5px] font-extrabold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded uppercase">Temporarily Disabled</span>
+                          <span className="font-bold text-gray-900 text-sm">Teffes Cash</span>
+                          {walletBalance >= finalPayable ? (
+                            <span className="text-[9.5px] font-extrabold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded uppercase">Available</span>
+                          ) : (
+                            <span className="text-[9.5px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded uppercase">Low Balance</span>
+                          )}
                         </div>
-                        <span className="text-[11.5px] text-gray-400">
-                          Balance: ₹{walletBalance} (Wallet payments temporarily paused)
+                        <span className="text-[11.5px] text-slate-500">
+                          Balance: ₹{walletBalance} {walletBalance >= finalPayable ? "• Instant 1-click checkout" : `(Need ₹${finalPayable})`}
                         </span>
                       </div>
                     </div>
-                    <div className="w-5 h-5 rounded-full border-2 border-gray-300 flex items-center justify-center" />
-                  </div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === "wallet" ? "border-primary" : "border-gray-300"}`}>
+                      {selectedPayment === "wallet" && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                    </div>
+                  </label>
                 </div>
               </div>
 
@@ -2131,14 +2099,14 @@ export default function CartDrawer() {
                     type="button"
                     disabled={isPlacingOrder || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={handleRazorpayPayment}
-                    className="w-full py-4 rounded-xl bg-[#0c2340] hover:bg-[#08182b] text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50"
                   >
                     {isPlacingOrder ? (
                       <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     ) : (
                       <>
                         <span className="material-symbols-outlined text-[19px]">lock</span>
-                        <span>Pay Online with Razorpay • ₹{finalPayable}</span>
+                        <span>Pay Online with PayU • ₹{finalPayable}</span>
                       </>
                     )}
                   </button>

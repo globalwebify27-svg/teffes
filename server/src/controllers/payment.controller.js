@@ -1,9 +1,10 @@
 /**
- * Payment Controller (Pure Cloud Firestore Backend)
- * 100% Zero MongoDB dependency - Fully migrated to Google Cloud Firestore
+ * Payment Controller - PayU Integration
+ * Replaces Razorpay. Uses SHA512 hash-based checkout.
+ * PayU Test Endpoint: https://test.payu.in/_payment
+ * PayU Live Endpoint: https://secure.payu.in/_payment
  */
 
-const Razorpay = require('razorpay');
 const crypto = require('crypto');
 const {
   queryDocs,
@@ -13,64 +14,83 @@ const {
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate, emitOrderCreated } = require('../socket');
 
-const getRazorpayInstance = () => {
-  const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_placeholder';
-  const key_secret = process.env.RAZORPAY_KEY_SECRET || 'rzp_secret_placeholder';
-  return new Razorpay({ key_id, key_secret });
-};
+const PAYU_KEY  = process.env.PAYU_MERCHANT_KEY  || 'mv5iBR';
+const PAYU_SALT = process.env.PAYU_MERCHANT_SALT || 'zfjyRbqXallwBDnRVXBVDIJGnM2sKmK';
+const PAYU_URL  = process.env.PAYU_BASE_URL       || 'https://test.payu.in';
+
+/**
+ * Compute PayU forward hash:
+ * SHA512(key|txnid|amount|productinfo|firstname|email|||||||||||salt)
+ */
+function computePayUHash({ txnid, amount, productinfo, firstname, email }) {
+  const str = `${PAYU_KEY}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${PAYU_SALT}`;
+  return crypto.createHash('sha512').update(str).digest('hex');
+}
+
+/**
+ * Compute PayU reverse hash for response verification:
+ * SHA512(salt|status|||||||||||email|firstname|productinfo|amount|txnid|key)
+ */
+function computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status }) {
+  const str = `${PAYU_SALT}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${PAYU_KEY}`;
+  return crypto.createHash('sha512').update(str).digest('hex');
+}
 
 /**
  * POST /api/payment/create-order
- * Body: { amount }
+ * Body: { amount, firstname, email, phone }
+ * Returns PayU payment params + hash for the frontend to POST to PayU
  */
-const createRazorpayOrder = async (req, res, next) => {
+const createPayUOrder = async (req, res, next) => {
   try {
-    const { amount } = req.body;
-    if (!amount || amount <= 0) {
+    const {
+      amount,
+      firstname = 'Customer',
+      email = 'customer@teffes.com',
+      phone = '9999999999',
+    } = req.body;
+
+    if (!amount || Number(amount) <= 0) {
       return res.status(400).json({ success: false, message: 'Valid amount required' });
     }
 
-    const amountInPaise = Math.round(amount * 100);
-    const key_id = process.env.RAZORPAY_KEY_ID || 'rzp_test_default';
-    const key_secret = process.env.RAZORPAY_KEY_SECRET || 'default_secret';
+    const txnid       = `TEF${Date.now()}`;
+    const amountStr   = Number(amount).toFixed(2);
+    const productinfo = "TeFFe's Fresh Order";
+    const hash        = computePayUHash({ txnid, amount: amountStr, productinfo, firstname, email });
 
-    let razorpayOrder;
-    let isLiveOrTestWorking = false;
+    // Pre-calculate mobile SDK static hashes required by PayU Checkout Pro
+    const paymentRelatedDetailsHash = crypto
+      .createHash('sha512')
+      .update(`${PAYU_KEY}|payment_related_details_for_mobile_sdk|default|${PAYU_SALT}`)
+      .digest('hex');
 
-    if (process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET && !process.env.RAZORPAY_KEY_ID.includes('placeholder')) {
-      try {
-        const instance = getRazorpayInstance();
-        razorpayOrder = await instance.orders.create({
-          amount: amountInPaise,
-          currency: 'INR',
-          receipt: `rcpt_${Date.now()}`,
-        });
-        isLiveOrTestWorking = true;
-      } catch (err) {
-        console.warn('[Razorpay] Live instance failed, falling back to mock simulator:', err.message);
-      }
-    }
+    const vasForMobileSdkHash = crypto
+      .createHash('sha512')
+      .update(`${PAYU_KEY}|vas_for_mobile_sdk|default|${PAYU_SALT}`)
+      .digest('hex');
 
-    if (!isLiveOrTestWorking) {
-      razorpayOrder = {
-        id: `order_mock_${Date.now()}`,
-        entity: 'order',
-        amount: amountInPaise,
-        amount_paid: 0,
-        amount_due: amountInPaise,
-        currency: 'INR',
-        receipt: `rcpt_${Date.now()}`,
-        status: 'created',
-        attempts: 0,
-        created_at: Math.floor(Date.now() / 1000),
-      };
-    }
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      order: razorpayOrder,
-      keyId: key_id,
-      mockMode: !isLiveOrTestWorking,
+      payuParams: {
+        key:         PAYU_KEY,
+        txnid,
+        amount:      amountStr,
+        productinfo,
+        firstname,
+        email,
+        phone,
+        surl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/payment/success`,
+        furl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/payment/failure`,
+        hash,
+        hashes: {
+          payment: hash,
+          payment_related_details_for_mobile_sdk: paymentRelatedDetailsHash,
+          vas_for_mobile_sdk: vasForMobileSdkHash,
+        },
+      },
+      payuUrl: `${PAYU_URL}/_payment`,
+      keyId:   PAYU_KEY, // Legacy alias
     });
   } catch (error) {
     next(error);
@@ -79,28 +99,30 @@ const createRazorpayOrder = async (req, res, next) => {
 
 /**
  * POST /api/payment/verify-payment
- * Body: { razorpay_order_id, razorpay_payment_id, razorpay_signature }
+ * Body: { txnid, amount, productinfo, firstname, email, status, hash }
  */
-const verifyRazorpayPayment = async (req, res, next) => {
+const verifyPayUPayment = async (req, res, next) => {
   try {
-    const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = req.body;
-    const secret = process.env.RAZORPAY_KEY_SECRET;
+    const { txnid, amount, productinfo, firstname, email, status, hash: receivedHash } = req.body;
 
-    if (secret && razorpay_signature) {
-      const generatedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${razorpay_order_id}|${razorpay_payment_id}`)
-        .digest('hex');
-
-      if (generatedSignature !== razorpay_signature) {
-        return res.status(400).json({ success: false, message: 'Invalid payment signature' });
-      }
+    if (!receivedHash) {
+      return res.status(400).json({ success: false, message: 'Missing payment hash' });
     }
 
-    res.status(200).json({
+    const expectedHash = computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status });
+
+    if (expectedHash !== receivedHash) {
+      return res.status(400).json({ success: false, message: 'Invalid payment signature' });
+    }
+
+    if (status !== 'success') {
+      return res.status(400).json({ success: false, message: `Payment ${status}` });
+    }
+
+    return res.status(200).json({
       success: true,
       message: 'Payment verified successfully',
-      paymentId: razorpay_payment_id,
+      paymentId: txnid,
     });
   } catch (error) {
     next(error);
@@ -109,103 +131,72 @@ const verifyRazorpayPayment = async (req, res, next) => {
 
 /**
  * POST /api/payment/webhook
- * Razorpay Webhook Listener for asynchronous payment reconciliation
+ * PayU posts payment result as form data (application/x-www-form-urlencoded)
  */
-const handleRazorpayWebhook = async (req, res, next) => {
+const handlePayUWebhook = async (req, res, next) => {
   try {
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
-    const signature = req.headers['x-razorpay-signature'];
+    const {
+      txnid, amount, productinfo, firstname, email,
+      status, hash: receivedHash, mihpayid,
+    } = req.body || {};
 
-    if (webhookSecret) {
-      if (!signature) {
-        console.warn('[Razorpay Webhook] Missing x-razorpay-signature header');
-        return res.status(400).json({ success: false, message: 'Missing webhook signature' });
-      }
-
-      const bodyData = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
-      const expectedSignature = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(bodyData)
-        .digest('hex');
-
-      if (expectedSignature !== signature) {
-        console.warn('[Razorpay Webhook] Invalid webhook signature');
-        return res.status(400).json({ success: false, message: 'Invalid webhook signature' });
+    if (receivedHash) {
+      const expectedHash = computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status });
+      if (expectedHash !== receivedHash) {
+        console.warn('[PayU Webhook] Invalid hash, ignoring');
+        return res.status(200).json({ status: 'ok' });
       }
     }
 
-    const { event, payload } = req.body || {};
-    console.log(`[Razorpay Webhook] Processing event: ${event}`);
+    console.log(`[PayU Webhook] txnid=${txnid} status=${status}`);
 
-    if (event === 'order.paid' || event === 'payment.captured') {
-      const paymentEntity = payload?.payment?.entity || {};
-      const orderEntity = payload?.order?.entity || {};
-
-      const razorpayOrderId = paymentEntity.order_id || orderEntity.id;
-      const razorpayPaymentId = paymentEntity.id;
-
-      if (!razorpayOrderId && !razorpayPaymentId) {
-        return res.status(200).json({ status: 'ok', message: 'No order identifier found' });
-      }
-
-      // Find order in Firestore matching razorpayOrderId or razorpayPaymentId
+    if (status === 'success') {
       let matchingOrders = [];
-      if (razorpayOrderId) {
+      if (txnid) {
         matchingOrders = await queryDocs('orders', (ref) =>
-          ref.where('razorpayOrderId', '==', razorpayOrderId).limit(1)
+          ref.where('transactionId', '==', txnid).limit(1)
         );
       }
-      if (matchingOrders.length === 0 && razorpayPaymentId) {
+      if (matchingOrders.length === 0 && mihpayid) {
         matchingOrders = await queryDocs('orders', (ref) =>
-          ref.where('razorpayPaymentId', '==', razorpayPaymentId).limit(1)
+          ref.where('payuPaymentId', '==', mihpayid).limit(1)
         );
       }
 
       const order = matchingOrders[0] || null;
-
       if (order) {
         const docId = order.orderId || order.id;
         const updates = {
           paymentStatus: 'Paid',
+          payuPaymentId: mihpayid || txnid,
+          transactionId: txnid,
           updatedAt: new Date().toISOString(),
         };
-
-        if (razorpayPaymentId) {
-          updates.razorpayPaymentId = razorpayPaymentId;
-        }
-
         if (order.status === 'Draft' || order.status === 'PendingPayment' || !order.status) {
           updates.status = 'Pending';
         }
-
         await updateDoc('orders', docId, updates);
         const updatedOrder = { ...order, ...updates };
-
-        console.log(`[Razorpay Webhook] Successfully reconciled Order #${docId} as Paid via Firestore`);
-
         emitOrderStatusUpdate(docId, updatedOrder);
         emitOrderCreated(updatedOrder);
 
         if (order.customer?.userId) {
           notificationService.sendToUser(order.customer.userId, {
             title: 'Payment Received',
-            body: `Your payment for order #${docId} was confirmed. Order preparation is underway!`,
+            body: `Your payment for order #${docId} was confirmed. Preparation is underway!`,
             data: {
               notificationType: 'ORDER_STATUS',
               orderId: docId,
               status: updatedOrder.status,
               clickAction: `/dashboard?orderId=${docId}`,
             },
-          }).catch((err) => console.warn('[FCM] Webhook order push error:', err.message));
+          }).catch((err) => console.warn('[FCM] PayU Webhook push error:', err.message));
         }
       }
-    } else if (event === 'payment.failed') {
-      const paymentEntity = payload?.payment?.entity || {};
-      const razorpayOrderId = paymentEntity.order_id;
-
-      if (razorpayOrderId) {
+    } else if (status === 'failure' || status === 'failed') {
+      if (txnid) {
         const matchingOrders = await queryDocs('orders', (ref) =>
-          ref.where('razorpayOrderId', '==', razorpayOrderId).limit(1)
+          ref.where('transactionId', '==', txnid).limit(1)
         );
         const order = matchingOrders[0] || null;
         if (order && order.paymentStatus !== 'Paid') {
@@ -221,13 +212,52 @@ const handleRazorpayWebhook = async (req, res, next) => {
 
     res.status(200).json({ status: 'ok', received: true });
   } catch (error) {
-    console.error('[Razorpay Webhook] Error processing webhook:', error);
+    console.error('[PayU Webhook] Error:', error);
     res.status(200).json({ status: 'error', message: error.message });
   }
 };
 
+/**
+ * POST /api/payment/generate-hash
+ * Used by mobile SDKs (e.g. Flutter PayUCheckoutPro) to compute on-demand hashes
+ */
+const generatePayUHash = async (req, res, next) => {
+  try {
+    const { hashName, hashString, postSalt } = req.body;
+    console.log(`[PayU Hash] requested hashName="${hashName}", hashString="${hashString}", postSalt="${postSalt}"`);
+
+    let hash = '';
+    if (hashString) {
+      const toHash = hashString + (postSalt ? (PAYU_SALT + postSalt) : PAYU_SALT);
+      hash = crypto.createHash('sha512').update(toHash).digest('hex');
+    } else if (hashName === 'payment_related_details_for_mobile_sdk') {
+      const toHash = `${PAYU_KEY}|payment_related_details_for_mobile_sdk|default|${PAYU_SALT}`;
+      hash = crypto.createHash('sha512').update(toHash).digest('hex');
+    } else if (hashName === 'vas_for_mobile_sdk') {
+      const toHash = `${PAYU_KEY}|vas_for_mobile_sdk|default|${PAYU_SALT}`;
+      hash = crypto.createHash('sha512').update(toHash).digest('hex');
+    } else {
+      return res.status(400).json({ success: false, message: 'hashString is required' });
+    }
+
+    console.log(`[PayU Hash] generated for "${hashName}": ${hash}`);
+    return res.status(200).json({
+      success: true,
+      hashName,
+      hash,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
-  createRazorpayOrder,
-  verifyRazorpayPayment,
-  handleRazorpayWebhook,
+  createPayUOrder,
+  verifyPayUPayment,
+  handlePayUWebhook,
+  generatePayUHash,
+  // Legacy aliases so routes/other files don't need changing
+  createRazorpayOrder: createPayUOrder,
+  verifyRazorpayPayment: verifyPayUPayment,
+  handleRazorpayWebhook: handlePayUWebhook,
 };

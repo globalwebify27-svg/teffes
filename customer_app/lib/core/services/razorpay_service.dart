@@ -1,104 +1,140 @@
 import 'package:flutter/foundation.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
+import 'package:payu_checkoutpro_flutter/payu_checkoutpro_flutter.dart';
+import 'package:payu_checkoutpro_flutter/PayUConstantKeys.dart';
+import '../constants/api_endpoints.dart';
 import '../constants/app_config.dart';
+import '../network/api_client.dart';
 
-typedef OnPaymentSuccess = void Function(PaymentSuccessResponse response);
-typedef OnPaymentError = void Function(PaymentFailureResponse response);
-typedef OnExternalWallet = void Function(ExternalWalletResponse response);
+typedef OnPayUSuccess = void Function(Map<dynamic, dynamic> response);
+typedef OnPayUFailure = void Function(Map<dynamic, dynamic> response);
+typedef OnPayUCancel = void Function(Map<dynamic, dynamic>? response);
 
-class RazorpayService {
-  late Razorpay _razorpay;
-  OnPaymentSuccess? onSuccess;
-  OnPaymentError? onError;
-  OnExternalWallet? onExternalWallet;
+class PayUService implements PayUCheckoutProProtocol {
+  final ApiClient _api = ApiClient();
+  late final PayUCheckoutProFlutter _checkoutPro;
 
-  RazorpayService({
+  OnPayUSuccess? onSuccess;
+  OnPayUFailure? onFailure;
+  OnPayUCancel? onCancel;
+
+  PayUService({
     this.onSuccess,
-    this.onError,
-    this.onExternalWallet,
+    this.onFailure,
+    this.onCancel,
   }) {
-    _init();
+    _checkoutPro = PayUCheckoutProFlutter(this);
   }
 
-  void _init() {
-    _razorpay = Razorpay();
-    _razorpay.on(Razorpay.EVENT_PAYMENT_SUCCESS, _handlePaymentSuccess);
-    _razorpay.on(Razorpay.EVENT_PAYMENT_ERROR, _handlePaymentError);
-    _razorpay.on(Razorpay.EVENT_EXTERNAL_WALLET, _handleExternalWallet);
-  }
-
-  void _handlePaymentSuccess(PaymentSuccessResponse response) {
-    debugPrint('[Razorpay] Payment Success: ${response.paymentId}');
-    onSuccess?.call(response);
-  }
-
-  void _handlePaymentError(PaymentFailureResponse response) {
-    debugPrint('[Razorpay] Payment Error: ${response.code} - ${response.message}');
-    onError?.call(response);
-  }
-
-  void _handleExternalWallet(ExternalWalletResponse response) {
-    debugPrint('[Razorpay] External Wallet: ${response.walletName}');
-    onExternalWallet?.call(response);
-  }
-
-  /// Launch Razorpay Native Checkout Dialog
+  /// Launch PayU Checkout Pro Native Dialog
+  /// [payuParams] comes directly from /api/payment/create-order backend response
   void openCheckout({
-    required double amount,
-    required String orderId,
-    String? keyId,
-    String? contact,
-    String? email,
-    String description = "Fresh Order Payment",
+    required Map<String, dynamic> payuParams,
   }) {
-    final activeKey = (keyId != null && keyId.isNotEmpty && !keyId.contains('placeholder'))
-        ? keyId
-        : AppConfig.razorpayKeyId;
+    final key = payuParams['key'] ?? AppConfig.payuMerchantKey;
+    final email = payuParams['email'] ?? 'customer@teffes.com';
+    final hashes = payuParams['hashes'] is Map ? Map<String, dynamic>.from(payuParams['hashes']) : <String, dynamic>{};
+    final paymentHash = payuParams['hash'] ?? hashes['payment'] ?? '';
+    final detailsHash = hashes['payment_related_details_for_mobile_sdk'] ?? '';
+    final vasHash = hashes['vas_for_mobile_sdk'] ?? '';
 
-    // Clean contact phone number (10-digit numeric format expected by Razorpay)
-    String cleanContact = (contact ?? '').replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanContact.length > 10 && cleanContact.startsWith('91')) {
-      cleanContact = cleanContact.substring(2);
-    }
+    final Map<String, dynamic> additionalParams = {
+      if (paymentHash.toString().isNotEmpty) 'payment': paymentHash,
+      if (detailsHash.toString().isNotEmpty) 'payment_related_details_for_mobile_sdk': detailsHash,
+      if (vasHash.toString().isNotEmpty) 'vas_for_mobile_sdk': vasHash,
+    };
 
-    final options = {
-      'key': activeKey,
-      'amount': (amount * 100).toInt(), // amount in paise
-      'name': AppConfig.appName,
-      'description': description,
-      'image': 'https://teffes.onrender.com/uploads/teffes-logo-maroon.png',
-      'order_id': (orderId.isNotEmpty &&
-              orderId.startsWith('order_') &&
-              !orderId.startsWith('order_rzp_') &&
-              !orderId.startsWith('order_dev_') &&
-              !orderId.startsWith('order_sim_'))
-          ? orderId
-          : null,
-      'prefill': {
-        if (cleanContact.isNotEmpty) 'contact': cleanContact,
-        'email': (email != null && email.isNotEmpty) ? email : 'customer@teffes.com',
-      },
-      'theme': {
-        'color': '#941717', // Teffe's Primary Maroon
-      },
-      'external': {
-        'wallets': ['paytm'],
-      }
+    final Map<String, dynamic> paymentParams = {
+      PayUPaymentParamKey.key: key,
+      PayUPaymentParamKey.transactionId: payuParams['txnid'] ?? '',
+      PayUPaymentParamKey.amount: payuParams['amount']?.toString() ?? '0.00',
+      PayUPaymentParamKey.productInfo: payuParams['productinfo'] ?? "TeFFe's Fresh Order",
+      PayUPaymentParamKey.firstName: payuParams['firstname'] ?? 'Customer',
+      PayUPaymentParamKey.email: email,
+      PayUPaymentParamKey.phone: payuParams['phone'] ?? '9999999999',
+      PayUPaymentParamKey.android_surl: payuParams['surl'] ?? '',
+      PayUPaymentParamKey.android_furl: payuParams['furl'] ?? '',
+      PayUPaymentParamKey.ios_surl: payuParams['surl'] ?? '',
+      PayUPaymentParamKey.ios_furl: payuParams['furl'] ?? '',
+      PayUPaymentParamKey.environment: AppConfig.payuEnvironment == 'production' ? '0' : '1',
+      PayUPaymentParamKey.userCredential: '$key:default',
+      if (additionalParams.isNotEmpty) PayUPaymentParamKey.additionalParam: additionalParams,
+    };
+
+    final Map<String, dynamic> checkoutConfig = {
+      PayUCheckoutProConfigKeys.primaryColor: '#800020',
+      PayUCheckoutProConfigKeys.secondaryColor: '#ffffff',
+      PayUCheckoutProConfigKeys.merchantName: "TeFFe's",
+      PayUCheckoutProConfigKeys.merchantLogo: 'https://teffes.onrender.com/uploads/teffes-logo-maroon.png',
+      PayUCheckoutProConfigKeys.showExitConfirmationOnCheckoutScreen: true,
+      PayUCheckoutProConfigKeys.showExitConfirmationOnPaymentScreen: true,
     };
 
     try {
-      _razorpay.open(options);
+      debugPrint('[PayU] Launching native checkout with params: $paymentParams');
+      _checkoutPro.openCheckoutScreen(
+        payUPaymentParams: paymentParams,
+        payUCheckoutProConfig: checkoutConfig,
+      );
     } catch (e) {
-      debugPrint('[Razorpay] Error opening checkout: $e');
-      onError?.call(PaymentFailureResponse(
-        Razorpay.UNKNOWN_ERROR,
-        e.toString(),
-        null,
-      ));
+      debugPrint('[PayU] Error opening checkout: $e');
+      onFailure?.call({'error': e.toString(), 'code': -1});
     }
   }
 
-  void dispose() {
-    _razorpay.clear();
+  // ── PayUCheckoutProProtocol Implementation ─────────────────────────────
+
+  @override
+  void generateHash(Map response) async {
+    final hashName = response[PayUHashConstantsKeys.hashName]?.toString() ?? '';
+    final hashString = response[PayUHashConstantsKeys.hashString]?.toString() ?? '';
+    final postSalt = response[PayUHashConstantsKeys.postSalt]?.toString() ?? '';
+
+    debugPrint('[PayU generateHash] callback requested: hashName=$hashName, hashString=$hashString, postSalt=$postSalt');
+
+    try {
+      final res = await _api.post(ApiEndpoints.generatePayUHash, data: {
+        'hashName': hashName,
+        'hashString': hashString,
+        'postSalt': postSalt,
+      });
+
+      if (res.data != null && res.data['hash'] != null) {
+        final hash = res.data['hash'].toString();
+        debugPrint('[PayU generateHash] passing computed hash back to PayU SDK: {$hashName: $hash}');
+        _checkoutPro.hashGenerated(hash: {hashName: hash});
+      } else {
+        debugPrint('[PayU generateHash] Warning: Backend returned null or empty hash');
+      }
+    } catch (e) {
+      debugPrint('[PayU] Error generating hash from backend: $e');
+    }
+  }
+
+  @override
+  void onPaymentSuccess(dynamic response) {
+    debugPrint('[PayU] Payment Success: $response');
+    onSuccess?.call(response is Map ? response.cast<dynamic, dynamic>() : {'response': response});
+  }
+
+  @override
+  void onPaymentFailure(dynamic response) {
+    debugPrint('[PayU] Payment Failure: $response');
+    onFailure?.call(response is Map ? response.cast<dynamic, dynamic>() : {'response': response});
+  }
+
+  @override
+  void onPaymentCancel(Map? response) {
+    debugPrint('[PayU] Payment Cancelled: $response');
+    onCancel?.call(response?.cast<dynamic, dynamic>());
+  }
+
+  @override
+  void onError(Map? response) {
+    debugPrint('[PayU] Error: $response');
+    onFailure?.call(response?.cast<dynamic, dynamic>() ?? {'error': 'Unknown PayU error'});
   }
 }
+
+// ── Legacy alias so any remaining imports compile seamlessly ───────────────
+// ignore_for_file: unused_element
+typedef RazorpayService = PayUService;

@@ -11,7 +11,7 @@ import '../../providers/cart_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../widgets/common/quantity_stepper.dart';
 import '../orders/order_tracking_screen.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
+import '../checkout/payment_proceed_screen.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/services/razorpay_service.dart';
 
@@ -33,7 +33,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   final TextEditingController _customTipController = TextEditingController();
   final TextEditingController _pickupInstructionController = TextEditingController();
   String _fulfillmentType = 'delivery'; // 'delivery' or 'pickup'
-  String _selectedPaymentMethod = 'cod'; // 'cod' is active; 'razorpay' & 'wallet' are temporarily disabled per client instructions
+  String _selectedPaymentMethod = 'payu'; // 'payu', 'wallet', 'cod'
   String _selectedSlot = '90 Min Delivery'; // 'Express Delivery (60 min)', '90 Min Delivery', 'Custom Delivery'
   String _selectedCustomSlot = '';
   List<ProductModel> _crossSellItems = [];
@@ -44,16 +44,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   String _deliveryInstruction = '';
   bool _isCouponsExpanded = false;
 
-  late RazorpayService _razorpayService;
-  String? _pendingRazorpayOrderId;
-  double _pendingRazorpayAmount = 0.0;
-  double _pendingExpressFee = 0.0;
-  String _pendingShippingAddress = '';
-  String _pendingDeliverySlot = '';
-  String _pendingStoreId = 'S001';
-  String _pendingStoreName = '';
-  String _pendingInstruction = '';
-  bool _pendingIsPickup = false;
+  late final PayUService _payUService;
+  Map<String, dynamic>? _pendingPayUParams;
+  Map<String, dynamic>? _pendingPayUOrderDetails;
 
   List<StoreModel> _stores = [];
   String _selectedStoreId = 'S001';
@@ -153,10 +146,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    _razorpayService = RazorpayService(
-      onSuccess: _onRazorpaySuccess,
-      onError: _onRazorpayError,
-      onExternalWallet: _onRazorpayWallet,
+    _payUService = PayUService(
+      onSuccess: _onPayUSuccess,
+      onFailure: _onPayUFailure,
+      onCancel: _onPayUCancel,
     );
     _initDefaultStores();
     _crossSellItems = _defaultCrossSellItems;
@@ -310,226 +303,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
   @override
   void dispose() {
-    _razorpayService.dispose();
     _couponController.dispose();
     _customTipController.dispose();
     _pickupInstructionController.dispose();
     super.dispose();
-  }
-
-  void _onRazorpaySuccess(PaymentSuccessResponse response) async {
-    debugPrint('[CartCheckout] Razorpay success paymentId: ${response.paymentId}');
-    await _finalizeRazorpayOrderAndNavigate(
-      paymentId: response.paymentId ?? 'pay_${DateTime.now().millisecondsSinceEpoch}',
-      razorpayOrderId: response.orderId ?? _pendingRazorpayOrderId ?? '',
-      signature: response.signature,
-    );
-  }
-
-  void _onRazorpayError(PaymentFailureResponse response) {
-    if (mounted) {
-      setState(() => _isPlacingOrder = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Payment cancelled or failed: ${response.message ?? "Try again"}'),
-          backgroundColor: AppColors.error,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  void _onRazorpayWallet(ExternalWalletResponse response) {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Redirecting to external wallet: ${response.walletName}'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-  }
-
-  Future<void> _processRazorpayPayment({
-    required double amount,
-    required String shippingAddress,
-    required String deliverySlot,
-    double expressFee = 0.0,
-    required bool isPickup,
-    required String storeId,
-    required String storeName,
-    required String instruction,
-    required AuthProvider auth,
-  }) async {
-    setState(() => _isPlacingOrder = true);
-
-    _pendingRazorpayAmount = amount;
-    _pendingExpressFee = expressFee;
-    _pendingShippingAddress = shippingAddress;
-    _pendingDeliverySlot = deliverySlot;
-    _pendingIsPickup = isPickup;
-    _pendingStoreId = storeId;
-    _pendingStoreName = storeName;
-    _pendingInstruction = instruction;
-
-    try {
-      final api = ApiClient();
-      String razorpayOrderId = '';
-      String? razorpayKeyId;
-
-      try {
-        final res = await api.post(ApiEndpoints.createRazorpayOrder, data: {
-          'amount': amount,
-        });
-        if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
-          final id = res.data['order']['id']?.toString() ?? '';
-          if (id.startsWith('order_') &&
-              !id.startsWith('order_dev_') &&
-              !id.startsWith('order_rzp_') &&
-              !id.startsWith('order_sim_')) {
-            razorpayOrderId = id;
-          }
-          razorpayKeyId = res.data['keyId'];
-        }
-      } catch (e) {
-        debugPrint('Razorpay create-order error: $e');
-      }
-
-      _pendingRazorpayOrderId = razorpayOrderId.isNotEmpty ? razorpayOrderId : 'order_rzp_${DateTime.now().millisecondsSinceEpoch}';
-
-      _razorpayService.openCheckout(
-        amount: amount,
-        orderId: razorpayOrderId,
-        keyId: (razorpayKeyId != null && razorpayKeyId.isNotEmpty && !razorpayKeyId.contains('placeholder'))
-            ? razorpayKeyId
-            : AppConfig.razorpayKeyId,
-        contact: auth.user?.phone,
-        email: auth.user?.email,
-      );
-    } catch (e) {
-      debugPrint('Error starting Razorpay checkout: $e');
-      if (mounted) {
-        setState(() => _isPlacingOrder = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error launching payment gateway: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _finalizeRazorpayOrderAndNavigate({
-    required String paymentId,
-    required String razorpayOrderId,
-    String? signature,
-  }) async {
-    final auth = context.read<AuthProvider>();
-    final cart = context.read<CartProvider>();
-    final location = context.read<LocationProvider>();
-
-    try {
-      final api = ApiClient();
-      try {
-        await api.post(ApiEndpoints.verifyRazorpayPayment, data: {
-          'razorpay_order_id': razorpayOrderId,
-          'razorpay_payment_id': paymentId,
-          if (signature != null) 'razorpay_signature': signature,
-        });
-      } catch (_) {}
-
-      final newOrderId = 'TEF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-      final orderPayload = {
-        'orderId': newOrderId,
-        'items': cart.items.values.map((i) => {
-          'productId': i.product.id,
-          'name': i.product.name,
-          'price': i.product.price,
-          'quantity': i.quantity,
-          'weight': i.selectedWeight,
-          'image': i.product.image,
-        }).toList(),
-        'subtotal': cart.subtotal,
-        'deliveryFee': _pendingIsPickup ? 0.0 : cart.deliveryFee,
-        'discount': cart.couponDiscount,
-        'couponCode': cart.appliedCoupon,
-        'discountAmount': cart.couponDiscount,
-        'amount': _pendingRazorpayAmount,
-        'totalAmount': _pendingRazorpayAmount,
-        'fulfillmentType': _pendingIsPickup ? 'pickup' : _fulfillmentType,
-        'pickupMode': _pendingIsPickup,
-        'paymentMethod': 'Online Payment (Razorpay)',
-        'paymentStatus': 'Paid',
-        'razorpayOrderId': razorpayOrderId,
-        'razorpayPaymentId': paymentId,
-        'shippingAddress': _pendingShippingAddress.isNotEmpty ? _pendingShippingAddress : location.activeAddressString,
-        'deliverySlot': _pendingIsPickup ? 'Store Pickup (Counter Takeaway)' : _pendingDeliverySlot,
-        'expressFee': _pendingExpressFee,
-        'storeId': _pendingStoreId,
-        'storeName': _pendingStoreName,
-        'deliveryInstruction': _pendingInstruction,
-      };
-
-      try {
-        final res = await api.post(ApiEndpoints.createOrder, data: orderPayload);
-        if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
-          final serverOrder = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
-          auth.addOrder(serverOrder);
-          cart.clearCart();
-          if (mounted) {
-            Navigator.of(context).pushAndRemoveUntil(
-              SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
-              (route) => route.isFirst,
-            );
-          }
-          return;
-        } else if (res.data != null && res.data['success'] == false) {
-          final msg = res.data['message']?.toString() ?? 'Unable to complete order';
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text(msg), backgroundColor: Colors.red.shade800),
-            );
-          }
-          return;
-        }
-      } catch (e) {
-        debugPrint('Create order post error: $e');
-      }
-
-      final createdOrder = OrderModel(
-        id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
-        orderId: newOrderId,
-        status: 'Pending',
-        amount: _pendingRazorpayAmount,
-        placedAt: 'Just Now',
-        items: cart.items.values.map((i) => {
-          'name': i.product.name,
-          'quantity': i.quantity,
-          'price': i.product.price,
-          'weight': i.selectedWeight,
-        }).toList(),
-        deliveryAddress: _pendingShippingAddress,
-        paymentMethod: 'Online Payment (Razorpay)',
-        paymentStatus: 'Paid',
-        storeName: _pendingStoreName,
-        fulfillmentType: _pendingIsPickup ? 'pickup' : _fulfillmentType,
-        pickupMode: _pendingIsPickup,
-        targetDeliveryTime: DateTime.now().add(const Duration(minutes: 35)).toIso8601String(),
-        prepTimeMinutes: 25,
-        remainingTransitMinutes: _pendingIsPickup ? 0 : 12,
-        etaStage: 'PREPARING',
-      );
-      auth.addOrder(createdOrder);
-      cart.clearCart();
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          SmoothPageRoute(page: OrderTrackingScreen(orderId: createdOrder.orderId)),
-          (route) => route.isFirst,
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isPlacingOrder = false);
-      }
-    }
   }
 
   void _showAddAddressDialog(BuildContext context, LocationProvider location) {
@@ -952,18 +729,19 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         : location.activeAddressString;
     final activeInstruction = isPickup ? _pickupInstructionController.text.trim() : _deliveryInstruction;
 
-    // 1. If Razorpay is selected, trigger Razorpay native checkout directly
-    if (_selectedPaymentMethod == 'razorpay') {
-      await _processRazorpayPayment(
-        amount: effectiveGrandTotal,
+    // 1. If PayU is selected, directly launch PayU Checkout Pro (skip intermediate screen)
+    if (_selectedPaymentMethod == 'payu') {
+      _startDirectPayUCheckout(
+        payableAmount: effectiveGrandTotal,
         shippingAddress: shippingAddress,
-        deliverySlot: resolvedDeliverySlot,
-        expressFee: expressFee,
-        isPickup: isPickup,
+        resolvedDeliverySlot: resolvedDeliverySlot,
         storeId: storeId,
         storeName: storeName,
-        instruction: activeInstruction,
-        auth: auth,
+        activeInstruction: activeInstruction,
+        isPickup: isPickup,
+        expressFee: expressFee,
+        effectiveDeliveryFee: effectiveDeliveryFee,
+        effectiveTip: effectiveTip,
       );
       return;
     }
@@ -977,7 +755,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
           builder: (ctx) => AlertDialog(
             title: const Text('Insufficient Wallet Balance', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 16)),
             content: Text(
-              'Your Teffe\'s Cash balance is ${CurrencyFormatter.format(userBalance)}, but this order requires ${CurrencyFormatter.format(effectiveGrandTotal)}. Please choose Razorpay or Pay at Counter.',
+              'Your Teffe\'s Cash balance is ${CurrencyFormatter.format(userBalance)}, but this order requires ${CurrencyFormatter.format(effectiveGrandTotal)}. Please choose PayU or Pay at Counter.',
               style: const TextStyle(fontSize: 13),
             ),
             actions: [
@@ -989,9 +767,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon),
                 onPressed: () {
                   Navigator.pop(ctx);
-                  setState(() => _selectedPaymentMethod = 'razorpay');
+                  setState(() => _selectedPaymentMethod = 'payu');
                 },
-                child: const Text('Switch to Razorpay', style: TextStyle(color: Colors.white)),
+                child: const Text('Switch to PayU', style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -1115,6 +893,223 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       }
     } finally {
       if (mounted) setState(() => _isPlacingOrder = false);
+    }
+  }
+
+  void _onPayUSuccess(Map<dynamic, dynamic> response) async {
+    debugPrint('[PayU Direct] Success: $response');
+    final txnid = response['payuResponse']?['txnid']
+        ?? response['txnid']
+        ?? _pendingPayUParams?['txnid']
+        ?? 'pay_${DateTime.now().millisecondsSinceEpoch}';
+    final mihpayid = response['payuResponse']?['mihpayid'] ?? response['mihpayid'] ?? txnid;
+
+    await _finalizePayUOrder(
+      paymentId: mihpayid.toString(),
+      transactionId: txnid.toString(),
+    );
+  }
+
+  void _onPayUFailure(Map<dynamic, dynamic> response) {
+    debugPrint('[PayU Direct] Failure: $response');
+    if (mounted) {
+      setState(() => _isPlacingOrder = false);
+      final msg = response['errorMsg'] ?? response['message'] ?? response['error'] ?? "Payment failed or cancelled";
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Payment failed: $msg'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _onPayUCancel(Map<dynamic, dynamic>? response) {
+    debugPrint('[PayU Direct] Cancel: $response');
+    if (mounted) {
+      setState(() => _isPlacingOrder = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment cancelled'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  Future<void> _startDirectPayUCheckout({
+    required double payableAmount,
+    required String shippingAddress,
+    required String resolvedDeliverySlot,
+    required String storeId,
+    required String storeName,
+    required String activeInstruction,
+    required bool isPickup,
+    required double expressFee,
+    required double effectiveDeliveryFee,
+    required int effectiveTip,
+  }) async {
+    setState(() => _isPlacingOrder = true);
+    final auth = context.read<AuthProvider>();
+
+    _pendingPayUOrderDetails = {
+      'payableAmount': payableAmount,
+      'shippingAddress': shippingAddress,
+      'resolvedDeliverySlot': resolvedDeliverySlot,
+      'storeId': storeId,
+      'storeName': storeName,
+      'activeInstruction': activeInstruction,
+      'isPickup': isPickup,
+      'expressFee': expressFee,
+      'effectiveDeliveryFee': effectiveDeliveryFee,
+      'effectiveTip': effectiveTip,
+    };
+
+    try {
+      Map<String, dynamic>? payuParams;
+      try {
+        final api = ApiClient();
+        final res = await api.post(ApiEndpoints.createPayUOrder, data: {
+          'amount': payableAmount,
+          'firstname': auth.user?.name ?? 'Customer',
+          'email': auth.user?.email ?? 'customer@teffes.com',
+          'phone': (auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').padLeft(10, '0').substring(
+            ((auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').length - 10).clamp(0, 100),
+          ),
+        });
+
+        if (res.data != null && res.data['success'] == true && res.data['payuParams'] != null) {
+          payuParams = Map<String, dynamic>.from(res.data['payuParams']);
+        }
+      } catch (apiErr) {
+        debugPrint('[PayU Direct] Backend createPayUOrder error: $apiErr');
+      }
+
+      payuParams ??= {
+        'key': AppConfig.payuMerchantKey,
+        'txnid': 'TEF${DateTime.now().millisecondsSinceEpoch}',
+        'amount': payableAmount.toStringAsFixed(2),
+        'productinfo': "TeFFe's Fresh Order",
+        'firstname': auth.user?.name ?? 'Customer',
+        'email': auth.user?.email ?? 'customer@teffes.com',
+        'phone': (auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').padLeft(10, '0').substring(
+          ((auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').length - 10).clamp(0, 100),
+        ),
+        'surl': 'http://localhost:3000/payment/success',
+        'furl': 'http://localhost:3000/payment/failure',
+      };
+
+      _pendingPayUParams = payuParams;
+      _payUService.openCheckout(payuParams: payuParams);
+    } catch (e) {
+      debugPrint('[PayU Direct] Error launching PayU checkout: $e');
+      if (mounted) {
+        setState(() => _isPlacingOrder = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error launching payment gateway: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _finalizePayUOrder({
+    required String paymentId,
+    required String transactionId,
+  }) async {
+    if (!mounted) return;
+    final auth = context.read<AuthProvider>();
+    final cart = context.read<CartProvider>();
+    final location = context.read<LocationProvider>();
+
+    final details = _pendingPayUOrderDetails ?? {};
+    final payableAmount = (details['payableAmount'] as num?)?.toDouble() ?? cart.grandTotal;
+    final shippingAddress = details['shippingAddress']?.toString() ?? location.activeAddressString;
+    final resolvedDeliverySlot = details['resolvedDeliverySlot']?.toString() ?? _selectedSlot;
+    final storeId = details['storeId']?.toString() ?? _selectedStoreId;
+    final storeName = details['storeName']?.toString() ?? (_selectedStore?.name ?? "TeFFe's Store");
+    final activeInstruction = details['activeInstruction']?.toString() ?? _deliveryInstruction;
+    final isPickup = details['isPickup'] == true;
+    final effectiveDeliveryFee = (details['effectiveDeliveryFee'] as num?)?.toDouble() ?? (isPickup ? 0.0 : cart.deliveryFee);
+    final effectiveTip = (details['effectiveTip'] as num?)?.toInt() ?? 0;
+
+    final newOrderId = 'TEF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
+    final orderPayload = {
+      'orderId': newOrderId,
+      'items': cart.items.values.map((i) => {
+        'productId': i.product.id,
+        'name': i.product.name,
+        'price': i.product.price,
+        'quantity': i.quantity,
+        'weight': i.selectedWeight,
+        'image': i.product.image,
+      }).toList(),
+      'subtotal': cart.subtotal,
+      'deliveryFee': effectiveDeliveryFee,
+      'discount': cart.couponDiscount,
+      'couponCode': cart.appliedCoupon,
+      'discountAmount': cart.couponDiscount,
+      'amount': payableAmount,
+      'totalAmount': payableAmount,
+      'fulfillmentType': isPickup ? 'pickup' : _fulfillmentType,
+      'pickupMode': isPickup,
+      'tip': effectiveTip,
+      'paymentMethod': 'Online Payment (PayU)',
+      'paymentStatus': 'Paid',
+      'transactionId': transactionId,
+      'payuPaymentId': paymentId,
+      'shippingAddress': shippingAddress,
+      'deliverySlot': resolvedDeliverySlot,
+      'storeId': storeId,
+      'storeName': storeName,
+      'deliveryInstruction': activeInstruction,
+    };
+
+    try {
+      final api = ApiClient();
+      final res = await api.post(ApiEndpoints.createOrder, data: orderPayload);
+      if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
+        final serverOrder = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
+        auth.addOrder(serverOrder);
+        cart.clearCart();
+        if (mounted) {
+          setState(() => _isPlacingOrder = false);
+          Navigator.of(context).pushReplacement(
+            SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
+          );
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint('[PayU Direct] Server createOrder error: $e');
+    }
+
+    // Fallback local order
+    final createdOrder = OrderModel(
+      id: 'ord-${DateTime.now().millisecondsSinceEpoch}',
+      orderId: newOrderId,
+      status: 'Pending',
+      amount: payableAmount,
+      placedAt: 'Just Now',
+      items: cart.items.values.map((i) => {
+        'name': i.product.name,
+        'quantity': i.quantity,
+        'price': i.product.price,
+        'weight': i.selectedWeight,
+      }).toList(),
+      deliveryAddress: shippingAddress,
+      paymentMethod: 'Online Payment (PayU)',
+      paymentStatus: 'Paid',
+      deliverySlot: resolvedDeliverySlot,
+      storeName: storeName,
+    );
+    auth.addOrder(createdOrder);
+    cart.clearCart();
+    if (mounted) {
+      setState(() => _isPlacingOrder = false);
+      Navigator.of(context).pushReplacement(
+        SmoothPageRoute(page: OrderTrackingScreen(orderId: newOrderId)),
+      );
     }
   }
 
@@ -2361,20 +2356,21 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           isEnabled: true,
                         ),
                         _buildPaymentOption(
-                          'razorpay',
-                          'Online UPI / Card / NetBanking (Razorpay)',
+                          'payu',
+                          'Online UPI / Cards / NetBanking (PayU)',
                           Icons.credit_card_rounded,
-                          badge: 'Temporarily Disabled',
-                          isEnabled: false,
-                          disabledReason: 'Online payment gateway is temporarily disabled by admin. Please select Cash on Delivery.',
+                          badge: 'Recommended',
+                          isEnabled: true,
                         ),
                         _buildPaymentOption(
                           'wallet',
                           "Teffe's Cash Wallet (${CurrencyFormatter.format(auth.user?.walletBalance ?? 0)})",
                           Icons.account_balance_wallet_rounded,
-                          badge: 'Temporarily Disabled',
-                          isEnabled: false,
-                          disabledReason: 'Wallet checkout is temporarily disabled. Please select Cash on Delivery.',
+                          badge: (auth.user?.walletBalance ?? 0) >= effectiveGrandTotal ? 'Available' : 'Low Balance',
+                          isEnabled: (auth.user?.walletBalance ?? 0) >= effectiveGrandTotal,
+                          disabledReason: (auth.user?.walletBalance ?? 0) < effectiveGrandTotal
+                              ? 'Insufficient wallet balance. Please recharge or choose PayU.'
+                              : null,
                         ),
                       ],
                     ),
@@ -2460,7 +2456,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           : Text(
                               !auth.isAuthenticated
                                   ? 'Login to proceed'
-                                  : (_selectedPaymentMethod == 'razorpay'
+                                  : (_selectedPaymentMethod == 'payu'
                                       ? 'Proceed to Pay →'
                                       : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
                               style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),

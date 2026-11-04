@@ -1,6 +1,10 @@
 const { Router } = require('express');
-const { protect } = require('../middlewares/auth');
+const { optionalProtect } = require('../middlewares/auth');
 const {
+  createPayUOrder,
+  verifyPayUPayment,
+  handlePayUWebhook,
+  generatePayUHash,
   createRazorpayOrder,
   verifyRazorpayPayment,
   handleRazorpayWebhook,
@@ -9,12 +13,13 @@ const {
 const router = Router();
 
 // Webhook listener MUST NOT be behind JWT authentication
-router.post('/webhook', handleRazorpayWebhook);
+router.post('/webhook', handlePayUWebhook);
 
-// Protected routes below
-router.use(protect);
+// Payment initiation and hash generation allow both authenticated users & guests
+router.use(optionalProtect);
 
-router.post('/create-order', createRazorpayOrder);
-router.post('/verify-payment', verifyRazorpayPayment);
+router.post('/create-order', createPayUOrder);
+router.post('/verify-payment', verifyPayUPayment);
+router.post('/generate-hash', generatePayUHash);
 
 module.exports = router;

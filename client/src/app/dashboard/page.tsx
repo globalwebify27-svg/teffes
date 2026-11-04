@@ -13,16 +13,21 @@ import { toast } from "@/lib/toast";
 
 type TabKey = "orders" | "support" | "addresses" | "profile" | "policy";
 
-const loadRazorpayScript = (): Promise<boolean> => {
-  return new Promise((resolve) => {
-    if (typeof window === "undefined") return resolve(false);
-    if ((window as any).Razorpay) return resolve(true);
-    const script = document.createElement("script");
-    script.src = "https://checkout.razorpay.com/v1/checkout.js";
-    script.onload = () => resolve(true);
-    script.onerror = () => resolve(false);
-    document.body.appendChild(script);
+// PayU: Submit a hidden form to PayU payment gateway
+const submitPayUForm = (payuParams: Record<string, string>, payuUrl: string) => {
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = payuUrl;
+  form.style.display = 'none';
+  Object.entries(payuParams).forEach(([key, value]) => {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = String(value);
+    form.appendChild(input);
   });
+  document.body.appendChild(form);
+  form.submit();
 };
 
 export default function DashboardPage() {
@@ -81,7 +86,7 @@ export default function DashboardPage() {
 
   const [isAddBalanceModalOpen, setIsAddBalanceModalOpen] = useState(false);
   const [balanceInput, setBalanceInput] = useState("");
-  const [rechargeMethod, setRechargeMethod] = useState<"razorpay" | "instant">("razorpay");
+  const [rechargeMethod, setRechargeMethod] = useState<"payu" | "instant">("payu");
   const [isRecharging, setIsRecharging] = useState(false);
   const [rechargeFeedback, setRechargeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -361,95 +366,26 @@ export default function DashboardPage() {
     setRechargeFeedback(null);
 
     try {
-      if (rechargeMethod === "razorpay") {
-        const rzpRes = await api.post<{ success: boolean; order: any; keyId: string; isSimulation?: boolean }>("/wallet/create-order", {
+      if (rechargeMethod === "payu" || rechargeMethod === "razorpay") {
+        const payuRes = await api.post<{ success: boolean; payuParams: any; payuUrl: string }>("/wallet/create-order", {
           amount: amountNum,
+          firstname: user?.name || name || 'Customer',
+          email: user?.email || email || 'customer@teffes.com',
+          phone: (user?.phone || phone || '9999999999').replace(/\D/g, '').slice(-10),
         });
 
-        // If in simulation mode or without valid key, smoothly top up via instant balance
-        if (rzpRes.data.isSimulation || !rzpRes.data.keyId || rzpRes.data.order?.id?.startsWith("order_wal_dev_")) {
-          const res = await api.post<{ success: boolean; balance: number }>("/wallet/add", {
-            amount: amountNum,
-            description: "Online Wallet Top-up (Sandbox)",
-          });
-          if (res.data.success) {
-            setTeffesCash(res.data.balance);
-            setRechargeFeedback({ type: "success", message: `₹${amountNum} successfully added to your Teffe's Cash!` });
-            setTimeout(() => {
-              closeAddBalanceModal();
-            }, 1200);
-          }
+        if (!payuRes.data.success || !payuRes.data.payuParams) {
+          setRechargeFeedback({ type: "error", message: "Failed to initiate PayU payment" });
           setIsRecharging(false);
           return;
         }
 
-        const loaded = await loadRazorpayScript();
-        if (loaded && (window as any).Razorpay && rzpRes.data.keyId) {
-          let isDismissed = false;
-          const options = {
-            key: rzpRes.data.keyId,
-            amount: rzpRes.data.order.amount,
-            currency: "INR",
-            name: "TeFFe's",
-            description: `Wallet Recharge: ₹${amountNum}`,
-            order_id: rzpRes.data.order.id,
-            handler: async function (response: any) {
-              isDismissed = true;
-              try {
-                const addRes = await api.post<{ success: boolean; balance: number }>("/wallet/verify-topup", {
-                  amount: amountNum,
-                  razorpay_order_id: response.razorpay_order_id || rzpRes.data.order?.id,
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_signature: response.razorpay_signature,
-                });
-                if (addRes.data.success) {
-                  setTeffesCash(addRes.data.balance);
-                  setRechargeFeedback({ type: "success", message: `₹${amountNum} successfully added to your Teffe's Cash!` });
-                  setTimeout(() => {
-                    closeAddBalanceModal();
-                  }, 1200);
-                }
-              } catch (err: any) {
-                setRechargeFeedback({ type: "error", message: err.response?.data?.message || "Failed to update wallet balance" });
-              } finally {
-                setIsRecharging(false);
-              }
-            },
-            prefill: {
-              name: user?.name || name || "Valued Customer",
-              contact: user?.phone || phone || "+91 9999999999",
-              email: user?.email || email || "customer@teffes.com",
-            },
-            theme: {
-              color: "#91000a",
-            },
-            modal: {
-              ondismiss: function () {
-                isDismissed = true;
-                setIsRecharging(false);
-              },
-            },
-          };
+        // Store recharge amount for the wallet-success callback page
+        sessionStorage.setItem('pendingWalletRecharge', JSON.stringify({ amount: amountNum }));
 
-          try {
-            const rzp = new (window as any).Razorpay(options);
-            rzp.on("payment.failed", function (resp: any) {
-              isDismissed = true;
-              setRechargeFeedback({ type: "error", message: "Payment failed: " + (resp.error?.description || "Transaction cancelled") });
-              setIsRecharging(false);
-            });
-            rzp.open();
-            setTimeout(() => {
-              if (!isDismissed) {
-                setIsRecharging(false);
-              }
-            }, 6000);
-            return;
-          } catch (openErr) {
-            console.error("Razorpay open error:", openErr);
-            setIsRecharging(false);
-          }
-        }
+        // Redirect to PayU via hidden form POST
+        submitPayUForm(payuRes.data.payuParams, payuRes.data.payuUrl);
+        return; // Page will redirect
       }
 
       // Instant Top-up or fallback mode
@@ -2323,10 +2259,10 @@ export default function DashboardPage() {
                     Select Recharge Method
                   </span>
                   <div className="space-y-2">
-                    {/* Method 1: Razorpay Online */}
+                    {/* Method 1: PayU Online */}
                     <div
-                      onClick={() => setRechargeMethod("razorpay")}
-                      className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${rechargeMethod === "razorpay"
+                      onClick={() => setRechargeMethod("payu")}
+                      className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${rechargeMethod === "payu"
                         ? "border-primary bg-primary/5 ring-1 ring-primary/20"
                         : "border-gray-200 hover:border-gray-300 bg-white"
                         }`}
@@ -2337,7 +2273,7 @@ export default function DashboardPage() {
                         </div>
                         <div>
                           <span className="font-bold text-gray-900 text-xs sm:text-sm block">
-                            UPI &amp; Cards (Razorpay)
+                            UPI &amp; Cards (PayU)
                           </span>
                           <span className="text-[11px] text-slate-500 block">
                             GPay, PhonePe, Paytm, Cards &amp; NetBanking
@@ -2345,10 +2281,10 @@ export default function DashboardPage() {
                         </div>
                       </div>
                       <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${rechargeMethod === "razorpay" ? "border-primary" : "border-gray-300"
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${rechargeMethod === "payu" ? "border-primary" : "border-gray-300"
                           }`}
                       >
-                        {rechargeMethod === "razorpay" && (
+                        {rechargeMethod === "payu" && (
                           <div className="w-2 h-2 rounded-full bg-primary" />
                         )}
                       </div>
