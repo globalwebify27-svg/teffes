@@ -776,20 +776,23 @@ export default function DashboardPage() {
 
     return {
       id: o.orderId || o.id || `TEF-${o._id?.slice(-6)}`,
-      status: isInProgress ? "in-progress" : isDelivered ? "delivered" : "cancelled",
+      orderId: o.orderId || o.id,
+      status: o.status || "Placed",
+      orderCategory: isInProgress ? "in-progress" : isDelivered ? "delivered" : "cancelled",
       statusText: o.status === "Pending" ? "Order Confirmed • Processing" : o.status,
       statusColor: isDelivered ? "text-emerald-700" : isCancelled ? "text-slate-500" : "text-amber-700",
       badgeBg: isDelivered ? "bg-emerald-50" : isCancelled ? "bg-slate-100" : "bg-amber-50",
       icon: isDelivered ? "check_circle" : isCancelled ? "cancel" : isOutForDelivery ? "two_wheeler" : "schedule",
       placedAt: etaText ? `${dateStr} • ${etaText}` : dateStr,
       amount: o.amount,
+      paymentMethod: o.paymentMethod || o.rawOrder?.paymentMethod || "Cash On Delivery",
       remainingTransitMinutes: o.remainingTransitMinutes,
       targetDeliveryTime: o.targetDeliveryTime,
       etaStage: o.etaStage,
       deliveryOtp: o.deliveryOtp || o.rawOrder?.deliveryOtp || null,
-      storeName: o.storeName || "Central Store (Kishore Ganj Hub)",
-      storeLat: 23.3441,
-      storeLng: 85.3096,
+      storeName: o.storeName || "TeFFe's — Doranda Hub",
+      storeLat: o.storeLat || 23.3441,
+      storeLng: o.storeLng || 85.3096,
       customer: o.customer || o.rawOrder?.customer || null,
       customerLat: o.customer?.lat || o.rawOrder?.customer?.lat || 23.3512,
       customerLng: o.customer?.lng || o.rawOrder?.customer?.lng || 85.3154,
@@ -798,17 +801,20 @@ export default function DashboardPage() {
         isAssigned: !!(o.rider?.name || o.rider?.riderId),
         name: o.rider?.name || (o.deliverySlot === "Store Pickup" ? "Store Pickup Counter" : ""),
         phone: o.rider?.phone || "",
-        vehicle: o.rider?.vehicleNumber || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : ""),
-        lat: o.rider?.lat || 23.3441,
-        lng: o.rider?.lng || 85.3096,
+        vehicle: o.rider?.vehicleNumber || o.rider?.vehicle || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : "Insulated Cold Box (Fleet)"),
+        lat: Number(o.rider?.lat) || 23.3441,
+        lng: Number(o.rider?.lng) || 85.3096,
         rating: o.rider?.rating || "4.9",
         deliveriesCount: o.rider?.deliveriesCount || "Fleet Partner",
-        bagTemp: "Fresh-Lock Insulated Box",
+        bagTemp: o.rider?.bagTemp || "Fresh-Lock Insulated Box",
         eta: etaText,
       },
       items: (o.items || []).map((it: any) => ({
         name: `${it.name}${it.netWeight ? ` (${it.netWeight})` : ""}`,
         img: it.image || "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80",
+        price: it.price || 0,
+        quantity: it.quantity || 1,
+        netWeight: it.netWeight || it.weight || "1 unit",
       })),
       rawOrder: o,
     };
@@ -1009,7 +1015,7 @@ export default function DashboardPage() {
                         </div>
                         <p className="text-xs text-slate-500 font-medium mt-0.5">
                           {(() => {
-                            if (order.status === "in-progress") {
+                            if (order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status)) {
                               const raw = order.rawOrder || order;
                               const isOut = order.statusText === "Out for Delivery" || raw.status === "Out for Delivery";
                               const transitMins = raw.remainingTransitMinutes ?? order.remainingTransitMinutes ?? 14;
@@ -1067,15 +1073,15 @@ export default function DashboardPage() {
                     </div>
 
                     {/* Action CTA: Track Rider / Cancel for in-progress vs Order Again for completed */}
-                    {order.status === "in-progress" ? (
+                    {order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status) ? (
                       <div className="p-3.5 bg-amber-50/80 border-t border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
                         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                           <div className="flex items-center gap-2">
                             <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
                             <span className="text-xs font-bold text-amber-950">
-                              {order.rawOrder?.status === "Cutting"
+                              {(order.status === "Cutting" || order.rawOrder?.status === "Cutting")
                                 ? "Store Butcher Cutting Meat"
-                                : order.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(order.rawOrder?.status)
+                                : order.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(order.status || order.rawOrder?.status)
                                 ? `Rider Dispatched • ${order.rider.name}`
                                 : "Order Confirmed • Prepping Fresh Cuts"}
                             </span>
@@ -1095,12 +1101,12 @@ export default function DashboardPage() {
                             className="flex-1 sm:flex-none py-2 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer"
                           >
                             <span className="material-symbols-outlined text-[17px]">
-                              {order.rider?.name && ["Ready", "Out for Delivery"].includes(order.rawOrder?.status) ? "two_wheeler" : "schedule"}
+                              {order.rider?.name && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) ? "two_wheeler" : "schedule"}
                             </span>
                             <span>Track Order</span>
                           </button>
 
-                          {["Placed", "Pending", "Confirmed", "Cutting"].includes(order.rawOrder?.status || "Pending") && (
+                          {["Placed", "Pending", "Confirmed", "Cutting"].includes(order.status || order.rawOrder?.status || "Pending") && (
                             <button
                               type="button"
                               onClick={() => { setCancelModalOrderId(order.id || order.rawOrder?._id || order.orderId); setCancelFeedback(null); }}
@@ -1111,7 +1117,7 @@ export default function DashboardPage() {
                             </button>
                           )}
 
-                          {order.rider?.phone && ["Ready", "Out for Delivery"].includes(order.rawOrder?.status) && (
+                          {order.rider?.phone && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) && (
                             <a
                               href={`tel:${order.rider?.phone}`}
                               className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-gray-800 font-headline-sm font-bold text-xs hover:bg-gray-50 transition-all flex items-center gap-1 text-decoration-none shadow-2xs"
@@ -1124,7 +1130,7 @@ export default function DashboardPage() {
                       </div>
                     ) : (
                       <div className="flex w-full border-t border-gray-100 divide-x divide-gray-100">
-                        {order.status === "delivered" && order.rawOrder?.returnStatus === "Not Requested" && (
+                        {(order.status === "Delivered" || order.orderCategory === "delivered") && order.rawOrder?.returnStatus === "Not Requested" && (
                           <button
                             type="button"
                             onClick={() => handleOpenReturnModal(order.id)}
@@ -1138,7 +1144,7 @@ export default function DashboardPage() {
                             Return {order.rawOrder?.returnStatus}
                           </div>
                         )}
-                        {order.status === "delivered" && (
+                        {(order.status === "Delivered" || order.orderCategory === "delivered") && (
                           order.rawOrder?.riderRating ? (
                             <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 text-[13px] bg-amber-50/40 flex items-center justify-center gap-1">
                               <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
@@ -1760,7 +1766,7 @@ export default function DashboardPage() {
             <div className="p-5 overflow-y-auto space-y-4">
               {/* Dynamic Multi-Phase ETA Banner */}
               {(() => {
-                const status = trackingOrder.status;
+                const status = trackingOrder.status || trackingOrder.rawOrder?.status || "Placed";
                 const isDelivered = status === "Delivered";
                 const isOutForDelivery = status === "Out for Delivery";
                 const transitMins = trackingOrder.remainingTransitMinutes != null ? trackingOrder.remainingTransitMinutes : 15;
@@ -1793,7 +1799,7 @@ export default function DashboardPage() {
                 } else if (isOutForDelivery) {
                   badgeText = "Rider on the Road";
                   mainHeading = `Arriving in ${transitMins} min`;
-                  subHeading = `Dispatched fresh from ${trackingOrder.storeName || "our store"}`;
+                  subHeading = `Dispatched fresh from ${trackingOrder.storeName || "TeFFe's — Doranda Hub"}`;
                   iconName = "two_wheeler";
                   bannerColor = "bg-sky-50 border-sky-200 text-sky-950";
                   iconColor = "bg-sky-500/20 text-sky-800";
@@ -1861,24 +1867,24 @@ export default function DashboardPage() {
               )}
 
               {/* Google Live Map vs Dark Store Preparation Card */}
-              {trackingOrder.status === "Cancelled" ? (
+              {(trackingOrder.status === "Cancelled" || trackingOrder.rawOrder?.status === "Cancelled") ? (
                 <div className="p-6 bg-red-50 border border-red-200 rounded-2xl text-center">
                   <span className="material-symbols-outlined text-red-600 text-[36px] mb-2">cancel</span>
                   <h4 className="font-headline-sm font-black text-gray-900 text-base">Order Cancelled</h4>
                   <p className="text-xs text-slate-600 mt-1">This order was cancelled and inventory has been restocked.</p>
                 </div>
-              ) : trackingOrder.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(trackingOrder.status) ? (
+              ) : trackingOrder.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(trackingOrder.status || trackingOrder.rawOrder?.status) ? (
                 <GoogleLiveMap
                   riderLat={liveRiderCoords?.lat || trackingOrder.rider?.lat || 23.3512}
                   riderLng={liveRiderCoords?.lng || trackingOrder.rider?.lng || 85.3154}
                   riderName={trackingOrder.rider?.name || "Delivery Partner"}
-                  storeName={trackingOrder.storeName || "Central Store (Kishore Ganj Hub)"}
+                  storeName={trackingOrder.storeName || "TeFFe's — Doranda Hub"}
                   storeLat={trackingOrder.storeLat || 23.3441}
                   storeLng={trackingOrder.storeLng || 85.3096}
                   customerLat={trackingOrder.customerLat || trackingOrder.customer?.lat || 23.3512}
                   customerLng={trackingOrder.customerLng || trackingOrder.customer?.lng || 85.3154}
                   customerAddress={trackingOrder.customerAddress || trackingOrder.customer?.address || "Your Kitchen"}
-                  orderStatus={trackingOrder.status || "Out for Delivery"}
+                  orderStatus={trackingOrder.status || trackingOrder.rawOrder?.status || "Out for Delivery"}
                   className="h-52 w-full rounded-2xl overflow-hidden shadow-inner"
                 />
               ) : (
@@ -1886,27 +1892,27 @@ export default function DashboardPage() {
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center text-amber-900 shrink-0">
                       <span className="material-symbols-outlined text-[22px]">
-                        {trackingOrder.status === "Cutting" ? "content_cut" : "storefront"}
+                        {(trackingOrder.status === "Cutting" || trackingOrder.rawOrder?.status === "Cutting") ? "content_cut" : "storefront"}
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
-                          {trackingOrder.status === "Cutting" ? "Fresh Meat Cutting in Progress" : "Order Verified at Dark Store"}
+                          {(trackingOrder.status === "Cutting" || trackingOrder.rawOrder?.status === "Cutting") ? "Fresh Meat Cutting in Progress" : "Order Verified at Dark Store"}
                         </h4>
                         <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
                           0-4°C Chill
                         </span>
                       </div>
                       <p className="text-xs text-slate-600 mt-0.5">
-                        {trackingOrder.storeName || "Teffes Ranchi Hub"}
+                        {trackingOrder.storeName || "TeFFe's — Doranda Hub"}
                       </p>
                     </div>
                   </div>
                   <div className="mt-3 p-3 bg-white/80 rounded-xl border border-amber-100 text-[11.5px] text-slate-600 flex items-start gap-2">
                     <span className="material-symbols-outlined text-amber-600 text-[16px] shrink-0 mt-0.5">info</span>
                     <span>
-                      {trackingOrder.status === "Cutting"
+                      {(trackingOrder.status === "Cutting" || trackingOrder.rawOrder?.status === "Cutting")
                         ? "Fresh cuts are being prepared on a sanitized cutting block. Live tracking will activate once meat is packed and dispatched to your delivery partner."
                         : "Your order is confirmed at the store. Cutting and packing will begin shortly, followed by delivery partner assignment."}
                     </span>
@@ -1941,7 +1947,7 @@ export default function DashboardPage() {
               )}
 
               {/* Rider Details Card */}
-              {trackingOrder.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(trackingOrder.status) ? (
+              {trackingOrder.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(trackingOrder.status || trackingOrder.rawOrder?.status) ? (
                 <div className="bg-white rounded-2xl border border-gray-200/90 p-4 shadow-2xs">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -2036,7 +2042,7 @@ export default function DashboardPage() {
 
                   {/* Step 2: Fresh Meat Cut & Packed */}
                   {(() => {
-                    const st = trackingOrder.status;
+                    const st = trackingOrder.status || trackingOrder.rawOrder?.status || "Placed";
                     const isCutting = st === "Cutting";
                     const isDone = ["Ready", "Out for Delivery", "Delivered"].includes(st);
                     return (
@@ -2065,7 +2071,7 @@ export default function DashboardPage() {
 
                   {/* Step 3: Out for Express Delivery */}
                   {(() => {
-                    const st = trackingOrder.status;
+                    const st = trackingOrder.status || trackingOrder.rawOrder?.status || "Placed";
                     const isDelivering = st === "Out for Delivery";
                     const isDone = st === "Delivered";
                     return (
@@ -2084,10 +2090,10 @@ export default function DashboardPage() {
                             {isDelivering
                               ? (trackingOrder.remainingTransitMinutes != null && trackingOrder.remainingTransitMinutes <= 5
                                 ? "Rider in neighborhood with insulated box"
-                                : `Rider is on the way (arriving in ${trackingOrder.remainingTransitMinutes ?? 14} min)`)
+                                : `Rider is on the way (arriving in ${trackingOrder.remainingTransitMinutes ?? 10} min)`)
                               : isDone
                                 ? "Dispatched & safely reached your address"
-                                : `Assigned to delivery fleet from ${trackingOrder.storeName || "our store"}`}
+                                : `Assigned to delivery fleet from ${trackingOrder.storeName || "TeFFe's — Doranda Hub"}`}
                           </span>
                         </div>
                       </div>
@@ -2096,7 +2102,7 @@ export default function DashboardPage() {
 
                   {/* Step 4: Delivered to Doorstep */}
                   {(() => {
-                    const isDelivered = trackingOrder.status === "Delivered";
+                    const isDelivered = (trackingOrder.status === "Delivered" || trackingOrder.rawOrder?.status === "Delivered");
                     return (
                       <div className={`flex items-start gap-2.5 ${!isDelivered ? "opacity-50" : ""}`}>
                         <span
@@ -2128,7 +2134,7 @@ export default function DashboardPage() {
                 Payable: <strong>₹{trackingOrder.amount}</strong> ({trackingOrder.paymentMethod || "Cash On Delivery"})
               </span>
               <div className="flex items-center gap-2">
-                {["Placed", "Pending", "Confirmed", "Cutting"].includes(trackingOrder.status) && (
+                {["Placed", "Pending", "Confirmed", "Cutting"].includes(trackingOrder.status || trackingOrder.rawOrder?.status) && (
                   <button
                     type="button"
                     onClick={() => {
