@@ -5964,6 +5964,17 @@ function ReturnsTab() {
   useEffect(() => {
     fetchReturns();
     fetchRiders();
+
+    const socket = getSocket();
+    const handleReturnEvent = () => {
+      fetchReturns();
+    };
+    socket.on("return:created", handleReturnEvent);
+    socket.on("returns:refreshed", handleReturnEvent);
+    return () => {
+      socket.off("return:created", handleReturnEvent);
+      socket.off("returns:refreshed", handleReturnEvent);
+    };
   }, []);
 
   // Reset pagination when status or search filter changes
@@ -6286,6 +6297,7 @@ export default function StoreAdminPage() {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [incomingOrders, setIncomingOrders] = useState<any[]>([]);
+  const [incomingReturns, setIncomingReturns] = useState<any[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const acknowledgedIdsRef = React.useRef<Set<string>>(new Set());
 
@@ -6334,7 +6346,7 @@ export default function StoreAdminPage() {
     setUser(stored);
   }, [router]);
 
-  // Real-time alarm listener for new incoming orders
+  // Real-time alarm listener for new incoming orders and customer return requests
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
@@ -6374,9 +6386,38 @@ export default function StoreAdminPage() {
       toast.info(`New Order #${orderId} received! Total: ₹${order.amount || order.totalAmount || 0}`, "New Order Alert");
     };
 
-    socket.on("order:created", onOrderCreated);
+    const onReturnCreated = (data: any) => {
+      const returnReq = data.returnRequest || data;
+      const orderId = returnReq.orderId || data.orderId;
+      const requestId = returnReq.requestId || data.requestId;
+      if (!requestId || acknowledgedIdsRef.current.has(requestId)) return;
 
-    // Initial check and 12-second polling redundancy for Pending orders
+      const isStoreMatch =
+        returnReq.storeId === currentStoreId ||
+        ((returnReq.storeId === "S002" || returnReq.storeId === "S004") &&
+          (currentStoreId === "S002" || currentStoreId === "S004"));
+      if (returnReq.storeId && !isStoreMatch && user.role !== "superadmin") {
+        return;
+      }
+
+      setIncomingReturns((prev) => {
+        if (prev.some((r) => r.requestId === requestId)) return prev;
+        return [returnReq, ...prev];
+      });
+
+      if (!isMuted) {
+        orderAlarm.startAlarm();
+      }
+      toast.warning(
+        `Customer requested Return #${requestId} for Order #${orderId}! Reason: ${returnReq.reason || "Return Requested"}`,
+        "Return Request Alert"
+      );
+    };
+
+    socket.on("order:created", onOrderCreated);
+    socket.on("return:created", onReturnCreated);
+
+    // Initial check and 12-second polling redundancy for Pending orders & Pending Review return requests
     const checkPendingOrders = () => {
       api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=Pending&storeId=${currentStoreId}`)
         .then((res) => {
@@ -6389,7 +6430,29 @@ export default function StoreAdminPage() {
               }
             } else {
               setIncomingOrders([]);
-              orderAlarm.stopAlarm();
+              if (incomingReturns.length === 0) {
+                orderAlarm.stopAlarm();
+              }
+            }
+          }
+        })
+        .catch(() => { });
+    };
+
+    const checkPendingReturns = () => {
+      api.get<{ success: boolean; returns: any[] }>(`/store-admin/returns?storeId=${currentStoreId}`)
+        .then((res) => {
+          if (res.data.success && Array.isArray(res.data.returns)) {
+            const unackedReturns = res.data.returns.filter(
+              (r) => r.status === "Pending Review" && !acknowledgedIdsRef.current.has(r.requestId)
+            );
+            if (unackedReturns.length > 0) {
+              setIncomingReturns(unackedReturns);
+              if (!isMuted && !orderAlarm.getIsRinging()) {
+                orderAlarm.startAlarm();
+              }
+            } else {
+              setIncomingReturns([]);
             }
           }
         })
@@ -6397,17 +6460,22 @@ export default function StoreAdminPage() {
     };
 
     checkPendingOrders();
-    const pollInterval = setInterval(checkPendingOrders, 12000);
+    checkPendingReturns();
+    const pollInterval = setInterval(() => {
+      checkPendingOrders();
+      checkPendingReturns();
+    }, 12000);
 
     return () => {
       if (currentStoreId) {
         socket.emit("leave:store", currentStoreId);
       }
       socket.off("order:created", onOrderCreated);
+      socket.off("return:created", onReturnCreated);
       clearInterval(pollInterval);
       orderAlarm.stopAlarm();
     };
-  }, [isMuted, user]);
+  }, [isMuted, user, incomingReturns.length]);
 
   const handleLogout = () => {
     clearAuth();
@@ -6422,7 +6490,7 @@ export default function StoreAdminPage() {
   const toggleMute = () => {
     if (isMuted) {
       setIsMuted(false);
-      if (incomingOrders.length > 0) {
+      if (incomingOrders.length > 0 || incomingReturns.length > 0) {
         orderAlarm.startAlarm();
       }
       toast.info("Audio alarm unmuted");
@@ -6435,12 +6503,17 @@ export default function StoreAdminPage() {
 
   const acknowledgeAllIncoming = async () => {
     const ordersToAck = [...incomingOrders];
+    const returnsToAck = [...incomingReturns];
 
     // 1. Immediately silence alarm and clear banner UI
     ordersToAck.forEach((o) => {
       if (o.orderId) acknowledgedIdsRef.current.add(o.orderId);
     });
+    returnsToAck.forEach((r) => {
+      if (r.requestId) acknowledgedIdsRef.current.add(r.requestId);
+    });
     setIncomingOrders([]);
+    setIncomingReturns([]);
     orderAlarm.stopAlarm();
 
     // 2. Persist acknowledged IDs to localStorage (up to last 100 orders)
@@ -6779,6 +6852,138 @@ export default function StoreAdminPage() {
               >
                 <span className="material-symbols-outlined text-[18px]">local_shipping</span>
                 <span>View in Live Orders</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={acknowledgeAllIncoming}
+                style={{
+                  background: "#10b981",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "8px 16px",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">done_all</span>
+                <span>Acknowledge</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Active Return Request Alarm Banner ────────────────────────────── */}
+        {incomingReturns.length > 0 && (
+          <div
+            className="animate-pulse-glow"
+            style={{
+              background: "linear-gradient(135deg, #c2410c 0%, #9a3412 100%)",
+              color: "#fff",
+              borderRadius: "14px",
+              padding: "16px 20px",
+              marginBottom: "24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "16px",
+              border: "2px solid #ea580c",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <span className="material-symbols-outlined text-[28px] animate-bell-ring" style={{ color: "#fef08a" }}>
+                  assignment_return
+                </span>
+              </div>
+              <div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>CUSTOMER RETURN REQUEST RECEIVED!</span>
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      background: "#fef08a",
+                      color: "#854d0e",
+                      padding: "2px 8px",
+                      borderRadius: "99px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {incomingReturns.length} PENDING REVIEW
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.85rem", opacity: 0.95, marginTop: "3px" }}>
+                  Return #{incomingReturns[0]?.requestId} · Order #{incomingReturns[0]?.orderId} · {incomingReturns[0]?.reason || "Return Requested"}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={toggleMute}
+                style={{
+                  background: isMuted ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  borderRadius: "10px",
+                  padding: "8px 14px",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "background 150ms ease",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {isMuted ? "volume_off" : "volume_up"}
+                </span>
+                <span>{isMuted ? "Unmute Alarm" : "Mute Sound"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("returns");
+                  orderAlarm.stopAlarm();
+                }}
+                style={{
+                  background: "#fff",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "8px 16px",
+                  color: "#c2410c",
+                  fontWeight: 800,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">assignment_return</span>
+                <span>Review Returns</span>
               </button>
 
               <button

@@ -31,7 +31,7 @@ const {
   requestReturn: requestReturnFS,
 } = require('../services/firestore/return.firestore.service');
 const notificationService = require('../services/notificationService');
-const { emitOrderCreated, emitOrderStatusUpdate } = require('../socket');
+const { emitOrderCreated, emitOrderStatusUpdate, emitReturnCreated } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
 
 const generateOrderId = () => {
@@ -445,6 +445,7 @@ const requestReturn = async (req, res, next) => {
 
     const updatedOrder = await getDoc('orders', orderId);
     emitOrderStatusUpdate(orderId, updatedOrder || { orderId, returnStatus: 'Requested' });
+    emitReturnCreated(returnDoc, updatedOrder || {});
 
     res.status(201).json({
       success: true,
