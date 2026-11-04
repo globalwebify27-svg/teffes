@@ -136,10 +136,10 @@ const sendToUser = async (userId, { title, body, data = {} }, appType = null) =>
     const cleanUserId = String(userId).trim();
 
     const records = await queryDocs(NOTIFICATION_TOKENS_COLLECTION, (ref) =>
-      ref.where('userId', '==', cleanUserId).where('isActive', '==', true)
+      ref.where('userId', '==', cleanUserId)
     );
 
-    let filtered = records;
+    let filtered = records.filter((r) => r.isActive !== false);
     if (appType) {
       filtered = records.filter((r) => r.appType === appType);
     }

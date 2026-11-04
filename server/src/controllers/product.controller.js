@@ -358,9 +358,10 @@ const subscribeProductStockNotification = async (req, res, next) => {
     }
 
     // Check if subscription already exists for this phone or userId on this product
-    const existing = await queryDocs('stock_notifications', (ref) =>
-      ref.where('productId', '==', productId).where('status', '==', 'pending')
+    const allProductSubs = await queryDocs('stock_notifications', (ref) =>
+      ref.where('productId', '==', productId)
     );
+    const existing = allProductSubs.filter((s) => s.status === 'pending');
 
     const alreadySubscribed = existing.some((sub) => {
       if (cleanPhone && sub.phone === cleanPhone) return true;

@@ -533,12 +533,15 @@ const rateRider = async (req, res, next) => {
     if (order.rider?.riderId) {
       const riderUser = await getUserById(order.rider.riderId);
       if (riderUser) {
-        const allRatedOrders = await queryDocs('orders', (ref) =>
-          ref.where('rider.riderId', '==', order.rider.riderId).where('riderRating', '>=', 1)
+        // Query by single field to avoid composite index requirement
+        const allRiderOrders = await queryDocs('orders', (ref) =>
+          ref.where('rider.riderId', '==', order.rider.riderId)
         );
-        const totalStars = allRatedOrders.reduce((sum, o) => sum + (Number(o.riderRating) || 0), 0) + numRating;
-        const count = allRatedOrders.length + 1;
-        const avg = parseFloat((totalStars / count).toFixed(1));
+        const allRatedOrders = allRiderOrders.filter((o) => typeof o.riderRating === 'number' && o.riderRating >= 1);
+        const hasCurrentOrder = allRatedOrders.some((o) => (o.id || o.orderId) === targetId);
+        const totalStars = allRatedOrders.reduce((sum, o) => sum + (Number(o.riderRating) || 0), 0) + (hasCurrentOrder ? 0 : numRating);
+        const count = allRatedOrders.length + (hasCurrentOrder ? 0 : 1);
+        const avg = parseFloat((totalStars / Math.max(1, count)).toFixed(1));
 
         await updateDoc('users', order.rider.riderId, {
           riderRating: avg,

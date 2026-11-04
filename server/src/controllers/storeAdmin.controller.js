@@ -393,10 +393,10 @@ const updateInventoryItem = async (req, res, next) => {
         try {
           const { queryDocs, updateDoc } = require('../lib/firestore');
           const notificationService = require('../services/notificationService');
-          const productId = updated.productId || id;
-          const pendingSubs = await queryDocs('stock_notifications', (ref) =>
-            ref.where('productId', '==', productId).where('status', '==', 'pending')
+          const allSubs = await queryDocs('stock_notifications', (ref) =>
+            ref.where('productId', '==', productId)
           );
+          const pendingSubs = allSubs.filter((s) => s.status === 'pending');
 
           for (const sub of pendingSubs) {
             await updateDoc('stock_notifications', sub.id, {

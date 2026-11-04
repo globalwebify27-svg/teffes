@@ -71,10 +71,10 @@ const getDashboard = async (req, res, next) => {
     const storeId = rider.storeId || 'S001';
     const store = await getStoreById(storeId);
 
-    const storeAdmins = await queryDocs('users', (ref) =>
-      ref.where('role', '==', 'storeadmin').where('storeId', '==', storeId).limit(1)
+    const allStoreAdmins = await queryDocs('users', (ref) =>
+      ref.where('role', '==', 'storeadmin')
     );
-    const storeAdmin = storeAdmins[0] || null;
+    const storeAdmin = allStoreAdmins.find((a) => a.storeId === storeId || a.storeId === 'all') || null;
 
     const storeAdminName = storeAdmin?.name || store?.admin || 'Store Admin';
     const storeAdminPhone = storeAdmin?.phone || store?.phone || '+91 9779687955';
@@ -1000,10 +1000,10 @@ const getDispatchSupport = async (req, res, next) => {
 
     const storeId = rider.storeId || 'S001';
     const store = await getStoreById(storeId);
-    const storeAdmins = await queryDocs('users', (ref) =>
-      ref.where('role', '==', 'storeadmin').where('storeId', '==', storeId).limit(1)
+    const allStoreAdmins = await queryDocs('users', (ref) =>
+      ref.where('role', '==', 'storeadmin')
     );
-    const storeAdmin = storeAdmins[0] || null;
+    const storeAdmin = allStoreAdmins.find((a) => a.storeId === storeId || a.storeId === 'all') || null;
 
     res.status(200).json({
       success: true,
