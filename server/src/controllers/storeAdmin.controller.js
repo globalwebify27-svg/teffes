@@ -393,10 +393,10 @@ const updateInventoryItem = async (req, res, next) => {
         try {
           const { queryDocs, updateDoc } = require('../lib/firestore');
           const notificationService = require('../services/notificationService');
-          const productId = updated.productId || id;
-          const pendingSubs = await queryDocs('stock_notifications', (ref) =>
-            ref.where('productId', '==', productId).where('status', '==', 'pending')
+          const allSubs = await queryDocs('stock_notifications', (ref) =>
+            ref.where('productId', '==', productId)
           );
+          const pendingSubs = allSubs.filter((s) => s.status === 'pending');
 
           for (const sub of pendingSubs) {
             await updateDoc('stock_notifications', sub.id, {
@@ -747,14 +747,24 @@ const getRiders = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
 
-    const allRiders = await queryDocs('users', (ref) => ref.where('role', '==', 'rider'));
+    let allRiders = await queryDocs('users', (ref) => ref.where('role', '==', 'rider'));
+    if (!allRiders || allRiders.length === 0) {
+      const allUsers = await queryDocs('users');
+      allRiders = allUsers.filter((u) => String(u.role || '').toLowerCase() === 'rider');
+    }
+
     let storeRiders = allRiders.filter(
-      (r) => !r.storeId || resolveStoreId(r.storeId) === storeId
+      (r) => !r.storeId || resolveStoreId(r.storeId) === storeId || r.storeId === 'all'
     );
     if (storeRiders.length === 0) storeRiders = allRiders;
 
-    const orders = await getStoreOrders(storeId);
-    const activeOrders = orders.filter((o) => o.status === 'Out for Delivery');
+    let activeOrders = [];
+    try {
+      const orders = await getStoreOrders(storeId);
+      activeOrders = (orders || []).filter((o) => o.status === 'Out for Delivery');
+    } catch (orderErr) {
+      console.warn('[StoreAdmin] Error fetching store orders for rider status sync:', orderErr.message);
+    }
 
     const activeRiderIdentifiers = new Set();
     activeOrders.forEach((o) => {
@@ -765,7 +775,7 @@ const getRiders = async (req, res, next) => {
 
     const updatedRiders = await Promise.all(
       storeRiders.map(async (r) => {
-        const idStr = r._id ? r._id.toString() : (r.id || '');
+        const idStr = r.id || (r._id ? r._id.toString() : '');
         const phoneStr = (r.phone || '').replace(/\D/g, '');
         const nameStr = (r.name || '').trim().toLowerCase();
 
@@ -777,15 +787,24 @@ const getRiders = async (req, res, next) => {
         const copy = { ...r };
         delete copy.password;
 
-        if (isOnDelivery && r.riderStatus !== 'On Delivery') {
-          await updateDoc('users', idStr, { riderStatus: 'On Delivery' });
-          copy.riderStatus = 'On Delivery';
-        } else if (!isOnDelivery && r.riderStatus === 'On Delivery') {
-          await updateDoc('users', idStr, { riderStatus: 'Available' });
-          copy.riderStatus = 'Available';
+        try {
+          if (isOnDelivery && r.riderStatus !== 'On Delivery') {
+            await updateDoc('users', idStr, { riderStatus: 'On Delivery' });
+            copy.riderStatus = 'On Delivery';
+          } else if (!isOnDelivery && r.riderStatus === 'On Delivery') {
+            await updateDoc('users', idStr, { riderStatus: 'Available' });
+            copy.riderStatus = 'Available';
+          }
+        } catch (syncErr) {
+          // Non-blocking status sync
         }
 
-        copy.cashInHand = await calculateRiderCashInHand(idStr, r.phone);
+        try {
+          copy.cashInHand = await calculateRiderCashInHand(idStr, r.phone);
+        } catch (cashErr) {
+          copy.cashInHand = 0;
+        }
+
         return copy;
       })
     );

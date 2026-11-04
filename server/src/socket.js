@@ -236,6 +236,40 @@ const emitInventoryUpdate = (storeId, data) => {
   io.emit('inventory:updated', payload);
 };
 
+const emitReturnCreated = (returnRequest, order = {}) => {
+  if (!io) return;
+  const storeId = returnRequest.storeId || order.storeId || 'S001';
+  const payload = {
+    requestId: returnRequest.requestId,
+    orderId: returnRequest.orderId,
+    customer: returnRequest.customer,
+    phone: returnRequest.phone,
+    reason: returnRequest.reason,
+    refundAmount: returnRequest.refundAmount,
+    storeId,
+    createdAt: returnRequest.createdAt || new Date().toISOString(),
+    returnRequest,
+  };
+
+  // Targeted store room emission
+  if (storeId) {
+    const storeRoom = `store:${storeId}`;
+    io.to(storeRoom).emit('return:created', payload);
+    if (storeId === 'S004') {
+      io.to('store:S002').emit('return:created', payload);
+    } else if (storeId === 'S002') {
+      io.to('store:S004').emit('return:created', payload);
+    }
+  }
+
+  // Super Admin room emission
+  io.to('role:superadmin').emit('return:created', payload);
+
+  // General feed for store admin audio alarm and real-time dashboard refresh
+  io.emit('return:created', payload);
+  io.emit('returns:refreshed', payload);
+};
+
 module.exports = {
   initSocket,
   getIO,
@@ -243,4 +277,5 @@ module.exports = {
   emitOrderCreated,
   emitWalletUpdate,
   emitInventoryUpdate,
+  emitReturnCreated,
 };

@@ -7,6 +7,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
+import '../../providers/cart_provider.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -274,6 +275,10 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _onLoginSuccess() async {
     final auth = context.read<AuthProvider>();
     final location = context.read<LocationProvider>();
+    final cart = context.read<CartProvider>();
+
+    // Fetch and merge persistent cart from server
+    cart.fetchCartFromServer();
 
     if (auth.user != null && auth.user!.addresses.isNotEmpty) {
       location.setSavedAddresses(auth.user!.addresses);

@@ -30,6 +30,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
       const CategoryListingScreen(showBackButton: false),
       const ProfileScreen(),
     ];
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<CartProvider>().fetchCartFromServer();
+      }
+    });
   }
 
   void _switchTab(int index) {

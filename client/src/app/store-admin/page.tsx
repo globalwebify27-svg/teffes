@@ -4253,7 +4253,7 @@ function CustomersTab() {
   );
 }
 
-function RidersTab() {
+function RidersTab({ storeId }: { storeId?: string }) {
   const [riders, setRiders] = useState<any[]>([]);
   const [readyOrders, setReadyOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4354,17 +4354,18 @@ function RidersTab() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const [ridersRes, ordersRes, storeRes, remittancesRes, batchRes] = await Promise.all([
-        api.get<{ success: boolean; riders: any[] }>("/store-admin/riders"),
-        api.get<{ success: boolean; orders: any[] }>("/store-admin/orders?status=all"),
-        api.get<{ success: boolean; store: any }>("/store-admin/store-status"),
-        api.get<{ success: boolean; remittances: any[] }>("/store-admin/remittances").catch(() => ({ data: { success: false, remittances: [] } })),
-        api.get<{ success: boolean; settings: any }>("/store-admin/batches/settings").catch(() => ({ data: { success: false, settings: null } })),
+      const qStore = storeId ? `?storeId=${storeId}` : "";
+      const [ridersResult, ordersResult, storeResult, remittancesResult, batchResult] = await Promise.allSettled([
+        api.get<{ success: boolean; riders: any[] }>(`/store-admin/riders${qStore}`),
+        api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=all${storeId ? `&storeId=${storeId}` : ""}`),
+        api.get<{ success: boolean; store: any }>(`/store-admin/store-status${qStore}`),
+        api.get<{ success: boolean; remittances: any[] }>(`/store-admin/remittances${qStore}`),
+        api.get<{ success: boolean; settings: any; config: any }>(`/store-admin/batches/settings${qStore}`),
       ]);
+
       let relevantOrders: any[] = [];
-      if (ordersRes.data.success) {
-        // Filter only Ready and Out for Delivery orders that require home delivery (exclude store takeaway)
-        relevantOrders = (ordersRes.data.orders || []).filter((o: any) => {
+      if (ordersResult.status === "fulfilled" && ordersResult.value.data?.success) {
+        relevantOrders = (ordersResult.value.data.orders || []).filter((o: any) => {
           const isPickup =
             o.fulfillmentType === "pickup" ||
             o.pickupMode === true ||
@@ -4374,7 +4375,8 @@ function RidersTab() {
         });
         setReadyOrders(relevantOrders);
       }
-      if (ridersRes.data.success) {
+
+      if (ridersResult.status === "fulfilled" && ridersResult.value.data?.success) {
         const outForDeliveryRiderNames = new Set(
           relevantOrders
             .filter((o: any) => o.status === "Out for Delivery")
@@ -4382,7 +4384,8 @@ function RidersTab() {
             .filter(Boolean)
         );
 
-        const syncedRiders = (ridersRes.data.riders || []).map((r: any) => {
+        const rawRiders = ridersResult.value.data.riders || [];
+        const syncedRiders = rawRiders.map((r: any) => {
           const isBusy = outForDeliveryRiderNames.has(r.name?.trim().toLowerCase());
           if (isBusy && r.riderStatus !== "On Delivery") {
             return { ...r, riderStatus: "On Delivery" };
@@ -4391,8 +4394,9 @@ function RidersTab() {
         });
         setRiders(syncedRiders);
       }
-      if (storeRes.data?.success && storeRes.data?.store) {
-        const s = storeRes.data.store;
+
+      if (storeResult.status === "fulfilled" && storeResult.value.data?.success && storeResult.value.data.store) {
+        const s = storeResult.value.data.store;
         if (s.riderPayoutSettings) {
           const ps = s.riderPayoutSettings;
           if (typeof ps.baseDeliveryPay === "number") setBaseDeliveryPay(ps.baseDeliveryPay);
@@ -4403,20 +4407,24 @@ function RidersTab() {
           setDefaultRiderDailyTarget(s.defaultRiderDailyTarget);
         }
       }
-      if (remittancesRes.data?.success && Array.isArray(remittancesRes.data.remittances)) {
-        setRemittances(remittancesRes.data.remittances);
+
+      if (remittancesResult.status === "fulfilled" && remittancesResult.value.data?.success && Array.isArray(remittancesResult.value.data.remittances)) {
+        setRemittances(remittancesResult.value.data.remittances);
       }
-      if (batchRes.data?.success && batchRes.data?.settings) {
-        const bs = batchRes.data.settings;
-        const cfg = {
-          maxBatchSize: Number(bs.maxBatchSize) || 3,
-          maxDetourKm: Number(bs.maxDetourKm) || 3.5,
-          maxTotalRouteKm: Number(bs.maxTotalRouteKm) || 15.0,
-          maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || 45,
-          maxBatchWeightKg: Number(bs.maxBatchWeightKg) || 10.0,
-        };
-        setBatchConfig(cfg);
-        setDraftBatchConfig(cfg);
+
+      if (batchResult.status === "fulfilled" && batchResult.value.data?.success) {
+        const bs = batchResult.value.data.settings || batchResult.value.data.config;
+        if (bs) {
+          const cfg = {
+            maxBatchSize: Number(bs.maxBatchSize) || 3,
+            maxDetourKm: Number(bs.maxDetourKm) || 3.5,
+            maxTotalRouteKm: Number(bs.maxTotalRouteKm) || 15.0,
+            maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || 45,
+            maxBatchWeightKg: Number(bs.maxBatchWeightKg) || 10.0,
+          };
+          setBatchConfig(cfg);
+          setDraftBatchConfig(cfg);
+        }
       }
     } catch (err) {
       console.warn("Failed to fetch dispatch data:", err);
@@ -4427,7 +4435,7 @@ function RidersTab() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [storeId]);
 
   const handleOpenRatesModal = () => {
     setDraftRates({
@@ -4752,6 +4760,26 @@ function RidersTab() {
           <p style={{ fontSize: "0.78rem", color: "#73695b", margin: "2px 0 0 0" }}>Delivery partners active in your hub delivery area with live Cash in Hand</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            type="button"
+            onClick={fetchData}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "4px",
+              background: "#fff",
+              border: "1px solid #cbd5e1",
+              borderRadius: "99px",
+              padding: "4px 10px",
+              fontSize: "0.75rem",
+              fontWeight: 700,
+              color: "#334155",
+              cursor: "pointer",
+            }}
+          >
+            <span className="material-symbols-outlined text-[15px]">refresh</span>
+            <span>Refresh Pool</span>
+          </button>
           {riders.length > 0 && (
             <div style={{ background: "#ecfdf5", border: "1px solid #a7f3d0", borderRadius: "99px", padding: "4px 12px", fontSize: "0.75rem", color: "#059669", fontWeight: 700 }}>
               {availableRiders.length} Available for Dispatch
@@ -5936,6 +5964,17 @@ function ReturnsTab() {
   useEffect(() => {
     fetchReturns();
     fetchRiders();
+
+    const socket = getSocket();
+    const handleReturnEvent = () => {
+      fetchReturns();
+    };
+    socket.on("return:created", handleReturnEvent);
+    socket.on("returns:refreshed", handleReturnEvent);
+    return () => {
+      socket.off("return:created", handleReturnEvent);
+      socket.off("returns:refreshed", handleReturnEvent);
+    };
   }, []);
 
   // Reset pagination when status or search filter changes
@@ -6258,6 +6297,7 @@ export default function StoreAdminPage() {
   const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [incomingOrders, setIncomingOrders] = useState<any[]>([]);
+  const [incomingReturns, setIncomingReturns] = useState<any[]>([]);
   const [isMuted, setIsMuted] = useState(false);
   const acknowledgedIdsRef = React.useRef<Set<string>>(new Set());
 
@@ -6287,14 +6327,15 @@ export default function StoreAdminPage() {
   }, []);
 
   useEffect(() => {
-    api.get<{ success: boolean; store: any }>("/store-admin/store-status")
+    const q = user?.storeId ? `?storeId=${user.storeId}` : "";
+    api.get<{ success: boolean; store: any }>(`/store-admin/store-status${q}`)
       .then(res => {
         if (res.data.success && res.data.store) {
           setStoreData(res.data.store);
         }
       })
       .catch(err => console.warn("Failed to load store status:", err));
-  }, []);
+  }, [user?.storeId]);
 
   useEffect(() => {
     const stored = getStoredUser();
@@ -6305,7 +6346,7 @@ export default function StoreAdminPage() {
     setUser(stored);
   }, [router]);
 
-  // Real-time alarm listener for new incoming orders
+  // Real-time alarm listener for new incoming orders and customer return requests
   useEffect(() => {
     if (!user) return;
     const socket = getSocket();
@@ -6345,9 +6386,38 @@ export default function StoreAdminPage() {
       toast.info(`New Order #${orderId} received! Total: ₹${order.amount || order.totalAmount || 0}`, "New Order Alert");
     };
 
-    socket.on("order:created", onOrderCreated);
+    const onReturnCreated = (data: any) => {
+      const returnReq = data.returnRequest || data;
+      const orderId = returnReq.orderId || data.orderId;
+      const requestId = returnReq.requestId || data.requestId;
+      if (!requestId || acknowledgedIdsRef.current.has(requestId)) return;
 
-    // Initial check and 12-second polling redundancy for Pending orders
+      const isStoreMatch =
+        returnReq.storeId === currentStoreId ||
+        ((returnReq.storeId === "S002" || returnReq.storeId === "S004") &&
+          (currentStoreId === "S002" || currentStoreId === "S004"));
+      if (returnReq.storeId && !isStoreMatch && user.role !== "superadmin") {
+        return;
+      }
+
+      setIncomingReturns((prev) => {
+        if (prev.some((r) => r.requestId === requestId)) return prev;
+        return [returnReq, ...prev];
+      });
+
+      if (!isMuted) {
+        orderAlarm.startAlarm();
+      }
+      toast.warning(
+        `Customer requested Return #${requestId} for Order #${orderId}! Reason: ${returnReq.reason || "Return Requested"}`,
+        "Return Request Alert"
+      );
+    };
+
+    socket.on("order:created", onOrderCreated);
+    socket.on("return:created", onReturnCreated);
+
+    // Initial check and 12-second polling redundancy for Pending orders & Pending Review return requests
     const checkPendingOrders = () => {
       api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=Pending&storeId=${currentStoreId}`)
         .then((res) => {
@@ -6360,7 +6430,29 @@ export default function StoreAdminPage() {
               }
             } else {
               setIncomingOrders([]);
-              orderAlarm.stopAlarm();
+              if (incomingReturns.length === 0) {
+                orderAlarm.stopAlarm();
+              }
+            }
+          }
+        })
+        .catch(() => { });
+    };
+
+    const checkPendingReturns = () => {
+      api.get<{ success: boolean; returns: any[] }>(`/store-admin/returns?storeId=${currentStoreId}`)
+        .then((res) => {
+          if (res.data.success && Array.isArray(res.data.returns)) {
+            const unackedReturns = res.data.returns.filter(
+              (r) => r.status === "Pending Review" && !acknowledgedIdsRef.current.has(r.requestId)
+            );
+            if (unackedReturns.length > 0) {
+              setIncomingReturns(unackedReturns);
+              if (!isMuted && !orderAlarm.getIsRinging()) {
+                orderAlarm.startAlarm();
+              }
+            } else {
+              setIncomingReturns([]);
             }
           }
         })
@@ -6368,17 +6460,22 @@ export default function StoreAdminPage() {
     };
 
     checkPendingOrders();
-    const pollInterval = setInterval(checkPendingOrders, 12000);
+    checkPendingReturns();
+    const pollInterval = setInterval(() => {
+      checkPendingOrders();
+      checkPendingReturns();
+    }, 12000);
 
     return () => {
       if (currentStoreId) {
         socket.emit("leave:store", currentStoreId);
       }
       socket.off("order:created", onOrderCreated);
+      socket.off("return:created", onReturnCreated);
       clearInterval(pollInterval);
       orderAlarm.stopAlarm();
     };
-  }, [isMuted, user]);
+  }, [isMuted, user, incomingReturns.length]);
 
   const handleLogout = () => {
     clearAuth();
@@ -6393,7 +6490,7 @@ export default function StoreAdminPage() {
   const toggleMute = () => {
     if (isMuted) {
       setIsMuted(false);
-      if (incomingOrders.length > 0) {
+      if (incomingOrders.length > 0 || incomingReturns.length > 0) {
         orderAlarm.startAlarm();
       }
       toast.info("Audio alarm unmuted");
@@ -6406,12 +6503,17 @@ export default function StoreAdminPage() {
 
   const acknowledgeAllIncoming = async () => {
     const ordersToAck = [...incomingOrders];
+    const returnsToAck = [...incomingReturns];
 
     // 1. Immediately silence alarm and clear banner UI
     ordersToAck.forEach((o) => {
       if (o.orderId) acknowledgedIdsRef.current.add(o.orderId);
     });
+    returnsToAck.forEach((r) => {
+      if (r.requestId) acknowledgedIdsRef.current.add(r.requestId);
+    });
     setIncomingOrders([]);
+    setIncomingReturns([]);
     orderAlarm.stopAlarm();
 
     // 2. Persist acknowledged IDs to localStorage (up to last 100 orders)
@@ -6442,9 +6544,13 @@ export default function StoreAdminPage() {
 
   if (!user) return null;
 
-
-
-  const tabComponents: Record<string, React.ReactNode> = {
+  const effectiveStoreId = user?.storeId || storeData?.storeId || "S001";
+  const storeDisplayName =
+    storeData?.name ||
+    user?.storeName ||
+    (effectiveStoreId === "S004" || effectiveStoreId === "S002"
+      ? "TeFFe's — Doranda Hub"
+      : "TeFFe's — Kishore Ganj Store");  const tabComponents: Record<string, React.ReactNode> = {
     dashboard: <DashboardTab setActiveTab={setActiveTab} />,
     orders: <LiveOrdersTab />,
     products: <ProductsStockTab />,
@@ -6452,7 +6558,7 @@ export default function StoreAdminPage() {
     inventory: <InventoryTab />,
     inventory_logs: <StoreAdminInventoryLogsTab />,
     customers: <CustomersTab />,
-    riders: <RidersTab />,
+    riders: <RidersTab storeId={effectiveStoreId} />,
     returns: <ReturnsTab />,
   };
 
@@ -6773,6 +6879,138 @@ export default function StoreAdminPage() {
           </div>
         )}
 
+        {/* ─── Active Return Request Alarm Banner ────────────────────────────── */}
+        {incomingReturns.length > 0 && (
+          <div
+            className="animate-pulse-glow"
+            style={{
+              background: "linear-gradient(135deg, #c2410c 0%, #9a3412 100%)",
+              color: "#fff",
+              borderRadius: "14px",
+              padding: "16px 20px",
+              marginBottom: "24px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "16px",
+              border: "2px solid #ea580c",
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div
+                style={{
+                  width: "48px",
+                  height: "48px",
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.2)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  flexShrink: 0,
+                }}
+              >
+                <span className="material-symbols-outlined text-[28px] animate-bell-ring" style={{ color: "#fef08a" }}>
+                  assignment_return
+                </span>
+              </div>
+              <div>
+                <div style={{ fontSize: "1.1rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "8px" }}>
+                  <span>CUSTOMER RETURN REQUEST RECEIVED!</span>
+                  <span
+                    style={{
+                      fontSize: "0.75rem",
+                      background: "#fef08a",
+                      color: "#854d0e",
+                      padding: "2px 8px",
+                      borderRadius: "99px",
+                      fontWeight: 800,
+                    }}
+                  >
+                    {incomingReturns.length} PENDING REVIEW
+                  </span>
+                </div>
+                <div style={{ fontSize: "0.85rem", opacity: 0.95, marginTop: "3px" }}>
+                  Return #{incomingReturns[0]?.requestId} · Order #{incomingReturns[0]?.orderId} · {incomingReturns[0]?.reason || "Return Requested"}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+              <button
+                type="button"
+                onClick={toggleMute}
+                style={{
+                  background: isMuted ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)",
+                  border: "1px solid rgba(255,255,255,0.3)",
+                  borderRadius: "10px",
+                  padding: "8px 14px",
+                  color: "#fff",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  transition: "background 150ms ease",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {isMuted ? "volume_off" : "volume_up"}
+                </span>
+                <span>{isMuted ? "Unmute Alarm" : "Mute Sound"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab("returns");
+                  orderAlarm.stopAlarm();
+                }}
+                style={{
+                  background: "#fff",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "8px 16px",
+                  color: "#c2410c",
+                  fontWeight: 800,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">assignment_return</span>
+                <span>Review Returns</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={acknowledgeAllIncoming}
+                style={{
+                  background: "#10b981",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "8px 16px",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">done_all</span>
+                <span>Acknowledge</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Unified Page Header */}
         {(() => {
           const currentTab = TABS.find((t) => t.key === activeTab);
@@ -6895,6 +7133,8 @@ export default function StoreAdminPage() {
           isOpenModal={isStatusModalOpen}
           onClose={() => setIsStatusModalOpen(false)}
           onStatusChange={(updatedStore) => setStoreData(updatedStore)}
+          storeId={effectiveStoreId}
+          storeName={storeDisplayName}
         />
 
         {/* Change Password Modal */}

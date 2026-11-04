@@ -711,17 +711,15 @@ const getActiveBatchForRider = async (riderId) => {
   const db = getDb();
   const cleanRiderId = String(riderId).trim();
 
-  let batches = await queryDocs(BATCHES_COLLECTION, (ref) =>
-    ref.where('riderId', '==', cleanRiderId).where('status', '==', 'In Transit').limit(1)
+  const allRiderBatches = await queryDocs(BATCHES_COLLECTION, (ref) =>
+    ref.where('riderId', '==', cleanRiderId)
   );
 
-  if (!batches || batches.length === 0) {
-    batches = await queryDocs(BATCHES_COLLECTION, (ref) =>
-      ref.where('riderId', '==', cleanRiderId).where('status', '==', 'In-Transit').limit(1)
-    );
-  }
+  const active = allRiderBatches.find(
+    (b) => b.status === 'In Transit' || b.status === 'In-Transit'
+  );
 
-  return batches[0] || null;
+  return active || null;
 };
 
 module.exports = {

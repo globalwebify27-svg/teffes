@@ -71,10 +71,10 @@ const getDashboard = async (req, res, next) => {
     const storeId = rider.storeId || 'S001';
     const store = await getStoreById(storeId);
 
-    const storeAdmins = await queryDocs('users', (ref) =>
-      ref.where('role', '==', 'storeadmin').where('storeId', '==', storeId).limit(1)
+    const allStoreAdmins = await queryDocs('users', (ref) =>
+      ref.where('role', '==', 'storeadmin')
     );
-    const storeAdmin = storeAdmins[0] || null;
+    const storeAdmin = allStoreAdmins.find((a) => a.storeId === storeId || a.storeId === 'all') || null;
 
     const storeAdminName = storeAdmin?.name || store?.admin || 'Store Admin';
     const storeAdminPhone = storeAdmin?.phone || store?.phone || '+91 9779687955';
@@ -233,7 +233,12 @@ const getAvailableOrders = async (req, res, next) => {
     const orders = allOrders.filter((o) => {
       if (o.fulfillmentType === 'pickup') return false;
       const oDeclinedBy = Array.isArray(o.declinedBy) ? o.declinedBy.map(String) : [];
-      if (oDeclinedBy.includes(String(riderId)) || (rider?.id && oDeclinedBy.includes(String(rider.id)))) {
+      if (
+        oDeclinedBy.includes(String(riderId)) ||
+        (rider?.id && oDeclinedBy.includes(String(rider.id))) ||
+        (rider?._id && oDeclinedBy.includes(String(rider._id))) ||
+        (rPhone && oDeclinedBy.includes(rPhone))
+      ) {
         return false;
       }
       const oRiderId = o.rider?.riderId || o.rider?.id;
@@ -439,10 +444,19 @@ const rejectOrder = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    const targetId = order.id || id;
     const now = new Date().toISOString();
     const currentDeclined = Array.isArray(order.declinedBy) ? order.declinedBy : [];
+    const rPhone = (rider?.phone || '').replace(/\D/g, '');
     const updatedDeclined = Array.from(
-      new Set([...currentDeclined, String(riderId), String(rider?.id || '')].filter(Boolean))
+      new Set([
+        ...currentDeclined,
+        String(riderId),
+        String(rider?.id || ''),
+        String(rider?._id || ''),
+        String(order.rider?.riderId || ''),
+        ...(rPhone ? [rPhone] : []),
+      ].filter(Boolean))
     );
 
     const updatedTimeline = Array.isArray(order.timeline) ? [...order.timeline] : [];
@@ -462,7 +476,7 @@ const rejectOrder = async (req, res, next) => {
       updatedAt: now,
     };
 
-    await updateDoc('orders', id, updatePayload);
+    await updateDoc('orders', targetId, updatePayload);
 
     if (rider) {
       await updateDoc('users', rider.id || riderId, {
@@ -1000,10 +1014,10 @@ const getDispatchSupport = async (req, res, next) => {
 
     const storeId = rider.storeId || 'S001';
     const store = await getStoreById(storeId);
-    const storeAdmins = await queryDocs('users', (ref) =>
-      ref.where('role', '==', 'storeadmin').where('storeId', '==', storeId).limit(1)
+    const allStoreAdmins = await queryDocs('users', (ref) =>
+      ref.where('role', '==', 'storeadmin')
     );
-    const storeAdmin = storeAdmins[0] || null;
+    const storeAdmin = allStoreAdmins.find((a) => a.storeId === storeId || a.storeId === 'all') || null;
 
     res.status(200).json({
       success: true,

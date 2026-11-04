@@ -34,7 +34,12 @@ class CartProvider with ChangeNotifier {
   double get grandTotal => (subtotal - _couponDiscount + deliveryFee).clamp(0.0, double.infinity);
 
   CartProvider() {
-    _loadPersistedCart();
+    _init();
+  }
+
+  Future<void> _init() async {
+    await _loadPersistedCart();
+    await fetchCartFromServer();
     fetchAvailableCoupons();
   }
 
@@ -296,12 +301,54 @@ class CartProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fetches persistent cloud cart from Cloud Firestore via API
+  Future<void> fetchCartFromServer() async {
+    try {
+      final res = await _api.get(ApiEndpoints.cart);
+      if (res.data != null && res.data['success'] == true) {
+        final raw = res.data['cart'] ?? res.data['items'];
+        if (raw is List) {
+          final List<CartItemModel> loadedItems = [];
+          for (final itemRaw in raw) {
+            if (itemRaw is Map) {
+              try {
+                final item = CartItemModel.fromJson(Map<String, dynamic>.from(itemRaw));
+                if (item.product.id.isNotEmpty) {
+                  loadedItems.add(item);
+                }
+              } catch (e) {
+                debugPrint('[CartProvider] parse item error: $e');
+              }
+            }
+          }
+
+          if (loadedItems.isNotEmpty) {
+            for (final item in loadedItems) {
+              if (_items.containsKey(item.product.id)) {
+                _items[item.product.id]!.quantity = item.quantity > _items[item.product.id]!.quantity
+                    ? item.quantity
+                    : _items[item.product.id]!.quantity;
+              } else {
+                _items[item.product.id] = item;
+              }
+            }
+            await _saveCartToStorage();
+            _revalidateCoupon();
+            notifyListeners();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[CartProvider] fetchCartFromServer error: $e');
+    }
+  }
+
   Future<void> _syncCartWithBackend() async {
     if (_isSyncing) return;
     _isSyncing = true;
     try {
       final payload = _items.values.map((i) => i.toJson()).toList();
-      await _api.put(ApiEndpoints.cart, data: {'cart': payload});
+      await _api.put(ApiEndpoints.cart, data: {'items': payload, 'cart': payload});
     } catch (_) {
       // Offline local cart is retained smoothly
     } finally {

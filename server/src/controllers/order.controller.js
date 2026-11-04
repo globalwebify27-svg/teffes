@@ -31,7 +31,7 @@ const {
   requestReturn: requestReturnFS,
 } = require('../services/firestore/return.firestore.service');
 const notificationService = require('../services/notificationService');
-const { emitOrderCreated, emitOrderStatusUpdate } = require('../socket');
+const { emitOrderCreated, emitOrderStatusUpdate, emitReturnCreated } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
 
 const generateOrderId = () => {
@@ -98,11 +98,12 @@ const createOrder = async (req, res, next) => {
     );
 
     // Determine whether order is Store Pickup or Home Delivery
-    const isPickup =
+    const isPickup = Boolean(
       pickupMode === true ||
       fulfillmentType === 'pickup' ||
-      deliverySlot?.toLowerCase().includes('pickup') ||
-      shippingAddress?.toLowerCase().includes('store pickup');
+      (typeof deliverySlot === 'string' && deliverySlot.toLowerCase().includes('pickup')) ||
+      (typeof shippingAddress === 'string' && shippingAddress.toLowerCase().includes('store pickup'))
+    );
 
     const resolvedFulfillmentType = isPickup ? 'pickup' : 'delivery';
 
@@ -251,7 +252,7 @@ const createOrder = async (req, res, next) => {
       storeName: resolvedStoreName,
       deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
       fulfillmentType: resolvedFulfillmentType,
-      pickupMode: isPickup,
+      pickupMode: Boolean(isPickup),
       prepTimeMinutes: prepMinutes,
       targetDeliveryTime: targetDelivery,
       remainingTransitMinutes: initialTransit,
@@ -444,6 +445,7 @@ const requestReturn = async (req, res, next) => {
 
     const updatedOrder = await getDoc('orders', orderId);
     emitOrderStatusUpdate(orderId, updatedOrder || { orderId, returnStatus: 'Requested' });
+    emitReturnCreated(returnDoc, updatedOrder || {});
 
     res.status(201).json({
       success: true,
@@ -532,12 +534,15 @@ const rateRider = async (req, res, next) => {
     if (order.rider?.riderId) {
       const riderUser = await getUserById(order.rider.riderId);
       if (riderUser) {
-        const allRatedOrders = await queryDocs('orders', (ref) =>
-          ref.where('rider.riderId', '==', order.rider.riderId).where('riderRating', '>=', 1)
+        // Query by single field to avoid composite index requirement
+        const allRiderOrders = await queryDocs('orders', (ref) =>
+          ref.where('rider.riderId', '==', order.rider.riderId)
         );
-        const totalStars = allRatedOrders.reduce((sum, o) => sum + (Number(o.riderRating) || 0), 0) + numRating;
-        const count = allRatedOrders.length + 1;
-        const avg = parseFloat((totalStars / count).toFixed(1));
+        const allRatedOrders = allRiderOrders.filter((o) => typeof o.riderRating === 'number' && o.riderRating >= 1);
+        const hasCurrentOrder = allRatedOrders.some((o) => (o.id || o.orderId) === targetId);
+        const totalStars = allRatedOrders.reduce((sum, o) => sum + (Number(o.riderRating) || 0), 0) + (hasCurrentOrder ? 0 : numRating);
+        const count = allRatedOrders.length + (hasCurrentOrder ? 0 : 1);
+        const avg = parseFloat((totalStars / Math.max(1, count)).toFixed(1));
 
         await updateDoc('users', order.rider.riderId, {
           riderRating: avg,

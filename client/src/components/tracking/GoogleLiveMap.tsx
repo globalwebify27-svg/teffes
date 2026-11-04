@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Loader } from "@googlemaps/js-api-loader";
+import { setOptions, importLibrary } from "@googlemaps/js-api-loader";
 
 interface GoogleLiveMapProps {
   riderLat?: number;
@@ -16,6 +16,8 @@ interface GoogleLiveMapProps {
   orderStatus?: string;
   className?: string;
 }
+
+let isGoogleMapsOptionsConfigured = false;
 
 export default function GoogleLiveMap({
   riderLat = 23.3512,
@@ -45,19 +47,19 @@ export default function GoogleLiveMap({
       return;
     }
 
-    const loader = new Loader({
-      apiKey: apiKey,
-      version: "weekly",
-      libraries: ["places"],
-    });
+    let isMounted = true;
 
     const loadMaps = async () => {
       try {
-        if (typeof (loader as any).load === "function") {
-          await (loader as any).load();
-        } else if (typeof (loader as any).importLibrary === "function") {
-          await (loader as any).importLibrary("maps");
+        if (!isGoogleMapsOptionsConfigured) {
+          setOptions({ key: apiKey, v: "weekly" });
+          isGoogleMapsOptionsConfigured = true;
         }
+
+        await importLibrary("maps");
+        await importLibrary("marker");
+
+        if (!isMounted) return;
 
         const google = (window as any).google;
         if (!google || !mapRef.current) return;
@@ -146,14 +148,22 @@ export default function GoogleLiveMap({
           map,
         });
 
-        setIsGoogleMapLoaded(true);
+        if (isMounted) {
+          setIsGoogleMapLoaded(true);
+        }
       } catch (err: any) {
         console.warn("[Google Maps] Failed to load, using interactive route radar:", err?.message || err);
-        setLoadError(true);
+        if (isMounted) {
+          setLoadError(true);
+        }
       }
     };
 
     loadMaps();
+
+    return () => {
+      isMounted = false;
+    };
   }, [apiKey, storeLat, storeLng, customerLat, customerLng, riderLat, riderLng, riderName, storeName]);
 
   // Update rider marker dynamically when riderLat / riderLng change via Socket.IO
