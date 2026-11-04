@@ -291,7 +291,8 @@ const updateUserProfile = async (userId, updates = {}, requestingUser = null) =>
 
 const getAddresses = async (userId) => {
   const user = await getUserById(userId);
-  return user?.addresses || [];
+  const addresses = Array.isArray(user?.addresses) ? user.addresses : [];
+  return addresses.map((a) => ({ ...a, _id: a._id || a.id, id: a.id || a._id }));
 };
 
 const addAddress = async (userId, addressData = {}) => {
@@ -307,6 +308,7 @@ const addAddress = async (userId, addressData = {}) => {
   }
 
   const newAddress = {
+    _id: addressId,
     id: addressId,
     tag: (addressData.tag || 'Home').trim(),
     line1: (addressData.line1 || '').trim(),
@@ -321,7 +323,7 @@ const addAddress = async (userId, addressData = {}) => {
 
   addresses.push(newAddress);
   await updateDoc(COLLECTION, userId, { addresses });
-  return addresses;
+  return addresses.map((a) => ({ ...a, _id: a._id || a.id, id: a.id || a._id }));
 };
 
 const updateAddress = async (userId, addressId, addressData = {}) => {
@@ -329,7 +331,7 @@ const updateAddress = async (userId, addressId, addressData = {}) => {
   if (!user) throw new Error(`User "${userId}" not found`);
 
   const addresses = Array.isArray(user.addresses) ? [...user.addresses] : [];
-  const targetIndex = addresses.findIndex((a) => a.id === addressId);
+  const targetIndex = addresses.findIndex((a) => (a.id === addressId || a._id === addressId));
   if (targetIndex === -1) {
     throw new Error(`Address "${addressId}" not found`);
   }
@@ -341,11 +343,12 @@ const updateAddress = async (userId, addressId, addressData = {}) => {
   addresses[targetIndex] = {
     ...addresses[targetIndex],
     ...addressData,
-    id: addressId, // prevent ID overwrite
+    _id: addresses[targetIndex]._id || addresses[targetIndex].id || addressId,
+    id: addresses[targetIndex].id || addresses[targetIndex]._id || addressId,
   };
 
   await updateDoc(COLLECTION, userId, { addresses });
-  return addresses;
+  return addresses.map((a) => ({ ...a, _id: a._id || a.id, id: a.id || a._id }));
 };
 
 const deleteAddress = async (userId, addressId) => {

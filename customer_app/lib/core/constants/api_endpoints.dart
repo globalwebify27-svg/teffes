@@ -19,17 +19,22 @@ class ApiEndpoints {
       return 'http://$customHost:5000/api';
     }
 
-    if (kIsWeb) {
-      return 'https://teffes.onrender.com/api';
+    // In development / debug mode, connect to local development backend (port 5000)
+    // 10.0.2.2 is the Android emulator's loopback alias for the host machine's localhost
+    if (kDebugMode) {
+      try {
+        if (Platform.isAndroid) {
+          return 'http://10.0.2.2:5000/api';
+        }
+        if (Platform.isIOS || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
+          return 'http://localhost:5000/api';
+        }
+      } catch (_) {}
+      if (kIsWeb) {
+        return 'http://localhost:5000/api';
+      }
     }
 
-    try {
-      if (Platform.isAndroid) {
-        return 'https://teffes.onrender.com/api';
-      }
-    } catch (_) {
-      // Platform check may throw on unsupported environments
-    }
     return 'https://teffes.onrender.com/api';
   }
 
@@ -83,16 +88,21 @@ class ApiEndpoints {
   static String orderDetails(String id) => '/orders/$id';
   static String requestReturn(String id) => '/orders/$id/return';
 
-  // Razorpay & Payments
-  static const String createRazorpayOrder = '/payment/create-order';
-  static const String verifyRazorpayPayment = '/payment/verify-payment';
+  // PayU & Payments
+  static const String createPayUOrder = '/payment/create-order';
+  static const String verifyPayUPayment = '/payment/verify-payment';
+  static const String generatePayUHash = '/payment/generate-hash';
+  // Legacy aliases
+  static const String createRazorpayOrder = createPayUOrder;
+  static const String verifyRazorpayPayment = verifyPayUPayment;
 
-  /// Razorpay Key ID - supports passing via --dart-define=RAZORPAY_KEY_ID=...
-  /// or defaults to the same standard test key configured in the web client
-  static const String razorpayKeyId = String.fromEnvironment(
-    'RAZORPAY_KEY_ID',
-    defaultValue: 'rzp_test_1DP5mmOlF5G5ag',
+  /// PayU Merchant Key - supports passing via --dart-define=PAYU_KEY=...
+  static const String payuMerchantKey = String.fromEnvironment(
+    'PAYU_KEY',
+    defaultValue: 'mv5iBR',
   );
+  // Legacy alias
+  static const String razorpayKeyId = payuMerchantKey;
 
   /// Google Maps API Key - supports passing via --dart-define=GOOGLE_MAPS_API_KEY=...
   static const String googleMapsApiKey = String.fromEnvironment(

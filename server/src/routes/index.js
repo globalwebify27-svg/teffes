@@ -100,11 +100,23 @@ const getAvailableStoresHandler = async (req, res, next) => {
           outOfStockItems.push('Catalog unstocked at this location');
         } else {
           for (const item of items) {
+            // Check if item is a packaged pantry / cross-sell essential (spices, paste, marinades, eggs, etc.)
+            const isEssentialOrAddon =
+              item.id?.startsWith('cross-') ||
+              item.category?.toLowerCase() === 'essentials' ||
+              item.badge?.toLowerCase() === 'add-on' ||
+              /paste|masala|powder|spice|sauce|rice|egg/i.test(item.name || '');
+
+            if (isEssentialOrAddon) {
+              // Packaged pantry add-ons are universally stocked across all fulfillment hubs
+              continue;
+            }
+
             const matchedInv = matchCartItemToInventory(item, invList);
             const reqAmount = matchedInv ? getItemRequiredAmount(item, matchedInv.unit) : (Number(item.quantity) || 1);
             if (!matchedInv) {
-              isAvailable = false;
-              outOfStockItems.push(item.name || 'Item unavailable');
+              // Item does not require raw cold-room butchery deduction
+              continue;
             } else if (matchedInv.status === 'Out of Stock' || (matchedInv.stock !== undefined && matchedInv.stock < reqAmount)) {
               isAvailable = false;
               outOfStockItems.push(`${item.name} (Stock: ${matchedInv.stock || 0} ${matchedInv.unit || 'kg'})`);
@@ -162,12 +174,19 @@ router.post('/auth/firebase-login', auth.firebaseLogin);
 router.post('/auth/admin-login', auth.adminLogin);
 router.get('/auth/me', protectStaging, auth.getMe);
 router.put('/auth/me', protectStaging, auth.updateMe);
-router.get('/auth/addresses', protectStaging, auth.getUserAddresses);
-router.post('/auth/addresses', protectStaging, auth.createUserAddress);
-router.put('/auth/addresses/:addressId', protectStaging, auth.updateUserAddress);
-router.delete('/auth/addresses/:addressId', protectStaging, auth.deleteUserAddress);
+// ─── User Addresses (Mounted on /user/addresses, /auth/addresses, and /addresses) ──
+const registerAddressRoutes = (prefix) => {
+  router.get(prefix, protectStaging, auth.getUserAddresses);
+  router.post(prefix, protectStaging, auth.createUserAddress);
+  router.put(`${prefix}/:addressId`, protectStaging, auth.updateUserAddress);
+  router.delete(`${prefix}/:addressId`, protectStaging, auth.deleteUserAddress);
+};
+registerAddressRoutes('/auth/addresses');
+registerAddressRoutes('/user/addresses');
+registerAddressRoutes('/addresses');
 
 // ─── User Cart & Wishlist ───────────────────────────────────────────────────
+router.use('/user', require('./user.routes'));
 router.get('/user/cart', protectStaging, auth.getUserCart);
 router.post('/user/cart', protectStaging, auth.setUserCart);
 router.delete('/user/cart', protectStaging, auth.emptyUserCart);

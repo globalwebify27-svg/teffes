@@ -177,7 +177,8 @@ const createUserAddress = async (req, res) => {
 
 const updateUserAddress = async (req, res) => {
   try {
-    const addresses = await updateAddress(req.user._id || req.user.id, req.params.addressId, req.body);
+    const addressId = req.params.addressId || req.params.id;
+    const addresses = await updateAddress(req.user._id || req.user.id, addressId, req.body);
     return res.status(200).json({ success: true, message: 'Address updated', addresses });
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });
@@ -186,7 +187,8 @@ const updateUserAddress = async (req, res) => {
 
 const deleteUserAddress = async (req, res) => {
   try {
-    const addresses = await deleteAddress(req.user._id || req.user.id, req.params.addressId);
+    const addressId = req.params.addressId || req.params.id;
+    const addresses = await deleteAddress(req.user._id || req.user.id, addressId);
     return res.status(200).json({ success: true, message: 'Address removed', addresses });
   } catch (err) {
     return res.status(400).json({ success: false, message: err.message });

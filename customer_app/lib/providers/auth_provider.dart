@@ -323,7 +323,7 @@ class AuthProvider with ChangeNotifier {
     return await updateProfileDetails(name: name, email: email, phone: _user?.phone ?? '');
   }
 
-  Future<bool> addMoneyToWallet(double amount, {String? description, String? razorpayPaymentId}) async {
+  Future<bool> addMoneyToWallet(double amount, {String? description, String? payuPaymentId, String? razorpayPaymentId}) async {
     final currentBal = _user?.walletBalance ?? 0.0;
     final newBal = currentBal + amount;
     _user = _user?.copyWith(walletBalance: newBal);
@@ -332,7 +332,7 @@ class AuthProvider with ChangeNotifier {
     try {
       await _api.post(ApiEndpoints.walletAdd, data: {
         'amount': amount,
-        'description': description ?? 'Recharge via Razorpay (${razorpayPaymentId ?? "UPI/Online"})',
+        'description': description ?? 'Recharge via PayU (${payuPaymentId ?? razorpayPaymentId ?? "UPI/Online"})',
       });
       return true;
     } catch (e) {

@@ -13,6 +13,7 @@ import '../../widgets/common/cold_chain_promise_card.dart';
 import '../../widgets/common/location_header.dart';
 import '../../widgets/common/product_card.dart';
 import '../../widgets/common/brand_watermark_footer.dart';
+import '../../widgets/common/floating_cart_bar.dart';
 import '../cart/cart_checkout_screen.dart';
 import '../product_details/product_details_screen.dart';
 
@@ -62,6 +63,9 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfacePorcelain,
+      bottomSheet: (widget.showBackButton && cart.itemCount > 0)
+          ? const FloatingCartBar()
+          : null,
       body: SafeArea(
         child: Column(
           children: [
@@ -143,9 +147,13 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                     )
                   : ListView.builder(
                       physics: const BouncingScrollPhysics(),
-                      keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd, vertical: 4),
                       itemCount: products.length + 1,
+                      padding: EdgeInsets.only(
+                        left: AppDimensions.spaceMd,
+                        right: AppDimensions.spaceMd,
+                        top: 4,
+                        bottom: cart.itemCount > 0 ? 100 : 20,
+                      ),
                       itemBuilder: (context, index) {
                         if (index == products.length) {
                           return const BrandWatermarkFooter(showExploreButton: false);

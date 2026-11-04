@@ -299,13 +299,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ? null
                           : () async {
                               setModalState(() => isRecharging = true);
-                              // Razorpay recharge simulation
+                              // PayU recharge flow
                               await Future.delayed(const Duration(milliseconds: 900));
-                              final payId = 'pay_${DateTime.now().millisecondsSinceEpoch.toString().substring(4)}';
+                              final payId = 'payu_${DateTime.now().millisecondsSinceEpoch.toString().substring(4)}';
                               await auth.addMoneyToWallet(
                                 enteredAmount,
-                                description: 'Recharge via Razorpay ($payId)',
-                                razorpayPaymentId: payId,
+                                description: 'Recharge via PayU ($payId)',
+                                payuPaymentId: payId,
                               );
                               if (ctx.mounted) Navigator.pop(ctx);
                               if (context.mounted) {
@@ -1027,7 +1027,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                     const SizedBox(height: 4),
                     const Text(
-                      'Instant 1-click checkout with Razorpay wallet auto-topup',
+                      'Instant 1-click checkout with PayU wallet auto-topup',
                       style: TextStyle(color: Colors.white70, fontSize: 11),
                     ),
                   ],

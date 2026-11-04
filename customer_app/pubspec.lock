@@ -137,14 +137,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.2"
-  eventify:
-    dependency: transitive
-    description:
-      name: eventify
-      sha256: b829429f08586cc2001c628e7499e3e3c2493a1d895fd73b00ecb23351aa5a66
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.0.1"
   fake_async:
     dependency: transitive
     description:
@@ -704,6 +696,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.3.0"
+  payu_checkoutpro_flutter:
+    dependency: "direct main"
+    description:
+      name: payu_checkoutpro_flutter
+      sha256: "456256983373273f79ce568c2331d031788757921524eae2c50c7f9365a6c3ea"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.5.0"
   petitparser:
     dependency: transitive
     description:
@@ -744,14 +744,6 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.1"
-  razorpay_flutter:
-    dependency: "direct main"
-    description:
-      name: razorpay_flutter
-      sha256: f0ffd4e162f0c4c8d72e512deaece22d2179e653e470fd794865283c28ff9079
-      url: "https://pub.dev"
-    source: hosted
-    version: "1.4.7"
   record_use:
     dependency: transitive
     description:
@@ -1158,7 +1150,7 @@ packages:
     source: hosted
     version: "1.0.1"
   webview_flutter:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: webview_flutter
       sha256: d53e1ccf5516f25017e3c9d44c39034db352d20fa34fe200674270242c2c5111

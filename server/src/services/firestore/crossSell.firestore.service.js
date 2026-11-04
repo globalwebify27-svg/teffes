@@ -127,6 +127,8 @@ const deleteCrossSellItem = async (id) => {
 module.exports = {
   COLLECTION,
   getPublicCrossSellItems,
+  getActiveCrossSellItems: getPublicCrossSellItems,
+  getCrossSellItemsByStore: getPublicCrossSellItems,
   getAdminCrossSellItems,
   getCrossSellItemById,
   createCrossSellItem,

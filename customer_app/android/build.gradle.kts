@@ -19,6 +19,36 @@ subprojects {
     project.evaluationDependsOn(":app")
 }
 
+subprojects {
+    val configureAndroid = {
+        val android = extensions.findByName("android")
+        if (android != null) {
+            for (method in android.javaClass.methods) {
+                if (method.name == "compileSdkVersion" && method.parameterCount == 1 && method.parameterTypes[0] == Int::class.javaPrimitiveType) {
+                    try {
+                        method.invoke(android, 36)
+                        println("Updated compileSdkVersion to 36 for $name")
+                    } catch (_: Throwable) {}
+                }
+                if (method.name == "setCompileSdk" && method.parameterCount == 1) {
+                    try {
+                        method.invoke(android, 36)
+                        println("Updated setCompileSdk to 36 for $name")
+                    } catch (_: Throwable) {}
+                }
+            }
+        }
+    }
+
+    if (state.executed) {
+        configureAndroid()
+    } else {
+        afterEvaluate {
+            configureAndroid()
+        }
+    }
+}
+
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }

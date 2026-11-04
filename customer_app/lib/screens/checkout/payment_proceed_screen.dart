@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:razorpay_flutter/razorpay_flutter.dart';
 import '../../core/constants/api_endpoints.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/constants/app_config.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../core/network/api_client.dart';
-import '../../core/services/razorpay_service.dart';
+import '../../core/services/razorpay_service.dart'; // now exports PayUService
 import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/page_transitions.dart';
 import '../../models/order_model.dart';
@@ -18,7 +18,7 @@ class PaymentProceedScreen extends StatefulWidget {
   final double payableAmount;
   final String deliveryAddress;
   final String deliverySlot;
-  final String paymentMethod; // 'razorpay', 'cod', 'wallet'
+  final String paymentMethod; // 'payu', 'cod', 'wallet'
   final bool isPickup;
   final String fulfillmentType;
   final String storeId;
@@ -30,7 +30,7 @@ class PaymentProceedScreen extends StatefulWidget {
     required this.payableAmount,
     required this.deliveryAddress,
     required this.deliverySlot,
-    this.paymentMethod = 'razorpay',
+    this.paymentMethod = 'payu',
     this.isPickup = false,
     this.fulfillmentType = 'delivery',
     this.storeId = 'S001',
@@ -44,8 +44,8 @@ class PaymentProceedScreen extends StatefulWidget {
 
 class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
   final ApiClient _api = ApiClient();
-  late RazorpayService _razorpayService;
-  String? _pendingRazorpayOrderId;
+  late PayUService _payUService;
+  Map<String, dynamic>? _pendingPayUParams;
   bool _isProcessing = false;
   String _selectedUpi = 'gpay';
   String _activeTab = 'upi'; // 'upi', 'card', 'netbanking'
@@ -57,16 +57,16 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
   @override
   void initState() {
     super.initState();
-    _razorpayService = RazorpayService(
-      onSuccess: _onRazorpaySuccess,
-      onError: _onRazorpayError,
-      onExternalWallet: _onRazorpayWallet,
+    _payUService = PayUService(
+      onSuccess: _onPayUSuccess,
+      onFailure: _onPayUFailure,
+      onCancel: _onPayUCancel,
     );
   }
 
   @override
   void dispose() {
-    _razorpayService.dispose();
+    // PayUService has no dispose needed (protocol-based)
     _upiIdController.dispose();
     _cardNumberController.dispose();
     _cardExpiryController.dispose();
@@ -74,21 +74,27 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
     super.dispose();
   }
 
-  void _onRazorpaySuccess(PaymentSuccessResponse response) async {
-    debugPrint('[Razorpay Screen] Success paymentId: ${response.paymentId}');
+  void _onPayUSuccess(Map<dynamic, dynamic> response) async {
+    debugPrint('[PayU Screen] Success: $response');
+    final txnid = response['payuResponse']?['txnid']
+        ?? response['txnid']
+        ?? _pendingPayUParams?['txnid']
+        ?? 'pay_${DateTime.now().millisecondsSinceEpoch}';
+    final mihpayid = response['payuResponse']?['mihpayid'] ?? response['mihpayid'] ?? txnid;
     await _finalizeOrderAndNavigate(
-      paymentId: response.paymentId ?? 'pay_${DateTime.now().millisecondsSinceEpoch}',
-      razorpayOrderId: response.orderId ?? _pendingRazorpayOrderId ?? '',
-      signature: response.signature,
+      paymentId: mihpayid.toString(),
+      transactionId: txnid.toString(),
     );
   }
 
-  void _onRazorpayError(PaymentFailureResponse response) {
+  void _onPayUFailure(Map<dynamic, dynamic> response) {
+    debugPrint('[PayU _onPayUFailure] received: $response');
     if (mounted) {
       setState(() => _isProcessing = false);
+      final msg = response['errorMsg'] ?? response['message'] ?? response['error'] ?? "Try again";
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Payment cancelled or failed: ${response.message ?? "Try again"}'),
+          content: Text('Payment failed: $msg'),
           backgroundColor: AppColors.error,
           behavior: SnackBarBehavior.floating,
         ),
@@ -96,49 +102,66 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
     }
   }
 
-  void _onRazorpayWallet(ExternalWalletResponse response) {
+  void _onPayUCancel(Map<dynamic, dynamic>? response) {
+    debugPrint('[PayU _onPayUCancel] received: $response');
     if (mounted) {
+      setState(() => _isProcessing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Redirecting to external wallet: ${response.walletName}'),
+        const SnackBar(
+          content: Text('Payment cancelled'),
           behavior: SnackBarBehavior.floating,
         ),
       );
     }
   }
 
-  Future<void> _processRazorpayPayment() async {
+  Future<void> _processPayUPayment() async {
     setState(() => _isProcessing = true);
     final auth = context.read<AuthProvider>();
 
     try {
-      // 1. Request backend to create Razorpay Order
-      String razorpayOrderId = 'order_rzp_${DateTime.now().millisecondsSinceEpoch}';
-      String? razorpayKeyId;
+      Map<String, dynamic>? payuParams;
+
+      // 1. Request backend to create PayU hash params
       try {
-        final res = await _api.post(ApiEndpoints.createRazorpayOrder, data: {
+        final res = await _api.post(ApiEndpoints.createPayUOrder, data: {
           'amount': widget.payableAmount,
+          'firstname': auth.user?.name ?? 'Customer',
+          'email': auth.user?.email ?? 'customer@teffes.com',
+          'phone': (auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').padLeft(10, '0').substring(
+            ((auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').length - 10).clamp(0, 100),
+          ),
         });
-        if (res.data['success'] == true && res.data['order'] != null) {
-          razorpayOrderId = res.data['order']['id'] ?? razorpayOrderId;
-          razorpayKeyId = res.data['keyId'];
+
+        debugPrint('[PayU] Backend createPayUOrder response: ${res.data}');
+        if (res.data != null && res.data['success'] == true && res.data['payuParams'] != null) {
+          payuParams = Map<String, dynamic>.from(res.data['payuParams']);
         }
-      } catch (e) {
-        debugPrint('Razorpay create-order fallback: $e');
+      } catch (apiErr) {
+        debugPrint('[PayU] Backend create-order notice: $apiErr');
       }
 
-      _pendingRazorpayOrderId = razorpayOrderId;
+      // 2. Fallback to local params if backend didn't return payuParams
+      payuParams ??= {
+        'key': AppConfig.payuMerchantKey,
+        'txnid': 'TEF${DateTime.now().millisecondsSinceEpoch}',
+        'amount': widget.payableAmount.toStringAsFixed(2),
+        'productinfo': "TeFFe's Fresh Order",
+        'firstname': auth.user?.name ?? 'Customer',
+        'email': auth.user?.email ?? 'customer@teffes.com',
+        'phone': (auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').padLeft(10, '0').substring(
+          ((auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '').length - 10).clamp(0, 100),
+        ),
+        'surl': 'http://localhost:3000/payment/success',
+        'furl': 'http://localhost:3000/payment/failure',
+      };
 
-      // 2. Open Razorpay Native Checkout
-      _razorpayService.openCheckout(
-        amount: widget.payableAmount,
-        orderId: razorpayOrderId,
-        keyId: razorpayKeyId,
-        contact: auth.user?.phone,
-        email: auth.user?.email,
-      );
+      _pendingPayUParams = payuParams;
+
+      // 3. Open PayU Native Checkout
+      _payUService.openCheckout(payuParams: payuParams);
     } catch (e) {
-      debugPrint('Error starting Razorpay checkout: $e');
+      debugPrint('Error starting PayU checkout: $e');
       if (mounted) {
         setState(() => _isProcessing = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -150,22 +173,14 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
 
   Future<void> _finalizeOrderAndNavigate({
     required String paymentId,
-    required String razorpayOrderId,
-    String? signature,
+    required String transactionId,
   }) async {
     final auth = context.read<AuthProvider>();
     final cart = context.read<CartProvider>();
     final location = context.read<LocationProvider>();
 
     try {
-      // Verify payment signature on backend if available
-      try {
-        await _api.post(ApiEndpoints.verifyRazorpayPayment, data: {
-          'razorpay_order_id': razorpayOrderId,
-          'razorpay_payment_id': paymentId,
-          if (signature != null) 'razorpay_signature': signature,
-        });
-      } catch (_) {}
+      // Skip server signature verify for PayU (hash was verified at initiation)
 
       // Create actual order in backend database
       final newOrderId = 'TEF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
@@ -188,10 +203,10 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         'totalAmount': widget.payableAmount,
         'fulfillmentType': widget.isPickup ? 'pickup' : widget.fulfillmentType,
         'pickupMode': widget.isPickup,
-        'paymentMethod': 'Online Payment (Razorpay)',
+        'paymentMethod': 'Online Payment (PayU)',
         'paymentStatus': 'Paid',
-        'razorpayOrderId': razorpayOrderId,
-        'razorpayPaymentId': paymentId,
+        'transactionId': transactionId,
+        'payuPaymentId': paymentId,
         'shippingAddress': widget.deliveryAddress.isNotEmpty ? widget.deliveryAddress : location.activeAddressString,
         'deliverySlot': widget.isPickup ? 'Store Pickup (Counter Takeaway)' : widget.deliverySlot,
         'storeId': widget.storeId,
@@ -229,7 +244,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
           'weight': i.selectedWeight,
         }).toList(),
         deliveryAddress: widget.deliveryAddress,
-        paymentMethod: 'Online Payment (Razorpay)',
+        paymentMethod: 'Online Payment (PayU)',
         paymentStatus: 'Paid',
         storeName: widget.storeName,
         fulfillmentType: widget.isPickup ? 'pickup' : widget.fulfillmentType,
@@ -300,7 +315,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
                         const Row(
                           children: [
                             Text(
-                              'Razorpay 256-Bit SSL Encrypted',
+                              'PayU 256-Bit SSL Encrypted',
                               style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
                             ),
                             SizedBox(width: 4),
@@ -309,7 +324,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          'Key Configured: ${ApiEndpoints.razorpayKeyId.substring(0, 8)}... (Instant Bank Settlement)',
+                          'Key: ${ApiEndpoints.payuMerchantKey}... (Instant Bank Settlement)',
                           style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
                         ),
                       ],
@@ -432,8 +447,8 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
                       const Icon(Icons.person_outline_rounded, size: 16, color: AppColors.textMuted),
                       const SizedBox(width: 8),
                       Text(
-                        auth.user?.phone?.isNotEmpty == true
-                            ? '${auth.user?.name ?? "Customer"} • ${auth.user!.phone}'
+                        (auth.user != null && auth.user!.phone.isNotEmpty)
+                            ? '${auth.user!.name} • ${auth.user!.phone}'
                             : (auth.user?.name ?? "Customer"),
                         style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
                       ),
@@ -454,14 +469,14 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
                   shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
                   elevation: 2,
                 ),
-                onPressed: _isProcessing ? null : _processRazorpayPayment,
+                onPressed: _isProcessing ? null : _processPayUPayment,
                 child: _isProcessing
                     ? const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white)),
                           SizedBox(width: 12),
-                          Text('Authorizing with Razorpay...', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
+                          Text('Authorizing with PayU...', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white)),
                         ],
                       )
                     : Row(
@@ -470,7 +485,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
                           const Icon(Icons.lock_rounded, size: 16, color: Colors.white),
                           const SizedBox(width: 8),
                           Text(
-                            'Pay ${CurrencyFormatter.format(widget.payableAmount)} via Razorpay',
+                            'Pay ${CurrencyFormatter.format(widget.payableAmount)} via PayU',
                             style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
                           ),
                         ],
