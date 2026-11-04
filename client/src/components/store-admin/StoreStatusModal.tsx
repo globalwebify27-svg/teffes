@@ -8,9 +8,17 @@ interface StoreStatusModalProps {
   isOpenModal: boolean;
   onClose: () => void;
   onStatusChange?: (storeData: any) => void;
+  storeName?: string;
+  storeId?: string;
 }
 
-export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange }: StoreStatusModalProps) {
+export default function StoreStatusModal({
+  isOpenModal,
+  onClose,
+  onStatusChange,
+  storeName: propStoreName,
+  storeId: propStoreId,
+}: StoreStatusModalProps) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [storeOpen, setStoreOpen] = useState(true);
@@ -18,7 +26,9 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
   const [emergencyNotice, setEmergencyNotice] = useState("");
   const [pickupEnabled, setPickupEnabled] = useState(true);
   const [deliveryEnabled, setDeliveryEnabled] = useState(true);
-  const [storeName, setStoreName] = useState("Store Outlet");
+  const [storeName, setStoreName] = useState(
+    propStoreName || (propStoreId === "S004" ? "TeFFe's — Doranda Hub" : "TeFFe's — Kishore Ganj Store")
+  );
   const [baseDeliveryPay, setBaseDeliveryPay] = useState<number>(65);
   const [distanceIncentive, setDistanceIncentive] = useState<number>(15);
   const [peakHourSurge, setPeakHourSurge] = useState<number>(20);
@@ -37,12 +47,15 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
 
   useEffect(() => {
     if (!isOpenModal) return;
+    if (propStoreName) setStoreName(propStoreName);
     setLoading(true);
-    api.get<{ success: boolean; store: any }>("/store-admin/store-status")
+    const q = propStoreId ? `?storeId=${propStoreId}` : "";
+    api.get<{ success: boolean; store: any }>(`/store-admin/store-status${q}`)
       .then((res) => {
         if (res.data.success && res.data.store) {
           const s = res.data.store;
           if (s.name) setStoreName(s.name);
+          else if (propStoreName) setStoreName(propStoreName);
           setStoreOpen(s.isOpen !== false);
           setTimings(s.timings || "08:00 AM - 08:00 PM");
           setEmergencyNotice(s.emergencyNotice || "");
@@ -127,17 +140,27 @@ export default function StoreStatusModal({ isOpenModal, onClose, onStatusChange 
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50/70 shrink-0">
-          <div className="flex items-center gap-2.5">
-            <span className="material-symbols-outlined text-primary text-[24px]">storefront</span>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-red-50 text-[#941717] flex items-center justify-center border border-red-100 shadow-sm shrink-0">
+              <span className="material-symbols-outlined text-[24px]">storefront</span>
+            </div>
             <div>
-              <h3 className="font-bold text-gray-900 text-base">Store Operational Control</h3>
-              <p className="text-xs text-gray-500">{storeName}</p>
+              <h3 className="font-bold text-gray-900 text-base leading-tight">Store Operational Control</h3>
+              <div className="flex items-center gap-1.5 mt-1">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold bg-red-100/80 text-[#941717] border border-red-200">
+                  <span className="material-symbols-outlined text-[13px]">location_on</span>
+                  {storeName || (propStoreId === "S004" ? "TeFFe's — Doranda Hub" : "TeFFe's — Kishore Ganj Store")}
+                </span>
+                <span className="text-[10px] font-bold text-gray-600 bg-gray-200/80 px-1.5 py-0.5 rounded tracking-wide">
+                  {propStoreId || (storeName?.includes("Doranda") ? "S004" : "S001")}
+                </span>
+              </div>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-200"
+            className="w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-gray-700 hover:bg-gray-200 transition-colors"
           >
             <span className="material-symbols-outlined text-[18px]">close</span>
           </button>
