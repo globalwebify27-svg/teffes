@@ -98,11 +98,12 @@ const createOrder = async (req, res, next) => {
     );
 
     // Determine whether order is Store Pickup or Home Delivery
-    const isPickup =
+    const isPickup = Boolean(
       pickupMode === true ||
       fulfillmentType === 'pickup' ||
-      deliverySlot?.toLowerCase().includes('pickup') ||
-      shippingAddress?.toLowerCase().includes('store pickup');
+      (typeof deliverySlot === 'string' && deliverySlot.toLowerCase().includes('pickup')) ||
+      (typeof shippingAddress === 'string' && shippingAddress.toLowerCase().includes('store pickup'))
+    );
 
     const resolvedFulfillmentType = isPickup ? 'pickup' : 'delivery';
 
@@ -251,7 +252,7 @@ const createOrder = async (req, res, next) => {
       storeName: resolvedStoreName,
       deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
       fulfillmentType: resolvedFulfillmentType,
-      pickupMode: isPickup,
+      pickupMode: Boolean(isPickup),
       prepTimeMinutes: prepMinutes,
       targetDeliveryTime: targetDelivery,
       remainingTransitMinutes: initialTransit,

@@ -120,6 +120,23 @@ const getDoc = async (collectionName, docId) => {
  * @param {Object} [options={ overwrite: false }]
  * @returns {Promise<Object>} Formatted document
  */
+const sanitizeForFirestore = (obj) => {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map((item) => sanitizeForFirestore(item));
+  if (obj instanceof Date) return obj.toISOString();
+  if (obj.constructor && obj.constructor.name && obj.constructor.name.includes('FieldValue')) return obj;
+  const clean = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = (val && typeof val === 'object' && !(val instanceof Date))
+        ? sanitizeForFirestore(val)
+        : val;
+    }
+  }
+  return clean;
+};
+
 const createDoc = async (collectionName, docId = null, data = {}, options = {}) => {
   if (!collectionName || typeof collectionName !== 'string') {
     throw new Error('[Firestore DAL] collectionName must be a non-empty string');
@@ -130,11 +147,11 @@ const createDoc = async (collectionName, docId = null, data = {}, options = {}) 
 
   const db = getDb();
   const now = new Date().toISOString();
-  const payload = {
+  const payload = sanitizeForFirestore({
     ...data,
     createdAt: data.createdAt || now,
     updatedAt: now,
-  };
+  });
 
   if (docId) {
     if (typeof docId !== 'string' || !docId.trim()) {
@@ -199,10 +216,10 @@ const updateDoc = async (collectionName, docId, data = {}) => {
 
   // Prevent callers from accidentally mutating document ID inside data
   const { id, _id, ...cleanData } = data;
-  const payload = {
+  const payload = sanitizeForFirestore({
     ...cleanData,
     updatedAt: new Date().toISOString(),
-  };
+  });
 
   await docRef.update(payload);
   const updatedSnap = await docRef.get();
