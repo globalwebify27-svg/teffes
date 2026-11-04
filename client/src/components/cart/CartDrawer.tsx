@@ -167,7 +167,8 @@ export default function CartDrawer() {
   useEffect(() => {
     if (isOpen) {
       setIsLoadingCrossSell(true);
-      api.get<{ success: boolean; data: CrossSellItemData[] }>("/cross-sell")
+      const q = selectedStoreId ? `?storeId=${selectedStoreId}` : "";
+      api.get<{ success: boolean; data: CrossSellItemData[] }>(`/cross-sell${q}`)
         .then((res) => {
           if (res.data?.success && Array.isArray(res.data.data)) {
             setCrossSellItems(res.data.data);
@@ -182,7 +183,7 @@ export default function CartDrawer() {
           setIsLoadingCrossSell(false);
         });
     }
-  }, [isOpen]);
+  }, [isOpen, selectedStoreId]);
 
   // Handler for cross-selling product addition
   const handleAddCrossSell = (cs: CrossSellItemData) => {

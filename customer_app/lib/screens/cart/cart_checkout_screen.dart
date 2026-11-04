@@ -11,7 +11,6 @@ import '../../providers/cart_provider.dart';
 import '../../providers/location_provider.dart';
 import '../../widgets/common/quantity_stepper.dart';
 import '../orders/order_tracking_screen.dart';
-import '../checkout/payment_proceed_screen.dart';
 import '../../core/constants/app_config.dart';
 import '../../core/services/razorpay_service.dart';
 
@@ -53,42 +52,6 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   bool _showStorePickerInDelivery = false;
   bool _isLoadingStores = false;
 
-  final List<ProductModel> _defaultCrossSellItems = [
-    ProductModel(
-      id: 'cross-onion-1kg',
-      name: 'Fresh Onion',
-      price: 40.0,
-      originalPrice: 50.0,
-      image: 'https://images.unsplash.com/photo-1618512496248-a07fe83aa8cb?w=400&auto=format&fit=crop&q=80',
-      netWeight: '1 kg',
-      category: 'essentials',
-      categoryLabel: 'Essentials',
-      inStock: true,
-    ),
-    ProductModel(
-      id: 'cross-ginger-garlic-paste',
-      name: 'Ginger Garlic Paste',
-      price: 45.0,
-      originalPrice: 55.0,
-      image: 'https://images.unsplash.com/photo-1596040033229-a9821ebd058d?w=400&auto=format&fit=crop&q=80',
-      netWeight: '200g',
-      category: 'essentials',
-      categoryLabel: 'Essentials',
-      inStock: true,
-    ),
-    ProductModel(
-      id: 'cross-chicken-masala',
-      name: 'Chicken Masala',
-      price: 35.0,
-      originalPrice: 45.0,
-      image: 'https://images.unsplash.com/photo-1596797038530-2c107229654b?w=400&auto=format&fit=crop&q=80',
-      netWeight: '100g',
-      category: 'essentials',
-      categoryLabel: 'Essentials',
-      inStock: true,
-    ),
-  ];
-
   List<Map<String, dynamic>> _getHourlySlots() {
     final now = DateTime.now();
     final currentHour = now.hour;
@@ -121,21 +84,26 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   Future<void> _fetchCrossSellItems() async {
     setState(() => _isLoadingCrossSell = true);
     try {
-      final res = await ApiClient().get('/cross-sell');
+      final storeParam = _selectedStoreId.isNotEmpty ? '?storeId=$_selectedStoreId' : '';
+      final res = await ApiClient().get('/cross-sell$storeParam');
       if (res.data != null && res.data['success'] == true && res.data['data'] is List) {
         final list = (res.data['data'] as List)
             .map((e) => ProductModel.fromJson(Map<String, dynamic>.from(e as Map)))
             .toList();
-        if (mounted && list.isNotEmpty) {
+        if (mounted) {
           setState(() {
             _crossSellItems = list;
           });
         }
+      } else if (mounted) {
+        setState(() {
+          _crossSellItems = [];
+        });
       }
     } catch (_) {
-      if (mounted && _crossSellItems.isEmpty) {
+      if (mounted) {
         setState(() {
-          _crossSellItems = _defaultCrossSellItems;
+          _crossSellItems = [];
         });
       }
     } finally {
@@ -152,11 +120,12 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       onCancel: _onPayUCancel,
     );
     _initDefaultStores();
-    _crossSellItems = _defaultCrossSellItems;
+    _crossSellItems = [];
     final available = _getHourlySlots().where((s) => s['isPassed'] == false).toList();
     _selectedCustomSlot = available.isNotEmpty ? (available.first['label'] as String) : 'Tomorrow: 08:00 AM - 09:00 AM';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        context.read<CartProvider>().fetchCartFromServer();
         context.read<CartProvider>().fetchAvailableCoupons();
         _fetchStores();
         _fetchCrossSellItems();
@@ -282,6 +251,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               }
             }
           });
+          _fetchCrossSellItems();
         }
       }
     } catch (e) {
