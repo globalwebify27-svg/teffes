@@ -13,26 +13,27 @@ class ApiEndpoints {
       return customBaseUrl.endsWith('/api') ? customBaseUrl : '$customBaseUrl/api';
     }
 
-    // Override with custom IP if testing on a physical device on the same Wi-Fi
     const String customHost = String.fromEnvironment('API_HOST');
     if (customHost.isNotEmpty) {
+      if (customHost == 'emulator') {
+        return 'http://10.0.2.2:5000/api';
+      }
       return 'http://$customHost:5000/api';
     }
 
-    // In development / debug mode, connect to local development backend (port 5000)
-    // 10.0.2.2 is the Android emulator's loopback alias for the host machine's localhost
-    if (kDebugMode) {
-      try {
-        if (Platform.isAndroid) {
-          return 'http://10.0.2.2:5000/api';
-        }
-        if (Platform.isIOS || Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
-          return 'http://localhost:5000/api';
-        }
-      } catch (_) {}
-      if (kIsWeb) {
+    if (kIsWeb) {
+      return 'https://teffes.onrender.com/api';
+    }
+
+    try {
+      if (Platform.isAndroid || Platform.isIOS) {
+        return 'https://teffes.onrender.com/api';
+      }
+      if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         return 'http://localhost:5000/api';
       }
+    } catch (_) {
+      // ignore
     }
 
     return 'https://teffes.onrender.com/api';
