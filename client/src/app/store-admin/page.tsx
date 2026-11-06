@@ -590,7 +590,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   );
 }
 
-function LiveOrdersTab() {
+function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string) => void } = {}) {
   const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
@@ -981,6 +981,9 @@ function LiveOrdersTab() {
       await api.patch(`/store-admin/orders/${orderId}/status`, { status: next });
       toast.success(`Order advanced to: ${next}`, "Order Updated");
       fetchOrders();
+      if (onOrderAdvanced) {
+        onOrderAdvanced(orderId);
+      }
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to advance order status", "Order Error");
     }
@@ -1724,7 +1727,9 @@ function LiveOrdersTab() {
                           background: isAvailable ? "#ecfdf5" : r.riderStatus === "On Delivery" ? "#eff6ff" : "#f3f4f6",
                           color: isAvailable ? "#059669" : r.riderStatus === "On Delivery" ? "#2563eb" : "#6b7280",
                         }}>
-                          {r.riderStatus || "Available"}
+                          {r.riderStatus === "On Delivery"
+                            ? `On Delivery (${r.activeOrdersCount || 1} active)`
+                            : (r.riderStatus || "Available")}
                         </span>
                       </div>
                     );
@@ -7177,9 +7182,6 @@ export default function StoreAdminPage() {
       );
     };
 
-    socket.on("order:created", onOrderCreated);
-    socket.on("return:created", onReturnCreated);
-
     // Initial check and 12-second polling redundancy for Pending orders & Pending Review return requests
     const checkPendingOrders = () => {
       api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=Pending&storeId=${currentStoreId}`)
@@ -7222,6 +7224,28 @@ export default function StoreAdminPage() {
         .catch(() => { });
     };
 
+    const handleStatusChanged = (data: any) => {
+      const orderId = data?.orderId || data?.id || data?.order?.orderId || data?.order?.id;
+      const status = data?.status || data?.order?.status;
+      if (orderId && status && status !== "Pending") {
+        acknowledgedIdsRef.current.add(orderId);
+        setIncomingOrders((prev) => {
+          const remaining = prev.filter((o) => (o.orderId || o.id || o._id) !== orderId);
+          if (remaining.length === 0 && incomingReturns.length === 0) {
+            orderAlarm.stopAlarm();
+          }
+          return remaining;
+        });
+      }
+      checkPendingOrders();
+    };
+
+    socket.on("order:created", onOrderCreated);
+    socket.on("return:created", onReturnCreated);
+    socket.on("orders:refreshed", checkPendingOrders);
+    socket.on("order:status_changed", handleStatusChanged);
+    socket.on("order:status_updated", handleStatusChanged);
+
     checkPendingOrders();
     checkPendingReturns();
     const pollInterval = setInterval(() => {
@@ -7235,6 +7259,9 @@ export default function StoreAdminPage() {
       }
       socket.off("order:created", onOrderCreated);
       socket.off("return:created", onReturnCreated);
+      socket.off("orders:refreshed", checkPendingOrders);
+      socket.off("order:status_changed", handleStatusChanged);
+      socket.off("order:status_updated", handleStatusChanged);
       clearInterval(pollInterval);
       orderAlarm.stopAlarm();
     };
@@ -7337,6 +7364,19 @@ export default function StoreAdminPage() {
     acknowledgeIncomingReturns();
   };
 
+  const handleOrderAdvanced = (orderId: string) => {
+    if (orderId) {
+      acknowledgedIdsRef.current.add(orderId);
+      setIncomingOrders((prev) => {
+        const remaining = prev.filter((o) => (o.orderId || o.id || o._id) !== orderId);
+        if (remaining.length === 0 && incomingReturns.length === 0) {
+          orderAlarm.stopAlarm();
+        }
+        return remaining;
+      });
+    }
+  };
+
   if (!user) return null;
 
   const effectiveStoreId = user?.storeId || storeData?.storeId || "S001";
@@ -7345,9 +7385,11 @@ export default function StoreAdminPage() {
     user?.storeName ||
     (effectiveStoreId === "S004" || effectiveStoreId === "S002"
       ? "TeFFe's — Doranda Hub"
-      : "TeFFe's — Kishore Ganj Store");  const tabComponents: Record<string, React.ReactNode> = {
+      : "TeFFe's — Kishore Ganj Store");
+
+  const tabComponents: Record<string, React.ReactNode> = {
     dashboard: <DashboardTab setActiveTab={setActiveTab} />,
-    orders: <LiveOrdersTab />,
+    orders: <LiveOrdersTab onOrderAdvanced={handleOrderAdvanced} />,
     products: <ProductsStockTab />,
     cross_sell: <CrossSellTab />,
     inventory: <InventoryTab />,
@@ -7650,28 +7692,6 @@ export default function StoreAdminPage() {
                 <span className="material-symbols-outlined text-[18px]">local_shipping</span>
                 <span>View in Live Orders</span>
               </button>
-
-              <button
-                type="button"
-                onClick={acknowledgeIncomingOrders}
-                style={{
-                  background: "#10b981",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "8px 16px",
-                  color: "#fff",
-                  fontWeight: 800,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-                }}
-              >
-                <span className="material-symbols-outlined text-[18px]">done_all</span>
-                <span>Acknowledge</span>
-              </button>
             </div>
           </div>
         )}
@@ -7762,6 +7782,17 @@ export default function StoreAdminPage() {
                 type="button"
                 onClick={() => {
                   setActiveTab("returns");
+                  // Clear return banner & mark as viewed/acknowledged
+                  incomingReturns.forEach((r) => {
+                    if (r.requestId) acknowledgedIdsRef.current.add(r.requestId);
+                    if (r.id) acknowledgedIdsRef.current.add(r.id);
+                    if (r._id) acknowledgedIdsRef.current.add(r._id);
+                  });
+                  try {
+                    const idsArray = Array.from(acknowledgedIdsRef.current).slice(-100);
+                    localStorage.setItem("teffes_acked_order_ids", JSON.stringify(idsArray));
+                  } catch { }
+                  setIncomingReturns([]);
                   if (incomingOrders.length === 0) {
                     orderAlarm.stopAlarm();
                   }
@@ -7783,28 +7814,6 @@ export default function StoreAdminPage() {
               >
                 <span className="material-symbols-outlined text-[18px]">assignment_return</span>
                 <span>Review Returns</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={acknowledgeIncomingReturns}
-                style={{
-                  background: "#10b981",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "8px 16px",
-                  color: "#fff",
-                  fontWeight: 800,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
-                }}
-              >
-                <span className="material-symbols-outlined text-[18px]">done_all</span>
-                <span>Acknowledge</span>
               </button>
             </div>
           </div>

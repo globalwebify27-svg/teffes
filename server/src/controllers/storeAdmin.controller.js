@@ -1010,7 +1010,14 @@ const getRiders = async (req, res, next) => {
           (phoneStr && activeRiderIdentifiers.has(phoneStr)) ||
           (nameStr && activeRiderIdentifiers.has(nameStr));
 
-        const copy = { ...r };
+        const riderActiveCount = activeOrders.filter((o) => {
+          const oRiderId = o.rider?.riderId ? String(o.rider.riderId) : '';
+          const oRiderPhone = o.rider?.phone ? String(o.rider.phone).replace(/\D/g, '') : '';
+          const oRiderName = o.rider?.name ? String(o.rider.name).trim().toLowerCase() : '';
+          return (idStr && oRiderId === idStr) || (phoneStr && oRiderPhone === phoneStr) || (nameStr && oRiderName === nameStr);
+        }).length;
+
+        const copy = { ...r, activeOrdersCount: riderActiveCount };
         delete copy.password;
 
         try {
@@ -1105,7 +1112,7 @@ const assignRiderToOrder = async (req, res, next) => {
       }).catch((err) => console.warn('[FCM] Customer rider push error:', err.message));
     }
 
-    res.status(200).json({ success: true, order, rider });
+    res.status(200).json({ success: true, order: updatedOrder || order, rider });
   } catch (error) {
     next(error);
   }
