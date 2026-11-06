@@ -293,6 +293,10 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
   const db = getDb();
   const now = new Date().toISOString();
 
+  // Read store batch configuration upfront
+  const batchConfig = await getStoreBatchConfig(cleanStoreId);
+  const maxBatchSize = batchConfig.maxBatchSize || 3;
+
   return runTransaction(async (transaction) => {
     // 1. Read rider doc upfront (check USERS_COLLECTION first, then riders collection)
     let riderRef = db.collection(USERS_COLLECTION).doc(cleanRiderId);
@@ -307,17 +311,60 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
         throw new Error(`Rider "${cleanRiderId}" not found in users or riders collection`);
       }
     }
-    const riderData = riderSnap.data();
+    const riderData = riderSnap.data() || {};
 
-    // Verification: Rider must be available and not already On Delivery
-    if (riderData.riderStatus === 'On Delivery' || riderData.activeBatchId) {
-      throw new Error(`Rider "${riderData.name || cleanRiderId}" is already on an active delivery run.`);
-    }
     if (riderData.riderStatus === 'Offline') {
       throw new Error(`Rider "${riderData.name || cleanRiderId}" is currently Offline.`);
     }
 
-    // 2. Read store doc upfront
+    // 2. Read existing batch upfront if rider is already on an active run
+    let existingBatchRef = null;
+    let existingBatchSnap = null;
+    let existingBatchData = null;
+
+    if (riderData.activeBatchId) {
+      existingBatchRef = db.collection(BATCHES_COLLECTION).doc(String(riderData.activeBatchId).trim());
+      existingBatchSnap = await transaction.get(existingBatchRef);
+      if (existingBatchSnap.exists) {
+        const b = existingBatchSnap.data();
+        if (b && (b.status === 'In Transit' || b.status === 'In-Transit')) {
+          existingBatchData = b;
+        }
+      }
+    }
+
+    // Determine current active undelivered orders for this rider
+    let existingActiveOrderIds = [];
+    if (existingBatchData) {
+      const comp = existingBatchData.completedOrderIds || [];
+      const canc = existingBatchData.cancelledOrderIds || [];
+      existingActiveOrderIds = (existingBatchData.orderIds || []).filter(
+        (id) => !comp.includes(id) && !canc.includes(id)
+      );
+    } else if (riderData.riderStatus === 'On Delivery') {
+      const activeQuery = await db
+        .collection(ORDERS_COLLECTION)
+        .where('rider.riderId', '==', cleanRiderId)
+        .where('status', '==', 'Out for Delivery')
+        .get();
+      existingActiveOrderIds = activeQuery.docs.map((d) => d.data().orderId || d.id);
+    }
+
+    // Exclude orders that are already active for this rider
+    const newOrderIds = cleanOrderIds.filter((id) => !existingActiveOrderIds.includes(id));
+    if (newOrderIds.length === 0) {
+      throw new Error(`Selected order(s) are already assigned to rider "${riderData.name || cleanRiderId}".`);
+    }
+
+    // Verify multi-order capacity limit against store configuration
+    const totalActiveOrders = existingActiveOrderIds.length + newOrderIds.length;
+    if (totalActiveOrders > maxBatchSize) {
+      throw new Error(
+        `Rider "${riderData.name || cleanRiderId}" already has ${existingActiveOrderIds.length} active delivery run. Maximum capacity per rider is ${maxBatchSize} orders.`
+      );
+    }
+
+    // 3. Read store doc upfront
     const storeRef = db.collection(STORES_COLLECTION).doc(cleanStoreId);
     const storeSnap = await transaction.get(storeRef);
     const storeData = storeSnap.exists ? storeSnap.data() : {};
@@ -326,14 +373,13 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       lng: storeData.lng || 85.3096,
     };
 
-    // 3. Read all order docs upfront (resolving doc ID or orderId)
+    // 4. Read all new order docs upfront (resolving doc ID or orderId)
     const orderDocs = [];
-    for (const rawId of cleanOrderIds) {
+    for (const rawId of newOrderIds) {
       let targetRef = db.collection(ORDERS_COLLECTION).doc(rawId);
       let snap = await transaction.get(targetRef);
 
       if (!snap.exists) {
-        // Query by orderId if rawId wasn't document ID
         const qSnap = await db.collection(ORDERS_COLLECTION).where('orderId', '==', rawId).limit(1).get();
         if (!qSnap.empty) {
           targetRef = qSnap.docs[0].ref;
@@ -346,47 +392,127 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       }
 
       const oData = snap.data();
-
-      // Validation: Order must be Ready or Packed
       const st = (oData.status || '').toLowerCase();
       if (st !== 'ready' && st !== 'packed' && st !== 'confirmed') {
         throw new Error(`Order #${oData.orderId || rawId} is in "${oData.status}" status (must be "Ready" or "Packed" to dispatch).`);
       }
 
-      // Validation: Order must belong to same store
-      if (oData.storeId && oData.storeId !== cleanStoreId) {
+      const isStoreMatch =
+        oData.storeId === cleanStoreId ||
+        ((cleanStoreId === 'S004' || cleanStoreId === 'S002') && (oData.storeId === 'S004' || oData.storeId === 'S002'));
+      if (oData.storeId && !isStoreMatch) {
         throw new Error(`Order #${oData.orderId || rawId} belongs to store "${oData.storeId}", not "${cleanStoreId}".`);
       }
 
       orderDocs.push({ ref: targetRef, data: oData, id: snap.id });
     }
 
-    // 4. Feasibility check
+    const riderInfo = {
+      riderId: cleanRiderId,
+      name: riderData.name || 'Rider Partner',
+      phone: riderData.phone || '',
+      vehicleNumber: riderData.vehicleNumber || 'JH-01-BK-1234',
+      lat: storeCoords.lat,
+      lng: storeCoords.lng,
+    };
+
+    // 5. Case A: Rider already has an active batch -> Append new order(s) to this batch
+    if (existingBatchData && existingBatchRef) {
+      const mergedOrderIds = [...(existingBatchData.orderIds || []), ...newOrderIds];
+      const startingSeq = (existingBatchData.orderIds || []).length;
+
+      orderDocs.forEach((od, idx) => {
+        const seq = startingSeq + idx + 1;
+        const randomOtp = od.data.deliveryOtp || Math.floor(1000 + Math.random() * 9000).toString();
+        transaction.update(od.ref, {
+          status: 'Out for Delivery',
+          rider: riderInfo,
+          deliveryOtp: randomOtp,
+          batchId: existingBatchData.batchId,
+          batchSequence: seq,
+          deliverySequence: seq,
+          etaStage: 'SCHEDULED_BATCH',
+          remainingTransitMinutes: Math.max(15, seq * 12),
+          updatedAt: now,
+        });
+      });
+
+      transaction.update(existingBatchRef, {
+        orderIds: mergedOrderIds,
+        totalOrders: mergedOrderIds.length,
+        updatedAt: now,
+      });
+
+      transaction.update(riderRef, {
+        riderStatus: 'On Delivery',
+        activeBatchId: existingBatchData.batchId,
+        updatedAt: now,
+      });
+
+      return {
+        success: true,
+        batchId: existingBatchData.batchId,
+        batch: {
+          ...existingBatchData,
+          orderIds: mergedOrderIds,
+          totalOrders: mergedOrderIds.length,
+        },
+        orders: orderDocs.map((o, idx) => ({
+          orderId: o.data.orderId || o.id,
+          sequence: startingSeq + idx + 1,
+        })),
+        rider: {
+          id: cleanRiderId,
+          name: riderData.name,
+          riderStatus: 'On Delivery',
+        },
+      };
+    }
+
+    // 6. Case B: Create new batch (incorporating any unbatched active orders + new orders)
+    const allBatchOrderDocs = [...orderDocs];
+    if (existingActiveOrderIds.length > 0) {
+      for (const eId of existingActiveOrderIds) {
+        let eRef = db.collection(ORDERS_COLLECTION).doc(eId);
+        let eSnap = await transaction.get(eRef);
+        if (!eSnap.exists) {
+          const q = await db.collection(ORDERS_COLLECTION).where('orderId', '==', eId).limit(1).get();
+          if (!q.empty) {
+            eRef = q.docs[0].ref;
+            eSnap = await transaction.get(eRef);
+          }
+        }
+        if (eSnap.exists) {
+          allBatchOrderDocs.unshift({ ref: eRef, data: eSnap.data(), id: eSnap.id });
+        }
+      }
+    }
+
     const feasibility = await evaluateRouteFeasibility({
       storeId: cleanStoreId,
       storeCoords,
-      orders: orderDocs.map((o) => o.data),
+      orders: allBatchOrderDocs.map((o) => o.data),
     });
 
-    if (!feasibility.isFeasible) {
+    if (!feasibility.isFeasible && allBatchOrderDocs.length > maxBatchSize) {
       throw new Error(feasibility.reason || 'Selected orders are not route-feasible for batch delivery');
     }
 
-    // Sort order docs according to optimalSequence
     const seqOrderMap = new Map();
-    feasibility.optimalSequence.forEach((seqId, idx) => seqOrderMap.set(seqId, idx + 1));
+    (feasibility.optimalSequence || allBatchOrderDocs.map((o) => o.data.orderId || o.id)).forEach((seqId, idx) => {
+      seqOrderMap.set(seqId, idx + 1);
+    });
 
-    orderDocs.sort((a, b) => {
+    allBatchOrderDocs.sort((a, b) => {
       const seqA = seqOrderMap.get(a.data.orderId) || seqOrderMap.get(a.id) || 999;
       const seqB = seqOrderMap.get(b.data.orderId) || seqOrderMap.get(b.id) || 999;
       return seqA - seqB;
     });
 
-    // 5. Generate Lean Batch Document (orders remain primary source of truth)
     const batchId = `BATCH-${Date.now().toString().slice(-6)}-${Math.floor(100 + Math.random() * 900)}`;
     const batchRef = db.collection(BATCHES_COLLECTION).doc(batchId);
 
-    const orderedIds = orderDocs.map((o) => o.data.orderId || o.id);
+    const orderedIds = allBatchOrderDocs.map((o) => o.data.orderId || o.id);
     const activeOrderId = orderedIds[0];
 
     const batchData = {
@@ -405,8 +531,8 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       orderIds: orderedIds,
       completedOrderIds: [],
       cancelledOrderIds: [],
-      totalDistanceKm: feasibility.totalDistanceKm,
-      estimatedDurationMinutes: feasibility.estimatedDurationMinutes,
+      totalDistanceKm: feasibility.totalDistanceKm || 2.5,
+      estimatedDurationMinutes: feasibility.estimatedDurationMinutes || 25,
       dispatchedBy: adminUser ? {
         id: adminUser.id || adminUser._id || null,
         name: adminUser.name || 'Store Admin',
@@ -420,17 +546,7 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
 
     transaction.set(batchRef, batchData);
 
-    // 6. Update individual order documents with batch reference & OTP
-    const riderInfo = {
-      riderId: cleanRiderId,
-      name: riderData.name || 'Rider Partner',
-      phone: riderData.phone || '',
-      vehicleNumber: riderData.vehicleNumber || 'JH-01-BK-1234',
-      lat: storeCoords.lat,
-      lng: storeCoords.lng,
-    };
-
-    orderDocs.forEach((od, idx) => {
+    allBatchOrderDocs.forEach((od, idx) => {
       const seq = idx + 1;
       const randomOtp = od.data.deliveryOtp || Math.floor(1000 + Math.random() * 9000).toString();
       const isFirst = seq === 1;
@@ -443,12 +559,11 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
         batchSequence: seq,
         deliverySequence: seq,
         etaStage: isFirst ? 'IN_TRANSIT' : 'SCHEDULED_BATCH',
-        remainingTransitMinutes: isFirst ? Math.max(10, Math.round(feasibility.estimatedDurationMinutes / orderedIds.length)) : feasibility.estimatedDurationMinutes,
+        remainingTransitMinutes: isFirst ? Math.max(10, Math.round((feasibility.estimatedDurationMinutes || 25) / orderedIds.length)) : (feasibility.estimatedDurationMinutes || 25),
         updatedAt: now,
       });
     });
 
-    // 7. Update Rider status
     transaction.update(riderRef, {
       riderStatus: 'On Delivery',
       activeBatchId: batchId,
@@ -459,7 +574,7 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       success: true,
       batchId,
       batch: batchData,
-      orders: orderDocs.map((o) => ({
+      orders: allBatchOrderDocs.map((o) => ({
         orderId: o.data.orderId || o.id,
         sequence: seqOrderMap.get(o.data.orderId) || seqOrderMap.get(o.id) || 1,
       })),

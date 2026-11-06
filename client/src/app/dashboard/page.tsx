@@ -348,6 +348,33 @@ export default function DashboardPage() {
         .then((res) => {
           if (res.data.success && res.data.orders) {
             setLiveOrders(res.data.orders);
+            setTrackingOrder((currentTracking: any) => {
+              if (!currentTracking) return null;
+              const matching = res.data.orders.find((o) =>
+                (currentTracking.orderId && (o.orderId === currentTracking.orderId || o.id === currentTracking.orderId)) ||
+                (currentTracking.id && (o.id === currentTracking.id || o.orderId === currentTracking.id))
+              );
+              if (matching) {
+                return {
+                  ...currentTracking,
+                  status: matching.status,
+                  rawOrder: matching,
+                  deliveryOtp: matching.deliveryOtp || currentTracking.deliveryOtp,
+                  rider: matching.rider ? {
+                    isAssigned: true,
+                    name: matching.rider.name || "",
+                    phone: matching.rider.phone || "",
+                    vehicle: matching.rider.vehicle || matching.rider.vehicleNumber || "Insulated Cold Box (Fleet)",
+                    lat: Number(matching.rider.lat) || 23.3441,
+                    lng: Number(matching.rider.lng) || 85.3096,
+                    rating: (matching.rider.rating || matching.rider.riderRating || "4.9").toString(),
+                    deliveriesCount: matching.rider.deliveriesCount || "Fleet Partner",
+                    bagTemp: matching.rider.bagTemp || "Fresh-Lock Insulated Box",
+                  } : currentTracking.rider,
+                };
+              }
+              return currentTracking;
+            });
           }
         })
         .catch(() => { });
@@ -808,6 +835,7 @@ export default function DashboardPage() {
     return {
       id: o.orderId || o.id || `TEF-${o._id?.slice(-6)}`,
       orderId: o.orderId || o.id,
+      status: o.status,
       statusText: o.status === "Pending"
         ? (o.isNextDayOrder || (o.deliverySlot && (o.deliverySlot.toLowerCase().includes('tomorrow') || o.deliverySlot.toLowerCase().includes('next-day') || o.deliverySlot.toLowerCase().includes('09:00 am'))))
           ? "Scheduled • Tomorrow by 9:00 AM"
