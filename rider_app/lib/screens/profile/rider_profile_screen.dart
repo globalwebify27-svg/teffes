@@ -429,7 +429,7 @@ class RiderProfileScreen extends StatelessWidget {
                   const Divider(color: AppColors.borderHairline, height: 16),
                   _buildProfileRow(
                     icon: Icons.storefront_rounded,
-                    title: 'Assigned Dark Store Hub',
+                    title: 'Assigned Teffe Store Hub',
                     value: rider?.assignedStore ?? 'Store S001 - Ranchi Central Hub',
                   ),
                   const Divider(color: AppColors.borderHairline, height: 16),

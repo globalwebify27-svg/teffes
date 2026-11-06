@@ -5,6 +5,9 @@ const {
   verifyPayUPayment,
   handlePayUWebhook,
   generatePayUHash,
+  getDoorstepQr,
+  getDoorstepPaymentStatus,
+  confirmDoorstepPayment,
   createRazorpayOrder,
   verifyRazorpayPayment,
   handleRazorpayWebhook,
@@ -21,5 +24,10 @@ router.use(optionalProtect);
 router.post('/create-order', createPayUOrder);
 router.post('/verify-payment', verifyPayUPayment);
 router.post('/generate-hash', generatePayUHash);
+
+// Doorstep QR payment endpoints
+router.get('/doorstep-qr/:orderId', getDoorstepQr);
+router.get('/doorstep-status/:orderId', getDoorstepPaymentStatus);
+router.post('/doorstep-confirm', confirmDoorstepPayment);
 
 module.exports = router;

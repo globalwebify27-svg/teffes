@@ -73,6 +73,7 @@ class RiderOrderModel {
   final double? riderLng;
   final bool isReturn;
   final String? returnStatus;
+  final String? deliveryInstruction;
 
   String get orderNumber => orderId.isNotEmpty ? orderId : id;
   String get customerName => customer.name;
@@ -113,6 +114,7 @@ class RiderOrderModel {
     this.riderLng,
     this.isReturn = false,
     this.returnStatus,
+    this.deliveryInstruction,
   });
 
   factory RiderOrderModel.fromJson(Map<String, dynamic> json) {
@@ -146,9 +148,19 @@ class RiderOrderModel {
         (json['id'] != null &&
             json['id'].toString().toUpperCase().startsWith('RET-'));
 
+    final String? rawInst = json['deliveryInstruction']?.toString() ??
+        json['instruction']?.toString() ??
+        custMap['deliveryInstruction']?.toString() ??
+        json['deliveryInstructions']?.toString() ??
+        json['deliveryNote']?.toString();
+    final String? deliveryInst = (rawInst != null && rawInst.trim().isNotEmpty && rawInst.trim().toLowerCase() != 'null')
+        ? rawInst.trim()
+        : null;
+
     return RiderOrderModel(
       id: json['_id'] ?? json['id'] ?? '',
       orderId: json['orderId'] ?? json['id'] ?? '',
+      deliveryInstruction: deliveryInst,
       status: json['status'] ?? 'Pending',
       amount: (json['amount'] as num?)?.toDouble() ?? (json['totalAmount'] as num?)?.toDouble() ?? 0.0,
       riderEarning: (json['riderEarning'] as num?)?.toDouble() ?? 65.0,

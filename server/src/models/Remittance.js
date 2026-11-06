@@ -29,7 +29,7 @@ const remittanceSchema = new mongoose.Schema(
     },
     storeName: {
       type: String,
-      default: "TeFFe's Dark Store Hub",
+      default: "TeFFe's Store Hub",
     },
     amount: {
       type: Number,

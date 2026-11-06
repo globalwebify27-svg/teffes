@@ -140,12 +140,14 @@ class RiderOrdersProvider with ChangeNotifier {
     required String orderId,
     required String otp,
     double? cashCollected,
+    String? paymentMode,
   }) async {
     _error = null;
     try {
       final res = await _api.post(ApiEndpoints.completeDelivery(orderId), data: {
         'otp': otp.trim(),
         'cashReceived': cashCollected,
+        'paymentMode': paymentMode,
       });
 
       if (res.data['success'] == true) {
@@ -161,6 +163,55 @@ class RiderOrdersProvider with ChangeNotifier {
       }
     } catch (e) {
       _error = 'OTP verification failed. Please ask customer to re-check code.';
+      return false;
+    }
+  }
+
+  Future<Map<String, dynamic>?> fetchDoorstepQr(String orderId) async {
+    _error = null;
+    try {
+      final res = await _api.get(ApiEndpoints.doorstepQr(orderId));
+      if (res.data['success'] == true) {
+        return res.data as Map<String, dynamic>;
+      }
+      _error = res.data['message'] ?? 'Failed to load QR code';
+      return null;
+    } catch (e) {
+      _error = 'Failed to load payment QR code';
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> checkDoorstepPaymentStatus(String orderId) async {
+    try {
+      final res = await _api.get(ApiEndpoints.doorstepStatus(orderId));
+      if (res.data['success'] == true) {
+        return res.data as Map<String, dynamic>;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> confirmDoorstepPayment({
+    required String orderId,
+    String? utr,
+  }) async {
+    _error = null;
+    try {
+      final res = await _api.post(ApiEndpoints.doorstepConfirm, data: {
+        'orderId': orderId,
+        'utr': utr,
+        'paymentMethod': 'UPI QR (Doorstep)',
+      });
+      if (res.data['success'] == true) {
+        return true;
+      }
+      _error = res.data['message'] ?? 'Payment confirmation failed';
+      return false;
+    } catch (e) {
+      _error = 'Failed to confirm payment';
       return false;
     }
   }
@@ -241,7 +292,7 @@ class RiderOrdersProvider with ChangeNotifier {
       if (res.data['success'] == true) {
         return {
           'success': true,
-          'message': res.data['message'] ?? 'SOS alert dispatched to dark store and emergency services.',
+          'message': res.data['message'] ?? 'SOS alert dispatched to Teffes store and emergency services.',
           'emergencyContacts': res.data['emergencyContacts'],
         };
       }

@@ -53,4 +53,9 @@ class ApiEndpoints {
   static const String riderNotifications = '/rider/notifications';
   static String markNotificationRead(String id) => '/rider/notifications/$id/read';
   static String orderDetails(String id) => '/orders/$id';
+
+  // Doorstep UPI QR Payments
+  static String doorstepQr(String id) => '/payment/doorstep-qr/$id';
+  static String doorstepStatus(String id) => '/payment/doorstep-status/$id';
+  static const String doorstepConfirm = '/payment/doorstep-confirm';
 }

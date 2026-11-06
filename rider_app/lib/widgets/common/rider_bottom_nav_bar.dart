@@ -13,6 +13,7 @@ class RiderBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -30,40 +31,40 @@ class RiderBottomNavBar extends StatelessWidget {
           ),
         ),
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(
-                index: 0,
-                icon: Icons.dashboard_outlined,
-                activeIcon: Icons.dashboard_rounded,
-                label: 'Duty',
-              ),
-              _buildNavItem(
-                index: 1,
-                icon: Icons.delivery_dining_outlined,
-                activeIcon: Icons.delivery_dining_rounded,
-                label: 'Deliveries',
-              ),
-              _buildNavItem(
-                index: 2,
-                icon: Icons.account_balance_wallet_outlined,
-                activeIcon: Icons.account_balance_wallet_rounded,
-                label: 'Earnings',
-              ),
-              _buildNavItem(
-                index: 3,
-                icon: Icons.person_outline_rounded,
-                activeIcon: Icons.person_rounded,
-                label: 'Profile',
-              ),
-            ],
+      padding: EdgeInsets.only(
+        left: 12,
+        right: 12,
+        top: 8,
+        bottom: 8 + bottomInset,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavItem(
+            index: 0,
+            icon: Icons.dashboard_outlined,
+            activeIcon: Icons.dashboard_rounded,
+            label: 'Duty',
           ),
-        ),
+          _buildNavItem(
+            index: 1,
+            icon: Icons.delivery_dining_outlined,
+            activeIcon: Icons.delivery_dining_rounded,
+            label: 'Deliveries',
+          ),
+          _buildNavItem(
+            index: 2,
+            icon: Icons.account_balance_wallet_outlined,
+            activeIcon: Icons.account_balance_wallet_rounded,
+            label: 'Earnings',
+          ),
+          _buildNavItem(
+            index: 3,
+            icon: Icons.person_outline_rounded,
+            activeIcon: Icons.person_rounded,
+            label: 'Profile',
+          ),
+        ],
       ),
     );
   }

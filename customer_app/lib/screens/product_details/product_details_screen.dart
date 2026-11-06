@@ -89,6 +89,8 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
       }
     }
 
+    final double bottomInset = MediaQuery.of(context).viewPadding.bottom;
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -511,9 +513,14 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
             ),
           ),
 
-          // Sticky Bottom Bar
+          // Sticky Bottom Bar (Dynamically respects 3-button & gesture navigation)
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: EdgeInsets.only(
+              left: 16,
+              right: 16,
+              top: 10,
+              bottom: 10 + bottomInset,
+            ),
             decoration: const BoxDecoration(
               color: Colors.white,
               border: Border(top: BorderSide(color: Color(0xE6E2E8F0))),
@@ -521,136 +528,133 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                 BoxShadow(color: Color.fromRGBO(0, 0, 0, 0.05), blurRadius: 10, offset: Offset(0, -3)),
               ],
             ),
-            child: SafeArea(
-              top: false,
-              child: Row(
-                children: [
-                  // 1. Price & Discount Column (Flexible so it safely adapts to narrow screens)
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.baseline,
-                          textBaseline: TextBaseline.alphabetic,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                CurrencyFormatter.format(product.price),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 19,
-                                  fontWeight: FontWeight.w900,
-                                  color: AppColors.textPrimary,
-                                ),
+            child: Row(
+              children: [
+                // 1. Price & Discount Column (Flexible so it safely adapts to narrow screens)
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Flexible(
+                            child: Text(
+                              CurrencyFormatter.format(product.price),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 19,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textPrimary,
                               ),
                             ),
-                            if (product.originalPrice > product.price) ...[
-                              const SizedBox(width: 5),
-                              Text(
-                                CurrencyFormatter.format(product.originalPrice),
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.textMuted,
-                                  decoration: TextDecoration.lineThrough,
-                                  decorationColor: AppColors.primaryMaroon,
-                                  decorationThickness: 2.0,
-                                ),
+                          ),
+                          if (product.originalPrice > product.price) ...[
+                            const SizedBox(width: 5),
+                            Text(
+                              CurrencyFormatter.format(product.originalPrice),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                                decoration: TextDecoration.lineThrough,
+                                decorationColor: AppColors.primaryMaroon,
+                                decorationThickness: 2.0,
                               ),
-                            ],
+                            ),
                           ],
-                        ),
-                        if (discountText.isNotEmpty)
-                          Text(
-                            discountText,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: AppColors.discountGreen,
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        ],
+                      ),
+                      if (discountText.isNotEmpty)
+                        Text(
+                          discountText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: AppColors.discountGreen,
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
                           ),
-                      ],
-                    ),
+                        ),
+                    ],
                   ),
-                  const SizedBox(width: 8),
+                ),
+                const SizedBox(width: 8),
 
-                  // 2. Action Area: Quantity Stepper & Responsive View Cart Button
-                  if (quantity == 0)
-                    QuantityStepper(
-                      quantity: quantity,
-                      inStock: product.inStock,
-                      onAdd: () => cart.addToCart(product),
-                      onIncrement: () => cart.increment(product.id),
-                      onDecrement: () => cart.decrement(product.id),
-                    )
-                  else
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        QuantityStepper(
-                          quantity: quantity,
-                          inStock: product.inStock,
-                          onAdd: () => cart.addToCart(product),
-                          onIncrement: () => cart.increment(product.id),
-                          onDecrement: () => cart.decrement(product.id),
-                        ),
-                        const SizedBox(width: 8),
-                        // View Cart CTA Button
-                        Material(
-                          color: AppColors.primaryMaroon,
+                // 2. Action Area: Quantity Stepper & Responsive View Cart Button
+                if (quantity == 0)
+                  QuantityStepper(
+                    quantity: quantity,
+                    inStock: product.inStock,
+                    onAdd: () => cart.addToCart(product),
+                    onIncrement: () => cart.increment(product.id),
+                    onDecrement: () => cart.decrement(product.id),
+                  )
+                else
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      QuantityStepper(
+                        quantity: quantity,
+                        inStock: product.inStock,
+                        onAdd: () => cart.addToCart(product),
+                        onIncrement: () => cart.increment(product.id),
+                        onDecrement: () => cart.decrement(product.id),
+                      ),
+                      const SizedBox(width: 8),
+                      // View Cart CTA Button
+                      Material(
+                        color: AppColors.primaryMaroon,
+                        borderRadius: AppDimensions.roundedMd,
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.of(context).push(
+                              SmoothPageRoute(page: const CartCheckoutScreen()),
+                            );
+                          },
                           borderRadius: AppDimensions.roundedMd,
-                          child: InkWell(
-                            onTap: () {
-                              Navigator.of(context).push(
-                                SmoothPageRoute(page: const CartCheckoutScreen()),
-                              );
-                            },
-                            borderRadius: AppDimensions.roundedMd,
-                            child: Container(
-                              height: 34,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              decoration: BoxDecoration(
-                                borderRadius: AppDimensions.roundedMd,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primaryMaroon.withValues(alpha: 0.22),
-                                    blurRadius: 4,
-                                    offset: const Offset(0, 2),
-                                  ),
-                                ],
-                              ),
-                              child: const Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Text(
-                                    'View Cart',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.3,
-                                    ),
-                                  ),
-                                  SizedBox(width: 4),
-                                  Icon(
-                                    Icons.arrow_forward_rounded,
-                                    size: 14,
+                          child: Container(
+                            height: 34,
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              borderRadius: AppDimensions.roundedMd,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primaryMaroon.withValues(alpha: 0.22),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'View Cart',
+                                  style: TextStyle(
                                     color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
                                   ),
-                                ],
-                              ),
+                                ),
+                                SizedBox(width: 4),
+                                Icon(
+                                  Icons.arrow_forward_rounded,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
-                ],
-              ),
+                      ),
+                    ],
+                  ),
+              ],
             ),
           ),
         ],

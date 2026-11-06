@@ -68,23 +68,10 @@ export default function Pagination({
 
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        flexWrap: "wrap",
-        gap: "14px",
-        padding: "12px 18px",
-        marginTop: "16px",
-        background: "#ffffff",
-        border: "1px solid #ede8e0",
-        borderRadius: "14px",
-        boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
-        userSelect: "none",
-      }}
+      className="flex flex-col sm:flex-row items-center sm:justify-between gap-3 p-3 sm:px-4 sm:py-3 mt-4 bg-white border border-[#ede8e0] rounded-2xl shadow-xs select-none w-full"
     >
       {/* Left: Summary text with maroon highlights */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+      <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start w-full sm:w-auto text-center sm:text-left">
         <span
           style={{
             fontSize: "0.825rem",
@@ -104,6 +91,7 @@ export default function Pagination({
             borderRadius: "99px",
             fontWeight: 700,
             border: "1px solid #fecaca",
+            whiteSpace: "nowrap",
           }}
         >
           {pageSize} per page
@@ -111,7 +99,7 @@ export default function Pagination({
       </div>
 
       {/* Right: Unified compact navigation controls with center editable page input */}
-      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+      <div className="flex items-center justify-center sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto">
         {/* First Page Button */}
         <button
           type="button"
@@ -119,9 +107,9 @@ export default function Pagination({
           disabled={currentPage === 1}
           title="First Page"
           style={{
-            minWidth: "32px",
-            height: "34px",
-            padding: "0 8px",
+            width: "30px",
+            height: "32px",
+            padding: 0,
             borderRadius: "8px",
             border: "1px solid #e7e5e4",
             background: currentPage === 1 ? "#fafaf9" : "#fff",
@@ -133,6 +121,7 @@ export default function Pagination({
             fontSize: "0.75rem",
             transition: "all 150ms ease",
             opacity: currentPage === 1 ? 0.6 : 1,
+            flexShrink: 0,
           }}
         >
           <FontAwesomeIcon icon={faAnglesLeft} />
@@ -144,9 +133,9 @@ export default function Pagination({
           onClick={() => handlePageSelect(currentPage - 1)}
           disabled={currentPage === 1}
           title="Previous Page"
+          className="px-2 sm:px-3"
           style={{
-            height: "34px",
-            padding: "0 12px",
+            height: "32px",
             borderRadius: "8px",
             border: "1px solid #e7e5e4",
             background: currentPage === 1 ? "#fafaf9" : "#fff",
@@ -154,15 +143,17 @@ export default function Pagination({
             cursor: currentPage === 1 ? "not-allowed" : "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "6px",
+            justifyContent: "center",
+            gap: "4px",
             fontSize: "0.8rem",
             fontWeight: 700,
             transition: "all 150ms ease",
             opacity: currentPage === 1 ? 0.6 : 1,
+            flexShrink: 0,
           }}
         >
           <FontAwesomeIcon icon={faChevronLeft} style={{ fontSize: "0.7rem" }} />
-          <span>Prev</span>
+          <span className="hidden sm:inline">Prev</span>
         </button>
 
         {/* Center: Interactive Page Input Box */}
@@ -170,16 +161,17 @@ export default function Pagination({
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: "8px",
+            gap: "4px",
             background: "#faf8f5",
             border: isFocused ? "1.5px solid #941717" : "1px solid #ede8e0",
-            borderRadius: "10px",
-            padding: "3px 10px",
+            borderRadius: "8px",
+            padding: "2px 6px",
             transition: "all 150ms ease",
-            boxShadow: isFocused ? "0 0 0 3px rgba(148, 23, 23, 0.12)" : "none",
+            boxShadow: isFocused ? "0 0 0 2px rgba(148, 23, 23, 0.12)" : "none",
+            flexShrink: 0,
           }}
         >
-          <span style={{ fontSize: "0.8rem", color: "#57534e", fontWeight: 600 }}>Page</span>
+          <span style={{ fontSize: "0.75rem", color: "#57534e", fontWeight: 600 }}>Page</span>
           <input
             type="text"
             inputMode="numeric"
@@ -197,13 +189,13 @@ export default function Pagination({
             onKeyDown={handleKeyDown}
             title="Type page number and press Enter"
             style={{
-              width: "44px",
-              height: "28px",
-              padding: "0 4px",
-              borderRadius: "6px",
+              width: "34px",
+              height: "26px",
+              padding: "0 2px",
+              borderRadius: "5px",
               border: "1.5px solid #d6ccc2",
               background: "#ffffff",
-              fontSize: "0.85rem",
+              fontSize: "0.8rem",
               textAlign: "center",
               fontWeight: 800,
               color: "#941717",
@@ -211,7 +203,7 @@ export default function Pagination({
               boxShadow: "inset 0 1px 2px rgba(0,0,0,0.06)",
             }}
           />
-          <span style={{ fontSize: "0.8rem", color: "#78716c", fontWeight: 600 }}>
+          <span style={{ fontSize: "0.75rem", color: "#78716c", fontWeight: 600 }}>
             of <strong style={{ color: "#1c1917", fontWeight: 800 }}>{totalPages}</strong>
           </span>
         </div>
@@ -222,9 +214,9 @@ export default function Pagination({
           onClick={() => handlePageSelect(currentPage + 1)}
           disabled={currentPage === totalPages}
           title="Next Page"
+          className="px-2 sm:px-3"
           style={{
-            height: "34px",
-            padding: "0 12px",
+            height: "32px",
             borderRadius: "8px",
             border: "1px solid #e7e5e4",
             background: currentPage === totalPages ? "#fafaf9" : "#fff",
@@ -232,14 +224,16 @@ export default function Pagination({
             cursor: currentPage === totalPages ? "not-allowed" : "pointer",
             display: "inline-flex",
             alignItems: "center",
-            gap: "6px",
+            justifyContent: "center",
+            gap: "4px",
             fontSize: "0.8rem",
             fontWeight: 700,
             transition: "all 150ms ease",
             opacity: currentPage === totalPages ? 0.6 : 1,
+            flexShrink: 0,
           }}
         >
-          <span>Next</span>
+          <span className="hidden sm:inline">Next</span>
           <FontAwesomeIcon icon={faChevronRight} style={{ fontSize: "0.7rem" }} />
         </button>
 
@@ -250,9 +244,9 @@ export default function Pagination({
           disabled={currentPage === totalPages}
           title="Last Page"
           style={{
-            minWidth: "32px",
-            height: "34px",
-            padding: "0 8px",
+            width: "30px",
+            height: "32px",
+            padding: 0,
             borderRadius: "8px",
             border: "1px solid #e7e5e4",
             background: currentPage === totalPages ? "#fafaf9" : "#fff",
@@ -264,6 +258,7 @@ export default function Pagination({
             fontSize: "0.75rem",
             transition: "all 150ms ease",
             opacity: currentPage === totalPages ? 0.6 : 1,
+            flexShrink: 0,
           }}
         >
           <FontAwesomeIcon icon={faAnglesRight} />

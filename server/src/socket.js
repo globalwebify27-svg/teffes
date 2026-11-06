@@ -150,20 +150,67 @@ const getIO = () => {
 };
 
 const emitOrderStatusUpdate = (orderId, order) => {
-  if (!io) return;
-  const room = `order:${orderId}`;
+  if (!io || !order) return;
+
+  const resolvedPublicId = order.orderId || orderId;
+  const resolvedDocId = order.id || order._id || orderId;
+  const customerUserId = order.customer?.userId;
+
   const payload = {
-    orderId,
+    orderId: resolvedPublicId,
+    id: resolvedDocId,
     status: order.status,
     order,
     updatedAt: new Date().toISOString(),
   };
-  io.to(room).emit('order:status_changed', payload);
-  io.to(room).emit('order:status_updated', payload);
-  // Also broadcast to general feed for Store Admin & Dashboard live refresh
-  io.emit('orders:refreshed', { orderId, status: order.status });
-  io.emit('order:status_changed', payload);
-  io.emit('order:status_updated', payload);
+
+  // Collect all unique order-specific rooms so whichever identifier the client joined, it arrives
+  const targetRooms = new Set();
+  if (orderId) {
+    targetRooms.add(`order:${orderId}`);
+    targetRooms.add(String(orderId));
+  }
+  if (resolvedPublicId) {
+    targetRooms.add(`order:${resolvedPublicId}`);
+    targetRooms.add(String(resolvedPublicId));
+  }
+  if (resolvedDocId) {
+    targetRooms.add(`order:${resolvedDocId}`);
+    targetRooms.add(String(resolvedDocId));
+  }
+  if (customerUserId) {
+    targetRooms.add(`user:${customerUserId}`);
+  }
+
+  // Targeted emission: Only clients in this order's rooms or the customer's personal room receive status events
+  targetRooms.forEach((r) => {
+    io.to(r).emit('order:status_changed', payload);
+    io.to(r).emit('order:status_updated', payload);
+  });
+
+  // Store Admin store room emission for live orders tab refresh
+  if (order.storeId) {
+    const refreshPayload = {
+      orderId: resolvedPublicId,
+      id: resolvedDocId,
+      status: order.status,
+      storeId: order.storeId,
+    };
+    io.to(`store:${order.storeId}`).emit('orders:refreshed', refreshPayload);
+    if (order.storeId === 'S004') {
+      io.to('store:S002').emit('orders:refreshed', refreshPayload);
+    } else if (order.storeId === 'S002') {
+      io.to('store:S004').emit('orders:refreshed', refreshPayload);
+    }
+  }
+
+  // Super Admin room emission
+  io.to('role:superadmin').emit('orders:refreshed', {
+    orderId: resolvedPublicId,
+    id: resolvedDocId,
+    status: order.status,
+    storeId: order.storeId,
+  });
 };
 
 const emitWalletUpdate = (userId, balance, transaction) => {

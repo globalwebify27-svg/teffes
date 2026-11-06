@@ -808,7 +808,7 @@ const getInventoryHistory = async (storeId = null, options = {}) => {
       notes,
       actor,
       actionType,
-      storeName: e.storeName || storeNames[e.storeId] || e.storeId || 'Dark Store',
+      storeName: e.storeName || storeNames[e.storeId] || e.storeId || 'Teffe Store',
     };
   });
 

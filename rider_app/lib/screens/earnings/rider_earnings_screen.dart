@@ -385,7 +385,7 @@ class _RiderEarningsScreenState extends State<RiderEarningsScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'Hand over collected COD cash to Dark Store Closing Manager.',
+                    'Hand over collected COD cash to Teffes Store Closing Manager.',
                     style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
                   ),
                   const SizedBox(height: 16),

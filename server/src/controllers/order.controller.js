@@ -32,7 +32,7 @@ const {
 } = require('../services/firestore/return.firestore.service');
 const notificationService = require('../services/notificationService');
 const { emitOrderCreated, emitOrderStatusUpdate, emitReturnCreated } = require('../socket');
-const { calculateTargetDeliveryTime, getEtaDetails } = require('../utils/etaCalculator');
+const { calculateTargetDeliveryTime, getEtaDetails, isAfter8PM, calculateNextDay9AM } = require('../utils/etaCalculator');
 
 const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -146,11 +146,26 @@ const createOrder = async (req, res, next) => {
       }).catch(() => {});
     }
 
-    const isExpressSlot = !isPickup && Boolean(
+    const nowUtc = new Date();
+    const isAfterHours = !isPickup && (
+      isAfter8PM(nowUtc) ||
+      (deliverySlot && (deliverySlot.toLowerCase().includes('tomorrow') || deliverySlot.toLowerCase().includes('next-day') || deliverySlot.toLowerCase().includes('9:00 am')))
+    );
+
+    let resolvedDeliverySlot;
+    if (isPickup) {
+      resolvedDeliverySlot = 'Store Pickup (Counter Takeaway)';
+    } else if (isAfterHours) {
+      resolvedDeliverySlot = 'Next-Day Delivery: Tomorrow by 09:00 AM';
+    } else {
+      resolvedDeliverySlot = deliverySlot || '90 Mins Express Delivery';
+    }
+
+    const isExpressSlot = !isPickup && !isAfterHours && Boolean(
       (deliverySlot && deliverySlot.toLowerCase().includes('60 min')) ||
       (deliverySlot && deliverySlot.toLowerCase().includes('express (60'))
     );
-    const expressFee = isExpressSlot ? 50 : (Number(req.body.expressFee) || 0);
+    const expressFee = isExpressSlot ? 50 : (isAfterHours ? 0 : (Number(req.body.expressFee) || 0));
     const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
     const tipAmount = Number(req.body.tip) || 0;
     const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + expressFee + tipAmount - verifiedDiscount);
@@ -172,7 +187,14 @@ const createOrder = async (req, res, next) => {
     // Dynamic initial ETA calculation
     const prepMinutes = Number(req.body.prepTimeMinutes) || 25;
     const initialTransit = isPickup ? 0 : 15;
-    const targetDelivery = calculateTargetDeliveryTime(new Date(), prepMinutes, initialTransit).toISOString();
+    const targetDeliveryDateObj = isAfterHours
+      ? calculateNextDay9AM(nowUtc)
+      : calculateTargetDeliveryTime(nowUtc, prepMinutes, initialTransit, resolvedDeliverySlot);
+    const targetDelivery = targetDeliveryDateObj.toISOString();
+
+    // IST date string (YYYY-MM-DD) for date filtering in store admin
+    const istMs = targetDeliveryDateObj.getTime() + (5.5 * 60 * 60 * 1000);
+    const scheduledDeliveryDate = new Date(istMs).toISOString().slice(0, 10);
 
     // ─── Deduct Store Inventory in Firestore (if mapped) ───
     try {
@@ -216,17 +238,22 @@ const createOrder = async (req, res, next) => {
     const itemSummary = items.map((i) => `${i.name || i.productId} ×${i.quantity || 1}`).join(', ');
     const deliveryOtp = isPickup ? null : Math.floor(1000 + Math.random() * 9000).toString();
 
+    const rawInstruction = req.body.deliveryInstruction || req.body.instruction || req.body.deliveryInstructions || req.body.deliveryNote || req.body.notes || '';
+    const deliveryInstruction = typeof rawInstruction === 'string' ? rawInstruction.trim() : '';
+
     const orderPayload = {
       id: orderId,
       _id: orderId,
       orderId,
       deliveryOtp,
+      deliveryInstruction: deliveryInstruction || null,
       customer: {
         name: user.name || req.body.customerName || 'Valued Customer',
         phone: user.phone || req.body.customerPhone || '9999999999',
         email: user.email || '',
         userId: user.id,
         address: orderAddress,
+        deliveryInstruction: deliveryInstruction || null,
         lat: req.body.customerLat || 23.3512,
         lng: req.body.customerLng || 85.3154,
       },
@@ -250,13 +277,15 @@ const createOrder = async (req, res, next) => {
       coupon: verifiedCouponSnapshot,
       storeId: resolvedStoreId,
       storeName: resolvedStoreName,
-      deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
+      isNextDayOrder: Boolean(isAfterHours),
+      scheduledDeliveryDate,
+      deliverySlot: resolvedDeliverySlot,
       fulfillmentType: resolvedFulfillmentType,
       pickupMode: Boolean(isPickup),
       prepTimeMinutes: prepMinutes,
       targetDeliveryTime: targetDelivery,
-      remainingTransitMinutes: initialTransit,
-      etaStage: 'PREPARING',
+      remainingTransitMinutes: isAfterHours ? 0 : initialTransit,
+      etaStage: isAfterHours ? 'SCHEDULED_NEXT_DAY' : 'PREPARING',
       paymentMethod: isWallet ? 'Teffes Cash (Wallet)' : (paymentMethod || (isPickup ? 'Pay at Store Counter' : 'Cash on Delivery')),
       paymentStatus: isWallet ? 'Paid' : (paymentStatus || (isOnline ? 'Paid' : 'Pending')),
       razorpayOrderId: razorpayOrderId || '',
@@ -402,15 +431,27 @@ const getMyOrders = async (req, res, next) => {
     const phone = req.user?.phone || '';
     const email = req.user?.email || '';
 
-    // Query user orders from Firestore
+    // Query user orders from Firestore by customer.userId
     let orders = await getUserOrdersFS(String(userId));
 
-    // Also match phone if not already found
-    if (orders.length === 0 && phone) {
+    // Also match by phone number to include phone/manual orders created by Store Admin
+    if (phone) {
       const clean10 = phone.replace(/\D/g, '').slice(-10);
-      const phoneOrders = await queryDocs('orders', (ref) => ref.where('customer.phone', '==', clean10));
-      orders = phoneOrders;
+      if (clean10) {
+        const phoneOrders = await queryDocs('orders', (ref) => ref.where('customer.phone', '==', clean10));
+        const phoneOrdersFull = await queryDocs('orders', (ref) => ref.where('customer.phone', '==', `+91${clean10}`));
+        const seen = new Set(orders.map((o) => o.orderId || o.id));
+        for (const po of [...phoneOrders, ...phoneOrdersFull]) {
+          const key = po.orderId || po.id;
+          if (!seen.has(key)) {
+            seen.add(key);
+            orders.push(po);
+          }
+        }
+      }
     }
+    // Sort latest first
+    orders.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
 
     const enrichedOrders = await Promise.all(orders.map(async (o) => {
       await ensureOrderDeliveryOtp(o);

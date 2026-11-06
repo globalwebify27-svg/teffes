@@ -42,10 +42,59 @@ function calculateTransitMinutes(distanceKm) {
 }
 
 /**
- * Calculates the initial target delivery timestamp when order is placed.
- * targetDeliveryTime = Placed Time + Prep Time (default 25m) + Est. Travel (15m)
+ * Helper to get IST date components (UTC + 5:30) independently of host server timezone
  */
-function calculateTargetDeliveryTime(placedAt = new Date(), prepTimeMinutes = 25, transitMinutes = 15) {
+function getISTDateComponents(date = new Date()) {
+  const d = new Date(date);
+  const istMs = d.getTime() + (5.5 * 60 * 60 * 1000);
+  const ist = new Date(istMs);
+  return {
+    year: ist.getUTCFullYear(),
+    month: ist.getUTCMonth(),
+    date: ist.getUTCDate(),
+    hours: ist.getUTCHours(),
+    minutes: ist.getUTCMinutes(),
+  };
+}
+
+/**
+ * Helper to check if current time in IST is after 7:59 PM (20:00 to 07:59)
+ */
+function isAfter8PM(date = new Date()) {
+  const comp = getISTDateComponents(date);
+  return comp.hours >= 20 || (comp.hours === 19 && comp.minutes >= 59) || comp.hours < 8;
+}
+
+/**
+ * Calculates next-day (or next available morning) 9:00 AM IST delivery time.
+ * Pure UTC: 9:00 AM IST is 03:30 AM UTC.
+ */
+function calculateNextDay9AM(date = new Date()) {
+  const comp = getISTDateComponents(date);
+  let targetYear = comp.year;
+  let targetMonth = comp.month;
+  let targetDate = comp.date;
+
+  if (comp.hours >= 20 || (comp.hours === 19 && comp.minutes >= 59)) {
+    targetDate += 1;
+  }
+
+  // 9:00:00 AM IST is 03:30:00 UTC
+  const utcTargetMs = Date.UTC(targetYear, targetMonth, targetDate, 3, 30, 0, 0);
+  return new Date(utcTargetMs);
+}
+
+/**
+ * Calculates the initial target delivery timestamp when order is placed.
+ * If after 7:59 PM or if deliverySlot is for next day, sets to tomorrow 9:00 AM.
+ * Otherwise targetDeliveryTime = Placed Time + Prep Time (default 25m) + Est. Travel (15m).
+ */
+function calculateTargetDeliveryTime(placedAt = new Date(), prepTimeMinutes = 25, transitMinutes = 15, deliverySlot = '') {
+  const slotStr = String(deliverySlot || '').toLowerCase();
+  const isNextDay = isAfter8PM(placedAt) || slotStr.includes('tomorrow') || slotStr.includes('next-day') || slotStr.includes('9:00 am');
+  if (isNextDay) {
+    return calculateNextDay9AM(placedAt);
+  }
   const baseTime = new Date(placedAt).getTime();
   const totalDurationMs = (prepTimeMinutes + transitMinutes) * 60 * 1000;
   return new Date(baseTime + totalDurationMs);
@@ -98,21 +147,42 @@ function getEtaDetails(order) {
   }
 
   // Phase 1: In-Store Prep (Pending, Cutting, Ready)
+  const slotStr = String(order.deliverySlot || '').toLowerCase();
+  const isNextDay = order.isNextDayOrder === true ||
+    isAfter8PM(order.createdAt) ||
+    slotStr.includes('tomorrow') ||
+    slotStr.includes('next-day') ||
+    slotStr.includes('9:00 am');
+
+  if (isNextDay && (status === 'Pending' || status === 'Cutting')) {
+    const nextDaySub = status === 'Cutting'
+      ? 'Teffes store team is preparing fresh cuts'
+      : 'Teffes store opens at 8:00 AM • Order will be prepared & delivered by 9:00 AM';
+
+    return {
+      stage: 'SCHEDULED_NEXT_DAY',
+      isNextDay: true,
+      displayText: 'Tomorrow by 9:00 AM',
+      subText: nextDaySub,
+      targetClockTime: 'Tomorrow 09:00 AM',
+      minutesRemaining: 60,
+    };
+  }
+
   let targetTimeStr = '';
   if (order.targetDeliveryTime) {
     const dt = new Date(order.targetDeliveryTime);
     targetTimeStr = dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   } else {
-    // Fallback: 40 minutes from order creation
     const fallbackDt = new Date(new Date(order.createdAt || Date.now()).getTime() + 40 * 60 * 1000);
     targetTimeStr = fallbackDt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   }
 
   const prepSubText = status === 'Cutting'
-    ? 'Store team slicing fresh cuts'
+    ? 'Teffes store team is preparing fresh cuts'
     : status === 'Ready'
     ? 'Packed fresh & waiting for rider'
-    : 'Order confirmed & sent to cutting station';
+    : 'Order placed at Teffes • Awaiting store confirmation';
 
   return {
     stage: 'PREPARING',
@@ -128,5 +198,7 @@ module.exports = {
   calculateRoadDistanceKm,
   calculateTransitMinutes,
   calculateTargetDeliveryTime,
+  calculateNextDay9AM,
+  isAfter8PM,
   getEtaDetails,
 };

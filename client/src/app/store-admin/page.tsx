@@ -289,18 +289,33 @@ const OrderStatusPipeline = ({ status }: { status: string }) => {
   const stages = ["Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"];
   const idx = stages.indexOf(status);
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "4px", flexWrap: "wrap" }}>
+    <div
+      className="no-scrollbar"
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "4px",
+        overflowX: "auto",
+        whiteSpace: "nowrap",
+        flexWrap: "nowrap",
+        WebkitOverflowScrolling: "touch",
+        maxWidth: "100%",
+        padding: "2px 0",
+      }}
+    >
       {stages.map((s, i) => (
         <React.Fragment key={s}>
           <div style={{
-            fontSize: "0.65rem",
+            fontSize: "0.68rem",
             fontWeight: 700,
-            padding: "2px 8px",
+            padding: "3px 8px",
             borderRadius: "99px",
             background: i <= idx ? "#941717" : "#ede8e0",
             color: i <= idx ? "#fff" : "#73695b",
+            whiteSpace: "nowrap",
+            flexShrink: 0,
           }}>{s}</div>
-          {i < stages.length - 1 && <span style={{ color: "#ede8e0", fontSize: "0.7rem" }}>→</span>}
+          {i < stages.length - 1 && <span style={{ color: "#d6cec5", fontSize: "0.7rem", flexShrink: 0 }}>→</span>}
         </React.Fragment>
       ))}
     </div>
@@ -541,6 +556,24 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
                 <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "2px" }}>
                   {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
                 </div>
+                {(o.deliveryInstruction || o.customer?.deliveryInstruction) && (
+                  <div style={{
+                    marginTop: "4px",
+                    fontSize: "0.75rem",
+                    color: "#92400e",
+                    background: "#fef3c7",
+                    border: "1px solid #fde68a",
+                    borderRadius: "6px",
+                    padding: "2px 8px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    fontWeight: 600,
+                  }}>
+                    <span className="material-symbols-outlined text-[13px]">note_alt</span>
+                    <span>Instruction: {o.deliveryInstruction || o.customer?.deliveryInstruction}</span>
+                  </div>
+                )}
               </div>
               <div style={{ textAlign: "right" }}>
                 <div style={{ fontWeight: 800, color: "#941717", fontSize: "1rem" }}>₹{o.amount}</div>
@@ -573,6 +606,129 @@ function LiveOrdersTab() {
   const [loadingRiders, setLoadingRiders] = useState(false);
   const [selectedRiderId, setSelectedRiderId] = useState("");
   const [assigningRider, setAssigningRider] = useState(false);
+
+  // Manual / Phone Order Creation Modal state
+  const [showCreateOrderModal, setShowCreateOrderModal] = useState(false);
+  const [manualCustName, setManualCustName] = useState("");
+  const [manualCustPhone, setManualCustPhone] = useState("");
+  const [manualCustAddress, setManualCustAddress] = useState("");
+  const [manualIsPickup, setManualIsPickup] = useState(false);
+  const [manualPaymentMethod, setManualPaymentMethod] = useState("Cash on Delivery");
+  const [manualPaymentStatus, setManualPaymentStatus] = useState("Pending");
+  const [manualOrderNotes, setManualOrderNotes] = useState("");
+  const [manualItems, setManualItems] = useState<any[]>([]);
+  const [submittingManualOrder, setSubmittingManualOrder] = useState(false);
+
+  // Quick item entry states
+  const [quickItemName, setQuickItemName] = useState("");
+  const [quickItemPrice, setQuickItemPrice] = useState("");
+  const [quickItemQty, setQuickItemQty] = useState(1);
+  const [quickItemWeight, setQuickItemWeight] = useState("500g");
+  const [inventorySuggestions, setInventorySuggestions] = useState<any[]>([]);
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+
+  const openCreateManualOrderModal = () => {
+    setShowCreateOrderModal(true);
+    if (inventorySuggestions.length === 0) {
+      setLoadingSuggestions(true);
+      api.get<{ success: boolean; inventory: any[] }>("/store-admin/inventory")
+        .then(res => {
+          if (res.data.success && Array.isArray(res.data.inventory)) {
+            setInventorySuggestions(res.data.inventory.filter((i: any) => (Number(i.stock) || 0) > 0));
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingSuggestions(false));
+    }
+  };
+
+  const handleAddManualItem = () => {
+    if (!quickItemName.trim()) {
+      toast.error("Please enter item name", "Item Missing");
+      return;
+    }
+    const priceNum = Number(quickItemPrice) || 0;
+    if (priceNum <= 0) {
+      toast.error("Please enter a valid price", "Invalid Price");
+      return;
+    }
+    setManualItems(prev => [
+      ...prev,
+      {
+        id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        name: quickItemName.trim(),
+        price: priceNum,
+        quantity: quickItemQty,
+        netWeight: quickItemWeight,
+      }
+    ]);
+    setQuickItemName("");
+    setQuickItemPrice("");
+    setQuickItemQty(1);
+    setQuickItemWeight("500g");
+  };
+
+  const handleSelectInventorySuggestion = (invItem: any) => {
+    setQuickItemName(invItem.item || invItem.name || "");
+    setQuickItemPrice(invItem.price ? String(invItem.price) : "220");
+    setQuickItemWeight(invItem.unit === "piece" ? "1 piece" : "500g");
+  };
+
+  const handleSaveManualOrder = async () => {
+    const cleanPhone = manualCustPhone.replace(/\D/g, "");
+    if (cleanPhone.length < 10) {
+      toast.error("Please enter a valid 10-digit customer phone number", "Invalid Phone");
+      return;
+    }
+    if (manualItems.length === 0) {
+      toast.error("Please add at least one meat item to the order", "Items Required");
+      return;
+    }
+    if (!manualIsPickup && !manualCustAddress.trim()) {
+      toast.error("Please enter a delivery address or choose Store Pickup", "Address Required");
+      return;
+    }
+
+    setSubmittingManualOrder(true);
+    try {
+      const res = await api.post<{ success: boolean; message: string; order: any }>(
+        "/store-admin/orders/create-manual",
+        {
+          customerName: manualCustName.trim() || "Valued Customer",
+          customerPhone: cleanPhone,
+          shippingAddress: manualIsPickup ? "Store Takeaway Counter, Ranchi" : manualCustAddress.trim(),
+          pickupMode: manualIsPickup,
+          fulfillmentType: manualIsPickup ? "pickup" : "delivery",
+          items: manualItems,
+          paymentMethod: manualIsPickup ? (manualPaymentStatus === "Paid" ? "Paid at Store Counter" : "Pay at Store Counter") : manualPaymentMethod,
+          paymentStatus: manualPaymentStatus,
+          deliverySlot: manualIsPickup ? "Store Pickup (Counter Takeaway)" : "60-90 Mins Express Delivery",
+          notes: manualOrderNotes.trim(),
+        }
+      );
+
+      if (res.data.success) {
+        toast.success(
+          `Order #${res.data.order?.orderId || ""} created successfully (Created by Self)! Moved to Cutting.`,
+          "Order Created"
+        );
+        setShowCreateOrderModal(false);
+        setManualCustName("");
+        setManualCustPhone("");
+        setManualCustAddress("");
+        setManualIsPickup(false);
+        setManualPaymentMethod("Cash on Delivery");
+        setManualPaymentStatus("Pending");
+        setManualOrderNotes("");
+        setManualItems([]);
+        fetchOrders();
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to create manual order", "Order Error");
+    } finally {
+      setSubmittingManualOrder(false);
+    }
+  };
 
   const fetchOrders = () => {
     setLoading(true);
@@ -621,8 +777,10 @@ function LiveOrdersTab() {
         if (!matchesArea) return false;
       }
       if (dateFilter) {
-        const orderDate = (o.createdAt || "").substring(0, 10);
-        if (orderDate !== dateFilter) return false;
+        const scheduledDate = o.scheduledDeliveryDate || (o.targetDeliveryTime ? o.targetDeliveryTime.substring(0, 10) : "");
+        const createdDate = (o.createdAt || "").substring(0, 10);
+        const matchesDate = scheduledDate === dateFilter || createdDate === dateFilter;
+        if (!matchesDate) return false;
       }
       return true;
     });
@@ -880,7 +1038,19 @@ function LiveOrdersTab() {
         border: "1px solid #ede8e0",
       }}>
         {/* Status filter pills */}
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+        <div
+          className="no-scrollbar"
+          style={{
+            display: "flex",
+            gap: "6px",
+            overflowX: "auto",
+            whiteSpace: "nowrap",
+            flexWrap: "nowrap",
+            WebkitOverflowScrolling: "touch",
+            width: "100%",
+            paddingBottom: "4px",
+          }}
+        >
           {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"].map(s => (
             <button
               key={s}
@@ -888,7 +1058,8 @@ function LiveOrdersTab() {
               style={{
                 padding: "6px 12px", borderRadius: "99px", border: "1.5px solid #ede8e0",
                 background: filter === s ? "#941717" : "#fff", color: filter === s ? "#fff" : "#423b32",
-                fontSize: "0.78rem", fontWeight: 700, cursor: "pointer"
+                fontSize: "0.78rem", fontWeight: 700, cursor: "pointer",
+                whiteSpace: "nowrap", flexShrink: 0,
               }}
             >
               {s}
@@ -896,9 +1067,33 @@ function LiveOrdersTab() {
           ))}
         </div>
 
-        {/* Locality / Pincode Dropdown & Date Picker */}
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+        {/* Locality / Pincode Dropdown & Date Picker + Manual Order button */}
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", width: "100%" }}>
+          <button
+            type="button"
+            onClick={openCreateManualOrderModal}
+            className="w-full sm:w-auto"
+            style={{
+              background: "#065f46",
+              color: "#fff",
+              border: "none",
+              borderRadius: "8px",
+              padding: "7px 14px",
+              fontSize: "0.8rem",
+              fontWeight: 800,
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: "6px",
+              boxShadow: "0 2px 6px rgba(6, 95, 70, 0.2)",
+            }}
+          >
+            <span className="material-symbols-outlined text-[17px]">add_shopping_cart</span>
+            <span>+ Create Manual Order</span>
+          </button>
+
+          <div style={{ display: "flex", alignItems: "center", gap: "6px", flex: 1, minWidth: "160px" }}>
             <span className="material-symbols-outlined text-[18px] text-gray-500">pin_drop</span>
             <input
               list="store-area-suggestions"
@@ -914,7 +1109,7 @@ function LiveOrdersTab() {
                 background: "#fff",
                 fontWeight: 600,
                 color: "#374151",
-                width: "190px",
+                width: "100%",
               }}
             />
             <datalist id="store-area-suggestions">
@@ -1079,6 +1274,42 @@ function LiveOrdersTab() {
                           HOME EXPRESS DELIVERY
                         </span>
                       )}
+                      {(o.createdByType === "self_store_admin" || o.orderSource === "store_direct") && (
+                        <span style={{
+                          background: "#ecfdf5",
+                          color: "#065f46",
+                          border: "1px solid #a7f3d0",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}>
+                          <span className="material-symbols-outlined text-[14px]">person_check</span>
+                          Created by Self
+                        </span>
+                      )}
+                      {(o.isNextDayOrder || (o.deliverySlot && (o.deliverySlot.toLowerCase().includes('tomorrow') || o.deliverySlot.toLowerCase().includes('next-day') || o.deliverySlot.toLowerCase().includes('09:00 am')))) && (
+                        <span style={{
+                          background: "#fef3c7",
+                          color: "#92400e",
+                          border: "1px solid #fde68a",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}>
+                          <span className="material-symbols-outlined text-[14px]">wb_sunny</span>
+                          DELIVER TOMORROW BY 9:00 AM
+                        </span>
+                      )}
                     </div>
                     <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "3px" }}>
                       {o.customer?.name} · {o.customer?.phone}
@@ -1101,6 +1332,24 @@ function LiveOrdersTab() {
                         </span>
                       )}
                     </div>
+                    {(o.deliveryInstruction || o.customer?.deliveryInstruction) && (
+                      <div style={{
+                        marginTop: "6px",
+                        background: "#fffbeb",
+                        border: "1px solid #fde68a",
+                        borderRadius: "6px",
+                        padding: "4px 8px",
+                        fontSize: "0.78rem",
+                        color: "#92400e",
+                        fontWeight: 600,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "5px",
+                      }}>
+                        <span className="material-symbols-outlined text-[15px] text-amber-700">note_alt</span>
+                        <span><strong>Customer Instruction:</strong> {o.deliveryInstruction || o.customer?.deliveryInstruction}</span>
+                      </div>
+                    )}
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 900, color: "#941717", fontSize: "1.15rem", fontFamily: "Outfit, sans-serif" }}>₹{o.amount}</div>
@@ -1176,23 +1425,26 @@ function LiveOrdersTab() {
                   )}
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "10px" }}>
-                  <OrderStatusPipeline status={o.status} />
-                  <div style={{ display: "flex", gap: "8px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #f5f2ed" }}>
+                  <div style={{ width: "100%", overflowX: "auto" }} className="no-scrollbar">
+                    <OrderStatusPipeline status={o.status} />
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", justifyContent: "flex-start" }}>
                     {o.rider?.name && (
                       <div style={{
                         fontSize: "0.75rem",
                         color: "#0369a1",
                         background: "#f0f9ff",
                         border: "1px solid #bae6fd",
-                        borderRadius: "6px",
-                        padding: "4px 8px",
+                        borderRadius: "8px",
+                        padding: "6px 10px",
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "4px",
+                        gap: "5px",
                         fontWeight: 700,
+                        whiteSpace: "nowrap",
                       }}>
-                        <span className="material-symbols-outlined text-[14px]">two_wheeler</span>
+                        <span className="material-symbols-outlined text-[15px]">two_wheeler</span>
                         <span>Rider: {o.rider.name}</span>
                       </div>
                     )}
@@ -1204,7 +1456,7 @@ function LiveOrdersTab() {
                           color: o.status === "Ready" && !isPickup ? "#fff" : "#941717",
                           border: o.status === "Ready" && !isPickup ? "1.5px solid #941717" : "1.5px solid rgba(148, 23, 23, 0.25)",
                           borderRadius: "8px",
-                          padding: "7px 15px",
+                          padding: "7px 14px",
                           fontSize: "0.8rem",
                           fontWeight: 700,
                           cursor: "pointer",
@@ -1213,6 +1465,7 @@ function LiveOrdersTab() {
                           alignItems: "center",
                           gap: "6px",
                           boxShadow: o.status === "Ready" && !isPickup ? "0 2px 6px rgba(148, 23, 23, 0.25)" : "none",
+                          whiteSpace: "nowrap",
                         }}
                       >
                         <span className="material-symbols-outlined text-[16px]">
@@ -1233,37 +1486,44 @@ function LiveOrdersTab() {
                         fontSize: "0.8rem",
                         fontWeight: 700,
                         cursor: "pointer",
-                        display: "flex",
+                        display: "inline-flex",
                         alignItems: "center",
                         gap: "6px",
+                        whiteSpace: "nowrap",
                       }}
                     >
                       <span className="material-symbols-outlined text-[16px]">print</span>
                       <span>Print KOT</span>
                     </button>
-                    <button style={{
-                      background: "none",
+                    <div style={{
+                      background: "#faf8f5",
                       border: "1px solid #ede8e0",
                       borderRadius: "8px",
-                      padding: "7px 14px",
+                      padding: "6px 12px",
                       color: "#423b32",
-                      fontSize: "0.8rem",
-                      cursor: "default",
+                      fontSize: "0.78rem",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                      whiteSpace: "nowrap",
                     }}>
-                      {o.paymentStatus} ({o.paymentMethod})
-                    </button>
+                      <span className="material-symbols-outlined text-[15px] text-gray-500">payments</span>
+                      <span>{o.paymentStatus} ({o.paymentMethod || "COD"})</span>
+                    </div>
                     {o.changeCreditedToWallet > 0 && (
                       <div style={{
                         fontSize: "0.75rem",
                         color: "#059669",
                         background: "#ecfdf5",
                         border: "1px solid #a7f3d0",
-                        borderRadius: "6px",
-                        padding: "4px 8px",
+                        borderRadius: "8px",
+                        padding: "6px 10px",
                         display: "inline-flex",
                         alignItems: "center",
                         gap: "4px",
                         fontWeight: 700,
+                        whiteSpace: "nowrap",
                       }} title={`Cash Received: ₹${o.cashCollected} | Bill: ₹${o.amount} | Credited to Wallet: ₹${o.changeCreditedToWallet}`}>
                         <span className="material-symbols-outlined text-[14px]">account_balance_wallet</span>
                         <span>₹{o.changeCreditedToWallet} Change to Wallet</span>
@@ -1820,6 +2080,475 @@ function LiveOrdersTab() {
         </div>
       )}
 
+      {/* Create Manual / Phone Order Modal */}
+      {showCreateOrderModal && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(0, 0, 0, 0.65)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 1000,
+          padding: "16px",
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "18px",
+            width: "100%",
+            maxWidth: "660px",
+            maxHeight: "90vh",
+            display: "flex",
+            flexDirection: "column",
+            boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
+            border: "1px solid #e5e7eb",
+            overflow: "hidden",
+          }}>
+            {/* Modal Header */}
+            <div style={{
+              padding: "16px 20px",
+              background: "#065f46",
+              color: "#fff",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <span className="material-symbols-outlined text-[24px]">phone_in_talk</span>
+                <div>
+                  <h3 style={{ fontSize: "1rem", fontWeight: 800, margin: 0 }}>
+                    Create Manual / Phone Order
+                  </h3>
+                  <p style={{ fontSize: "0.72rem", opacity: 0.9, margin: "2px 0 0" }}>
+                    Placed directly by Store Admin • Tagged as "Created by Self"
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateOrderModal(false)}
+                style={{
+                  background: "rgba(255,255,255,0.15)",
+                  border: "none",
+                  borderRadius: "8px",
+                  color: "#fff",
+                  cursor: "pointer",
+                  padding: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            {/* Modal Scrollable Body */}
+            <div style={{ padding: "18px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
+              {/* Section 1: Customer Details */}
+              <div style={{ background: "#f9fafb", padding: "14px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#111827", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
+                  <span className="material-symbols-outlined text-[16px] text-emerald-700">person</span>
+                  <span>Customer Information</span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Phone Number * (10 Digits)
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="e.g. 9876543210"
+                      value={manualCustPhone}
+                      onChange={(e) => setManualCustPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid #d1d5db",
+                        fontSize: "0.82rem",
+                        fontWeight: 600,
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Customer Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Rahul Sharma"
+                      value={manualCustName}
+                      onChange={(e) => setManualCustName(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid #d1d5db",
+                        fontSize: "0.82rem",
+                        fontWeight: 600,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Fulfillment toggle: Home Delivery vs Counter Pickup */}
+                <div style={{ marginTop: "12px" }}>
+                  <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "6px" }}>
+                    Fulfillment Method
+                  </label>
+                  <div style={{ display: "flex", gap: "10px" }}>
+                    <button
+                      type="button"
+                      onClick={() => setManualIsPickup(false)}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        borderRadius: "8px",
+                        border: !manualIsPickup ? "2px solid #065f46" : "1px solid #d1d5db",
+                        background: !manualIsPickup ? "#ecfdf5" : "#fff",
+                        color: !manualIsPickup ? "#065f46" : "#374151",
+                        fontWeight: 800,
+                        fontSize: "0.78rem",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">delivery_dining</span>
+                      <span>Home Delivery</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setManualIsPickup(true)}
+                      style={{
+                        flex: 1,
+                        padding: "8px",
+                        borderRadius: "8px",
+                        border: manualIsPickup ? "2px solid #b45309" : "1px solid #d1d5db",
+                        background: manualIsPickup ? "#fef3c7" : "#fff",
+                        color: manualIsPickup ? "#b45309" : "#374151",
+                        fontWeight: 800,
+                        fontSize: "0.78rem",
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: "6px",
+                      }}
+                    >
+                      <span className="material-symbols-outlined text-[16px]">storefront</span>
+                      <span>Store Counter Takeaway</span>
+                    </button>
+                  </div>
+                </div>
+
+                {!manualIsPickup && (
+                  <div style={{ marginTop: "10px" }}>
+                    <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Delivery Address *
+                    </label>
+                    <textarea
+                      rows={2}
+                      placeholder="e.g. House No 42, Main Road, Kishore Ganj / Doranda, Ranchi"
+                      value={manualCustAddress}
+                      onChange={(e) => setManualCustAddress(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "8px 12px",
+                        borderRadius: "8px",
+                        border: "1px solid #d1d5db",
+                        fontSize: "0.82rem",
+                        fontWeight: 500,
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Add Meat Items */}
+              <div style={{ background: "#f9fafb", padding: "14px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
+                <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#111827", marginBottom: "10px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <span className="material-symbols-outlined text-[16px] text-emerald-700">restaurant</span>
+                    <span>Meat Items ({manualItems.length})</span>
+                  </div>
+                  {inventorySuggestions.length > 0 && (
+                    <span style={{ fontSize: "0.7rem", color: "#6b7280" }}>
+                      {inventorySuggestions.length} items in live stock
+                    </span>
+                  )}
+                </div>
+
+                {/* Quick select from Store Inventory */}
+                {inventorySuggestions.length > 0 && (
+                  <div style={{ marginBottom: "10px" }}>
+                    <label style={{ fontSize: "0.72rem", color: "#6b7280", display: "block", marginBottom: "3px" }}>
+                      Quick Pick from Store Stock:
+                    </label>
+                    <div style={{ display: "flex", gap: "6px", overflowX: "auto", paddingBottom: "4px" }}>
+                      {inventorySuggestions.slice(0, 6).map((inv: any) => (
+                        <button
+                          key={inv.id || inv.item}
+                          type="button"
+                          onClick={() => handleSelectInventorySuggestion(inv)}
+                          style={{
+                            whiteSpace: "nowrap",
+                            background: "#fff",
+                            border: "1px solid #d1d5db",
+                            borderRadius: "6px",
+                            padding: "4px 8px",
+                            fontSize: "0.72rem",
+                            cursor: "pointer",
+                            fontWeight: 600,
+                            color: "#374151",
+                          }}
+                        >
+                          + {inv.item || inv.name} ({inv.stock}{inv.unit || "kg"})
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Item Entry Row */}
+                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: "8px", alignItems: "end" }}>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
+                      Item Name
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Chicken Curry Cut"
+                      value={quickItemName}
+                      onChange={(e) => setQuickItemName(e.target.value)}
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
+                      Weight/Cut
+                    </label>
+                    <select
+                      value={quickItemWeight}
+                      onChange={(e) => setQuickItemWeight(e.target.value)}
+                      style={{ width: "100%", padding: "7px 8px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem", background: "#fff" }}
+                    >
+                      <option value="500g">500g</option>
+                      <option value="1kg">1kg</option>
+                      <option value="250g">250g</option>
+                      <option value="750g">750g</option>
+                      <option value="1 piece">1 piece</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
+                      Price (₹)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="₹220"
+                      value={quickItemPrice}
+                      onChange={(e) => setQuickItemPrice(e.target.value)}
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem" }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
+                      Qty
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={20}
+                      value={quickItemQty}
+                      onChange={(e) => setQuickItemQty(Math.max(1, Number(e.target.value) || 1))}
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem" }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddManualItem}
+                    style={{
+                      background: "#065f46",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "6px",
+                      padding: "8px 12px",
+                      fontWeight: 800,
+                      fontSize: "0.8rem",
+                      cursor: "pointer",
+                      height: "35px",
+                    }}
+                  >
+                    + Add
+                  </button>
+                </div>
+
+                {/* Added Items List */}
+                {manualItems.length > 0 && (
+                  <div style={{ marginTop: "12px", borderTop: "1px solid #e5e7eb", paddingTop: "8px" }}>
+                    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                      {manualItems.map((item, idx) => (
+                        <div
+                          key={item.id || idx}
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "center",
+                            background: "#fff",
+                            padding: "6px 10px",
+                            borderRadius: "6px",
+                            border: "1px solid #e5e7eb",
+                            fontSize: "0.8rem",
+                          }}
+                        >
+                          <div>
+                            <span style={{ fontWeight: 700, color: "#111827" }}>{item.name}</span>
+                            <span style={{ color: "#6b7280", marginLeft: "6px" }}>({item.netWeight} ×{item.quantity})</span>
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            <span style={{ fontWeight: 800, color: "#065f46" }}>₹{(item.price || 0) * (item.quantity || 1)}</span>
+                            <button
+                              type="button"
+                              onClick={() => setManualItems(prev => prev.filter((_, i) => i !== idx))}
+                              style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", padding: "2px" }}
+                            >
+                              <span className="material-symbols-outlined text-[16px]">delete</span>
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Section 3: Payment & Notes */}
+              <div style={{ background: "#f9fafb", padding: "14px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                  <div>
+                    <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Payment Method
+                    </label>
+                    <select
+                      value={manualPaymentMethod}
+                      onChange={(e) => setManualPaymentMethod(e.target.value)}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "0.82rem", background: "#fff" }}
+                    >
+                      <option value="Cash on Delivery">Cash on Delivery (COD)</option>
+                      <option value="UPI on Delivery">UPI QR on Delivery</option>
+                      <option value="Paid at Store Counter">Paid at Store Counter</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
+                      Payment Status
+                    </label>
+                    <select
+                      value={manualPaymentStatus}
+                      onChange={(e) => setManualPaymentStatus(e.target.value)}
+                      style={{ width: "100%", padding: "8px 10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "0.82rem", background: "#fff" }}
+                    >
+                      <option value="Pending">Pending (Collect on Delivery)</option>
+                      <option value="Paid">Paid (Already Received)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: "10px" }}>
+                  <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
+                    Special Cutting / Preparation Notes
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Skinless medium cut, extra curry pieces"
+                    value={manualOrderNotes}
+                    onChange={(e) => setManualOrderNotes(e.target.value)}
+                    style={{ width: "100%", padding: "7px 10px", borderRadius: "8px", border: "1px solid #d1d5db", fontSize: "0.8rem" }}
+                  />
+                </div>
+              </div>
+
+              {/* Total Calculation Summary */}
+              {manualItems.length > 0 && (() => {
+                const subtotal = manualItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+                const deliveryFee = manualIsPickup ? 0 : (subtotal >= 399 ? 0 : 40);
+                const total = subtotal + deliveryFee;
+
+                return (
+                  <div style={{ background: "#ecfdf5", padding: "12px 16px", borderRadius: "10px", border: "1px solid #a7f3d0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div>
+                      <div style={{ fontSize: "0.75rem", color: "#065f46" }}>
+                        Subtotal: ₹{subtotal} {deliveryFee > 0 ? `+ ₹${deliveryFee} Delivery` : "(Free Delivery)"}
+                      </div>
+                      <div style={{ fontSize: "0.72rem", color: "#047857", fontWeight: 600 }}>
+                        📱 Customer can track live on TeFFe App/Web under #{manualCustPhone}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: "right" }}>
+                      <div style={{ fontSize: "0.72rem", color: "#065f46", textTransform: "uppercase", fontWeight: 700 }}>Total Order Value</div>
+                      <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#065f46" }}>₹{total}</div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div style={{
+              padding: "14px 20px",
+              background: "#f9fafb",
+              borderTop: "1px solid #e5e7eb",
+              display: "flex",
+              justifyContent: "flex-end",
+              gap: "10px",
+            }}>
+              <button
+                type="button"
+                onClick={() => setShowCreateOrderModal(false)}
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1d5db",
+                  background: "#fff",
+                  color: "#374151",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveManualOrder}
+                disabled={submittingManualOrder || manualItems.length === 0 || manualCustPhone.replace(/\D/g, "").length < 10}
+                style={{
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  border: "none",
+                  background: submittingManualOrder || manualItems.length === 0 || manualCustPhone.replace(/\D/g, "").length < 10 ? "#9ca3af" : "#065f46",
+                  color: "#fff",
+                  fontWeight: 800,
+                  fontSize: "0.82rem",
+                  cursor: submittingManualOrder || manualItems.length === 0 || manualCustPhone.replace(/\D/g, "").length < 10 ? "not-allowed" : "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "6px",
+                  boxShadow: "0 2px 6px rgba(6, 95, 70, 0.25)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[17px]">check_circle</span>
+                <span>{submittingManualOrder ? "Placing Order…" : "Place Order (Created by Self)"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {printModalOrder && (
         <ThermalKOTModal
           order={printModalOrder}
@@ -1867,27 +2596,29 @@ function ProductsStockTab() {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
           {products.map(p => (
-            <div key={p.id} style={{
-              background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "16px 20px",
-              display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "12px",
-            }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, color: "#171410", marginBottom: "2px" }}>{p.name}</div>
-                <div style={{ fontSize: "0.8rem", color: "#73695b" }}>{p.categoryLabel || p.category} · ₹{p.price} ({p.netWeight})</div>
+            <div
+              key={p.id}
+              className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 shadow-xs"
+            >
+              <div className="w-full sm:flex-1">
+                <div style={{ fontWeight: 700, color: "#171410", marginBottom: "3px", fontSize: "0.95rem" }}>{p.name}</div>
+                <div style={{ fontSize: "0.8rem", color: "#73695b" }}>{p.categoryLabel || p.category} · <span style={{ fontWeight: 700, color: "#941717" }}>₹{p.price}</span> ({p.netWeight})</div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+              <div className="flex items-center justify-between sm:justify-end gap-3 w-full sm:w-auto pt-2.5 sm:pt-0 border-t border-[#f5f2ed] sm:border-0">
                 <Badge label={p.inStock ? "In Stock" : "Out of Stock"} color={p.inStock ? "#059669" : "#d97706"} />
                 <button
                   onClick={() => toggleStock(p.id, p.inStock)}
                   style={{
                     background: p.inStock ? "#fdf2f2" : "#ecfdf5",
-                    border: `1px solid ${p.inStock ? "#fecaca" : "#a7f3d0"}`,
+                    border: `1.5px solid ${p.inStock ? "#fecaca" : "#a7f3d0"}`,
                     borderRadius: "8px",
                     padding: "7px 14px",
-                    fontSize: "0.8rem",
+                    fontSize: "0.82rem",
                     fontWeight: 700,
                     cursor: "pointer",
                     color: p.inStock ? "#941717" : "#059669",
+                    whiteSpace: "nowrap",
+                    transition: "all 150ms ease",
                   }}
                 >
                   {p.inStock ? "Mark Unavailable" : "Mark Available"}
@@ -3074,7 +3805,7 @@ function InventoryTab() {
             </div>
           ) : (
             <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", textAlign: "left" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", textAlign: "left", minWidth: "720px" }}>
                 <thead>
                   <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0", color: "#423b32", fontWeight: 700 }}>
                     <th style={{ padding: "10px 14px" }}>Timestamp</th>
@@ -4206,11 +4937,11 @@ function CustomersTab() {
         </div>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading customers…</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "640px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
                 {["Name", "Phone", "Total Orders", "Total Spent", "Address", "Last Order"].map(h => (
@@ -5071,6 +5802,24 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <div style={{ fontSize: "0.75rem", color: "#73695b", marginTop: "2px" }}>
                     {o.customer?.address}
                   </div>
+                  {(o.deliveryInstruction || o.customer?.deliveryInstruction) && (
+                    <div style={{
+                      marginTop: "6px",
+                      background: "#fffbeb",
+                      border: "1px solid #fde68a",
+                      borderRadius: "6px",
+                      padding: "3px 8px",
+                      fontSize: "0.75rem",
+                      color: "#92400e",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "4px",
+                    }}>
+                      <span className="material-symbols-outlined text-[14px] text-amber-700">note_alt</span>
+                      <span><strong>Customer Instruction:</strong> {o.deliveryInstruction || o.customer?.deliveryInstruction}</span>
+                    </div>
+                  )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
                   <div style={{ textAlign: "right", marginRight: "8px" }}>
@@ -6069,7 +6818,19 @@ function ReturnsTab() {
         border: "1px solid #ede8e0",
       }}>
         {/* Status filter pills */}
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+        <div
+          className="no-scrollbar"
+          style={{
+            display: "flex",
+            gap: "6px",
+            overflowX: "auto",
+            whiteSpace: "nowrap",
+            flexWrap: "nowrap",
+            WebkitOverflowScrolling: "touch",
+            width: "100%",
+            paddingBottom: "4px",
+          }}
+        >
           {["All", "Pending Review", "Approved", "Pickup Assigned", "Completed", "Rejected"].map(s => (
             <button
               key={s}
@@ -6084,6 +6845,8 @@ function ReturnsTab() {
                 fontSize: "0.78rem",
                 fontWeight: 700,
                 cursor: "pointer",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
               }}
             >
               {s}
@@ -6092,7 +6855,7 @@ function ReturnsTab() {
         </div>
 
         {/* Search input */}
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", minWidth: "260px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, minWidth: "160px", maxWidth: "420px" }}>
           <span className="material-symbols-outlined text-[18px] text-gray-500">search</span>
           <input
             type="text"
@@ -6501,28 +7264,30 @@ export default function StoreAdminPage() {
     }
   };
 
-  const acknowledgeAllIncoming = async () => {
+  const acknowledgeIncomingOrders = async () => {
     const ordersToAck = [...incomingOrders];
-    const returnsToAck = [...incomingReturns];
+    if (ordersToAck.length === 0) return;
 
-    // 1. Immediately silence alarm and clear banner UI
+    // 1. Mark orders as acknowledged and clear order banner
     ordersToAck.forEach((o) => {
       if (o.orderId) acknowledgedIdsRef.current.add(o.orderId);
-    });
-    returnsToAck.forEach((r) => {
-      if (r.requestId) acknowledgedIdsRef.current.add(r.requestId);
+      if (o.id) acknowledgedIdsRef.current.add(o.id);
+      if (o._id) acknowledgedIdsRef.current.add(o._id);
     });
     setIncomingOrders([]);
-    setIncomingReturns([]);
-    orderAlarm.stopAlarm();
 
-    // 2. Persist acknowledged IDs to localStorage (up to last 100 orders)
+    // 2. Only stop alarm if no pending return requests remain
+    if (incomingReturns.length === 0) {
+      orderAlarm.stopAlarm();
+    }
+
+    // 3. Persist acknowledged IDs to localStorage
     try {
       const idsArray = Array.from(acknowledgedIdsRef.current).slice(-100);
       localStorage.setItem("teffes_acked_order_ids", JSON.stringify(idsArray));
     } catch { }
 
-    // 3. Update database status of each acknowledged order to 'Cutting'
+    // 4. Update database status of each acknowledged order to 'Cutting'
     toast.info("Acknowledging orders and moving to Cutting…", "Order Accepted");
     try {
       await Promise.all(
@@ -6534,12 +7299,42 @@ export default function StoreAdminPage() {
         })
       );
       toast.success("Orders moved to Cutting queue in Live Orders", "Orders Acknowledged");
-      // Trigger order refresh event so orders tab updates automatically
       const socket = getSocket();
       socket.emit("orders:refresh");
     } catch (err) {
       console.warn("Failed to update order status to Cutting:", err);
     }
+  };
+
+  const acknowledgeIncomingReturns = () => {
+    const returnsToAck = [...incomingReturns];
+    if (returnsToAck.length === 0) return;
+
+    // 1. Mark return requests as acknowledged and clear return banner
+    returnsToAck.forEach((r) => {
+      if (r.requestId) acknowledgedIdsRef.current.add(r.requestId);
+      if (r.id) acknowledgedIdsRef.current.add(r.id);
+      if (r._id) acknowledgedIdsRef.current.add(r._id);
+    });
+    setIncomingReturns([]);
+
+    // 2. Only stop alarm if no incoming orders remain
+    if (incomingOrders.length === 0) {
+      orderAlarm.stopAlarm();
+    }
+
+    // 3. Persist acknowledged IDs to localStorage
+    try {
+      const idsArray = Array.from(acknowledgedIdsRef.current).slice(-100);
+      localStorage.setItem("teffes_acked_order_ids", JSON.stringify(idsArray));
+    } catch { }
+
+    toast.success("Return request alert acknowledged", "Return Acknowledged");
+  };
+
+  const acknowledgeAllIncoming = async () => {
+    await acknowledgeIncomingOrders();
+    acknowledgeIncomingReturns();
   };
 
   if (!user) return null;
@@ -6721,7 +7516,7 @@ export default function StoreAdminPage() {
       </aside>
 
       {/* ─── Main Content ────────────────────────────────────────────── */}
-      <main style={{ flex: 1, padding: isMobile ? "16px" : "32px", overflowY: "auto", minWidth: 0 }}>
+      <main style={{ flex: 1, padding: isMobile ? "14px 10px" : "32px", overflowY: "auto", minWidth: 0 }}>
         {/* CSS Keyframes for Alarm Bell Shake & Glowing Pulse */}
         <style dangerouslySetInnerHTML={{
           __html: `
@@ -6833,7 +7628,9 @@ export default function StoreAdminPage() {
                 type="button"
                 onClick={() => {
                   setActiveTab("orders");
-                  orderAlarm.stopAlarm();
+                  if (incomingReturns.length === 0) {
+                    orderAlarm.stopAlarm();
+                  }
                 }}
                 style={{
                   background: "#fff",
@@ -6856,7 +7653,7 @@ export default function StoreAdminPage() {
 
               <button
                 type="button"
-                onClick={acknowledgeAllIncoming}
+                onClick={acknowledgeIncomingOrders}
                 style={{
                   background: "#10b981",
                   border: "none",
@@ -6965,7 +7762,9 @@ export default function StoreAdminPage() {
                 type="button"
                 onClick={() => {
                   setActiveTab("returns");
-                  orderAlarm.stopAlarm();
+                  if (incomingOrders.length === 0) {
+                    orderAlarm.stopAlarm();
+                  }
                 }}
                 style={{
                   background: "#fff",
@@ -6988,7 +7787,7 @@ export default function StoreAdminPage() {
 
               <button
                 type="button"
-                onClick={acknowledgeAllIncoming}
+                onClick={acknowledgeIncomingReturns}
                 style={{
                   background: "#10b981",
                   border: "none",

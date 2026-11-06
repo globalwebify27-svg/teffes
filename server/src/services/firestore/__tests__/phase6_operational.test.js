@@ -543,7 +543,7 @@ async function runPhase6Tests() {
     const confirmed = await remittanceService.confirmRemittanceTransactional({
       remittanceId,
       adminUser: testStoreAdminUserA,
-      notes: 'Cash verified and physically placed in dark store cash vault',
+      notes: 'Cash verified and physically placed in store cash vault',
     });
 
     assert.strictEqual(confirmed.status, 'Confirmed');
@@ -662,45 +662,45 @@ async function runPhase6Tests() {
 
     // Remove slots
     for (const id of createdSlotIds) {
-      await deliverySlotService.deleteDeliverySlot(id).catch(() => {});
+      await deliverySlotService.deleteDeliverySlot(id).catch(() => { });
     }
 
     // Remove returns
     for (const id of createdReturnIds) {
-      await returnService.deleteReturnRequest(id).catch(() => {});
+      await returnService.deleteReturnRequest(id).catch(() => { });
     }
 
     // Remove reviews
     for (const id of createdReviewIds) {
-      await reviewService.deleteReview(id).catch(() => {});
+      await reviewService.deleteReview(id).catch(() => { });
     }
 
     // Remove SOS
     for (const id of createdSosIds) {
-      await sosService.deleteSosAlert(id).catch(() => {});
+      await sosService.deleteSosAlert(id).catch(() => { });
     }
 
     // Remove remittances
     for (const id of createdRemittanceIds) {
-      await remittanceService.deleteRemittance(id).catch(() => {});
+      await remittanceService.deleteRemittance(id).catch(() => { });
     }
 
     // Remove transfers
     for (const id of createdTransferIds) {
-      await transferService.deleteStoreTransfer(id).catch(() => {});
+      await transferService.deleteStoreTransfer(id).catch(() => { });
     }
 
     // Remove orders
     for (const id of createdOrderIds) {
-      await orderService.deleteOrder(id).catch(() => {});
+      await orderService.deleteOrder(id).catch(() => { });
     }
 
     // Remove stores, product, and inventory
-    await inventoryService.deleteInventoryItem(testStoreIdA, testProductId).catch(() => {});
-    await inventoryService.deleteInventoryItem(testStoreIdB, testProductId).catch(() => {});
-    await productService.deleteProduct(testProductId).catch(() => {});
-    await storeService.deleteStore(testStoreIdA).catch(() => {});
-    await storeService.deleteStore(testStoreIdB).catch(() => {});
+    await inventoryService.deleteInventoryItem(testStoreIdA, testProductId).catch(() => { });
+    await inventoryService.deleteInventoryItem(testStoreIdB, testProductId).catch(() => { });
+    await productService.deleteProduct(testProductId).catch(() => { });
+    await storeService.deleteStore(testStoreIdA).catch(() => { });
+    await storeService.deleteStore(testStoreIdB).catch(() => { });
 
     // Clean any audit history logs generated during test
     const histories = await db

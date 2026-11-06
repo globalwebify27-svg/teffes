@@ -94,7 +94,7 @@ class _LocationPermissionScreenState extends State<LocationPermissionScreen> {
               _buildFeatureItem(
                 icon: Icons.store_rounded,
                 title: 'Accurate Hub Proximity',
-                subtitle: 'Get notified for orders nearest to Ranchi dark store',
+                subtitle: 'Get notified for orders nearest to Ranchi Teffe store',
               ),
               const SizedBox(height: 16),
               _buildFeatureItem(

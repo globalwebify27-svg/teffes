@@ -159,12 +159,25 @@ export default function DashboardPage() {
   useEffect(() => {
     if (!trackingOrder) return;
     const socket = getSocket();
-    const orderId = trackingOrder.orderId || trackingOrder.id;
+    const publicOrderId = trackingOrder.orderId;
+    const docOrderId = trackingOrder.id || trackingOrder._id;
 
-    socket.emit("join:order", orderId);
+    if (publicOrderId) {
+      socket.emit("join:order", publicOrderId);
+      socket.emit("join", `order:${publicOrderId}`);
+    }
+    if (docOrderId && docOrderId !== publicOrderId) {
+      socket.emit("join:order", docOrderId);
+      socket.emit("join", `order:${docOrderId}`);
+    }
 
     const handleStatusChanged = (data: any) => {
-      if (data.orderId === orderId || data.id === orderId) {
+      const eventOrderId = data.orderId || data.id || data.order?.orderId || data.order?.id;
+      const isTargetMatch =
+        (publicOrderId && eventOrderId === publicOrderId) ||
+        (docOrderId && eventOrderId === docOrderId);
+
+      if (isTargetMatch) {
         const newStatus = data.status || data.order?.status;
         const rawRider = data.rider !== undefined ? data.rider : (data.order?.rider !== undefined ? data.order.rider : undefined);
         const newDeliveryOtp = data.deliveryOtp || data.order?.deliveryOtp;
@@ -193,7 +206,10 @@ export default function DashboardPage() {
         });
         setLiveOrders((prev: any[]) =>
           prev.map((o) => {
-            if (o.orderId === orderId || o.id === orderId) {
+            if (
+              (publicOrderId && (o.orderId === publicOrderId || o.id === publicOrderId)) ||
+              (docOrderId && (o.orderId === docOrderId || o.id === docOrderId))
+            ) {
               const updated = { ...o };
               if (newStatus) updated.status = newStatus;
               if (rawRider !== undefined) updated.rider = rawRider;
@@ -207,7 +223,10 @@ export default function DashboardPage() {
     };
 
     const handleLocationChanged = (data: any) => {
-      if (data.orderId === orderId) {
+      if (
+        (publicOrderId && data.orderId === publicOrderId) ||
+        (docOrderId && data.orderId === docOrderId)
+      ) {
         setLiveRiderCoords({
           lat: Number(data.lat),
           lng: Number(data.lng),
@@ -221,7 +240,14 @@ export default function DashboardPage() {
     socket.on("rider:location_changed", handleLocationChanged);
 
     return () => {
-      socket.emit("leave:order", orderId);
+      if (publicOrderId) {
+        socket.emit("leave:order", publicOrderId);
+        socket.emit("leave", `order:${publicOrderId}`);
+      }
+      if (docOrderId && docOrderId !== publicOrderId) {
+        socket.emit("leave:order", docOrderId);
+        socket.emit("leave", `order:${docOrderId}`);
+      }
       socket.off("order:status_changed", handleStatusChanged);
       socket.off("order:status_updated", handleStatusChanged);
       socket.off("rider:location_changed", handleLocationChanged);
@@ -312,14 +338,19 @@ export default function DashboardPage() {
   // Real-time socket sync for active customer orders
   useEffect(() => {
     const socket = getSocket();
-    const handleOrderSync = () => {
+    const handleOrderSync = (data?: any) => {
+      const storedUser = getStoredUser();
+      const currentUserId = storedUser?.id || (storedUser as any)?._id;
+      if (data?.order?.customer?.userId && currentUserId && String(data.order.customer.userId) !== String(currentUserId)) {
+        return; // Strict customer isolation: ignore other customers' orders
+      }
       api.get<{ success: boolean; orders: any[] }>("/orders/my-orders")
         .then((res) => {
           if (res.data.success && res.data.orders) {
             setLiveOrders(res.data.orders);
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
 
     socket.on("orders:refreshed", handleOrderSync);
@@ -668,7 +699,7 @@ export default function DashboardPage() {
           .then((w) => {
             if (w.data?.success) setTeffesCash(w.data.balance || 0);
           })
-          .catch(() => {});
+          .catch(() => { });
         if (trackingOrder && (trackingOrder.id === cancelModalOrderId || trackingOrder.orderId === cancelModalOrderId)) {
           setTrackingOrder((prev: any) => prev ? { ...prev, status: "Cancelled" } : null);
         }
@@ -777,9 +808,13 @@ export default function DashboardPage() {
     return {
       id: o.orderId || o.id || `TEF-${o._id?.slice(-6)}`,
       orderId: o.orderId || o.id,
-      status: o.status || "Placed",
-      orderCategory: isInProgress ? "in-progress" : isDelivered ? "delivered" : "cancelled",
-      statusText: o.status === "Pending" ? "Order Confirmed • Processing" : o.status,
+      statusText: o.status === "Pending"
+        ? (o.isNextDayOrder || (o.deliverySlot && (o.deliverySlot.toLowerCase().includes('tomorrow') || o.deliverySlot.toLowerCase().includes('next-day') || o.deliverySlot.toLowerCase().includes('09:00 am'))))
+          ? "Scheduled • Tomorrow by 9:00 AM"
+          : "Order Placed at Teffes"
+        : o.status === "Cutting"
+          ? "Order Confirmed • Prepping Fresh Cuts"
+          : o.status,
       statusColor: isDelivered ? "text-emerald-700" : isCancelled ? "text-slate-500" : "text-amber-700",
       badgeBg: isDelivered ? "bg-emerald-50" : isCancelled ? "bg-slate-100" : "bg-amber-50",
       icon: isDelivered ? "check_circle" : isCancelled ? "cancel" : isOutForDelivery ? "two_wheeler" : "schedule",
@@ -1002,178 +1037,180 @@ export default function DashboardPage() {
                       key={order.id}
                       className="bg-white rounded-2xl border border-gray-200/90 overflow-hidden shadow-2xs hover:border-gray-300 transition-all"
                     >
-                    {/* Order Header */}
-                    <div className="p-4 sm:p-5 flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`font-headline-sm font-bold text-[14px] flex items-center gap-1 ${order.statusColor}`}>
-                            <span>{order.statusText}</span>
-                            <span className="material-symbols-outlined text-[16px]">
-                              {order.icon}
+                      {/* Order Header */}
+                      <div className="p-4 sm:p-5 flex items-start justify-between gap-3">
+                        <div>
+                          <div className="flex items-center gap-1.5">
+                            <span className={`font-headline-sm font-bold text-[14px] flex items-center gap-1 ${order.statusColor}`}>
+                              <span>{order.statusText}</span>
+                              <span className="material-symbols-outlined text-[16px]">
+                                {order.icon}
+                              </span>
                             </span>
-                          </span>
-                        </div>
-                        <p className="text-xs text-slate-500 font-medium mt-0.5">
-                          {(() => {
-                            if (order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status)) {
-                              const raw = order.rawOrder || order;
-                              const isOut = order.statusText === "Out for Delivery" || raw.status === "Out for Delivery";
-                              const transitMins = raw.remainingTransitMinutes ?? order.remainingTransitMinutes ?? 14;
-                              const isNear = isOut && (transitMins <= 5 || raw.etaStage === "NEAR_DOORSTEP" || order.etaStage === "NEAR_DOORSTEP");
+                          </div>
+                          <p className="text-xs text-slate-500 font-medium mt-0.5">
+                            {(() => {
+                              if (order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status)) {
+                                const raw = order.rawOrder || order;
+                                const isOut = order.statusText === "Out for Delivery" || raw.status === "Out for Delivery";
+                                const transitMins = raw.remainingTransitMinutes ?? order.remainingTransitMinutes ?? 14;
+                                const isNear = isOut && (transitMins <= 5 || raw.etaStage === "NEAR_DOORSTEP" || order.etaStage === "NEAR_DOORSTEP");
 
-                              let dynamicEta = "";
-                              if (isNear) {
-                                dynamicEta = "Arriving in ~5 min";
-                              } else if (isOut) {
-                                dynamicEta = `Arriving in ${transitMins} min`;
-                              } else if (raw.targetDeliveryTime || order.targetDeliveryTime) {
-                                try {
-                                  const dt = new Date(raw.targetDeliveryTime || order.targetDeliveryTime);
-                                  dynamicEta = `Arriving by ${dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}`;
-                                } catch {
+                                let dynamicEta = "";
+                                if (isNear) {
+                                  dynamicEta = "Arriving in ~5 min";
+                                } else if (isOut) {
+                                  dynamicEta = `Arriving in ${transitMins} min`;
+                                } else if (raw.targetDeliveryTime || order.targetDeliveryTime) {
+                                  try {
+                                    const dt = new Date(raw.targetDeliveryTime || order.targetDeliveryTime);
+                                    dynamicEta = `Arriving by ${dt.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })}`;
+                                  } catch {
+                                    dynamicEta = "Preparing your cuts";
+                                  }
+                                } else {
                                   dynamicEta = "Preparing your cuts";
                                 }
-                              } else {
-                                dynamicEta = "Preparing your cuts";
+
+                                const rawDate = (order.placedAt || "Recently").split(" • ")[0];
+                                return `${rawDate} • ${dynamicEta}`;
                               }
-
-                              const rawDate = (order.placedAt || "Recently").split(" • ")[0];
-                              return `${rawDate} • ${dynamicEta}`;
-                            }
-                            return order.placedAt;
-                          })()}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <span className="font-headline-sm font-black text-gray-900 text-sm">
-                          ₹{order.amount}
-                        </span>
-                        <span className="material-symbols-outlined text-gray-400 text-[18px]">
-                          chevron_right
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Order Thumbnails Strip */}
-                    <div className="px-4 sm:px-5 pb-4 flex items-center gap-2.5 overflow-x-auto">
-                      {order.items.map((item: any, idx: number) => (
-                        <div
-                          key={idx}
-                          className="w-14 h-14 rounded-xl border border-gray-200/80 overflow-hidden bg-gray-50 shrink-0"
-                          title={item.name}
-                        >
-                          <img
-                            src={item.img}
-                            alt={item.name}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Action CTA: Track Rider / Cancel for in-progress vs Order Again for completed */}
-                    {order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status) ? (
-                      <div className="p-3.5 bg-amber-50/80 border-t border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                          <div className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
-                            <span className="text-xs font-bold text-amber-950">
-                              {(order.status === "Cutting" || order.rawOrder?.status === "Cutting")
-                                ? "Store Butcher Cutting Meat"
-                                : order.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(order.status || order.rawOrder?.status)
-                                ? `Rider Dispatched • ${order.rider.name}`
-                                : "Order Confirmed • Prepping Fresh Cuts"}
-                            </span>
-                          </div>
-                          {order.deliveryOtp && (
-                            <div className="flex items-center gap-1.5 bg-white border border-amber-300 px-2.5 py-0.5 rounded-lg text-xs shadow-2xs">
-                              <span className="text-[10.5px] font-bold text-amber-800 uppercase tracking-wide">OTP:</span>
-                              <span className="font-mono font-black text-primary text-sm tracking-wider">{order.deliveryOtp}</span>
-                            </div>
-                          )}
+                              return order.placedAt;
+                            })()}
+                          </p>
                         </div>
 
-                        <div className="flex items-center gap-2 w-full sm:w-auto">
-                          <button
-                            type="button"
-                            onClick={() => setTrackingOrder(order)}
-                            className="flex-1 sm:flex-none py-2 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer"
+                        <div className="flex items-center gap-2">
+                          <span className="font-headline-sm font-black text-gray-900 text-sm">
+                            ₹{order.amount}
+                          </span>
+                          <span className="material-symbols-outlined text-gray-400 text-[18px]">
+                            chevron_right
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Order Thumbnails Strip */}
+                      <div className="px-4 sm:px-5 pb-4 flex items-center gap-2.5 overflow-x-auto">
+                        {order.items.map((item: any, idx: number) => (
+                          <div
+                            key={idx}
+                            className="w-14 h-14 rounded-xl border border-gray-200/80 overflow-hidden bg-gray-50 shrink-0"
+                            title={item.name}
                           >
-                            <span className="material-symbols-outlined text-[17px]">
-                              {order.rider?.name && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) ? "two_wheeler" : "schedule"}
-                            </span>
-                            <span>Track Order</span>
-                          </button>
+                            <img
+                              src={item.img}
+                              alt={item.name}
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ))}
+                      </div>
 
-                          {["Placed", "Pending", "Confirmed", "Cutting"].includes(order.status || order.rawOrder?.status || "Pending") && (
+                      {/* Action CTA: Track Rider / Cancel for in-progress vs Order Again for completed */}
+                      {order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status) ? (
+                        <div className="p-3.5 bg-amber-50/80 border-t border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping shrink-0" />
+                              <span className="text-xs font-bold text-amber-950">
+                                {(order.status === "Cutting" || order.rawOrder?.status === "Cutting")
+                                  ? "Teffes Store Preparing Meat"
+                                  : order.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(order.status || order.rawOrder?.status)
+                                    ? `Rider Dispatched • ${order.rider.name}`
+                                    : (order.status === "Pending" || order.rawOrder?.status === "Pending")
+                                      ? "Order Placed at Teffes Store"
+                                      : "Order Confirmed • Prepping Fresh Cuts"}
+                              </span>
+                            </div>
+                            {order.deliveryOtp && (
+                              <div className="flex items-center gap-1.5 bg-white border border-amber-300 px-2.5 py-0.5 rounded-lg text-xs shadow-2xs">
+                                <span className="text-[10.5px] font-bold text-amber-800 uppercase tracking-wide">OTP:</span>
+                                <span className="font-mono font-black text-primary text-sm tracking-wider">{order.deliveryOtp}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 w-full sm:w-auto">
                             <button
                               type="button"
-                              onClick={() => { setCancelModalOrderId(order.id || order.rawOrder?._id || order.orderId); setCancelFeedback(null); }}
-                              className="py-2 px-3 rounded-xl bg-white border border-red-200 text-red-700 hover:bg-red-50 font-headline-sm font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                              onClick={() => setTrackingOrder(order)}
+                              className="flex-1 sm:flex-none py-2 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer"
                             >
-                              <span className="material-symbols-outlined text-red-600 text-[16px]">cancel</span>
-                              <span>Cancel Order</span>
+                              <span className="material-symbols-outlined text-[17px]">
+                                {order.rider?.name && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) ? "two_wheeler" : "schedule"}
+                              </span>
+                              <span>Track Order</span>
                             </button>
-                          )}
 
-                          {order.rider?.phone && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) && (
-                            <a
-                              href={`tel:${order.rider?.phone}`}
-                              className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-gray-800 font-headline-sm font-bold text-xs hover:bg-gray-50 transition-all flex items-center gap-1 text-decoration-none shadow-2xs"
-                            >
-                              <span className="material-symbols-outlined text-emerald-600 text-[17px]">call</span>
-                              <span>Call</span>
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex w-full border-t border-gray-100 divide-x divide-gray-100">
-                        {(order.status === "Delivered" || order.orderCategory === "delivered") && order.rawOrder?.returnStatus === "Not Requested" && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenReturnModal(order.id)}
-                            className="flex-1 py-3 text-center font-headline-sm font-bold text-gray-700 hover:bg-gray-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none"
-                          >
-                            Return/Exchange
-                          </button>
-                        )}
-                        {order.rawOrder?.returnStatus && order.rawOrder?.returnStatus !== "Not Requested" && (
-                          <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-600 text-[13.5px] bg-amber-50/30">
-                            Return {order.rawOrder?.returnStatus}
+                            {["Placed", "Pending", "Confirmed", "Cutting"].includes(order.status || order.rawOrder?.status || "Pending") && (
+                              <button
+                                type="button"
+                                onClick={() => { setCancelModalOrderId(order.id || order.rawOrder?._id || order.orderId); setCancelFeedback(null); }}
+                                className="py-2 px-3 rounded-xl bg-white border border-red-200 text-red-700 hover:bg-red-50 font-headline-sm font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                              >
+                                <span className="material-symbols-outlined text-red-600 text-[16px]">cancel</span>
+                                <span>Cancel Order</span>
+                              </button>
+                            )}
+
+                            {order.rider?.phone && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) && (
+                              <a
+                                href={`tel:${order.rider?.phone}`}
+                                className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-gray-800 font-headline-sm font-bold text-xs hover:bg-gray-50 transition-all flex items-center gap-1 text-decoration-none shadow-2xs"
+                              >
+                                <span className="material-symbols-outlined text-emerald-600 text-[17px]">call</span>
+                                <span>Call</span>
+                              </a>
+                            )}
                           </div>
-                        )}
-                        {(order.status === "Delivered" || order.orderCategory === "delivered") && (
-                          order.rawOrder?.riderRating ? (
-                            <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 text-[13px] bg-amber-50/40 flex items-center justify-center gap-1">
-                              <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
-                              <span>Rated {order.rawOrder.riderRating}★</span>
-                            </div>
-                          ) : (
+                        </div>
+                      ) : (
+                        <div className="flex w-full border-t border-gray-100 divide-x divide-gray-100">
+                          {(order.status === "Delivered" || order.orderCategory === "delivered") && order.rawOrder?.returnStatus === "Not Requested" && (
                             <button
                               type="button"
-                              onClick={() => handleOpenRatingModal(order)}
-                              className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 hover:bg-amber-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none flex items-center justify-center gap-1"
+                              onClick={() => handleOpenReturnModal(order.id)}
+                              className="flex-1 py-3 text-center font-headline-sm font-bold text-gray-700 hover:bg-gray-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none"
                             >
-                              <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
-                              <span>Rate Rider</span>
+                              Return/Exchange
                             </button>
-                          )
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleOrderAgain(order.items.map((i: any) => i.name))}
-                          className="flex-1 py-3 text-center font-headline-sm font-bold text-primary hover:bg-crimson-soft text-[13.5px] cursor-pointer bg-white transition-colors border-none"
-                        >
-                          Order Again
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))
-              )}
-            </div>
+                          )}
+                          {order.rawOrder?.returnStatus && order.rawOrder?.returnStatus !== "Not Requested" && (
+                            <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-600 text-[13.5px] bg-amber-50/30">
+                              Return {order.rawOrder?.returnStatus}
+                            </div>
+                          )}
+                          {(order.status === "Delivered" || order.orderCategory === "delivered") && (
+                            order.rawOrder?.riderRating ? (
+                              <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 text-[13px] bg-amber-50/40 flex items-center justify-center gap-1">
+                                <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
+                                <span>Rated {order.rawOrder.riderRating}★</span>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenRatingModal(order)}
+                                className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 hover:bg-amber-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none flex items-center justify-center gap-1"
+                              >
+                                <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
+                                <span>Rate Rider</span>
+                              </button>
+                            )
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleOrderAgain(order.items.map((i: any) => i.name))}
+                            className="flex-1 py-3 text-center font-headline-sm font-bold text-primary hover:bg-crimson-soft text-[13.5px] cursor-pointer bg-white transition-colors border-none"
+                          >
+                            Order Again
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             )}
 
             {/* 2. CUSTOMER SUPPORT TAB (Image 2 Style) */}
@@ -1226,8 +1263,8 @@ export default function DashboardPage() {
                 {addressFeedback && (
                   <div
                     className={`p-3.5 rounded-2xl text-xs font-bold border flex items-center gap-2.5 shadow-2xs ${addressFeedback.type === "success"
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                        : "bg-red-50 text-red-700 border-red-200"
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                      : "bg-red-50 text-red-700 border-red-200"
                       }`}
                   >
                     <span className="material-symbols-outlined text-[18px]">
@@ -1377,8 +1414,8 @@ export default function DashboardPage() {
                           type="button"
                           onClick={() => setEditingAddress({ ...editingAddress, label: lbl })}
                           className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${editingAddress.label === lbl
-                              ? "bg-primary text-white border-primary"
-                              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                            ? "bg-primary text-white border-primary"
+                            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                             }`}
                         >
                           {lbl}
@@ -1439,8 +1476,8 @@ export default function DashboardPage() {
                           type="button"
                           onClick={() => setNewLabelInput(lbl)}
                           className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${newLabelInput === lbl
-                              ? "bg-primary text-white border-primary"
-                              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                            ? "bg-primary text-white border-primary"
+                            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
                             }`}
                         >
                           {lbl}
@@ -1775,8 +1812,8 @@ export default function DashboardPage() {
                 let badgeText = "Order in Preparation";
                 let mainHeading = "Preparing your cuts";
                 let subHeading = `Arriving by ${trackingOrder.targetDeliveryTime
-                    ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                    : "30-40 mins"
+                  ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                  : "30-40 mins"
                   }`;
                 let iconName = "skillet";
                 let bannerColor = "bg-amber-50 border-amber-200/80 text-amber-950";
@@ -1806,16 +1843,16 @@ export default function DashboardPage() {
                 } else if (status === "Cutting") {
                   badgeText = "Live Cutting Station";
                   mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
-                      ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                      : "soon"
+                    ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                    : "soon"
                     }`;
                   subHeading = "Store team slicing & packing your fresh cuts";
                   iconName = "content_cut";
                 } else if (status === "Ready") {
                   badgeText = "Packed & Ready";
                   mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
-                      ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                      : "soon"
+                    ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                    : "soon"
                     }`;
                   subHeading = "Insulated fresh pack assigned to delivery rider";
                   iconName = "inventory_2";
@@ -1833,6 +1870,12 @@ export default function DashboardPage() {
                       <span className="text-xs opacity-90 block mt-1 font-medium">
                         {subHeading}
                       </span>
+                      {(trackingOrder.createdByType === "self_store_admin" || trackingOrder.orderSource === "store_direct") && (
+                        <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-md bg-black/10 text-[10.5px] font-bold">
+                          <span className="material-symbols-outlined text-[13px]">storefront</span>
+                          Direct Store Order • Placed via Store
+                        </span>
+                      )}
                     </div>
 
                     <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${iconColor}`}>
@@ -1898,11 +1941,9 @@ export default function DashboardPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between">
                         <h4 className="font-headline-sm font-extrabold text-gray-900 text-sm">
-                          {(trackingOrder.status === "Cutting" || trackingOrder.rawOrder?.status === "Cutting") ? "Fresh Meat Cutting in Progress" : "Order Verified at Dark Store"}
+                          {(trackingOrder.status === "Cutting" || trackingOrder.rawOrder?.status === "Cutting") ? "Fresh Meat Cutting in Progress" : "Order Verified at Teffe's Store"}
                         </h4>
-                        <span className="text-[10px] font-bold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded-full">
-                          0-4°C Chill
-                        </span>
+
                       </div>
                       <p className="text-xs text-slate-600 mt-0.5">
                         {trackingOrder.storeName || "TeFFe's — Doranda Hub"}
@@ -2029,16 +2070,26 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="space-y-3 text-xs">
-                  {/* Step 1: Order Confirmed */}
-                  <div className="flex items-start gap-2.5">
-                    <span className="material-symbols-outlined text-emerald-600 text-[18px] shrink-0">
-                      check_circle
-                    </span>
-                    <div>
-                      <span className="font-bold text-gray-900 block">Order Confirmed</span>
-                      <span className="text-slate-500 text-[11px]">Verified by store manager</span>
-                    </div>
-                  </div>
+                  {/* Step 1: Order Placed vs Confirmed */}
+                  {(() => {
+                    const st = trackingOrder.status || trackingOrder.rawOrder?.status || "Placed";
+                    const isConfirmed = ["Cutting", "Ready", "Out for Delivery", "Delivered"].includes(st);
+                    return (
+                      <div className="flex items-start gap-2.5">
+                        <span className={`material-symbols-outlined text-[18px] shrink-0 ${isConfirmed ? "text-emerald-600" : "text-amber-600"}`}>
+                          {isConfirmed ? "check_circle" : "radio_button_checked"}
+                        </span>
+                        <div>
+                          <span className="font-bold text-gray-900 block">
+                            {isConfirmed ? "Order Confirmed" : "Order Placed at Teffes"}
+                          </span>
+                          <span className="text-slate-500 text-[11px]">
+                            {isConfirmed ? "Verified by Teffes store manager" : "Sent to Teffes store team"}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Step 2: Fresh Meat Cut & Packed */}
                   {(() => {
@@ -2398,8 +2449,8 @@ export default function DashboardPage() {
               {returnFeedback && (
                 <div
                   className={`p-3 rounded-2xl mb-4 flex items-center gap-2.5 text-xs font-bold animate-fade-in ${returnFeedback.type === "success"
-                      ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                      : "bg-red-50 text-red-800 border border-red-200"
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : "bg-red-50 text-red-800 border border-red-200"
                     }`}
                 >
                   <span className="material-symbols-outlined text-[18px] shrink-0">
@@ -2425,8 +2476,8 @@ export default function DashboardPage() {
                         key={reason}
                         onClick={() => setReturnReasonInput(reason)}
                         className={`p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition-all flex items-center justify-between ${returnReasonInput === reason
-                            ? "bg-primary/5 border-primary text-primary"
-                            : "bg-gray-50 border-gray-200 text-gray-700 hover:border-gray-300"
+                          ? "bg-primary/5 border-primary text-primary"
+                          : "bg-gray-50 border-gray-200 text-gray-700 hover:border-gray-300"
                           }`}
                       >
                         <span>{reason}</span>
@@ -2585,9 +2636,8 @@ export default function DashboardPage() {
                         title={`${star} Star`}
                       >
                         <span
-                          className={`material-symbols-outlined text-[34px] ${
-                            star <= riderRatingValue ? "text-amber-400 fill-amber-400" : "text-gray-200"
-                          }`}
+                          className={`material-symbols-outlined text-[34px] ${star <= riderRatingValue ? "text-amber-400 fill-amber-400" : "text-gray-200"
+                            }`}
                           style={{
                             fontVariationSettings: star <= riderRatingValue ? "'FILL' 1" : "'FILL' 0",
                           }}
@@ -2621,11 +2671,10 @@ export default function DashboardPage() {
                             setRiderRatingFeedback((prev) => (prev ? `${prev}, ${tag}` : tag));
                           }
                         }}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          riderRatingFeedback.includes(tag)
-                            ? "bg-amber-100 text-amber-900 border-amber-300 font-bold"
-                            : "bg-white text-slate-600 border-gray-200 hover:border-gray-300"
-                        }`}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${riderRatingFeedback.includes(tag)
+                          ? "bg-amber-100 text-amber-900 border-amber-300 font-bold"
+                          : "bg-white text-slate-600 border-gray-200 hover:border-gray-300"
+                          }`}
                       >
                         {tag}
                       </button>

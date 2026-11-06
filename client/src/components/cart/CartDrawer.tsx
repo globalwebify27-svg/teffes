@@ -367,20 +367,33 @@ export default function CartDrawer() {
   const storeFreeGiftName = selectedStore?.freeGiftName || "Free Biryani Rice (500g)";
   const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 5;
 
+  // Check if current time in IST is after 7:59 PM (20:00 to 07:59)
+  const isAfter8PM = () => {
+    const now = new Date();
+    const istOffsetMs = 5.5 * 60 * 60 * 1000;
+    const ist = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffsetMs);
+    const hour = ist.getHours();
+    const minute = ist.getMinutes();
+    return hour >= 20 || (hour === 19 && minute >= 59) || hour < 8;
+  };
+  const isAfterHours = !isPickup && isAfter8PM();
+
   const isFreeDelivery = subtotal >= storeFreeDeliveryThreshold;
   const effectiveDeliveryFee = isPickup ? 0 : (isFreeDelivery ? 0 : storeStandardDeliveryFee);
-  const expressFee = (!isPickup && slot === "express60" && storeExpressEnabled) ? storeExpressDeliveryFee : 0;
+  const expressFee = (!isPickup && !isAfterHours && slot === "express60" && storeExpressEnabled) ? storeExpressDeliveryFee : 0;
   const rainSurgeFee = (!isPickup && storeRainSurgeEnabled) ? storeRainSurgeFee : 0;
   const effectiveTip = isPickup ? 0 : selectedTip;
   const discountAmount = couponDiscount;
   const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + expressFee + rainSurgeFee + effectiveTip - discountAmount);
   const resolvedDeliverySlot = isPickup
     ? "Store Pickup"
-    : slot === "express60"
-      ? "Express Delivery (60 min)"
-      : slot === "custom"
-        ? `Custom Delivery: ${customSlotTime}`
-        : "90 Min Delivery";
+    : isAfterHours
+      ? "Next-Day Delivery: Tomorrow by 09:00 AM"
+      : slot === "express60"
+        ? "Express Delivery (60 min)"
+        : slot === "custom"
+          ? `Custom Delivery: ${customSlotTime}`
+          : "90 Min Delivery";
 
   const amountForFreeDelivery = Math.max(0, storeFreeDeliveryThreshold - subtotal);
   const amountForFreeGift = Math.max(0, storeFreeGiftThreshold - subtotal);
@@ -569,6 +582,8 @@ export default function CartDrawer() {
         storeId: selectedStore?.storeId || "S001",
         deliverySlot: resolvedDeliverySlot,
         expressFee: expressFee,
+        tip: effectiveTip,
+        deliveryInstruction: (fulfillmentType === "pickup" ? pickupNote : deliveryNote).trim() || undefined,
         paymentMethod: selectedPayment === "wallet" ? "wallet" : fulfillmentType === "pickup" ? "Pay at Store Counter" : "Cash on Delivery",
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
@@ -615,6 +630,8 @@ export default function CartDrawer() {
         storeName: selectedStore?.name || "Central Store",
         deliverySlot: resolvedDeliverySlot,
         expressFee: expressFee,
+        tip: effectiveTip,
+        deliveryInstruction: (fulfillmentType === "pickup" ? pickupNote : deliveryNote).trim() || undefined,
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
       };
@@ -950,11 +967,10 @@ export default function CartDrawer() {
                                   {selectedStore.name}
                                 </span>
                                 <span
-                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
-                                    selectedStore.isAvailable !== false
+                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${selectedStore.isAvailable !== false
                                       ? "text-emerald-800 bg-emerald-100/90"
                                       : "text-red-700 bg-red-100"
-                                  }`}
+                                    }`}
                                 >
                                   {selectedStore.isAvailable !== false ? "Nearest • In Stock" : "Out of Stock"}
                                 </span>
@@ -970,136 +986,160 @@ export default function CartDrawer() {
                         )}
                       </div>
 
-                      {/* Delivery Speed Slots: 3 Options (Express 60 min, 90 min, Custom) */}
+                      {/* Delivery Speed Slots: After 8 PM Notice or Normal 3 Options */}
                       <div className="p-3 bg-slate-50 rounded-2xl border border-gray-200">
-                        {/* Live Bad Weather / Rain Surge Alert if enabled by Store Admin */}
-                        {storeRainSurgeEnabled && (
-                          <div className="mb-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-center justify-between text-[11px] text-amber-950 font-semibold shadow-xs">
-                            <span className="flex items-center gap-1.5">
-                              <span className="material-symbols-outlined text-[16px] text-amber-600">rainy</span>
-                              <span>Bad Weather / Rain Surge Active in your area</span>
-                            </span>
-                            <span className="font-extrabold text-amber-900">+₹{storeRainSurgeFee}</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px]">
-                            Select Delivery Speed (Ranchi Only)
-                          </div>
-                        </div>
-
-                        {/* 3 Slot Buttons Grid */}
-                        <div className="grid grid-cols-3 gap-2">
-                          {/* 1. Express Delivery (60 min) */}
-                          <button
-                            type="button"
-                            disabled={!storeExpressEnabled}
-                            onClick={() => storeExpressEnabled && setSlot("express60")}
-                            style={slot === "express60" && storeExpressEnabled ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${!storeExpressEnabled
-                              ? "border-gray-200 bg-gray-100/70 opacity-60 cursor-not-allowed"
-                              : slot === "express60"
-                                ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
-                                : "border-gray-200 bg-white hover:border-gray-300"
-                              }`}
-                            title={!storeExpressEnabled ? "Express 60-min delivery temporarily paused by store hub (Kitchen Busy)" : undefined}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-bold text-[12px] text-gray-900 leading-tight">Express</span>
-                              <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${storeExpressEnabled ? "bg-amber-100 text-amber-900" : "bg-gray-200 text-gray-600"}`}>
-                                {storeExpressEnabled ? `+₹${storeExpressDeliveryFee}` : "Paused"}
-                              </span>
-                            </div>
-                            <div className="mt-1.5">
-                              <div className="text-[11px] font-bold text-[#91000a] leading-tight">60 Mins</div>
-                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">
-                                {storeExpressEnabled ? "Priority Rush" : "Kitchen Backlog"}
+                        {isAfterHours ? (
+                          <div className="p-3.5 bg-amber-50/90 rounded-xl border border-amber-200/90 shadow-2xs">
+                            <div className="flex items-start gap-3">
+                              <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
+                                <span className="material-symbols-outlined text-[20px]">nightlight</span>
+                              </div>
+                              <div className="flex-1">
+                                <h4 className="font-headline-sm font-extrabold text-amber-950 text-[13px] leading-tight">
+                                  Teffes Store Hours: 8:00 AM – 8:00 PM
+                                </h4>
+                                <p className="font-body-sm text-amber-900/90 text-[11.5px] leading-relaxed mt-1">
+                                  Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM.
+                                </p>
+                                <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100/90 border border-emerald-200 rounded-lg text-emerald-900 text-[11px] font-bold">
+                                  <span className="material-symbols-outlined text-[15px] text-emerald-700">wb_sunny</span>
+                                  <span>Scheduled: Tomorrow by 09:00 AM</span>
+                                </div>
                               </div>
                             </div>
-                          </button>
-
-                          {/* 2. 90 Min Delivery */}
-                          <button
-                            type="button"
-                            onClick={() => setSlot("standard90")}
-                            style={slot === "standard90" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "standard90"
-                              ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
-                              : "border-gray-200 bg-white hover:border-gray-300"
-                              }`}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-bold text-[12px] text-gray-900 leading-tight">90 Min</span>
-                              <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
-                            </div>
-                            <div className="mt-1.5">
-                              <div className="text-[11px] font-bold text-gray-900 leading-tight">Fresh Cut</div>
-                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">Standard</div>
-                            </div>
-                          </button>
-
-                          {/* 3. Custom Delivery */}
-                          <button
-                            type="button"
-                            onClick={() => setSlot("custom")}
-                            style={slot === "custom" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
-                            className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "custom"
-                              ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
-                              : "border-gray-200 bg-white hover:border-gray-300"
-                              }`}
-                          >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className="font-bold text-[12px] text-gray-900 leading-tight">Custom</span>
-                              <span className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
-                            </div>
-                            <div className="mt-1.5">
-                              <div className="text-[11px] font-bold text-sky-900 leading-tight">Choose</div>
-                              <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">8 AM - 8 PM</div>
-                            </div>
-                          </button>
-                        </div>
-
-                        {/* Custom Delivery Dropdown when Custom is selected */}
-                        {slot === "custom" && (
-                          <div className="mt-3 pt-2.5 border-t border-gray-200/80">
-                            <label className="block text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
-                              <span>Select 1-Hour Time Slot (8:00 AM – 8:00 PM):</span>
-                              <span className="text-[10px] text-slate-400 font-normal">Past hours disabled</span>
-                            </label>
-                            <div className="relative">
-                              <select
-                                value={customSlotTime}
-                                onChange={(e) => setCustomSlotTime(e.target.value)}
-                                className="w-full py-2 pl-3 pr-8 text-[12px] font-semibold bg-white border border-gray-300 rounded-xl outline-none focus:border-primary text-gray-900 shadow-2xs cursor-pointer appearance-none"
-                              >
-                                {hourlySlots.map((s) => (
-                                  <option
-                                    key={s.label}
-                                    value={s.label}
-                                    disabled={s.isPassed}
-                                    className={s.isPassed ? "text-gray-400 bg-gray-50" : "text-gray-900 font-medium"}
-                                  >
-                                    {s.label} {s.isPassed ? "— (Passed)" : "• Available"}
-                                  </option>
-                                ))}
-                                {hourlySlots.every((s) => s.isPassed) && (
-                                  <option value="Tomorrow: 08:00 AM - 09:00 AM" className="text-emerald-700 font-bold">
-                                    Tomorrow: 08:00 AM - 09:00 AM
-                                  </option>
-                                )}
-                              </select>
-                              <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 text-[18px]">
-                                expand_more
-                              </span>
-                            </div>
-                            {customSlotTime && (
-                              <p className="text-[10.5px] text-sky-700 font-medium mt-1 flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[13px]">check_circle</span>
-                                <span>Order will be delivered during <strong>{customSlotTime}</strong></span>
-                              </p>
-                            )}
                           </div>
+                        ) : (
+                          <>
+                            {/* Live Bad Weather / Rain Surge Alert if enabled by Store Admin */}
+                            {storeRainSurgeEnabled && (
+                              <div className="mb-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-center justify-between text-[11px] text-amber-950 font-semibold shadow-xs">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="material-symbols-outlined text-[16px] text-amber-600">rainy</span>
+                                  <span>Bad Weather / Rain Surge Active in your area</span>
+                                </span>
+                                <span className="font-extrabold text-amber-900">+₹{storeRainSurgeFee}</span>
+                              </div>
+                            )}
+
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="font-label-badge uppercase font-bold text-slate-body text-[10.5px]">
+                                Select Delivery Speed (Ranchi Only)
+                              </div>
+                            </div>
+
+                            {/* 3 Slot Buttons Grid */}
+                            <div className="grid grid-cols-3 gap-2">
+                              {/* 1. Express Delivery (60 min) */}
+                              <button
+                                type="button"
+                                disabled={!storeExpressEnabled}
+                                onClick={() => storeExpressEnabled && setSlot("express60")}
+                                style={slot === "express60" && storeExpressEnabled ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${!storeExpressEnabled
+                                  ? "border-gray-200 bg-gray-100/70 opacity-60 cursor-not-allowed"
+                                  : slot === "express60"
+                                    ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
+                                    : "border-gray-200 bg-white hover:border-gray-300"
+                                  }`}
+                                title={!storeExpressEnabled ? "Express 60-min delivery temporarily paused by store hub (Kitchen Busy)" : undefined}
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-bold text-[12px] text-gray-900 leading-tight">Express</span>
+                                  <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${storeExpressEnabled ? "bg-amber-100 text-amber-900" : "bg-gray-200 text-gray-600"}`}>
+                                    {storeExpressEnabled ? `+₹${storeExpressDeliveryFee}` : "Paused"}
+                                  </span>
+                                </div>
+                                <div className="mt-1.5">
+                                  <div className="text-[11px] font-bold text-[#91000a] leading-tight">60 Mins</div>
+                                  <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">
+                                    {storeExpressEnabled ? "Priority Rush" : "Kitchen Backlog"}
+                                  </div>
+                                </div>
+                              </button>
+
+                              {/* 2. 90 Min Delivery */}
+                              <button
+                                type="button"
+                                onClick={() => setSlot("standard90")}
+                                style={slot === "standard90" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "standard90"
+                                  ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
+                                  : "border-gray-200 bg-white hover:border-gray-300"
+                                  }`}
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-bold text-[12px] text-gray-900 leading-tight">90 Min</span>
+                                  <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
+                                </div>
+                                <div className="mt-1.5">
+                                  <div className="text-[11px] font-bold text-gray-900 leading-tight">Fresh Cut</div>
+                                  <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">Standard</div>
+                                </div>
+                              </button>
+
+                              {/* 3. Custom Delivery */}
+                              <button
+                                type="button"
+                                onClick={() => setSlot("custom")}
+                                style={slot === "custom" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "custom"
+                                  ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
+                                  : "border-gray-200 bg-white hover:border-gray-300"
+                                  }`}
+                              >
+                                <div className="flex items-center justify-between gap-1">
+                                  <span className="font-bold text-[12px] text-gray-900 leading-tight">Custom</span>
+                                  <span className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
+                                </div>
+                                <div className="mt-1.5">
+                                  <div className="text-[11px] font-bold text-sky-900 leading-tight">Choose</div>
+                                  <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">8 AM - 8 PM</div>
+                                </div>
+                              </button>
+                            </div>
+
+                            {/* Custom Delivery Dropdown when Custom is selected */}
+                            {slot === "custom" && (
+                              <div className="mt-3 pt-2.5 border-t border-gray-200/80">
+                                <label className="block text-[11px] font-bold text-slate-700 mb-1.5 flex items-center justify-between">
+                                  <span>Select 1-Hour Time Slot (8:00 AM – 8:00 PM):</span>
+                                  <span className="text-[10px] text-slate-400 font-normal">Past hours disabled</span>
+                                </label>
+                                <div className="relative">
+                                  <select
+                                    value={customSlotTime}
+                                    onChange={(e) => setCustomSlotTime(e.target.value)}
+                                    className="w-full py-2 pl-3 pr-8 text-[12px] font-semibold bg-white border border-gray-300 rounded-xl outline-none focus:border-primary text-gray-900 shadow-2xs cursor-pointer appearance-none"
+                                  >
+                                    {hourlySlots.map((s) => (
+                                      <option
+                                        key={s.label}
+                                        value={s.label}
+                                        disabled={s.isPassed}
+                                        className={s.isPassed ? "text-gray-400 bg-gray-50" : "text-gray-900 font-medium"}
+                                      >
+                                        {s.label} {s.isPassed ? "— (Passed)" : "• Available"}
+                                      </option>
+                                    ))}
+                                    {hourlySlots.every((s) => s.isPassed) && (
+                                      <option value="Tomorrow: 08:00 AM - 09:00 AM" className="text-emerald-700 font-bold">
+                                        Tomorrow: 08:00 AM - 09:00 AM
+                                      </option>
+                                    )}
+                                  </select>
+                                  <span className="material-symbols-outlined absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 text-[18px]">
+                                    expand_more
+                                  </span>
+                                </div>
+                                {customSlotTime && (
+                                  <p className="text-[10.5px] text-sky-700 font-medium mt-1 flex items-center gap-1">
+                                    <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                    <span>Order will be delivered during <strong>{customSlotTime}</strong></span>
+                                  </p>
+                                )}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -1290,7 +1330,7 @@ export default function CartDrawer() {
                             : "bg-transparent text-slate-body hover:text-on-surface"
                             }`}
                         >
-                          Delivery Instructions
+                          Instructions
                         </button>
                       </div>
 
@@ -1427,7 +1467,7 @@ export default function CartDrawer() {
                         /* Delivery Instructions Tab */
                         <div>
                           <h4 className="font-headline-sm font-extrabold text-on-surface text-[14px] mb-1">
-                            Delivery Instructions
+                            Instructions
                           </h4>
                           <input
                             type="text"
@@ -1999,9 +2039,8 @@ export default function CartDrawer() {
                   {/* Method B: Pay Online (PayU / UPI, Cards, Netbanking) */}
                   <label
                     onClick={() => setSelectedPayment("razorpay")}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${
-                      selectedPayment === "razorpay" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
-                    }`}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${selectedPayment === "razorpay" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
@@ -2031,11 +2070,10 @@ export default function CartDrawer() {
                       }
                       setSelectedPayment("wallet");
                     }}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
-                      walletBalance < finalPayable
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${walletBalance < finalPayable
                         ? "opacity-60 cursor-not-allowed border-gray-200"
                         : "cursor-pointer " + (selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300")
-                    }`}
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">

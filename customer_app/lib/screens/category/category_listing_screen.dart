@@ -63,8 +63,11 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.surfacePorcelain,
-      bottomSheet: (widget.showBackButton && cart.itemCount > 0)
-          ? const FloatingCartBar()
+      bottomNavigationBar: (widget.showBackButton && cart.itemCount > 0)
+          ? Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewPadding.bottom),
+              child: const FloatingCartBar(),
+            )
           : null,
       body: SafeArea(
         child: Column(

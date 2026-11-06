@@ -28,6 +28,7 @@ const {
   createDeliveryBatch,
   getStoreBatchSettings,
   updateStoreBatchSettings,
+  createManualOrder,
 } = require('../controllers/storeAdmin.controller');
 
 const router = Router();
@@ -44,6 +45,7 @@ router.get('/dashboard', getDashboardOverview);
 
 // 2. Orders & Delivery Batches
 router.get('/orders', getOrders);
+router.post('/orders/create-manual', createManualOrder);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.post('/orders/:id/delay-prep', delayPrepTime);
 router.patch('/orders/:id/assign-rider', assignRiderToOrder);

@@ -25,6 +25,9 @@ const {
   getInventoryHistory: getInventoryHistoryFS,
   transferDefreezeToFreshTransactional,
   recordDamageWasteTransactional,
+  calculateInventoryStatus,
+  matchCartItemToInventory,
+  getItemRequiredAmount,
 } = require('../services/firestore/inventory.firestore.service');
 
 const {
@@ -52,7 +55,7 @@ const {
 } = require('../services/firestore/remittance.firestore.service');
 
 const notificationService = require('../services/notificationService');
-const { emitOrderStatusUpdate, emitInventoryUpdate } = require('../socket');
+const { emitOrderStatusUpdate, emitInventoryUpdate, emitOrderCreated } = require('../socket');
 
 const {
   getStoreBatchConfig,
@@ -104,7 +107,7 @@ const getDashboardOverview = async (req, res, next) => {
         icon: 'pending_actions',
         label: 'Orders to Prepare',
         value: `${pendingCount}`,
-        sub: pendingCount > 0 ? `${pendingCount} orders in butcher prep` : 'All caught up',
+        sub: pendingCount > 0 ? `${pendingCount} orders in Teffes store prep` : 'All caught up',
         color: '#941717',
         tab: 'orders',
       },
@@ -296,6 +299,229 @@ const delayPrepTime = async (req, res, next) => {
       success: true,
       message: `Prep time extended by +${extraMinutes} mins. New customer ETA updated.`,
       order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const generateOrderId = () => {
+  return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+};
+
+/**
+ * POST /api/store-admin/orders/create-manual
+ * Create an order directly by Store Admin (Self / Phone / Walk-in / Direct message)
+ */
+const createManualOrder = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const {
+      customerName,
+      customerPhone,
+      customerEmail,
+      shippingAddress,
+      pickupMode,
+      fulfillmentType,
+      items,
+      paymentMethod,
+      paymentStatus,
+      deliverySlot,
+      prepTimeMinutes,
+      notes,
+    } = req.body;
+
+    if (!customerPhone || typeof customerPhone !== 'string' || customerPhone.replace(/\D/g, '').length < 10) {
+      return res.status(400).json({
+        success: false,
+        message: 'Valid 10-digit customer phone number is required',
+      });
+    }
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Order items cannot be empty',
+      });
+    }
+
+    const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
+    const finalCustomerName = (customerName || '').trim() || 'Valued Customer';
+    const isPickup = Boolean(
+      pickupMode === true ||
+      fulfillmentType === 'pickup' ||
+      (typeof deliverySlot === 'string' && deliverySlot.toLowerCase().includes('pickup'))
+    );
+    const resolvedFulfillment = isPickup ? 'pickup' : 'delivery';
+
+    // 1. Resolve or register Customer User Profile in Firestore
+    let customerUserId = `cust-${cleanPhone}`;
+    let existingUser = null;
+    const userMatches = await queryDocs('users', (ref) => ref.where('phone', '==', cleanPhone).limit(1));
+    if (userMatches && userMatches.length > 0) {
+      existingUser = userMatches[0];
+      customerUserId = existingUser.id || existingUser._id || customerUserId;
+    } else {
+      const fullPhoneMatches = await queryDocs('users', (ref) => ref.where('phone', '==', `+91${cleanPhone}`).limit(1));
+      if (fullPhoneMatches && fullPhoneMatches.length > 0) {
+        existingUser = fullPhoneMatches[0];
+        customerUserId = existingUser.id || existingUser._id || customerUserId;
+      }
+    }
+
+    if (!existingUser) {
+      const newUserDoc = {
+        id: customerUserId,
+        _id: customerUserId,
+        name: finalCustomerName,
+        phone: cleanPhone,
+        email: customerEmail || '',
+        role: 'customer',
+        walletBalance: 0,
+        addresses: isPickup ? [] : [{
+          id: `addr-${Date.now()}`,
+          tag: 'Delivery Address',
+          line1: shippingAddress || 'Ranchi Delivery',
+          city: 'Ranchi',
+          pincode: '834001',
+          isDefault: true,
+        }],
+        isActive: true,
+        createdAt: new Date().toISOString(),
+      };
+      await createDoc('users', customerUserId, newUserDoc).catch(() => {});
+    }
+
+    // 2. Calculate Pricing
+    const itemsSubtotal = items.reduce(
+      (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
+      0
+    );
+    const deliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
+    const finalAmount = Math.max(0, itemsSubtotal + deliveryFee);
+
+    // 3. Deduct Store Inventory
+    try {
+      const storeInv = await getStoreInventory(storeId);
+      if (Array.isArray(storeInv) && storeInv.length > 0) {
+        for (const item of items) {
+          const matched = matchCartItemToInventory(item, storeInv);
+          if (matched && matched.id) {
+            const reqKg = getItemRequiredAmount(item, matched.unit || 'kg');
+            const currentStock = Number(matched.stock) || 0;
+            const newStock = Math.max(0, Math.round((currentStock - reqKg) * 1000) / 1000);
+            const newStatus = calculateInventoryStatus(newStock, matched.min);
+            await updateDoc('inventory', matched.id, {
+              stock: newStock,
+              status: newStatus,
+              updatedAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        }
+      }
+    } catch (invErr) {
+      console.warn('[StoreAdmin] Manual order inventory deduction note:', invErr.message);
+    }
+
+    // 4. Construct Order Document
+    const orderId = generateOrderId();
+    const now = new Date().toISOString();
+    const prepMinutes = Number(prepTimeMinutes) || 25;
+    const initialTransit = isPickup ? 0 : 15;
+    const targetDeliveryTime = new Date(Date.now() + (prepMinutes + initialTransit) * 60 * 1000).toISOString();
+    const deliveryOtp = isPickup ? null : Math.floor(1000 + Math.random() * 9000).toString();
+
+    const manualInstruction = String(notes || req.body.deliveryInstruction || req.body.instruction || '').trim();
+
+    const orderPayload = {
+      id: orderId,
+      _id: orderId,
+      orderId,
+      deliveryOtp,
+      deliveryInstruction: manualInstruction || null,
+      customer: {
+        name: finalCustomerName,
+        phone: cleanPhone,
+        email: customerEmail || existingUser?.email || '',
+        userId: customerUserId,
+        address: isPickup ? 'Store Takeaway Counter, Ranchi' : (shippingAddress || 'Ranchi Delivery'),
+        deliveryInstruction: manualInstruction || null,
+        lat: 23.3512,
+        lng: 85.3154,
+      },
+      items: items.map((i) => ({
+        productId: i.productId || i.id || '',
+        name: i.name || 'Fresh Meat Cut',
+        price: Number(i.price) || 0,
+        quantity: Number(i.quantity) || 1,
+        netWeight: i.netWeight || i.selectedWeight || i.weight || '500g',
+        image: i.image || '',
+      })),
+      itemSummary: items.map((i) => `${i.name || 'Cut'} ×${i.quantity || 1}`).join(', '),
+      amount: finalAmount,
+      totalAmount: finalAmount,
+      itemsSubtotal,
+      deliveryFee,
+      expressFee: 0,
+      tipAmount: 0,
+      discountAmount: 0,
+      couponCode: null,
+      coupon: null,
+      storeId,
+      storeName: storeId === 'S004' ? "TeFFe's — Doranda Hub" : "TeFFe's — Kishore Ganj Store",
+      deliverySlot: isPickup ? 'Store Pickup (Counter Takeaway)' : (deliverySlot || '90 Mins Express Delivery'),
+      fulfillmentType: resolvedFulfillment,
+      pickupMode: isPickup,
+      prepTimeMinutes: prepMinutes,
+      targetDeliveryTime,
+      remainingTransitMinutes: initialTransit,
+      etaStage: 'PREPARING',
+      paymentMethod: paymentMethod || (isPickup ? 'Paid at Store Counter' : 'Cash on Delivery'),
+      paymentStatus: paymentStatus || (isPickup ? 'Paid' : 'Pending'),
+      status: 'Cutting', // Queued straight into cutting because Store Admin received & accepted it
+      createdByType: 'self_store_admin',
+      createdByAdminName: req.user?.name || 'Store Admin',
+      createdByAdminId: req.user?.id || req.user?._id || 'admin',
+      orderSource: 'store_direct',
+      notes: notes || 'Created by Store Admin (Self - Direct/Phone)',
+      timeline: [
+        { status: 'Pending', timestamp: now, note: 'Order created directly by Store Admin (Self)' },
+        { status: 'Cutting', timestamp: now, note: 'Order acknowledged and moved to cutting queue' },
+      ],
+      isInventoryDeducted: true,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Save into Firestore orders collection
+    await createDoc('orders', orderId, orderPayload, { overwrite: true });
+
+    // Broadcast socket events so live tables and customer tracking update in real-time
+    try {
+      emitOrderCreated(orderPayload);
+      emitOrderStatusUpdate(orderId, orderPayload);
+    } catch (sErr) {
+      console.warn('[StoreAdmin] Socket emit warning:', sErr.message);
+    }
+
+    // Push notification to customer if they have the app registered
+    if (customerUserId) {
+      notificationService.sendToUser(customerUserId, {
+        title: 'Order Confirmed by Store',
+        body: `Your order #${orderId} was placed directly with ${orderPayload.storeName}. Tap to track live prep and delivery!`,
+        data: {
+          notificationType: 'ORDER_STATUS',
+          orderId,
+          status: 'Cutting',
+          clickAction: `/dashboard?orderId=${orderId}`,
+        },
+      }).catch(() => {});
+    }
+
+    res.status(201).json({
+      success: true,
+      message: 'Order created successfully by Store Admin (Self)',
+      order: orderPayload,
     });
   } catch (error) {
     next(error);
@@ -1173,4 +1399,5 @@ module.exports = {
   createDeliveryBatch,
   getStoreBatchSettings,
   updateStoreBatchSettings,
+  createManualOrder,
 };
