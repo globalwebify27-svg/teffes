@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:dio/dio.dart';
@@ -36,6 +37,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
   int? _liveEtaMinutes;
   double? _liveRoadDistanceKm;
   bool _socketConnected = false;
+  Timer? _fallbackPollingTimer;
 
   // Default coordinate constants (Ranchi)
   static const double _defaultStoreLat = 23.3685;
@@ -58,8 +60,35 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     _initSocket();
   }
 
+  void _startFallbackPolling() {
+    if (_fallbackPollingTimer != null && _fallbackPollingTimer!.isActive) return;
+    final st = _serverOrder?.status;
+    if (st == 'Delivered' || st == 'Cancelled') return;
+
+    // Safety fallback: only polls every 10s when Socket.IO is disconnected
+    _fallbackPollingTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final current = _serverOrder?.status;
+      if (current == 'Delivered' || current == 'Cancelled' || _socketConnected) {
+        timer.cancel();
+        _fallbackPollingTimer = null;
+        return;
+      }
+      _fetchLiveOrderDetails();
+    });
+  }
+
+  void _stopFallbackPolling() {
+    _fallbackPollingTimer?.cancel();
+    _fallbackPollingTimer = null;
+  }
+
   @override
   void dispose() {
+    _stopFallbackPolling();
     _socket?.disconnect();
     _socket?.dispose();
     _mapController?.dispose();
@@ -480,10 +509,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         socketUri,
         IO.OptionBuilder()
             .setTransports(['websocket', 'polling'])
-            .disableAutoConnect()
+            .enableAutoConnect()
             .enableReconnection()
-            .setReconnectionAttempts(10)
-            .setReconnectionDelay(2000)
+            .setReconnectionAttempts(999999)
+            .setReconnectionDelay(1000)
+            .setReconnectionDelayMax(5000)
             .build(),
       );
 
@@ -491,7 +521,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
 
       _socket?.onConnect((_) {
         debugPrint('[Customer Tracking] Connected to real-time telemetry socket');
-        if (mounted) setState(() => _socketConnected = true);
+        if (mounted) {
+          setState(() => _socketConnected = true);
+          _stopFallbackPolling();
+          _fetchLiveOrderDetails();
+        }
         final targetId = widget.orderId;
         _socket?.emit('join:order', targetId);
         _socket?.emit('join', 'order:$targetId');
@@ -515,7 +549,18 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
 
       _socket?.onDisconnect((_) {
         debugPrint('[Customer Tracking] Disconnected from telemetry socket');
-        if (mounted) setState(() => _socketConnected = false);
+        if (mounted) {
+          setState(() => _socketConnected = false);
+          _startFallbackPolling();
+        }
+      });
+
+      _socket?.onConnectError((err) {
+        debugPrint('[Customer Tracking] Telemetry socket connect error: $err');
+        if (mounted) {
+          setState(() => _socketConnected = false);
+          _startFallbackPolling();
+        }
       });
 
       _socket?.on('rider:location:update', (data) {
@@ -542,6 +587,16 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
             if (!isMatch) {
               return; // Ignore updates belonging to other customers
             }
+          }
+
+          // Immediate local state update from socket payload without waiting for roundtrip
+          if (map['order'] != null && map['order'] is Map) {
+            try {
+              final directOrder = OrderModel.fromJson(Map<String, dynamic>.from(map['order']));
+              setState(() {
+                _serverOrder = directOrder;
+              });
+            } catch (_) {}
           }
         }
         _fetchLiveOrderDetails();

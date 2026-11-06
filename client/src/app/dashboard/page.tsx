@@ -252,7 +252,32 @@ export default function DashboardPage() {
       socket.off("order:status_updated", handleStatusChanged);
       socket.off("rider:location_changed", handleLocationChanged);
     };
-  }, [trackingOrder]);
+  }, [trackingOrder?.orderId, trackingOrder?.id, trackingOrder?._id]);
+
+  // Safety net adaptive polling: Only runs every 12s while live tracking modal is open and active
+  useEffect(() => {
+    if (!trackingOrder) return;
+    const currentStatus = trackingOrder.status || trackingOrder.rawOrder?.status;
+    if (currentStatus === "Delivered" || currentStatus === "Cancelled") return;
+
+    const targetId = trackingOrder.orderId || trackingOrder.id;
+    if (!targetId) return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get<{ success: boolean; order: any }>(`/orders/${targetId}`);
+        if (res.data?.success && res.data?.order) {
+          const fresh = res.data.order;
+          setTrackingOrder((prev: any) => (prev ? { ...prev, ...fresh } : fresh));
+          if (["Delivered", "Cancelled"].includes(fresh.status)) {
+            clearInterval(interval);
+          }
+        }
+      } catch (_) {}
+    }, 12000);
+
+    return () => clearInterval(interval);
+  }, [trackingOrder?.orderId, trackingOrder?.id, trackingOrder?.status]);
 
   // Real-time Socket.IO sync for Wallet balance
   useEffect(() => {

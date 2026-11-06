@@ -6,10 +6,12 @@ let io = null;
 const initSocket = (httpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: process.env.CLIENT_URL || 'http://localhost:3000',
+      origin: (origin, callback) => callback(null, true),
       credentials: true,
       methods: ['GET', 'POST', 'PATCH'],
     },
+    pingTimeout: 20000,
+    pingInterval: 10000,
     transports: ['websocket', 'polling'],
   });
 
