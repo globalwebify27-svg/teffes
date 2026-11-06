@@ -27,10 +27,12 @@ interface ThermalOrder {
   paymentMethod?: string;
   paymentStatus?: string;
   deliveryOtp?: string;
+  deliveryInstruction?: string;
   customer?: {
     name?: string;
     phone?: string;
     address?: string;
+    deliveryInstruction?: string;
   };
   items?: OrderItem[];
   itemSummary?: string;
@@ -203,6 +205,12 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                     ? `Collection at Store Counter (${order.storeName || "Store"})`
                     : `Addr: ${order.customer?.address || "Ranchi"}`}
                 </div>
+                {(order.deliveryInstruction || order.customer?.deliveryInstruction) && (
+                  <div className="mt-1 p-1 bg-gray-100 border border-dashed border-gray-600 text-[9.5px]">
+                    <span className="font-bold">INSTRUCTION: </span>
+                    <span>{order.deliveryInstruction || order.customer?.deliveryInstruction}</span>
+                  </div>
+                )}
               </div>
 
               {/* Prep / Cutting Items List */}

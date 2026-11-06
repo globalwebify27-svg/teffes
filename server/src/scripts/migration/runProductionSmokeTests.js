@@ -18,7 +18,7 @@ const probe = async (baseUrl, path) => {
   let json = null;
   try {
     json = JSON.parse(text);
-  } catch (_) {}
+  } catch (_) { }
   return { status: res.status, json, text };
 };
 
@@ -81,7 +81,7 @@ const runSmokeTestsForTarget = async ({ name, baseUrl }) => {
     assert.strictEqual(stores.json?.success, true);
     assert(Array.isArray(stores.json?.stores), 'Stores must be an array');
     assert(stores.json?.stores?.length >= 2, `Expected >= 2 stores, got ${stores.json?.stores?.length}`);
-    console.log(`  [PASS] GET /stores: ${stores.json.stores.length} active dark stores verified`);
+    console.log(`  [PASS] GET /stores: ${stores.json.stores.length} active stores verified`);
     results.push({ test: 'Stores', status: 'PASS', count: stores.json.stores.length });
   } catch (err) {
     console.error(`  [FAIL] GET /stores: ${err.message}`);

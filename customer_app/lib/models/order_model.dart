@@ -63,6 +63,11 @@ class OrderModel {
   final String? customerPhone;
   final String? customerUserId;
   final String? cancellationReason;
+  final String? createdByType;
+  final String? orderSource;
+
+  bool get isStoreDirect =>
+      createdByType == 'self_store_admin' || orderSource == 'store_direct';
 
   bool get isActive {
     final s = status.toLowerCase();
@@ -107,6 +112,8 @@ class OrderModel {
     this.customerPhone,
     this.customerUserId,
     this.cancellationReason,
+    this.createdByType,
+    this.orderSource,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -171,6 +178,8 @@ class OrderModel {
       customerPhone: json['customer'] is Map ? json['customer']['phone']?.toString() : null,
       customerUserId: json['customer'] is Map ? (json['customer']['userId']?.toString() ?? json['customer']['id']?.toString()) : null,
       cancellationReason: json['cancellationReason']?.toString(),
+      createdByType: json['createdByType']?.toString(),
+      orderSource: json['orderSource']?.toString(),
     );
   }
 }

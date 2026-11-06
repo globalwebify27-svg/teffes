@@ -615,7 +615,7 @@ export default function StoreAdminInventoryLogsTab() {
         {/* Responsive Table */}
         {!loading && !error && logs.length > 0 && (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.84rem" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.84rem", minWidth: "750px" }}>
               <thead>
                 <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e2e8f0", color: "#475569" }}>
                   <th style={{ padding: "12px 16px", fontWeight: 700 }}>Date & Time</th>

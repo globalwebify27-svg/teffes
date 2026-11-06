@@ -703,11 +703,11 @@ function StoresTab() {
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px" }}>
         <button onClick={() => setShowAddStoreModal(true)} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Add Store</button>
       </div>
-      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading stores from database…</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "750px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
                 {["Store ID", "Photo", "Name", "City", "Store Admin", "Today's Orders", "Phone", "Status", "Actions"].map(h => (
@@ -1197,11 +1197,11 @@ function StoreAdminsTab() {
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: "20px" }}>
         <button onClick={() => { setShowCreateModal(true); setShowCreatePassword(false); }} className="btn btn-primary" style={{ fontSize: "0.875rem" }}>+ Create Admin</button>
       </div>
-      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading store admins…</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "750px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
                 {["Name", "Email", "Phone", "Assigned Store", "Role", "Status", "Actions"].map(h => (
@@ -3747,7 +3747,7 @@ function OrdersTab() {
         </div>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading platform orders…</div>
         ) : filteredOrders.length === 0 ? (
@@ -3755,7 +3755,7 @@ function OrdersTab() {
             No orders match the selected filters.
           </div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "780px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
                 {["Order ID", "Fulfillment", "Customer", "Store", "Amount", "Slot", "Payment", "Status"].map(h => (
@@ -4575,11 +4575,11 @@ function CustomersTab() {
         </div>
       </div>
 
-      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "auto" }}>
+      <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading customers…</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "750px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
                 {["Name", "Phone", "Total Orders", "Total Spent", "Wallet", "Default Address", "Actions"].map(h => (

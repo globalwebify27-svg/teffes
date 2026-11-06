@@ -251,11 +251,183 @@ const generatePayUHash = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/payment/doorstep-qr/:orderId
+ * Generate dynamic UPI QR parameters for doorstep collection
+ */
+const getDoorstepQr = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: 'orderId is required' });
+    }
+
+    let order = await getDoc('orders', String(orderId).trim());
+    if (!order) {
+      const matches = await queryDocs('orders', (ref) => ref.where('orderId', '==', String(orderId).trim()).limit(1));
+      order = matches[0] || null;
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const docId = order.orderId || order.id || orderId;
+    const amount = Number(order.amount != null ? order.amount : order.totalAmount) || 0;
+    const isAlreadyPaid = order.paymentStatus === 'Paid';
+
+    // Standard NPCI UPI URI with exact amount and merchant info
+    const payeeVpa = process.env.UPI_VPA || 'teffes@icici';
+    const payeeName = encodeURIComponent("TeFFe's Fresh Meat");
+    const note = encodeURIComponent(`Order ${docId}`);
+    const upiUri = `upi://pay?pa=${payeeVpa}&pn=${payeeName}&am=${amount.toFixed(2)}&tr=${docId}&tn=${note}&cu=INR`;
+
+    // PayU dynamic transaction id for doorstep payment
+    const txnid = `TEF_DOORSTEP_${docId}_${Date.now()}`;
+    const productinfo = `Doorstep Payment #${docId}`;
+    const firstname = (order.customer?.name || 'Customer').split(' ')[0] || 'Customer';
+    const email = order.customer?.email || 'customer@teffes.com';
+    const hash = computePayUHash({
+      txnid,
+      amount: amount.toFixed(2),
+      productinfo,
+      firstname,
+      email,
+    });
+
+    const payuParams = {
+      key: PAYU_KEY,
+      txnid,
+      amount: amount.toFixed(2),
+      productinfo,
+      firstname,
+      email,
+      phone: order.customer?.phone || '9999999999',
+      hash,
+    };
+
+    // Update order with pending doorstep payment marker
+    await updateDoc('orders', docId, {
+      doorstepQrGeneratedAt: new Date().toISOString(),
+      doorstepTxnId: txnid,
+      updatedAt: new Date().toISOString(),
+    }).catch(() => {});
+
+    return res.status(200).json({
+      success: true,
+      orderId: docId,
+      amount,
+      upiUri,
+      isPaid: isAlreadyPaid,
+      paymentStatus: order.paymentStatus,
+      paymentMethod: order.paymentMethod,
+      payuParams,
+      customerName: order.customer?.name || 'Customer',
+      customerPhone: order.customer?.phone || '',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/payment/doorstep-status/:orderId
+ * Check current payment status of an order at doorstep
+ */
+const getDoorstepPaymentStatus = async (req, res, next) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: 'orderId is required' });
+    }
+
+    let order = await getDoc('orders', String(orderId).trim());
+    if (!order) {
+      const matches = await queryDocs('orders', (ref) => ref.where('orderId', '==', String(orderId).trim()).limit(1));
+      order = matches[0] || null;
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const isPaid = order.paymentStatus === 'Paid';
+    return res.status(200).json({
+      success: true,
+      orderId: order.orderId || order.id || orderId,
+      isPaid,
+      paymentStatus: order.paymentStatus || 'Pending',
+      paymentMethod: order.paymentMethod || 'Cash on Delivery',
+      transactionId: order.transactionId || order.payuPaymentId || null,
+      amount: Number(order.amount != null ? order.amount : order.totalAmount) || 0,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/payment/doorstep-confirm
+ * Confirm doorstep payment via UPI QR code
+ */
+const confirmDoorstepPayment = async (req, res, next) => {
+  try {
+    const { orderId, utr, paymentMethod } = req.body;
+    if (!orderId) {
+      return res.status(400).json({ success: false, message: 'orderId is required' });
+    }
+
+    let order = await getDoc('orders', String(orderId).trim());
+    if (!order) {
+      const matches = await queryDocs('orders', (ref) => ref.where('orderId', '==', String(orderId).trim()).limit(1));
+      order = matches[0] || null;
+    }
+
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    const docId = order.orderId || order.id || orderId;
+    const now = new Date().toISOString();
+    const finalMethod = paymentMethod || 'UPI QR (Doorstep)';
+    const finalTxnId = utr || `UPI_DOORSTEP_${Date.now()}`;
+
+    const updatePayload = {
+      paymentStatus: 'Paid',
+      paymentMethod: finalMethod,
+      transactionId: finalTxnId,
+      paidAt: now,
+      cashCollected: 0, // CRITICAL: Rider collected 0 physical cash!
+      updatedAt: now,
+    };
+
+    await updateDoc('orders', docId, updatePayload);
+    const updatedOrder = { ...order, ...updatePayload };
+
+    // Emit live status update to all connected clients & rider
+    try {
+      emitOrderStatusUpdate(docId, updatedOrder);
+    } catch (_) {}
+
+    return res.status(200).json({
+      success: true,
+      message: 'Doorstep UPI payment verified successfully',
+      isPaid: true,
+      order: updatedOrder,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createPayUOrder,
   verifyPayUPayment,
   handlePayUWebhook,
   generatePayUHash,
+  getDoorstepQr,
+  getDoorstepPaymentStatus,
+  confirmDoorstepPayment,
   // Legacy aliases so routes/other files don't need changing
   createRazorpayOrder: createPayUOrder,
   verifyRazorpayPayment: verifyPayUPayment,

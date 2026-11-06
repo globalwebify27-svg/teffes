@@ -376,7 +376,7 @@ export default function StoreTransfersSection({
             <span>Inter-Store Inventory Transfers</span>
           </h3>
           <p style={{ margin: "4px 0 0", fontSize: "0.8rem", color: "#73695b" }}>
-            Reallocate fresh cuts and stock between Ranchi dark stores with atomic audit logging.
+            Reallocate fresh cuts and stock between Ranchi Teffe's stores with atomic audit logging.
           </p>
         </div>
 
@@ -563,7 +563,7 @@ export default function StoreTransfersSection({
           </div>
         ) : (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.82rem", minWidth: "700px" }}>
               <thead>
                 <tr style={{ background: "#faf8f5", borderBottom: "1.5px solid #ede8e0", color: "#73695b", textAlign: "left" }}>
                   <th style={{ padding: "12px 16px", fontWeight: 700 }}>Transfer ID</th>

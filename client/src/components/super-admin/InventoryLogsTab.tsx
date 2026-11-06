@@ -318,7 +318,7 @@ export default function SuperAdminInventoryLogsTab() {
             </h2>
           </div>
           <p style={{ margin: "4px 0 0 0", fontSize: "0.83rem", color: "#73695b" }}>
-            Consolidated platform-wide audit history across all dark stores, covering restocks, thawing, order deductions, and waste routings.
+            Consolidated platform-wide audit history across all Teffe's stores, covering restocks, thawing, order deductions, and waste routings.
           </p>
         </div>
 
@@ -676,7 +676,7 @@ export default function SuperAdminInventoryLogsTab() {
         {/* Responsive Table */}
         {!loading && !error && logs.length > 0 && (
           <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.84rem" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", fontSize: "0.84rem", minWidth: "800px" }}>
               <thead>
                 <tr style={{ background: "#f8fafc", borderBottom: "1.5px solid #e2e8f0", color: "#475569" }}>
                   <th style={{ padding: "12px 16px", fontWeight: 700 }}>Store Hub</th>
@@ -712,7 +712,7 @@ export default function SuperAdminInventoryLogsTab() {
                       {/* Store Hub */}
                       <td style={{ padding: "12px 16px", whiteSpace: "nowrap" }}>
                         <div style={{ fontWeight: 700, color: "#0f172a" }}>
-                          {log.storeName || "Dark Store"}
+                          {log.storeName || "Teffe's Store"}
                         </div>
                         <div style={{ fontSize: "0.72rem", color: "#64748b", fontFamily: "monospace" }}>
                           {log.storeId}

@@ -153,11 +153,11 @@ async function runE2EVerification() {
     assert.strictEqual(cross.name, 'Special Biryani Masala');
   });
 
-  await runTest('Stores & Inventory: provision dual dark stores and stock items', async () => {
+  await runTest('Stores & Inventory: provision dual stores and stock items', async () => {
     // Store Alpha (Kishore Ganj Hub)
     await storeService.createStore({
       storeId: storeIdAlpha,
-      name: 'Kishore Ganj Dark Store',
+      name: 'Kishore Ganj Store',
       city: 'Ranchi',
       address: 'Harmu Road, Ranchi, Jharkhand 834001',
       isOpen: true,
@@ -169,7 +169,7 @@ async function runE2EVerification() {
     // Store Beta (Lalpur Hub)
     await storeService.createStore({
       storeId: storeIdBeta,
-      name: 'Lalpur Dark Store',
+      name: 'Lalpur Store',
       city: 'Ranchi',
       address: 'Circular Road, Lalpur, Ranchi, Jharkhand 834001',
       isOpen: true,
@@ -517,7 +517,7 @@ async function runE2EVerification() {
     const rem = await remittanceService.submitRemittance({
       rider: { id: riderUserId, name: riderSpeed.name, phone: riderSpeed.phone, storeId: storeIdAlpha },
       amount: 432,
-      notes: 'Deposit of order cash at dark store vault',
+      notes: 'Deposit of order cash at store vault',
     });
     tracked.remittances.push(rem.remittance.id);
     assert.strictEqual(rem.remittance.status, 'Pending');
@@ -676,77 +676,77 @@ async function runE2EVerification() {
 
     // 1. Users
     for (const id of tracked.users) {
-      await userService.deleteUser(id).catch(() => {});
+      await userService.deleteUser(id).catch(() => { });
     }
 
     // 2. Categories
     for (const id of tracked.categories) {
-      await categoryService.deleteCategory(id).catch(() => {});
+      await categoryService.deleteCategory(id).catch(() => { });
     }
 
     // 3. Banners
     for (const id of tracked.banners) {
-      await bannerService.deleteBanner(id).catch(() => {});
+      await bannerService.deleteBanner(id).catch(() => { });
     }
 
     // 4. CrossSell
     for (const id of tracked.crossSell) {
-      await crossSellService.deleteCrossSellItem(id).catch(() => {});
+      await crossSellService.deleteCrossSellItem(id).catch(() => { });
     }
 
     // 5. Products
     for (const id of tracked.products) {
-      await productService.deleteProduct(id).catch(() => {});
+      await productService.deleteProduct(id).catch(() => { });
     }
 
     // 6. Slots
     for (const id of tracked.slots) {
-      await deliverySlotService.deleteDeliverySlot(id).catch(() => {});
+      await deliverySlotService.deleteDeliverySlot(id).catch(() => { });
     }
 
     // 7. Orders
     for (const id of tracked.orders) {
-      await orderService.deleteOrder(id).catch(() => {});
+      await orderService.deleteOrder(id).catch(() => { });
     }
 
     // 8. Coupons
     for (const id of tracked.coupons) {
-      await couponService.deleteCoupon(id).catch(() => {});
+      await couponService.deleteCoupon(id).catch(() => { });
     }
 
     // 9. Returns
     for (const id of tracked.returns) {
-      await returnService.deleteReturnRequest(id).catch(() => {});
+      await returnService.deleteReturnRequest(id).catch(() => { });
     }
 
     // 10. Reviews
     for (const id of tracked.reviews) {
-      await reviewService.deleteReview(id).catch(() => {});
+      await reviewService.deleteReview(id).catch(() => { });
     }
 
     // 11. SOS
     for (const id of tracked.sos) {
-      await sosService.deleteSosAlert(id).catch(() => {});
+      await sosService.deleteSosAlert(id).catch(() => { });
     }
 
     // 12. Remittances
     for (const id of tracked.remittances) {
-      await remittanceService.deleteRemittance(id).catch(() => {});
+      await remittanceService.deleteRemittance(id).catch(() => { });
     }
 
     // 13. Transfers
     for (const id of tracked.transfers) {
-      await transferService.deleteStoreTransfer(id).catch(() => {});
+      await transferService.deleteStoreTransfer(id).catch(() => { });
     }
 
     // 14. Inventory
     for (const item of tracked.inventory) {
-      await inventoryService.deleteInventoryItem(item.storeId, item.itemId).catch(() => {});
+      await inventoryService.deleteInventoryItem(item.storeId, item.itemId).catch(() => { });
     }
 
     // 15. Stores
     for (const id of tracked.stores) {
-      await storeService.deleteStore(id).catch(() => {});
+      await storeService.deleteStore(id).catch(() => { });
     }
 
     // 16. Audit History
@@ -760,7 +760,7 @@ async function runE2EVerification() {
 
     // 17. Wallets & Transactions
     for (const userId of tracked.wallets) {
-      await db.collection('wallets').doc(userId).delete().catch(() => {});
+      await db.collection('wallets').doc(userId).delete().catch(() => { });
       const txs = await db.collection('wallet_transactions').where('userId', '==', userId).get();
       for (const d of txs.docs) {
         await d.ref.delete();

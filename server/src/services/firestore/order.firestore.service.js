@@ -473,10 +473,18 @@ const updateOrderStatus = async (orderId, newStatus, actor = null, note = '') =>
   }
 
   const cleanOrderId = orderId.trim();
-  const order = await getDoc(ORDERS_COLLECTION, cleanOrderId);
+  let order = await getDoc(ORDERS_COLLECTION, cleanOrderId);
+  if (!order) {
+    const list = await queryDocs(ORDERS_COLLECTION, (ref) => ref.where('orderId', '==', cleanOrderId).limit(1));
+    if (list && list.length > 0) {
+      order = list[0];
+    }
+  }
   if (!order) {
     throw new Error(`Order "${cleanOrderId}" not found`);
   }
+
+  const targetDocId = order.id || order._id || cleanOrderId;
 
   const now = new Date().toISOString();
   const timeline = Array.isArray(order.timeline) ? [...order.timeline] : [];
@@ -500,7 +508,18 @@ const updateOrderStatus = async (orderId, newStatus, actor = null, note = '') =>
     updates.paymentStatus = 'Paid';
   }
 
-  return updateDoc(ORDERS_COLLECTION, cleanOrderId, updates);
+  await updateDoc(ORDERS_COLLECTION, targetDocId, updates);
+  return {
+    success: true,
+    order: {
+      ...order,
+      ...updates,
+      id: targetDocId,
+      _id: targetDocId,
+      orderId: order.orderId || cleanOrderId,
+    },
+    ...updates,
+  };
 };
 
 /**

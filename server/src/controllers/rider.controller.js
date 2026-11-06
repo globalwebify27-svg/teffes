@@ -697,7 +697,17 @@ const completeDelivery = async (req, res, next) => {
     const orderAmount = Number(order.amount != null ? order.amount : order.totalAmount) || 0;
     let excessCash = 0;
 
-    if (received != null) {
+    const isDoorstepQr = req.body.paymentMode === 'qr' ||
+      (order.paymentMethod && order.paymentMethod.toLowerCase().includes('qr')) ||
+      (order.paymentStatus === 'Paid' && (!received || Number(received) === 0));
+
+    if (isDoorstepQr) {
+      updatePayload.cashCollected = 0;
+      updatePayload.paymentMethod = order.paymentMethod && order.paymentMethod.toLowerCase().includes('qr')
+        ? order.paymentMethod
+        : 'UPI QR (Doorstep)';
+      updatePayload.paymentStatus = 'Paid';
+    } else if (received != null) {
       const numCashReceived = Number(received);
       updatePayload.cashCollected = numCashReceived;
       if (numCashReceived > orderAmount) {
@@ -1062,7 +1072,7 @@ const remitCash = async (req, res, next) => {
 
     const storeId = rider.storeId || 'S001';
     const store = await getStoreById(storeId);
-    const storeName = store?.name || rider.storeName || "TeFFe's Dark Store Hub";
+    const storeName = store?.name || rider.storeName || "TeFFe's Store Hub";
 
     const remittanceId = 'RMT-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 90 + 10);
     const remittanceDoc = {
@@ -1143,12 +1153,12 @@ const triggerSosAlert = async (req, res, next) => {
 
     res.status(200).json({
       success: true,
-      message: 'SOS Alert triggered. Dark Store Dispatch team notified.',
+      message: 'SOS Alert triggered. Store Dispatch team notified.',
       alert,
       emergencyContacts: {
         policeAmbulance: '112',
         dispatchManager: store?.phone || '+91 9779687955',
-        storeName: store?.name || "TeFFe's Dark Store Hub",
+        storeName: store?.name || "TeFFe's Store Hub",
       },
     });
   } catch (error) {
@@ -1172,7 +1182,7 @@ const getNotifications = async (req, res, next) => {
         {
           id: `notif_${Date.now()}_1`,
           riderId,
-          title: 'Ranchi Dark Store Shift Started',
+          title: 'Ranchi Teffe Store Shift Started',
           body: 'Good morning! Ranchi Central Hub is now taking peak orders. Keep your insulated delivery box ready.',
           type: 'HUB_ALERT',
           isRead: false,

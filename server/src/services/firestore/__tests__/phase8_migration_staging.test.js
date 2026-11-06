@@ -288,7 +288,7 @@ async function runTests() {
 
       const orderPayload = {
         storeId: invItem.storeId,
-        storeName: 'Central Dark Store',
+        storeName: 'Central Store',
         items: [
           {
             productId: invItem.itemId,

@@ -282,7 +282,7 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         ),
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppDimensions.spaceMd),
+        padding: EdgeInsets.fromLTRB(AppDimensions.spaceMd, AppDimensions.spaceMd, AppDimensions.spaceMd, AppDimensions.spaceMd + MediaQuery.of(context).viewPadding.bottom),
         physics: const BouncingScrollPhysics(),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

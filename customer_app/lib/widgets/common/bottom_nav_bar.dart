@@ -15,6 +15,7 @@ class TeffeBottomNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final double bottomInset = MediaQuery.of(context).viewPadding.bottom;
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -27,20 +28,18 @@ class TeffeBottomNavBar extends StatelessWidget {
           ),
         ],
       ),
-      child: SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'Home'),
-              _buildNavItem(context, 1, Icons.favorite_rounded, Icons.favorite_border_rounded, 'Wishlist'),
-              _buildNavItem(context, 2, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Categories'),
-              _buildNavItem(context, 3, Icons.person_rounded, Icons.person_outline_rounded, 'Account'),
-            ],
-          ),
-        ),
+      padding: EdgeInsets.only(
+        top: 6,
+        bottom: 6 + bottomInset,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _buildNavItem(context, 0, Icons.home_rounded, Icons.home_outlined, 'Home'),
+          _buildNavItem(context, 1, Icons.favorite_rounded, Icons.favorite_border_rounded, 'Wishlist'),
+          _buildNavItem(context, 2, Icons.grid_view_rounded, Icons.grid_view_outlined, 'Categories'),
+          _buildNavItem(context, 3, Icons.person_rounded, Icons.person_outline_rounded, 'Account'),
+        ],
       ),
     );
   }

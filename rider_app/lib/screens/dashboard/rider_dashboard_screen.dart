@@ -41,7 +41,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
           ],
         ),
         content: const Text(
-          'Do you need immediate emergency assistance? This will dispatch a high-priority alert with your coordinates to Ranchi Dark Store Dispatch & local emergency services.',
+          'Do you need immediate emergency assistance? This will dispatch a high-priority alert with your coordinates to Ranchi Teffes Store Dispatch & local emergency services.',
           style: TextStyle(fontSize: 13, height: 1.4),
         ),
         actions: [
@@ -96,7 +96,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
             ),
             const SizedBox(height: 10),
             Text(
-              result['message'] ?? 'Emergency signal active. Dark store management notified.',
+              result['message'] ?? 'Emergency signal active. Teffes store management notified.',
               style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 18),
@@ -411,6 +411,34 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                             color: AppColors.textSecondary,
                           ),
                         ),
+                        if (activeOrder.deliveryInstruction != null && activeOrder.deliveryInstruction!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFFBEB),
+                              border: Border.all(color: const Color(0xFFFDE68A)),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Icon(Icons.sticky_note_2_outlined, size: 14, color: Color(0xFFB45309)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Instruction: ${activeOrder.deliveryInstruction!.trim()}',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      color: Color(0xFF92400E),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                         const SizedBox(height: 14),
                         Builder(
                           builder: (context) {
@@ -575,7 +603,7 @@ class _RiderDashboardScreenState extends State<RiderDashboardScreen> {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Waiting for new meat orders from Ranchi dark store...',
+                          'Waiting for new meat orders from Ranchi Teffes store...',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 13,

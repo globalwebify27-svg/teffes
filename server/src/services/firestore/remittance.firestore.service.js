@@ -103,7 +103,7 @@ const submitRemittance = async ({ rider, amount, notes = '', storeName = '', sto
     riderName,
     riderPhone,
     storeId: cleanStoreId,
-    storeName: storeName || rider.storeName || "TeFFe's Dark Store Hub",
+    storeName: storeName || rider.storeName || "TeFFe's Store Hub",
     amount: remitAmount,
     status: 'Pending',
     notes: (notes || 'Cash remittance submitted at hub counter').trim(),

@@ -68,13 +68,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
   }
 
   Future<void> _fetchLiveOrderDetails() async {
+    if (!mounted) return;
     setState(() => _isRefreshing = true);
     try {
       final res = await _api.get(ApiEndpoints.orderDetails(widget.orderId));
-      if (res.data['success'] == true && res.data['order'] != null) {
+      if (res.data != null && res.data['success'] == true && res.data['order'] != null) {
         if (mounted) {
+          final updated = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
           setState(() {
-            _serverOrder = OrderModel.fromJson(res.data['order'] as Map<String, dynamic>);
+            _serverOrder = updated;
             if (_serverOrder?.rider == null || _serverOrder?.rider?.name?.trim().isEmpty == true) {
               _riderLat = null;
               _riderLng = null;
@@ -84,8 +86,40 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
           });
         }
       }
-    } catch (_) {
-      // Offline fallback: will read from AuthProvider
+
+      // Also refresh AuthProvider's cached orders list so app memory is completely synchronized
+      if (mounted) {
+        final auth = Provider.of<AuthProvider>(context, listen: false);
+        await auth.fetchMyOrders();
+        final freshMatch = auth.myOrders.where(
+          (o) => o.orderId == widget.orderId || o.id == widget.orderId,
+        ).isNotEmpty
+            ? auth.myOrders.firstWhere((o) => o.orderId == widget.orderId || o.id == widget.orderId)
+            : null;
+        if (freshMatch != null && mounted) {
+          setState(() {
+            _serverOrder = freshMatch;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[Customer Tracking] _fetchLiveOrderDetails error: $e');
+      if (mounted) {
+        try {
+          final auth = Provider.of<AuthProvider>(context, listen: false);
+          await auth.fetchMyOrders();
+          final freshMatch = auth.myOrders.where(
+            (o) => o.orderId == widget.orderId || o.id == widget.orderId,
+          ).isNotEmpty
+              ? auth.myOrders.firstWhere((o) => o.orderId == widget.orderId || o.id == widget.orderId)
+              : null;
+          if (freshMatch != null && mounted) {
+            setState(() {
+              _serverOrder = freshMatch;
+            });
+          }
+        } catch (_) {}
+      }
     } finally {
       if (mounted) setState(() => _isRefreshing = false);
     }
@@ -458,8 +492,25 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       _socket?.onConnect((_) {
         debugPrint('[Customer Tracking] Connected to real-time telemetry socket');
         if (mounted) setState(() => _socketConnected = true);
-        _socket?.emit('join:order', widget.orderId);
-        _socket?.emit('join', 'order:${widget.orderId}');
+        final targetId = widget.orderId;
+        _socket?.emit('join:order', targetId);
+        _socket?.emit('join', 'order:$targetId');
+        if (_serverOrder?.id != null && _serverOrder!.id.isNotEmpty && _serverOrder!.id != targetId) {
+          _socket?.emit('join:order', _serverOrder!.id);
+          _socket?.emit('join', 'order:${_serverOrder!.id}');
+        }
+        if (_serverOrder?.orderId != null && _serverOrder!.orderId.isNotEmpty && _serverOrder!.orderId != targetId) {
+          _socket?.emit('join:order', _serverOrder!.orderId);
+          _socket?.emit('join', 'order:${_serverOrder!.orderId}');
+        }
+        try {
+          final auth = Provider.of<AuthProvider>(context, listen: false);
+          final uId = auth.user?.id;
+          if (uId != null && uId.isNotEmpty) {
+            _socket?.emit('join:user', uId);
+            _socket?.emit('join', 'user:$uId');
+          }
+        } catch (_) {}
       });
 
       _socket?.onDisconnect((_) {
@@ -475,16 +526,46 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         _handleRiderLocationPayload(data);
       });
 
-      _socket?.on('order:status_updated', (_) {
+      // Strict Customer Order Isolation: Only re-fetch if this event belongs to THIS customer's order
+      void handleTargetedStatusEvent(dynamic data) {
+        if (!mounted) return;
+        if (data != null && data is Map) {
+          final map = Map<String, dynamic>.from(data);
+          final eventOrderId = (map['orderId'] ?? map['id'] ?? map['order']?['orderId'] ?? map['order']?['id'])?.toString();
+          if (eventOrderId != null && eventOrderId.isNotEmpty) {
+            final targetId = widget.orderId;
+            final serverId = _serverOrder?.orderId;
+            final serverDocId = _serverOrder?.id;
+            final isMatch = eventOrderId == targetId ||
+                (serverId != null && eventOrderId == serverId) ||
+                (serverDocId != null && eventOrderId == serverDocId);
+            if (!isMatch) {
+              return; // Ignore updates belonging to other customers
+            }
+          }
+        }
         _fetchLiveOrderDetails();
-      });
+      }
 
-      _socket?.on('order:status_changed', (_) {
-        _fetchLiveOrderDetails();
-      });
+      _socket?.on('order:status_updated', handleTargetedStatusEvent);
+      _socket?.on('order:status_changed', handleTargetedStatusEvent);
 
-      _socket?.on('orders:refreshed', (_) {
-        _fetchLiveOrderDetails();
+      _socket?.on('orders:refreshed', (data) {
+        if (!mounted) return;
+        if (data != null && data is Map) {
+          final map = Map<String, dynamic>.from(data);
+          final eventOrderId = (map['orderId'] ?? map['id'])?.toString();
+          if (eventOrderId != null && eventOrderId.isNotEmpty) {
+            final targetId = widget.orderId;
+            final serverId = _serverOrder?.orderId;
+            final serverDocId = _serverOrder?.id;
+            if (eventOrderId == targetId ||
+                (serverId != null && eventOrderId == serverId) ||
+                (serverDocId != null && eventOrderId == serverDocId)) {
+              _fetchLiveOrderDetails();
+            }
+          }
+        }
       });
     } catch (e) {
       debugPrint('[Customer Tracking] Socket initialization error: $e');
@@ -601,13 +682,13 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         return {
           'badge': 'FRESH CUTTING STATION',
           'title': 'Preparing Fresh Cuts',
-          'sub': 'Store cutting station: ${order.storeName ?? "Store Counter"}',
+          'sub': 'Teffes store cutting station: ${order.storeName ?? "Store Counter"}',
         };
       }
       return {
-        'badge': 'ORDER RECEIVED',
-        'title': 'Order Confirmed',
-        'sub': 'Verified for counter pickup at ${order.storeName ?? "Store Counter"}',
+        'badge': 'ORDER PLACED',
+        'title': 'Order Placed at Teffes',
+        'sub': 'Awaiting store confirmation for pickup at ${order.storeName ?? "Store Counter"}',
       };
     }
 
@@ -627,7 +708,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       return {
         'badge': 'RIDER ON THE ROAD',
         'title': 'Arriving in $transitMins min',
-        'sub': 'Dispatched fresh from ${order.storeName ?? "our store"}',
+        'sub': 'Dispatched fresh from ${order.storeName ?? "Teffes store"}',
       };
     }
 
@@ -639,15 +720,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       };
     } else if (status == 'Cutting') {
       return {
-        'badge': 'FRESH CUTTING STATION',
-        'title': 'Slicing & Custom Cuts in Progress',
-        'sub': 'Store butchery team preparing your order',
+        'badge': 'ORDER CONFIRMED',
+        'title': 'Order Confirmed & Preparing',
+        'sub': 'Teffes store team is preparing fresh cuts',
       };
     }
 
-    // Pending: Check if user booked a specific hour slot
+    // Pending: Check if user booked a specific hour slot or next-day scheduled
     String slotInfo = '';
     final slot = order.deliverySlot;
+    final isNextDay = slot != null && (
+      slot.toLowerCase().contains('tomorrow') ||
+      slot.toLowerCase().contains('next-day') ||
+      slot.toLowerCase().contains('09:00 am') ||
+      order.etaStage == 'SCHEDULED_NEXT_DAY'
+    );
+
+    if (isNextDay) {
+      return {
+        'badge': 'SCHEDULED DELIVERY',
+        'title': 'Deliver Tomorrow by 9:00 AM',
+        'sub': 'Order Placed at Teffes • Fresh morning delivery scheduled',
+      };
+    }
+
     if (slot != null && slot.isNotEmpty) {
       final s = slot.toLowerCase();
       final isGeneric = (s.contains('min express') || s.contains('min delivery') || s == 'delivery' || s == 'pickup' || s == 'standard') && !s.contains('am') && !s.contains('pm');
@@ -657,9 +753,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
 
     return {
-      'badge': 'ORDER IN PREPARATION',
-      'title': slotInfo.isNotEmpty ? 'Delivery Slot: $slotInfo' : 'Order Confirmed & Preparing',
-      'sub': 'Order verified at ${order.storeName ?? "Doranda Hub"}',
+      'badge': 'ORDER PLACED',
+      'title': slotInfo.isNotEmpty ? 'Delivery Slot: $slotInfo' : 'Order Placed at Teffes',
+      'sub': 'Awaiting store confirmation & preparation at ${order.storeName ?? "Teffes Store"}',
     };
   }
 
@@ -739,7 +835,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
         onRefresh: _fetchLiveOrderDetails,
         color: AppColors.primaryMaroon,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppDimensions.spaceMd),
+          padding: EdgeInsets.fromLTRB(AppDimensions.spaceMd, AppDimensions.spaceMd, AppDimensions.spaceMd, AppDimensions.spaceMd + MediaQuery.of(context).viewPadding.bottom),
           physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -837,6 +933,32 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                                           : Colors.amber.shade900,
                             ),
                           ),
+                          if (order.isStoreDirect) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD1FAE5),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: const Color(0xFFA7F3D0)),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.storefront_rounded, size: 13, color: Color(0xFF065F46)),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'Direct Store Order • Managed by Hub',
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF065F46),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -1111,7 +1233,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                 ),
               )
               else
-                // Dark Store Fresh Meat Preparation Card (Shown before rider dispatch)
+                // Teffes Store Fresh Meat Preparation Card (Shown before rider dispatch)
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(18),
@@ -1145,15 +1267,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               children: [
                                 Text(
                                   status == 'Cutting'
-                                      ? 'Butcher Cutting in Progress'
-                                      : 'Order Verified at Dark Store',
+                                      ? 'Preparing Fresh Cuts at Teffes Store'
+                                      : 'Order Received at Teffes Store',
                                   style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   order.storeName != null
-                                      ? (order.storeName!.endsWith('Hub') ? order.storeName! : '${order.storeName} Hub')
-                                      : 'TeFFe\'s Local Store Hub',
+                                      ? (order.storeName!.endsWith('Store') ? order.storeName! : '${order.storeName} Store')
+                                      : 'Teffes Local Store',
                                   style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w500),
                                 ),
                               ],
@@ -1165,7 +1287,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               color: AppColors.hygieneLight,
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: const Text('0-4°C Chill', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.hygieneDark)),
+                            child: const Text('', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.hygieneDark)),
                           ),
                         ],
                       ),
@@ -1184,8 +1306,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                             Expanded(
                               child: Text(
                                 status == 'Cutting'
-                                    ? 'Fresh meat is being cut on a sanitized block. Once packed, a delivery partner will be assigned and live tracking will start.'
-                                    : 'Your order is confirmed at the store. Cutting and packing will begin shortly, followed by delivery partner assignment.',
+                                    ? 'Fresh meat is being cut cleanly on a sanitized block. Once packed, a delivery partner will be assigned and live tracking will start.'
+                                    : (order.deliverySlot?.toLowerCase().contains('tomorrow') == true || order.etaStage == 'SCHEDULED_NEXT_DAY')
+                                        ? 'Your order is placed. Teffes store team will prepare fresh cuts tomorrow morning by 9:00 AM.'
+                                        : 'Your order is placed at the store. Teffes store team will review and confirm shortly before cutting begins.',
                                 style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569), height: 1.35),
                               ),
                             ),
@@ -1373,24 +1497,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                     ),
                     const SizedBox(height: 14),
 
-                    // Step 1: Order Confirmed
+                    // Step 1: Order Placed vs Order Confirmed
                     _buildDynamicTimelineStep(
                       stepNumber: 1,
-                      title: 'Order Confirmed',
-                      desc: order.isPickup
-                          ? 'Verified for counter pickup at ${order.storeName ?? "Store Counter"}'
-                          : 'Verified by store manager',
+                      title: ['Cutting', 'Ready', 'Out for Delivery', 'Delivered'].contains(status)
+                          ? 'Order Confirmed'
+                          : 'Order Placed',
+                      desc: ['Cutting', 'Ready', 'Out for Delivery', 'Delivered'].contains(status)
+                          ? (order.isPickup
+                              ? 'Verified for counter pickup at ${order.storeName ?? "Store Counter"}'
+                              : 'Verified by Teffes store manager')
+                          : (order.isPickup
+                              ? 'Received by Teffes store takeaway counter'
+                              : 'Sent to Teffes store team'),
                       isCompleted: ['Cutting', 'Ready', 'Out for Delivery', 'Delivered'].contains(status),
                       isActive: status == 'Pending',
                       showLine: true,
                     ),
 
-                    // Step 2: Store Team Cutting Meat / Fresh Meat Cut & Packed
+                    // Step 2: Teffes Store Preparing Meat / Fresh Meat Cut & Packed
                     _buildDynamicTimelineStep(
                       stepNumber: 2,
-                      title: status == 'Cutting' ? 'Store Team Cutting Meat' : 'Fresh Meat Cut & Packed',
+                      title: status == 'Cutting' ? 'Teffes Store Preparing Meat' : 'Fresh Meat Cut & Packed',
                       desc: status == 'Cutting'
-                          ? 'Clean cutting on sanitized cutting block in progress'
+                          ? 'Clean preparation on sanitized cutting block in progress'
                           : status == 'Ready'
                               ? 'Cleanly cut upon order & sealed in insulated pack'
                               : ['Out for Delivery', 'Delivered'].contains(status)

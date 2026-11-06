@@ -74,7 +74,7 @@ const triggerSosAlert = async ({ rider, lat, lng, activeOrderId = null, reason =
 
   return {
     alert: created,
-    notificationSummary: `SOS Emergency Alert logged for Rider ${riderName} at (${latitude}, ${longitude}). Dark store dispatch alert active.`,
+    notificationSummary: `SOS Emergency Alert logged for Rider ${riderName} at (${latitude}, ${longitude}). Teffe's store dispatch alert active.`,
   };
 };
 

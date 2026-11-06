@@ -52,6 +52,13 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   bool _showStorePickerInDelivery = false;
   bool _isLoadingStores = false;
 
+  bool _isAfter8PM() {
+    final now = DateTime.now();
+    final hour = now.hour;
+    final minute = now.minute;
+    return hour >= 20 || (hour == 19 && minute >= 59) || hour < 8;
+  }
+
   List<Map<String, dynamic>> _getHourlySlots() {
     final now = DateTime.now();
     final currentHour = now.hour;
@@ -179,7 +186,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       double lat = location.latitude ?? 23.3441;
       double lng = location.longitude ?? 85.3096;
 
-      // Smart locality geocoding fallback for Ranchi dark stores
+      // Smart locality geocoding fallback for Ranchi Teffes stores
       final addrStr = '${location.activeAddressString} ${location.selectedAddress?.pincode ?? ""}'.toLowerCase();
       if (addrStr.contains('doranda') || addrStr.contains('834002') || addrStr.contains('hinoo')) {
         lat = 23.332;
@@ -675,14 +682,17 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     }
 
     final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
-    final expressFee = (!isPickup && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
+    final isAfterHours = !isPickup && _isAfter8PM();
+    final expressFee = (!isPickup && !isAfterHours && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
     final effectiveTip = isPickup ? 0 : _selectedTip;
     final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
     final resolvedDeliverySlot = isPickup
         ? 'Store Pickup (Counter Takeaway)'
-        : _selectedSlot == 'Custom Delivery'
-            ? 'Custom Delivery: $_selectedCustomSlot'
-            : _selectedSlot;
+        : isAfterHours
+            ? 'Next-Day Delivery: Tomorrow by 09:00 AM'
+            : _selectedSlot == 'Custom Delivery'
+                ? 'Custom Delivery: $_selectedCustomSlot'
+                : _selectedSlot;
 
     final selStore = _selectedStore;
     if (selStore != null && !selStore.isAvailable) {
@@ -1094,9 +1104,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     final auth = context.watch<AuthProvider>();
     final items = cart.items.values.toList();
     final isPickup = _fulfillmentType == 'pickup';
+    final isAfterHours = !isPickup && _isAfter8PM();
     final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
-    final expressFee = (!isPickup && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
+    final expressFee = (!isPickup && !isAfterHours && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
     final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + _selectedTip - cart.couponDiscount).clamp(0.0, double.infinity);
+    final double bottomInset = MediaQuery.of(context).viewPadding.bottom;
 
     return Scaffold(
       backgroundColor: AppColors.surfacePorcelain,
@@ -1126,7 +1138,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               ),
             )
           : SingleChildScrollView(
-              padding: const EdgeInsets.only(bottom: 120),
+              padding: EdgeInsets.only(bottom: 110 + bottomInset),
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
@@ -1782,7 +1794,79 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                               ),
                             ],
                           )
-                        else ...[
+                        else if (_isAfter8PM()) ...[
+                          // After 7:59 PM Customer Education Notice Banner (Locks slots, schedules next morning 9 AM delivery)
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFFFFBEB),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFFDE68A), width: 1.2),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF59E0B).withOpacity(0.15),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(Icons.nightlight_round, color: Color(0xFFD97706), size: 18),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Teffes Store Hours: 8:00 AM – 8:00 PM',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12.5,
+                                          color: Color(0xFF78350F),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      const Text(
+                                        'Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM.',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          height: 1.35,
+                                          color: Color(0xFF92400E),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF10B981).withOpacity(0.12),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+                                        ),
+                                        child: const Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.wb_sunny_rounded, size: 13, color: Color(0xFF047857)),
+                                            SizedBox(width: 5),
+                                            Text(
+                                              'Scheduled: Tomorrow by 09:00 AM',
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w800,
+                                                color: Color(0xFF047857),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ] else ...[
                           // 3 Options for Home Delivery
                           Row(
                             children: [
@@ -2218,7 +2302,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                             ),
                           ],
                           const SizedBox(height: 16),
-                          const Text('Delivery Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
+                          const Text('Instructions', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5)),
                           const SizedBox(height: 8),
                           TextField(
                             onChanged: (val) => _deliveryInstruction = val,
@@ -2396,48 +2480,50 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 ],
               ),
             ),
-      // Sticky Checkout Bottom Bar
-      bottomSheet: items.isNotEmpty
+      // Sticky Checkout Bottom Bar (Dynamically respects 3-button & gesture navigation)
+      bottomNavigationBar: items.isNotEmpty
           ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               decoration: BoxDecoration(
                 color: Colors.white,
                 boxShadow: AppDimensions.floatingShadow,
                 border: Border(top: BorderSide(color: AppColors.borderHairline.withOpacity(0.9))),
               ),
-              child: SafeArea(
-                top: false,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text('TOTAL AMOUNT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                        Text(CurrencyFormatter.format(effectiveGrandTotal), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                      ],
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 12,
+                bottom: 12 + bottomInset,
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('TOTAL AMOUNT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                      Text(CurrencyFormatter.format(effectiveGrandTotal), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                    ],
+                  ),
+                  ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryMaroon,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
                     ),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryMaroon,
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
-                      ),
-                      onPressed: _isPlacingOrder ? null : () => _handlePlaceOrder(cart, location, auth),
-                      child: _isPlacingOrder
-                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                          : Text(
-                              !auth.isAuthenticated
-                                  ? 'Login to proceed'
-                                  : (_selectedPaymentMethod == 'payu'
-                                      ? 'Proceed to Pay →'
-                                      : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
-                              style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
-                            ),
-                    ),
-                  ],
-                ),
+                    onPressed: _isPlacingOrder ? null : () => _handlePlaceOrder(cart, location, auth),
+                    child: _isPlacingOrder
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : Text(
+                            !auth.isAuthenticated
+                                ? 'Login to proceed'
+                                : (_selectedPaymentMethod == 'payu'
+                                    ? 'Proceed to Pay →'
+                                    : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
+                            style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                  ),
+                ],
               ),
             )
           : null,
