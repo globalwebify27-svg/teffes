@@ -7,6 +7,9 @@ import '../../core/utils/currency_formatter.dart';
 import '../../core/utils/page_transitions.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
+import '../../core/constants/api_endpoints.dart';
+import '../../core/network/api_client.dart';
+import '../../core/services/razorpay_service.dart'; // contains PayUService
 import '../../models/user_model.dart';
 import '../../models/order_model.dart';
 import '../auth/login_screen.dart';
@@ -20,6 +23,104 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  late final PayUService _payUService;
+  double _pendingRechargeAmount = 0.0;
+  String _pendingRechargeTxnId = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _payUService = PayUService(
+      onSuccess: _onWalletPayUSuccess,
+      onFailure: _onWalletPayUFailure,
+      onCancel: _onWalletPayUCancel,
+    );
+  }
+
+  void _onWalletPayUSuccess(Map<dynamic, dynamic> response) async {
+    debugPrint('[Wallet PayU] Success response: $response');
+    final payuResp = response['payuResponse'] ?? response;
+    final txnid = payuResp['txnid'] ?? _pendingRechargeTxnId;
+    final amount = _pendingRechargeAmount;
+    final mihpayid = payuResp['mihpayid'] ?? txnid;
+    final hash = payuResp['hash'] ?? '';
+
+    try {
+      final api = ApiClient();
+      await api.post(ApiEndpoints.walletVerifyTopup, data: {
+        'txnid': txnid,
+        'amount': amount,
+        'status': 'success',
+        'mihpayid': mihpayid,
+        if (hash.toString().isNotEmpty) 'hash': hash,
+      });
+
+      if (mounted) {
+        final auth = context.read<AuthProvider>();
+        await auth.syncWalletBalance();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('₹${amount.toStringAsFixed(0)} successfully added to your Teffe\'s Cash Wallet!'),
+            backgroundColor: AppColors.hygieneDark,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Wallet PayU] Verify error: $e');
+      if (mounted) {
+        final auth = context.read<AuthProvider>();
+        await auth.syncWalletBalance();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Recharge of ₹${amount.toStringAsFixed(0)} verified! Wallet balance updated.'),
+            backgroundColor: AppColors.hygieneDark,
+          ),
+        );
+      }
+    }
+  }
+
+  void _onWalletPayUFailure(Map<dynamic, dynamic> response) {
+    debugPrint('[Wallet PayU] Failed: $response');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Payment failed or was declined by bank.'),
+          backgroundColor: Colors.red.shade800,
+        ),
+      );
+    }
+  }
+
+  void _onWalletPayUCancel(Map<dynamic, dynamic>? response) {
+    debugPrint('[Wallet PayU] Cancelled');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Payment cancelled.'),
+          backgroundColor: Colors.black87,
+        ),
+      );
+    }
+  }
+
+  String _formatOrderPlacedDate(String dateStr) {
+    if (dateStr.isEmpty) return 'Recently';
+    try {
+      final dt = DateTime.parse(dateStr).toLocal();
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      final day = dt.day.toString().padLeft(2, '0');
+      final month = months[dt.month - 1];
+      final year = dt.year;
+      final hour = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
+      final min = dt.minute.toString().padLeft(2, '0');
+      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
+      return '$day $month $year, $hour:$min $ampm';
+    } catch (_) {
+      return dateStr;
+    }
+  }
+
   // Edit Profile Dialog
   void _showEditProfileDialog(BuildContext context, AuthProvider auth) {
     final nameController = TextEditingController(text: auth.user?.name ?? '');
@@ -32,19 +133,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: AppDimensions.spaceMd,
-                right: AppDimensions.spaceMd,
-                top: AppDimensions.spaceMd,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
-              ),
+            final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+                ? MediaQuery.of(ctx).viewInsets.bottom
+                : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceMd;
+            return SafeArea(
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: AppDimensions.spaceMd,
+                  right: AppDimensions.spaceMd,
+                  top: AppDimensions.spaceMd,
+                  bottom: bottomPadding,
+                ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -137,8 +244,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -148,11 +256,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void _showAddMoneySheet(BuildContext context, AuthProvider auth) {
     final amountController = TextEditingController(text: '500');
     bool isRecharging = false;
-    String selectedMethod = 'razorpay';
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
       ),
@@ -160,172 +268,203 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return StatefulBuilder(
           builder: (context, setModalState) {
             final double enteredAmount = double.tryParse(amountController.text) ?? 0.0;
+            final isZeroOrNegative = enteredAmount <= 0;
+            final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+                ? MediaQuery.of(ctx).viewInsets.bottom
+                : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceLg;
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: AppDimensions.spaceMd,
-                right: AppDimensions.spaceMd,
-                top: AppDimensions.spaceMd,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.account_balance_wallet_rounded, color: AppColors.primaryMaroon),
-                          SizedBox(width: 8),
-                          Text(
-                            "Add Money to Teffe's Cash",
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded),
-                        onPressed: () => Navigator.pop(ctx),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Current Balance: ${CurrencyFormatter.format(auth.user?.walletBalance ?? 0)}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Amount Input
-                  TextField(
-                    controller: amountController,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setModalState(() {}),
-                    style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
-                    decoration: InputDecoration(
-                      prefixText: '₹ ',
-                      prefixStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.primaryMaroon),
-                      hintText: 'Enter amount',
-                      filled: true,
-                      fillColor: AppColors.surfaceSubtle,
-                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Quick Amount Chips
-                  Row(
-                    children: [200, 500, 1000, 2000].map((amt) {
-                      return Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 3),
-                          child: OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 6),
-                              side: BorderSide(
-                                color: enteredAmount == amt ? AppColors.primaryMaroon : AppColors.borderHairline,
-                              ),
-                              backgroundColor: enteredAmount == amt ? AppColors.primaryLight.withOpacity(0.3) : Colors.transparent,
+            return SafeArea(
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: AppDimensions.spaceMd,
+                  right: AppDimensions.spaceMd,
+                  top: AppDimensions.spaceMd,
+                  bottom: bottomPadding,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.account_balance_wallet_rounded, color: AppColors.primaryMaroon),
+                            SizedBox(width: 8),
+                            Text(
+                              "Add Money to Teffe's Cash",
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
                             ),
-                            onPressed: () {
-                              setModalState(() {
-                                amountController.text = amt.toString();
-                              });
-                            },
-                            child: Text(
-                              '+ ₹$amt',
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                fontWeight: FontWeight.w800,
-                                color: enteredAmount == amt ? AppColors.primaryMaroon : AppColors.textPrimary,
-                              ),
-                            ),
-                          ),
+                          ],
                         ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 14),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Current Balance: ${CurrencyFormatter.format(auth.user?.walletBalance ?? 0)}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 14),
 
-                  // Payment Method Selector
-                  const Text('Payment Gateway', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 6),
-                  GestureDetector(
-                    onTap: () => setModalState(() => selectedMethod = 'razorpay'),
-                    child: Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: selectedMethod == 'razorpay' ? AppColors.primaryLight.withOpacity(0.3) : AppColors.surfaceSubtle,
-                        borderRadius: AppDimensions.roundedMd,
-                        border: Border.all(color: selectedMethod == 'razorpay' ? AppColors.primaryMaroon : AppColors.borderHairline),
+                    // Amount Input
+                    TextField(
+                      controller: amountController,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setModalState(() {}),
+                      style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900),
+                      decoration: InputDecoration(
+                        prefixText: '₹ ',
+                        prefixStyle: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: AppColors.primaryMaroon),
+                        hintText: 'Enter amount',
+                        filled: true,
+                        fillColor: AppColors.surfaceSubtle,
+                        border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                       ),
-                      child: Row(
+                    ),
+                    const SizedBox(height: 10),
+
+                    // Quick Amount Chips
+                    Row(
+                      children: [200, 500, 1000, 2000].map((amt) {
+                        return Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 3),
+                            child: OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 6),
+                                side: BorderSide(
+                                  color: enteredAmount == amt ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                ),
+                                backgroundColor: enteredAmount == amt ? AppColors.primaryLight.withOpacity(0.3) : Colors.transparent,
+                              ),
+                              onPressed: () {
+                                setModalState(() {
+                                  amountController.text = amt.toString();
+                                });
+                              },
+                              child: Text(
+                                '+ ₹$amt',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: enteredAmount == amt ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Payment Method Selector
+                    const Text('Payment Gateway', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight.withOpacity(0.2),
+                        borderRadius: AppDimensions.roundedMd,
+                        border: Border.all(color: AppColors.primaryMaroon.withOpacity(0.5)),
+                      ),
+                      child: const Row(
                         children: [
-                          const Icon(Icons.credit_card_rounded, color: AppColors.primaryMaroon, size: 20),
-                          const SizedBox(width: 10),
-                          const Expanded(
+                          Icon(Icons.credit_card_rounded, color: AppColors.primaryMaroon, size: 22),
+                          SizedBox(width: 10),
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('Razorpay Express (UPI, Cards, NetBanking)', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800)),
-                                Text('Instant auto-crediting to wallet', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
+                                Text('UPI, Cards & NetBanking (PayU)', style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800)),
+                                SizedBox(height: 2),
+                                Text('Instant auto-crediting to wallet • 256-bit encrypted', style: TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
                               ],
                             ),
                           ),
                           Icon(
-                            selectedMethod == 'razorpay' ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
+                            Icons.radio_button_checked_rounded,
                             color: AppColors.primaryMaroon,
-                            size: 16,
+                            size: 18,
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-                  // Recharge Button
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primaryMaroon,
-                        shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                    // Recharge Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: (isZeroOrNegative || isRecharging) ? Colors.grey.shade300 : AppColors.primaryMaroon,
+                          disabledBackgroundColor: Colors.grey.shade300,
+                          elevation: isZeroOrNegative ? 0 : 2,
+                          shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                        ),
+                        onPressed: (isRecharging || isZeroOrNegative)
+                            ? null
+                            : () async {
+                                setModalState(() => isRecharging = true);
+                                final navigator = Navigator.of(ctx);
+                                try {
+                                  final api = ApiClient();
+                                  final rawPhone = (auth.user?.phone ?? '9999999999').replaceAll(RegExp(r'[^0-9]'), '');
+                                  final cleanPhone = rawPhone.length >= 10
+                                      ? rawPhone.substring(rawPhone.length - 10)
+                                      : rawPhone.padLeft(10, '0');
+
+                                  final res = await api.post(ApiEndpoints.walletCreateOrder, data: {
+                                    'amount': enteredAmount,
+                                    'firstname': auth.user?.name ?? 'Customer',
+                                    'email': auth.user?.email ?? 'customer@teffes.com',
+                                    'phone': cleanPhone,
+                                  });
+
+                                  if (res.data != null && res.data['success'] == true && res.data['payuParams'] != null) {
+                                    final payuParams = Map<String, dynamic>.from(res.data['payuParams']);
+                                    _pendingRechargeAmount = enteredAmount;
+                                    _pendingRechargeTxnId = payuParams['txnid']?.toString() ?? '';
+                                    navigator.pop();
+                                    _payUService.openCheckout(payuParams: payuParams);
+                                  } else {
+                                    throw Exception(res.data?['message'] ?? 'Could not initialize PayU order');
+                                  }
+                                } catch (e) {
+                                  debugPrint('[Wallet PayU Error] $e');
+                                  setModalState(() => isRecharging = false);
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text('Failed to initiate PayU payment: $e'),
+                                        backgroundColor: Colors.red.shade800,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        child: isRecharging
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text(
+                                isZeroOrNegative
+                                    ? 'Enter Amount to Add'
+                                    : 'Proceed to Add ${CurrencyFormatter.format(enteredAmount)}',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: isZeroOrNegative ? Colors.grey.shade600 : Colors.white,
+                                ),
+                              ),
                       ),
-                      onPressed: (isRecharging || enteredAmount <= 0)
-                          ? null
-                          : () async {
-                              setModalState(() => isRecharging = true);
-                              // PayU recharge flow
-                              await Future.delayed(const Duration(milliseconds: 900));
-                              final payId = 'payu_${DateTime.now().millisecondsSinceEpoch.toString().substring(4)}';
-                              await auth.addMoneyToWallet(
-                                enteredAmount,
-                                description: 'Recharge via PayU ($payId)',
-                                payuPaymentId: payId,
-                              );
-                              if (ctx.mounted) Navigator.pop(ctx);
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text('₹$enteredAmount successfully added to your Teffe\'s Cash Wallet!'),
-                                    backgroundColor: AppColors.hygieneDark,
-                                  ),
-                                );
-                              }
-                            },
-                      child: isRecharging
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text(
-                              'Proceed to Add ${CurrencyFormatter.format(enteredAmount)}',
-                              style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
-                            ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             );
           },
@@ -344,17 +483,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: AppDimensions.spaceMd,
-                right: AppDimensions.spaceMd,
-                top: AppDimensions.spaceMd,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
-              ),
+            final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+                ? MediaQuery.of(ctx).viewInsets.bottom
+                : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceMd;
+            return SafeArea(
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: AppDimensions.spaceMd,
+                  right: AppDimensions.spaceMd,
+                  top: AppDimensions.spaceMd,
+                  bottom: bottomPadding,
+                ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -455,8 +600,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -472,17 +618,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: AppDimensions.spaceMd,
-                right: AppDimensions.spaceMd,
-                top: AppDimensions.spaceMd,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
-              ),
+            final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+                ? MediaQuery.of(ctx).viewInsets.bottom
+                : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceMd;
+            return SafeArea(
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: AppDimensions.spaceMd,
+                  right: AppDimensions.spaceMd,
+                  top: AppDimensions.spaceMd,
+                  bottom: bottomPadding,
+                ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -596,8 +748,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
-            );
-          },
+            ),
+          );
+        },
         );
       },
     );
@@ -608,14 +761,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(AppDimensions.spaceMd),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+        return SafeArea(
+          bottom: true,
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppDimensions.spaceMd,
+              AppDimensions.spaceMd,
+              AppDimensions.spaceMd,
+              MediaQuery.of(ctx).viewPadding.bottom + AppDimensions.spaceMd,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -682,7 +843,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Payment Mode', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
-                  Text(ord.paymentMethod ?? 'Razorpay / Online', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(ord.paymentMethod ?? 'PayU / Online', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ],
               ),
               const SizedBox(height: 6),
@@ -721,9 +882,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ],
           ),
-        );
-      },
-    );
+        ),
+      );
+    },
+  );
   }
 
   void _confirmLogout(BuildContext context, AuthProvider auth) {
@@ -1249,53 +1411,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             const SizedBox(height: 8),
                             const Divider(height: 1, color: AppColors.borderHairline),
                             const SizedBox(height: 8),
+                            // Row 1: Placed Date & Payment Method badge
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
+                                Expanded(
+                                  child: Text(
+                                    _formatOrderPlacedDate(ord.placedAt),
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w500),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                if (ord.paymentMethod != null && ord.paymentMethod!.isNotEmpty)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceSubtle,
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      ord.paymentMethod!,
+                                      style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            // Row 2: Total Amount on Left, Track Live Button / View Receipt on Right
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
                                 Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(ord.placedAt, style: const TextStyle(fontSize: 10.5, color: AppColors.textMuted)),
-                                    if (ord.paymentMethod != null)
-                                      Text(ord.paymentMethod!, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
-                                  ],
-                                ),
-                                Row(
-                                  children: [
+                                    const Text('Total Amount', style: TextStyle(fontSize: 9.5, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
                                     Text(
                                       CurrencyFormatter.format(ord.amount),
-                                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14, color: AppColors.textPrimary),
+                                      style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: AppColors.textPrimary),
                                     ),
-                                    const SizedBox(width: 8),
-                                    if (isLive)
-                                      ElevatedButton.icon(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: AppColors.primaryMaroon,
-                                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        icon: const Icon(Icons.navigation_rounded, size: 12, color: Colors.white),
-                                        label: const Text('Track Live →', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-                                        onPressed: () {
-                                          Navigator.of(context).push(
-                                            SmoothPageRoute(page: OrderTrackingScreen(orderId: ord.orderId)),
-                                          );
-                                        },
-                                      )
-                                    else
-                                      TextButton.icon(
-                                        style: TextButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          minimumSize: Size.zero,
-                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                        ),
-                                        icon: const Icon(Icons.receipt_long_rounded, size: 14, color: AppColors.textSecondary),
-                                        label: const Text('View Receipt', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-                                        onPressed: () => _showOrderReceiptModal(context, ord),
-                                      ),
                                   ],
                                 ),
+                                if (isLive)
+                                  ElevatedButton.icon(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primaryMaroon,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                      elevation: 0,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                    ),
+                                    icon: const Icon(Icons.navigation_rounded, size: 12, color: Colors.white),
+                                    label: const Text('Track Live →', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.white)),
+                                    onPressed: () {
+                                      Navigator.of(context).push(
+                                        SmoothPageRoute(page: OrderTrackingScreen(orderId: ord.orderId)),
+                                      );
+                                    },
+                                  )
+                                else
+                                  TextButton.icon(
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    icon: const Icon(Icons.receipt_long_rounded, size: 14, color: AppColors.textSecondary),
+                                    label: const Text('View Receipt', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                                    onPressed: () => _showOrderReceiptModal(context, ord),
+                                  ),
                               ],
                             ),
                           ],

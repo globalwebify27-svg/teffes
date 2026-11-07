@@ -13,7 +13,7 @@ const router = Router();
 router.use(protect);
 
 router.get('/details', getWalletDetails);
-router.post('/add', addMoney);
+router.post('/add', restrictTo('superadmin'), addMoney);
 router.post('/create-order', createWalletTopupOrder);
 router.post('/verify-topup', verifyWalletTopup);
 router.post('/admin/add-money', restrictTo('superadmin'), addMoneyToUser);

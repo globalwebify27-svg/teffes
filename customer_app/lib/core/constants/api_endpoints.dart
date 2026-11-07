@@ -76,6 +76,8 @@ class ApiEndpoints {
   // Wallet
   static const String walletDetails = '/wallet/details';
   static const String walletRecharge = '/user/wallet/recharge';
+  static const String walletCreateOrder = '/wallet/create-order';
+  static const String walletVerifyTopup = '/wallet/verify-topup';
   static const String walletAdd = '/wallet/add';
 
   // Coupons

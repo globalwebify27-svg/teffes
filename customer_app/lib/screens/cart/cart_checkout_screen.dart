@@ -299,17 +299,23 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
       builder: (ctx) {
         return StatefulBuilder(
           builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                left: AppDimensions.spaceMd,
-                right: AppDimensions.spaceMd,
-                top: AppDimensions.spaceMd,
-                bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
-              ),
+            final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+                ? MediaQuery.of(ctx).viewInsets.bottom
+                : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceMd;
+            return SafeArea(
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: AppDimensions.spaceMd,
+                  right: AppDimensions.spaceMd,
+                  top: AppDimensions.spaceMd,
+                  bottom: bottomPadding,
+                ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -409,34 +415,41 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                   ),
                 ],
               ),
-            );
-          },
-        );
-      },
-    );
-  }
+            ),
+          );
+        },
+      );
+    },
+  );
+}
 
   void _showAddressPicker(BuildContext context, LocationProvider location) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) {
-        return Container(
-          padding: EdgeInsets.only(
-            left: AppDimensions.spaceMd,
-            right: AppDimensions.spaceMd,
-            top: AppDimensions.spaceMd,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceMd,
-          ),
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.75,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+        final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+            ? MediaQuery.of(ctx).viewInsets.bottom
+            : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceMd;
+        return SafeArea(
+          bottom: true,
+          child: Container(
+            padding: EdgeInsets.only(
+              left: AppDimensions.spaceMd,
+              right: AppDimensions.spaceMd,
+              top: AppDimensions.spaceMd,
+              bottom: bottomPadding,
+            ),
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.75,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -642,10 +655,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 ),
             ],
           ),
-        );
-      },
-    );
-  }
+        ),
+      );
+    },
+  );
+}
 
   Future<void> _handlePlaceOrder(CartProvider cart, LocationProvider location, AuthProvider auth) async {
     // 0. Enforce user authentication: must be logged in to proceed with checkout or payment
