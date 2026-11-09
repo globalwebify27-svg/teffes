@@ -54,6 +54,35 @@ export default function OffersPage() {
     }
   };
 
+  // Helper for formatting discount label cleanly
+  const formatDiscountTitle = (c: Coupon) => {
+    if (c.discount && typeof c.discount === "string" && c.discount.trim() && isNaN(Number(c.discount))) {
+      return c.discount;
+    }
+    if (c.discountType === "percentage") {
+      return `${c.discountValue}% OFF`;
+    }
+    if (c.discountType === "free_delivery") {
+      return "Free Express Shipping";
+    }
+    if (c.discountValue) {
+      return `Flat ₹${c.discountValue} OFF`;
+    }
+    return "Special Promotional Offer";
+  };
+
+  // Helper for human-readable dates
+  const formatTillDate = (d?: string) => {
+    if (!d) return "";
+    try {
+      const parsed = new Date(d);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
+      }
+    } catch (_) {}
+    return d;
+  };
+
   // Helper for styling card according to coupon discount type
   const getStyleForType = (type?: string) => {
     switch (type) {
@@ -184,10 +213,10 @@ export default function OffersPage() {
                           <span>Featured Super Offer</span>
                         </span>
                         <h3 className="font-headline-md font-extrabold text-xl sm:text-2xl">
-                          {superOffer.discount}
+                          {formatDiscountTitle(superOffer)}
                         </h3>
                         <p className="text-xs text-white/90 mt-1 max-w-xl leading-relaxed">
-                          Use promo code <strong className="font-mono bg-white/20 px-2 py-0.5 rounded text-amber-200 font-bold">{superOffer.code}</strong> at checkout. {superOffer.minOrder > 0 ? `Requires a minimum cart value of ₹${superOffer.minOrder}.` : "Valid on all orders."} Offer valid till {superOffer.validTill}.
+                          Use promo code <strong className="font-mono bg-white/20 px-2 py-0.5 rounded text-amber-200 font-bold">{superOffer.code}</strong> at checkout. {superOffer.minOrder > 0 ? `Requires a minimum cart value of ₹${superOffer.minOrder}.` : "Valid on all orders."} {superOffer.validTill ? `Offer valid till ${formatTillDate(superOffer.validTill)}.` : ""}
                         </p>
                       </div>
                     </div>
@@ -254,13 +283,13 @@ export default function OffersPage() {
 
                                 {coupon.validTill && (
                                   <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-1 rounded-full whitespace-nowrap">
-                                    Till {coupon.validTill}
+                                    Till {formatTillDate(coupon.validTill)}
                                   </span>
                                 )}
                               </div>
 
                               <h3 className="font-headline-sm font-extrabold text-gray-900 text-lg sm:text-xl leading-snug mb-2">
-                                {coupon.discount}
+                                {formatDiscountTitle(coupon)}
                               </h3>
                               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed mb-6">
                                 Apply promo code <strong className="text-gray-900 font-mono font-bold">{coupon.code}</strong> at checkout to redeem this offer.
