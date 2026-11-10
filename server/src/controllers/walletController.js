@@ -1,18 +1,32 @@
 const crypto = require('crypto');
 const { getDoc, createDoc, updateDoc, queryDocs } = require('../lib/firestore');
 const { getUserById } = require('../services/firestore/user.firestore.service');
+const { getPaymentSettings } = require('../services/firestore/siteSettings.firestore.service');
 
-const PAYU_KEY  = process.env.PAYU_MERCHANT_KEY  || 'mv5iBR';
-const PAYU_SALT = process.env.PAYU_MERCHANT_SALT || 'zfjyRbqXallwBDnRVXBVDIJGnM2sKmK';
-const PAYU_URL  = process.env.PAYU_BASE_URL       || 'https://test.payu.in';
+const PAYU_LIVE_URL = 'https://secure.payu.in';
 
-function computePayUHash({ txnid, amount, productinfo, firstname, email }) {
-  const str = `${PAYU_KEY}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${PAYU_SALT}`;
+async function getActivePayUConfig() {
+  const settings = await getPaymentSettings();
+  const key = settings.payuMerchantKey ? settings.payuMerchantKey.trim() : '';
+  const salt = settings.payuMerchantSalt ? settings.payuMerchantSalt.trim() : '';
+  const isConfigured = Boolean(key && salt);
+
+  return {
+    key,
+    salt,
+    url: PAYU_LIVE_URL,
+    onlineEnabled: settings.onlineEnabled !== false,
+    isConfigured,
+  };
+}
+
+function computePayUHash({ key, salt, txnid, amount, productinfo, firstname, email }) {
+  const str = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${salt}`;
   return crypto.createHash('sha512').update(str).digest('hex');
 }
 
-function computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status }) {
-  const str = `${PAYU_SALT}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${PAYU_KEY}`;
+function computePayUReverseHash({ key, salt, txnid, amount, productinfo, firstname, email, status }) {
+  const str = `${salt}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
   return crypto.createHash('sha512').update(str).digest('hex');
 }
 
@@ -156,6 +170,22 @@ exports.addMoneyToUser = async (req, res, next) => {
  */
 exports.createWalletTopupOrder = async (req, res, next) => {
   try {
+    const config = await getActivePayUConfig();
+
+    if (!config.onlineEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Online wallet recharge is currently disabled by store administration.',
+      });
+    }
+
+    if (!config.isConfigured) {
+      return res.status(400).json({
+        success: false,
+        message: 'PayU online payment is not configured by admin. Please contact support.',
+      });
+    }
+
     const { amount, firstname = 'Customer', email = 'customer@teffes.com', phone = '9999999999' } = req.body;
     const numAmount = Number(amount);
     if (!numAmount || numAmount <= 0) {
@@ -165,12 +195,20 @@ exports.createWalletTopupOrder = async (req, res, next) => {
     const txnid       = `WAL${Date.now()}`;
     const amountStr   = numAmount.toFixed(2);
     const productinfo = "TeFFe's Wallet Recharge";
-    const hash        = computePayUHash({ txnid, amount: amountStr, productinfo, firstname, email });
+    const hash        = computePayUHash({
+      key: config.key,
+      salt: config.salt,
+      txnid,
+      amount: amountStr,
+      productinfo,
+      firstname,
+      email,
+    });
 
     res.status(200).json({
       success: true,
       payuParams: {
-        key:         PAYU_KEY,
+        key:         config.key,
         txnid,
         amount:      amountStr,
         productinfo,
@@ -181,8 +219,8 @@ exports.createWalletTopupOrder = async (req, res, next) => {
         furl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/payment/wallet-failure`,
         hash,
       },
-      payuUrl: `${PAYU_URL}/_payment`,
-      keyId:   PAYU_KEY,
+      payuUrl: `${config.url}/_payment`,
+      keyId:   config.key,
       amount:  numAmount,
       isSimulation: false,
     });
@@ -204,9 +242,20 @@ exports.verifyWalletTopup = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Invalid recharge amount' });
     }
 
+    const config = await getActivePayUConfig();
+
     // Verify PayU reverse hash
     if (receivedHash) {
-      const expectedHash = computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status });
+      const expectedHash = computePayUReverseHash({
+        key: config.key,
+        salt: config.salt,
+        txnid,
+        amount,
+        productinfo,
+        firstname,
+        email,
+        status,
+      });
       if (expectedHash !== receivedHash) {
         return res.status(400).json({ success: false, message: 'Invalid payment signature' });
       }

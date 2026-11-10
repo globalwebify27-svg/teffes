@@ -23,6 +23,8 @@ const {
   getAllOrders,
   getSettings,
   getInventoryHistory,
+  getSuperAdminPaymentSettings,
+  updateSuperAdminPaymentSettings,
 } = require('../controllers/superAdmin.controller');
 
 const router = Router();
@@ -74,6 +76,8 @@ const {
 } = require('../controllers/seo.controller');
 
 router.get('/settings', getSettings);
+router.get('/payment-settings', getSuperAdminPaymentSettings);
+router.put('/payment-settings', updateSuperAdminPaymentSettings);
 router.get('/seo', getSuperAdminSeoSettings);
 router.put('/seo', updateSuperAdminSeoSettings);
 

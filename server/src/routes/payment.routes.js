@@ -1,6 +1,7 @@
 const { Router } = require('express');
 const { optionalProtect } = require('../middlewares/auth');
 const {
+  getPublicPaymentSettings,
   createPayUOrder,
   verifyPayUPayment,
   handlePayUWebhook,
@@ -14,6 +15,9 @@ const {
 } = require('../controllers/payment.controller');
 
 const router = Router();
+
+// Public payment options availability (COD, Online, Wallet)
+router.get('/settings', getPublicPaymentSettings);
 
 // Webhook listener MUST NOT be behind JWT authentication
 router.post('/webhook', handlePayUWebhook);

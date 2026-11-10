@@ -50,7 +50,7 @@ export default function AdminLoginForm() {
     } catch (err) {
       const msg =
         err instanceof AxiosError
-          ? err.response?.data?.message || "Invalid email or password"
+          ? err.response?.data?.message || (err.response ? "Invalid email or password" : "Unable to reach server. Please check your network connection.")
           : "Something went wrong. Please check your credentials and try again.";
       setError(msg);
     } finally {

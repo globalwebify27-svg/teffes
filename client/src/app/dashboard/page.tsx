@@ -88,6 +88,7 @@ export default function DashboardPage() {
   const [balanceInput, setBalanceInput] = useState("");
   const [isRecharging, setIsRecharging] = useState(false);
   const [rechargeFeedback, setRechargeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
+  const [paymentSettings, setPaymentSettings] = useState<{ onlineEnabled: boolean; payuConfigured: boolean }>({ onlineEnabled: true, payuConfigured: true });
 
   // Return request modal states
   const [returnModalOrderId, setReturnModalOrderId] = useState<string | null>(null);
@@ -375,6 +376,18 @@ export default function DashboardPage() {
         }
       })
       .catch((err) => console.warn("Failed to fetch wallet details:", err));
+
+    // Fetch payment settings to verify online/recharge gateway status
+    api.get<{ success: boolean; settings: { onlineEnabled: boolean; payuConfigured: boolean } }>("/payment/settings")
+      .then((res) => {
+        if (res.data?.success && res.data.settings) {
+          setPaymentSettings({
+            onlineEnabled: !!res.data.settings.onlineEnabled,
+            payuConfigured: !!res.data.settings.payuConfigured,
+          });
+        }
+      })
+      .catch((err) => console.warn("Failed to fetch payment settings:", err));
 
     // Fetch user's saved addresses
     fetchAddresses();
@@ -988,17 +1001,33 @@ export default function DashboardPage() {
                     <span className="text-[11px] text-slate-500 font-medium block">Available Balance:</span>
                     <span className="font-headline-sm font-extrabold text-gray-900 text-base">₹{teffesCash}</span>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBalanceInput("");
-                      setRechargeFeedback(null);
-                      setIsAddBalanceModalOpen(true);
-                    }}
-                    className="py-1.5 px-3.5 rounded-full bg-black hover:bg-gray-800 text-white font-label-badge font-bold text-xs shadow-xs cursor-pointer border-none transition-all"
-                  >
-                    Add Balance
-                  </button>
+                  {(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? (
+                    <div className="flex flex-col items-end gap-1">
+                      <button
+                        type="button"
+                        disabled
+                        title={!paymentSettings.onlineEnabled ? "Online recharge is temporarily paused by store" : "PayU is not configured by admin"}
+                        className="py-1.5 px-3.5 rounded-full bg-gray-200 text-gray-400 font-label-badge font-bold text-xs shadow-none cursor-not-allowed border-none"
+                      >
+                        Add Balance
+                      </button>
+                      <span className="text-[10px] text-amber-700 font-semibold">
+                        {!paymentSettings.onlineEnabled ? "Recharge Paused" : "Gateway Unconfigured"}
+                      </span>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBalanceInput("");
+                        setRechargeFeedback(null);
+                        setIsAddBalanceModalOpen(true);
+                      }}
+                      className="py-1.5 px-3.5 rounded-full bg-black hover:bg-gray-800 text-white font-label-badge font-bold text-xs shadow-xs cursor-pointer border-none transition-all"
+                    >
+                      Add Balance
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2376,9 +2405,25 @@ export default function DashboardPage() {
                   <span className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
                     Payment Gateway
                   </span>
-                  <div className="p-3.5 rounded-2xl border border-primary/30 bg-primary/5 flex items-center justify-between">
+                  {(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) && (
+                    <div className="p-3 mb-2 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2 text-xs text-amber-800 font-semibold">
+                      <span className="material-symbols-outlined text-[18px] shrink-0">warning</span>
+                      <span>
+                        {!paymentSettings.onlineEnabled
+                          ? "Online payment is currently paused by store admin."
+                          : "PayU is not configured by admin."}
+                      </span>
+                    </div>
+                  )}
+                  <div className={`p-3.5 rounded-2xl border flex items-center justify-between ${
+                    (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured)
+                      ? "border-gray-200 bg-gray-50 opacity-60"
+                      : "border-primary/30 bg-primary/5"
+                  }`}>
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shrink-0">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                        (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-300 text-gray-500" : "bg-primary text-white"
+                      }`}>
                         <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
                       </div>
                       <div>
@@ -2386,12 +2431,18 @@ export default function DashboardPage() {
                           UPI, Cards &amp; NetBanking (PayU)
                         </span>
                         <span className="text-[11px] text-slate-500 block">
-                          Instant bank verification &amp; 256-bit encrypted checkout
+                          {(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured)
+                            ? "Gateway currently unavailable"
+                            : "Instant bank verification & 256-bit encrypted checkout"}
                         </span>
                       </div>
                     </div>
-                    <div className="w-5 h-5 rounded-full border-2 border-primary flex items-center justify-center shrink-0">
-                      <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
+                      (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "border-gray-300" : "border-primary"
+                    }`}>
+                      <div className={`w-2.5 h-2.5 rounded-full ${
+                        (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-300" : "bg-primary"
+                      }`} />
                     </div>
                   </div>
                 </div>
@@ -2407,7 +2458,7 @@ export default function DashboardPage() {
                   </button>
                   <button
                     type="submit"
-                    disabled={isRecharging || !balanceInput || isNaN(Number(balanceInput)) || Number(balanceInput) <= 0}
+                    disabled={isRecharging || !paymentSettings.onlineEnabled || !paymentSettings.payuConfigured || !balanceInput || isNaN(Number(balanceInput)) || Number(balanceInput) <= 0}
                     className="flex-1 py-3 px-4 bg-[#91000a] hover:bg-[#7a0008] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none text-white font-medium text-sm rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer border-none flex items-center justify-center gap-1.5 whitespace-nowrap"
                   >
                     {isRecharging ? (

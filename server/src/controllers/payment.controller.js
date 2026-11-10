@@ -13,17 +13,37 @@ const {
 } = require('../lib/firestore');
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate, emitOrderCreated } = require('../socket');
+const { getPaymentSettings } = require('../services/firestore/siteSettings.firestore.service');
 
-const PAYU_KEY  = process.env.PAYU_MERCHANT_KEY  || 'mv5iBR';
-const PAYU_SALT = process.env.PAYU_MERCHANT_SALT || 'zfjyRbqXallwBDnRVXBVDIJGnM2sKmK';
-const PAYU_URL  = process.env.PAYU_BASE_URL       || 'https://test.payu.in';
+const PAYU_LIVE_URL = 'https://secure.payu.in';
+
+/**
+ * Resolve active PayU credentials from DB.
+ * Client requirement: strictly Production/Live URL, no test fallback when unconfigured.
+ */
+async function getActivePayUConfig() {
+  const settings = await getPaymentSettings();
+  const key = settings.payuMerchantKey ? settings.payuMerchantKey.trim() : '';
+  const salt = settings.payuMerchantSalt ? settings.payuMerchantSalt.trim() : '';
+  const isConfigured = Boolean(key && salt);
+
+  return {
+    key,
+    salt,
+    url: PAYU_LIVE_URL,
+    onlineEnabled: settings.onlineEnabled !== false,
+    codEnabled: settings.codEnabled !== false,
+    walletEnabled: settings.walletEnabled !== false,
+    isConfigured,
+  };
+}
 
 /**
  * Compute PayU forward hash:
  * SHA512(key|txnid|amount|productinfo|firstname|email|||||||||||salt)
  */
-function computePayUHash({ txnid, amount, productinfo, firstname, email }) {
-  const str = `${PAYU_KEY}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${PAYU_SALT}`;
+function computePayUHash({ key, salt, txnid, amount, productinfo, firstname, email }) {
+  const str = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${salt}`;
   return crypto.createHash('sha512').update(str).digest('hex');
 }
 
@@ -31,10 +51,32 @@ function computePayUHash({ txnid, amount, productinfo, firstname, email }) {
  * Compute PayU reverse hash for response verification:
  * SHA512(salt|status|||||||||||email|firstname|productinfo|amount|txnid|key)
  */
-function computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status }) {
-  const str = `${PAYU_SALT}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${PAYU_KEY}`;
+function computePayUReverseHash({ key, salt, txnid, amount, productinfo, firstname, email, status }) {
+  const str = `${salt}|${status}|||||||||||${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
   return crypto.createHash('sha512').update(str).digest('hex');
 }
+
+/**
+ * GET /api/payment/settings
+ * Public payment options availability for website and mobile checkout
+ */
+const getPublicPaymentSettings = async (req, res, next) => {
+  try {
+    const config = await getActivePayUConfig();
+    res.status(200).json({
+      success: true,
+      paymentSettings: {
+        codEnabled: config.codEnabled,
+        onlineEnabled: config.onlineEnabled,
+        walletEnabled: config.walletEnabled,
+        payuConfigured: config.isConfigured,
+        payuMerchantKey: config.isConfigured ? config.key : '',
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
 
 /**
  * POST /api/payment/create-order
@@ -43,6 +85,22 @@ function computePayUReverseHash({ txnid, amount, productinfo, firstname, email, 
  */
 const createPayUOrder = async (req, res, next) => {
   try {
+    const config = await getActivePayUConfig();
+
+    if (!config.onlineEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Online payment (PayU) is currently disabled by store administration.',
+      });
+    }
+
+    if (!config.isConfigured) {
+      return res.status(400).json({
+        success: false,
+        message: 'PayU online payment is not configured by admin. Please contact support or choose another payment method.',
+      });
+    }
+
     const {
       amount,
       firstname = 'Customer',
@@ -57,23 +115,31 @@ const createPayUOrder = async (req, res, next) => {
     const txnid       = `TEF${Date.now()}`;
     const amountStr   = Number(amount).toFixed(2);
     const productinfo = "TeFFe's Fresh Order";
-    const hash        = computePayUHash({ txnid, amount: amountStr, productinfo, firstname, email });
+    const hash        = computePayUHash({
+      key: config.key,
+      salt: config.salt,
+      txnid,
+      amount: amountStr,
+      productinfo,
+      firstname,
+      email,
+    });
 
     // Pre-calculate mobile SDK static hashes required by PayU Checkout Pro
     const paymentRelatedDetailsHash = crypto
       .createHash('sha512')
-      .update(`${PAYU_KEY}|payment_related_details_for_mobile_sdk|default|${PAYU_SALT}`)
+      .update(`${config.key}|payment_related_details_for_mobile_sdk|default|${config.salt}`)
       .digest('hex');
 
     const vasForMobileSdkHash = crypto
       .createHash('sha512')
-      .update(`${PAYU_KEY}|vas_for_mobile_sdk|default|${PAYU_SALT}`)
+      .update(`${config.key}|vas_for_mobile_sdk|default|${config.salt}`)
       .digest('hex');
 
     return res.status(200).json({
       success: true,
       payuParams: {
-        key:         PAYU_KEY,
+        key:         config.key,
         txnid,
         amount:      amountStr,
         productinfo,
@@ -89,8 +155,8 @@ const createPayUOrder = async (req, res, next) => {
           vas_for_mobile_sdk: vasForMobileSdkHash,
         },
       },
-      payuUrl: `${PAYU_URL}/_payment`,
-      keyId:   PAYU_KEY, // Legacy alias
+      payuUrl: `${config.url}/_payment`,
+      keyId:   config.key, // Legacy alias
     });
   } catch (error) {
     next(error);
@@ -109,7 +175,17 @@ const verifyPayUPayment = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Missing payment hash' });
     }
 
-    const expectedHash = computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status });
+    const config = await getActivePayUConfig();
+    const expectedHash = computePayUReverseHash({
+      key: config.key,
+      salt: config.salt,
+      txnid,
+      amount,
+      productinfo,
+      firstname,
+      email,
+      status,
+    });
 
     if (expectedHash !== receivedHash) {
       return res.status(400).json({ success: false, message: 'Invalid payment signature' });
@@ -140,8 +216,19 @@ const handlePayUWebhook = async (req, res, next) => {
       status, hash: receivedHash, mihpayid,
     } = req.body || {};
 
+    const config = await getActivePayUConfig();
+
     if (receivedHash) {
-      const expectedHash = computePayUReverseHash({ txnid, amount, productinfo, firstname, email, status });
+      const expectedHash = computePayUReverseHash({
+        key: config.key,
+        salt: config.salt,
+        txnid,
+        amount,
+        productinfo,
+        firstname,
+        email,
+        status,
+      });
       if (expectedHash !== receivedHash) {
         console.warn('[PayU Webhook] Invalid hash, ignoring');
         return res.status(200).json({ status: 'ok' });
@@ -226,15 +313,23 @@ const generatePayUHash = async (req, res, next) => {
     const { hashName, hashString, postSalt } = req.body;
     console.log(`[PayU Hash] requested hashName="${hashName}", hashString="${hashString}", postSalt="${postSalt}"`);
 
+    const config = await getActivePayUConfig();
+    if (!config.onlineEnabled || !config.isConfigured) {
+      return res.status(400).json({
+        success: false,
+        message: 'PayU online payment is not configured or is disabled by store administration.',
+      });
+    }
+
     let hash = '';
     if (hashString) {
-      const toHash = hashString + (postSalt ? (PAYU_SALT + postSalt) : PAYU_SALT);
+      const toHash = hashString + (postSalt ? (config.salt + postSalt) : config.salt);
       hash = crypto.createHash('sha512').update(toHash).digest('hex');
     } else if (hashName === 'payment_related_details_for_mobile_sdk') {
-      const toHash = `${PAYU_KEY}|payment_related_details_for_mobile_sdk|default|${PAYU_SALT}`;
+      const toHash = `${config.key}|payment_related_details_for_mobile_sdk|default|${config.salt}`;
       hash = crypto.createHash('sha512').update(toHash).digest('hex');
     } else if (hashName === 'vas_for_mobile_sdk') {
-      const toHash = `${PAYU_KEY}|vas_for_mobile_sdk|default|${PAYU_SALT}`;
+      const toHash = `${config.key}|vas_for_mobile_sdk|default|${config.salt}`;
       hash = crypto.createHash('sha512').update(toHash).digest('hex');
     } else {
       return res.status(400).json({ success: false, message: 'hashString is required' });
@@ -421,6 +516,7 @@ const confirmDoorstepPayment = async (req, res, next) => {
 };
 
 module.exports = {
+  getPublicPaymentSettings,
   createPayUOrder,
   verifyPayUPayment,
   handlePayUWebhook,

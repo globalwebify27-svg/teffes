@@ -30,7 +30,7 @@ class PaymentProceedScreen extends StatefulWidget {
     required this.payableAmount,
     required this.deliveryAddress,
     required this.deliverySlot,
-    this.paymentMethod = 'payu',
+    this.paymentMethod = 'cod',
     this.isPickup = false,
     this.fulfillmentType = 'delivery',
     this.storeId = 'S001',

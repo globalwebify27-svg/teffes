@@ -33,6 +33,7 @@ const {
 const notificationService = require('../services/notificationService');
 const { emitOrderCreated, emitOrderStatusUpdate, emitReturnCreated } = require('../socket');
 const { calculateTargetDeliveryTime, getEtaDetails, isAfter8PM, calculateNextDay9AM } = require('../utils/etaCalculator');
+const { getPaymentSettings } = require('../services/firestore/siteSettings.firestore.service');
 
 const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
@@ -68,6 +69,31 @@ const createOrder = async (req, res, next) => {
     const userId = req.user?.id || req.user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Authentication required' });
+    }
+
+    const isOnline = paymentMethod?.toLowerCase().includes('online') || paymentMethod?.toLowerCase().includes('payu') || paymentMethod?.toLowerCase().includes('razorpay');
+    const isWallet = paymentMethod === 'wallet' || paymentMethod === 'Wallet' || paymentMethod === 'Teffes Cash' || req.body.paymentMethod === 'wallet';
+    const isCod = !isOnline && !isWallet;
+
+    // Enforce store payment settings
+    const paymentSettings = await getPaymentSettings();
+    if (isCod && paymentSettings.codEnabled === false) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cash on Delivery (COD) is currently disabled by store administration. Please choose another payment method.',
+      });
+    }
+    if (isWallet && paymentSettings.walletEnabled === false) {
+      return res.status(400).json({
+        success: false,
+        message: 'Wallet payment is currently disabled by store administration. Please choose another payment method.',
+      });
+    }
+    if (isOnline && paymentSettings.onlineEnabled === false) {
+      return res.status(400).json({
+        success: false,
+        message: 'Online payment is currently disabled by store administration. Please choose another payment method.',
+      });
     }
 
     let user = await getUserById(String(userId));
@@ -165,8 +191,11 @@ const createOrder = async (req, res, next) => {
       (deliverySlot && deliverySlot.toLowerCase().includes('60 min')) ||
       (deliverySlot && deliverySlot.toLowerCase().includes('express (60'))
     );
-    const expressFee = isExpressSlot ? 50 : (isAfterHours ? 0 : (Number(req.body.expressFee) || 0));
-    const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
+    const storeDoc = await getDoc('stores', resolvedStoreId);
+    const freeThreshold = typeof storeDoc?.freeDeliveryThreshold === 'number' ? storeDoc.freeDeliveryThreshold : 399;
+    const storeDeliveryFee = typeof storeDoc?.standardDeliveryFee === 'number' ? storeDoc.standardDeliveryFee : 40;
+    const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= freeThreshold ? 0 : storeDeliveryFee);
+    const expressFee = isExpressSlot ? (typeof storeDoc?.expressDeliveryFee === 'number' ? storeDoc.expressDeliveryFee : 50) : (isAfterHours ? 0 : (Number(req.body.expressFee) || 0));
     const tipAmount = Number(req.body.tip) || 0;
     const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + expressFee + tipAmount - verifiedDiscount);
     const finalAmount = amount !== undefined ? Number(amount) : (totalAmount !== undefined ? Number(totalAmount) : computedFinalAmount);
@@ -181,8 +210,6 @@ const createOrder = async (req, res, next) => {
         orderAddress = `${addr.line1 || ''}, ${addr.line2 ? addr.line2 + ', ' : ''}${addr.city || ''} - ${addr.pincode || ''}`.trim();
       }
     }
-
-    const isOnline = paymentMethod?.toLowerCase().includes('online') || paymentMethod?.toLowerCase().includes('razorpay');
 
     // Dynamic initial ETA calculation
     const prepMinutes = Number(req.body.prepTimeMinutes) || 25;
@@ -220,7 +247,6 @@ const createOrder = async (req, res, next) => {
     }
 
     // Wallet deduction if applicable
-    const isWallet = paymentMethod === 'wallet' || paymentMethod === 'Wallet' || paymentMethod === 'Teffes Cash' || req.body.paymentMethod === 'wallet';
     if (isWallet) {
       const currentBal = Number(user.walletBalance) || 0;
       if (currentBal < finalAmount) {

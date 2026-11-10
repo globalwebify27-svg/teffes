@@ -6,10 +6,10 @@ class AppConfig {
     defaultValue: 'mv5iBR',
   );
 
-  /// PayU Environment - 'test' or 'production'
+  /// PayU Environment - 'production' (Live gateway)
   static const String payuEnvironment = String.fromEnvironment(
     'PAYU_ENV',
-    defaultValue: 'test',
+    defaultValue: 'production',
   );
 
   /// Legacy alias so any remaining code referencing razorpayKeyId still compiles

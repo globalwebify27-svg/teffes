@@ -32,7 +32,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   final TextEditingController _customTipController = TextEditingController();
   final TextEditingController _pickupInstructionController = TextEditingController();
   String _fulfillmentType = 'delivery'; // 'delivery' or 'pickup'
-  String _selectedPaymentMethod = 'payu'; // 'payu', 'wallet', 'cod'
+  String _selectedPaymentMethod = 'cod'; // 'cod', 'payu', 'wallet'
+  bool _codEnabled = true;
+  bool _onlineEnabled = true;
+  bool _walletEnabled = true;
+  bool _payuConfigured = true;
   String _selectedSlot = '90 Min Delivery'; // 'Express Delivery (60 min)', '90 Min Delivery', 'Custom Delivery'
   String _selectedCustomSlot = '';
   List<ProductModel> _crossSellItems = [];
@@ -140,8 +144,49 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         context.read<CartProvider>().fetchAvailableCoupons();
         _fetchStores();
         _fetchCrossSellItems();
+        _fetchPaymentSettings();
       }
     });
+  }
+
+  Future<void> _fetchPaymentSettings() async {
+    try {
+      final res = await ApiClient().get('/payment/settings');
+      if (res.data != null && res.data['success'] == true && res.data['settings'] != null) {
+        final s = res.data['settings'];
+        if (mounted) {
+          setState(() {
+            _codEnabled = s['codEnabled'] != false;
+            _onlineEnabled = s['onlineEnabled'] != false;
+            _walletEnabled = s['walletEnabled'] != false;
+            _payuConfigured = s['payuConfigured'] != false;
+
+            // Auto-fallback if currently selected payment method is disabled
+            if (_selectedPaymentMethod == 'cod' && !_codEnabled) {
+              if (_onlineEnabled && _payuConfigured) {
+                _selectedPaymentMethod = 'payu';
+              } else if (_walletEnabled) {
+                _selectedPaymentMethod = 'wallet';
+              }
+            } else if (_selectedPaymentMethod == 'payu' && (!_onlineEnabled || !_payuConfigured)) {
+              if (_codEnabled) {
+                _selectedPaymentMethod = 'cod';
+              } else if (_walletEnabled) {
+                _selectedPaymentMethod = 'wallet';
+              }
+            } else if (_selectedPaymentMethod == 'wallet' && !_walletEnabled) {
+              if (_codEnabled) {
+                _selectedPaymentMethod = 'cod';
+              } else if (_onlineEnabled && _payuConfigured) {
+                _selectedPaymentMethod = 'payu';
+              }
+            }
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[Checkout] Error fetching payment settings: $e');
+    }
   }
 
   void _initDefaultStores() {
@@ -726,6 +771,37 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         ? 'Store Pickup: ${selStore?.name ?? "Store Counter"}, ${selStore?.address ?? "Ranchi"}'
         : location.activeAddressString;
     final activeInstruction = isPickup ? _pickupInstructionController.text.trim() : _deliveryInstruction;
+
+    // Validate that selected payment method is active in store settings
+    if (_selectedPaymentMethod == 'cod' && !_codEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cash on Delivery is currently disabled by store. Please select another payment method.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (_selectedPaymentMethod == 'payu' && (!_onlineEnabled || !_payuConfigured)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(!_onlineEnabled
+              ? 'Online payment is currently disabled by store.'
+              : 'PayU is not configured by admin.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+    if (_selectedPaymentMethod == 'wallet' && !_walletEnabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Wallet payment is currently disabled by store. Please select another payment method.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
 
     // 1. If PayU is selected, directly launch PayU Checkout Pro (skip intermediate screen)
     if (_selectedPaymentMethod == 'payu') {
@@ -2424,25 +2500,33 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           'cod',
                           isPickup ? 'Pay at Store Counter (Cash / POS Machine)' : 'Cash on Delivery (COD)',
                           Icons.money_rounded,
-                          badge: 'Available',
-                          isEnabled: true,
+                          badge: _codEnabled ? 'Available' : 'Disabled',
+                          isEnabled: _codEnabled,
+                          disabledReason: _codEnabled ? null : 'Cash on Delivery is currently disabled by store.',
                         ),
                         _buildPaymentOption(
                           'payu',
                           'Online UPI / Cards / NetBanking (PayU)',
                           Icons.credit_card_rounded,
-                          badge: 'Recommended',
-                          isEnabled: true,
+                          badge: (_onlineEnabled && _payuConfigured) ? 'Recommended' : 'Disabled',
+                          isEnabled: _onlineEnabled && _payuConfigured,
+                          disabledReason: !_onlineEnabled
+                              ? 'Online payment is currently disabled by store.'
+                              : (!_payuConfigured ? 'PayU is not configured by admin.' : null),
                         ),
                         _buildPaymentOption(
                           'wallet',
                           "Teffe's Cash Wallet (${CurrencyFormatter.format(auth.user?.walletBalance ?? 0)})",
                           Icons.account_balance_wallet_rounded,
-                          badge: (auth.user?.walletBalance ?? 0) >= effectiveGrandTotal ? 'Available' : 'Low Balance',
-                          isEnabled: (auth.user?.walletBalance ?? 0) >= effectiveGrandTotal,
-                          disabledReason: (auth.user?.walletBalance ?? 0) < effectiveGrandTotal
-                              ? 'Insufficient wallet balance. Please recharge or choose PayU.'
-                              : null,
+                          badge: !_walletEnabled
+                              ? 'Disabled'
+                              : ((auth.user?.walletBalance ?? 0) >= effectiveGrandTotal ? 'Available' : 'Low Balance'),
+                          isEnabled: _walletEnabled && (auth.user?.walletBalance ?? 0) >= effectiveGrandTotal,
+                          disabledReason: !_walletEnabled
+                              ? 'Wallet payment is currently disabled by store.'
+                              : ((auth.user?.walletBalance ?? 0) < effectiveGrandTotal
+                                  ? 'Insufficient wallet balance. Please recharge or choose another method.'
+                                  : null),
                         ),
                       ],
                     ),

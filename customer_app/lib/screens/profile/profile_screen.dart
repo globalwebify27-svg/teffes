@@ -26,6 +26,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late final PayUService _payUService;
   double _pendingRechargeAmount = 0.0;
   String _pendingRechargeTxnId = '';
+  bool _onlineEnabled = true;
+  bool _payuConfigured = true;
 
   @override
   void initState() {
@@ -35,6 +37,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
       onFailure: _onWalletPayUFailure,
       onCancel: _onWalletPayUCancel,
     );
+    _fetchPaymentSettings();
+  }
+
+  Future<void> _fetchPaymentSettings() async {
+    try {
+      final res = await ApiClient().get('/payment/settings');
+      if (res.data != null && res.data['success'] == true && res.data['settings'] != null) {
+        final s = res.data['settings'];
+        if (mounted) {
+          setState(() {
+            _onlineEnabled = s['onlineEnabled'] != false;
+            _payuConfigured = s['payuConfigured'] != false;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[Profile] Error fetching payment settings: $e');
+    }
   }
 
   void _onWalletPayUSuccess(Map<dynamic, dynamic> response) async {
@@ -396,7 +416,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 20),
+                    if (!_onlineEnabled || !_payuConfigured)
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.amber.shade300),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded, size: 18, color: Colors.amber.shade900),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                !_onlineEnabled
+                                    ? 'Online wallet recharge is currently paused by store.'
+                                    : 'PayU is not configured by admin.',
+                                style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
                     // Recharge Button
                     SizedBox(
@@ -404,12 +447,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       height: 48,
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: (isZeroOrNegative || isRecharging) ? Colors.grey.shade300 : AppColors.primaryMaroon,
+                          backgroundColor: (isZeroOrNegative || isRecharging || !_onlineEnabled || !_payuConfigured)
+                              ? Colors.grey.shade300
+                              : AppColors.primaryMaroon,
                           disabledBackgroundColor: Colors.grey.shade300,
-                          elevation: isZeroOrNegative ? 0 : 2,
+                          elevation: (isZeroOrNegative || !_onlineEnabled || !_payuConfigured) ? 0 : 2,
                           shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
                         ),
-                        onPressed: (isRecharging || isZeroOrNegative)
+                        onPressed: (isRecharging || isZeroOrNegative || !_onlineEnabled || !_payuConfigured)
                             ? null
                             : () async {
                                 setModalState(() => isRecharging = true);
@@ -1176,14 +1221,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         ElevatedButton.icon(
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: AppColors.primaryMaroon,
+                            backgroundColor: (_onlineEnabled && _payuConfigured) ? Colors.white : Colors.white60,
+                            foregroundColor: (_onlineEnabled && _payuConfigured) ? AppColors.primaryMaroon : Colors.grey.shade600,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
                           ),
                           icon: const Icon(Icons.add_circle_outline_rounded, size: 16),
-                          label: const Text('+ Add Money', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
-                          onPressed: () => _showAddMoneySheet(context, auth),
+                          label: Text(
+                            !_onlineEnabled
+                                ? 'Recharge Paused'
+                                : (!_payuConfigured ? 'Unconfigured' : '+ Add Money'),
+                            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                          ),
+                          onPressed: (_onlineEnabled && _payuConfigured)
+                              ? () => _showAddMoneySheet(context, auth)
+                              : () {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(!_onlineEnabled
+                                          ? 'Online wallet recharge is currently paused by store.'
+                                          : 'PayU is not configured by admin.'),
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                    ),
+                                  );
+                                },
                         ),
                       ],
                     ),

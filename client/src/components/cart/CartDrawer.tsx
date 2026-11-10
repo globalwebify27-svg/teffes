@@ -303,6 +303,43 @@ export default function CartDrawer() {
   // Payment method state ("cod" | "razorpay" | "wallet")
   const [selectedPayment, setSelectedPayment] = useState<string>("cod");
   const [walletBalance, setWalletBalance] = useState<number>(0);
+  const [paymentSettings, setPaymentSettings] = useState<{
+    codEnabled: boolean;
+    onlineEnabled: boolean;
+    walletEnabled: boolean;
+    payuConfigured: boolean;
+  }>({
+    codEnabled: true,
+    onlineEnabled: true,
+    walletEnabled: true,
+    payuConfigured: true,
+  });
+
+  const fetchPaymentSettings = async () => {
+    try {
+      const res = await api.get<{ success: boolean; paymentSettings: any }>("/payment/settings");
+      if (res.data?.success && res.data.paymentSettings) {
+        const ps = res.data.paymentSettings;
+        setPaymentSettings(ps);
+        // Automatic Fallback: ensure selected payment is an active, enabled method
+        setSelectedPayment((current) => {
+          const isCurrentActive =
+            (current === "cod" && ps.codEnabled !== false) ||
+            (current === "razorpay" && ps.onlineEnabled !== false && ps.payuConfigured) ||
+            (current === "wallet" && ps.walletEnabled !== false);
+
+          if (!isCurrentActive) {
+            if (ps.codEnabled !== false) return "cod";
+            if (ps.onlineEnabled !== false && ps.payuConfigured) return "razorpay";
+            if (ps.walletEnabled !== false) return "wallet";
+          }
+          return current;
+        });
+      }
+    } catch (err) {
+      console.warn("Could not fetch payment settings:", err);
+    }
+  };
   const [showAddAddressForm, setShowAddAddressForm] = useState<boolean>(false);
   const [isSavingAddress, setIsSavingAddress] = useState<boolean>(false);
   const [newAddress, setNewAddress] = useState({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
@@ -329,6 +366,7 @@ export default function CartDrawer() {
 
   useEffect(() => {
     if (isOpen) {
+      fetchPaymentSettings();
       setLoadingCoupons(true);
       api.get<{ success: boolean; coupons: any[] }>("/coupons/active")
         .then((res) => {
@@ -545,6 +583,7 @@ export default function CartDrawer() {
     }
 
     try {
+      await fetchPaymentSettings();
       const res = await api.get<{ success: boolean; balance: number }>("/wallet/details");
       if (res.data.success) {
         setWalletBalance(res.data.balance || 0);
@@ -2012,89 +2051,139 @@ export default function CartDrawer() {
                 <div className="space-y-3">
                   {/* Method A: Cash on Delivery / Pay at Counter */}
                   <label
-                    onClick={() => setSelectedPayment("cod")}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${selectedPayment === "cod" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
-                      }`}
+                    onClick={() => {
+                      if (!paymentSettings.codEnabled) {
+                        toast.warning("Cash on Delivery is currently disabled by store management.");
+                        return;
+                      }
+                      setSelectedPayment("cod");
+                    }}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
+                      !paymentSettings.codEnabled
+                        ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
+                        : selectedPayment === "cod"
+                          ? "border-primary ring-1 ring-primary/20 cursor-pointer"
+                          : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-pink-50 flex items-center justify-center text-primary">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${!paymentSettings.codEnabled ? "bg-gray-100 text-gray-400" : "bg-pink-50 text-primary"}`}>
                         <span className="material-symbols-outlined text-[24px]">
                           {isPickup ? "storefront" : "payments"}
                         </span>
                       </div>
                       <div>
-                        <span className="font-bold text-gray-900 text-sm block">
-                          {isPickup ? "Pay at Store Counter" : "Cash on Delivery (COD)"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`font-bold text-sm ${!paymentSettings.codEnabled ? "text-gray-400 line-through" : "text-gray-900"}`}>
+                            {isPickup ? "Pay at Store Counter" : "Cash on Delivery (COD)"}
+                          </span>
+                          {!paymentSettings.codEnabled && (
+                            <span className="text-[9px] font-extrabold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded uppercase">Currently Disabled</span>
+                          )}
+                        </div>
                         <span className="text-[11.5px] text-slate-500">
-                          {isPickup ? "Pay cash, card or UPI when picking up" : "Pay cash or scan QR at doorstep via UPI"}
+                          {!paymentSettings.codEnabled
+                            ? "Temporarily unavailable for new orders"
+                            : isPickup ? "Pay cash, card or UPI when picking up" : "Pay cash or scan QR at doorstep via UPI"}
                         </span>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === "cod" ? "border-primary" : "border-gray-300"}`}>
-                      {selectedPayment === "cod" && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!paymentSettings.codEnabled ? "border-gray-200 bg-gray-100" : selectedPayment === "cod" ? "border-primary" : "border-gray-300"}`}>
+                      {selectedPayment === "cod" && paymentSettings.codEnabled && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
                     </div>
                   </label>
 
                   {/* Method B: Pay Online (PayU / UPI, Cards, Netbanking) */}
                   <label
-                    onClick={() => setSelectedPayment("razorpay")}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between cursor-pointer transition-all bg-white shadow-2xs ${selectedPayment === "razorpay" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300"
-                      }`}
+                    onClick={() => {
+                      if (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) {
+                        toast.warning("Online payment is currently disabled or unconfigured by store administration.");
+                        return;
+                      }
+                      setSelectedPayment("razorpay");
+                    }}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
+                      (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured)
+                        ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
+                        : selectedPayment === "razorpay"
+                          ? "border-primary ring-1 ring-primary/20 cursor-pointer"
+                          : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-100 text-gray-400" : "bg-blue-50 text-blue-600"}`}>
                         <span className="material-symbols-outlined text-[24px]">credit_card</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900 text-sm">Pay Online (PayU)</span>
-                          <span className="text-[9.5px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase">Instant</span>
+                          <span className={`font-bold text-sm ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "text-gray-400 line-through" : "text-gray-900"}`}>
+                            Pay Online (PayU)
+                          </span>
+                          {paymentSettings.onlineEnabled && paymentSettings.payuConfigured ? (
+                            <span className="text-[9.5px] font-extrabold bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded uppercase">Instant</span>
+                          ) : (
+                            <span className="text-[9px] font-extrabold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded uppercase">Currently Disabled</span>
+                          )}
                         </div>
                         <span className="text-[11.5px] text-slate-500">
-                          UPI, Debit/Credit Cards & Netbanking via PayU
+                          {paymentSettings.onlineEnabled && paymentSettings.payuConfigured
+                            ? "UPI, Debit/Credit Cards & Netbanking via PayU"
+                            : "Online payments temporarily paused by store"}
                         </span>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === "razorpay" ? "border-primary" : "border-gray-300"}`}>
-                      {selectedPayment === "razorpay" && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "border-gray-200 bg-gray-100" : selectedPayment === "razorpay" ? "border-primary" : "border-gray-300"}`}>
+                      {selectedPayment === "razorpay" && paymentSettings.onlineEnabled && paymentSettings.payuConfigured && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
                     </div>
                   </label>
 
                   {/* Method C: Teffes Cash / Wallet */}
                   <label
                     onClick={() => {
+                      if (!paymentSettings.walletEnabled) {
+                        toast.warning("Wallet payment is currently disabled by store management.");
+                        return;
+                      }
                       if (walletBalance < finalPayable) {
                         toast.warning(`Insufficient wallet balance (₹${walletBalance}). Required: ₹${finalPayable}. Please choose another payment method.`);
                         return;
                       }
                       setSelectedPayment("wallet");
                     }}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${walletBalance < finalPayable
-                        ? "opacity-60 cursor-not-allowed border-gray-200"
-                        : "cursor-pointer " + (selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300")
-                      }`}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
+                      !paymentSettings.walletEnabled
+                        ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
+                        : walletBalance < finalPayable
+                          ? "opacity-60 cursor-not-allowed border-gray-200"
+                          : "cursor-pointer " + (selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300")
+                    }`}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${!paymentSettings.walletEnabled ? "bg-gray-100 text-gray-400" : "bg-purple-50 text-purple-600"}`}>
                         <span className="material-symbols-outlined text-[24px]">account_balance_wallet</span>
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="font-bold text-gray-900 text-sm">Teffes Cash</span>
-                          {walletBalance >= finalPayable ? (
+                          <span className={`font-bold text-sm ${!paymentSettings.walletEnabled ? "text-gray-400 line-through" : "text-gray-900"}`}>
+                            Teffes Cash
+                          </span>
+                          {!paymentSettings.walletEnabled ? (
+                            <span className="text-[9px] font-extrabold bg-gray-200 text-gray-600 px-1.5 py-0.5 rounded uppercase">Currently Disabled</span>
+                          ) : walletBalance >= finalPayable ? (
                             <span className="text-[9.5px] font-extrabold bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded uppercase">Available</span>
                           ) : (
                             <span className="text-[9.5px] font-extrabold bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded uppercase">Low Balance</span>
                           )}
                         </div>
                         <span className="text-[11.5px] text-slate-500">
-                          Balance: ₹{walletBalance} {walletBalance >= finalPayable ? "• Instant 1-click checkout" : `(Need ₹${finalPayable})`}
+                          {!paymentSettings.walletEnabled
+                            ? "Wallet payment is temporarily unavailable"
+                            : `Balance: ₹${walletBalance} ${walletBalance >= finalPayable ? "• Instant 1-click checkout" : `(Need ₹${finalPayable})`}`}
                         </span>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${selectedPayment === "wallet" ? "border-primary" : "border-gray-300"}`}>
-                      {selectedPayment === "wallet" && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${!paymentSettings.walletEnabled ? "border-gray-200 bg-gray-100" : selectedPayment === "wallet" ? "border-primary" : "border-gray-300"}`}>
+                      {selectedPayment === "wallet" && paymentSettings.walletEnabled && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
                     </div>
                   </label>
                 </div>

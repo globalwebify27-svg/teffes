@@ -63,6 +63,13 @@ const siteSettingsSchema = new mongoose.Schema(
         country: { type: String, trim: true, default: 'India' },
       },
     },
+    paymentSettings: {
+      codEnabled: { type: Boolean, default: true },
+      onlineEnabled: { type: Boolean, default: true },
+      walletEnabled: { type: Boolean, default: true },
+      payuMerchantKey: { type: String, trim: true, default: '' },
+      payuMerchantSalt: { type: String, trim: true, default: '' },
+    },
   },
   {
     timestamps: true,

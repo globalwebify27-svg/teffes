@@ -162,9 +162,15 @@ const createOrderTransactional = async (orderData = {}) => {
 
   const isPickup = pickupMode === true || fulfillmentType === 'pickup';
   const resolvedFulfillment = isPickup ? 'pickup' : 'delivery';
-  const standardDeliveryFee = isPickup ? 0 : itemsSubtotal >= 399 ? 0 : 40;
+  
+  // Dynamic store configuration (configured by Store Admin in Store Status Modal)
+  const storeDoc = await getDoc('stores', cleanStoreId);
+  const freeThreshold = typeof storeDoc?.freeDeliveryThreshold === 'number' ? storeDoc.freeDeliveryThreshold : 399;
+  const storeDeliveryFee = typeof storeDoc?.standardDeliveryFee === 'number' ? storeDoc.standardDeliveryFee : 40;
+  const standardDeliveryFee = isPickup ? 0 : itemsSubtotal >= freeThreshold ? 0 : storeDeliveryFee;
+  const expressFeeAmount = typeof storeDoc?.expressDeliveryFee === 'number' ? storeDoc.expressDeliveryFee : 50;
   const isExpress = !isPickup && String(deliverySlot).toLowerCase().includes('express');
-  const expressFee = isExpress ? 50 : 0;
+  const expressFee = isExpress ? expressFeeAmount : 0;
   const tipAmount = Math.max(0, Number(tip) || 0);
 
   return runTransaction(async (transaction) => {

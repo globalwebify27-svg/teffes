@@ -42,6 +42,13 @@ const DEFAULT_SETTINGS = {
       country: 'India',
     },
   },
+  paymentSettings: {
+    codEnabled: true,
+    onlineEnabled: true,
+    walletEnabled: true,
+    payuMerchantKey: '',
+    payuMerchantSalt: '',
+  },
 };
 
 /**
@@ -58,7 +65,14 @@ const getAuthoritativeSettings = async () => {
       ...DEFAULT_SETTINGS,
     };
   }
-  return settings;
+  return {
+    ...DEFAULT_SETTINGS,
+    ...settings,
+    paymentSettings: {
+      ...DEFAULT_SETTINGS.paymentSettings,
+      ...(settings.paymentSettings || {}),
+    },
+  };
 };
 
 /**
@@ -88,6 +102,23 @@ const updateSettings = async (updates = {}) => {
         ...((updates.contactDetails && updates.contactDetails.address) || {}),
       },
     },
+    paymentSettings: {
+      codEnabled: updates.paymentSettings?.codEnabled !== undefined
+        ? Boolean(updates.paymentSettings.codEnabled)
+        : (current.paymentSettings?.codEnabled !== false),
+      onlineEnabled: updates.paymentSettings?.onlineEnabled !== undefined
+        ? Boolean(updates.paymentSettings.onlineEnabled)
+        : (current.paymentSettings?.onlineEnabled !== false),
+      walletEnabled: updates.paymentSettings?.walletEnabled !== undefined
+        ? Boolean(updates.paymentSettings.walletEnabled)
+        : (current.paymentSettings?.walletEnabled !== false),
+      payuMerchantKey: updates.paymentSettings?.payuMerchantKey !== undefined
+        ? String(updates.paymentSettings.payuMerchantKey).trim()
+        : (current.paymentSettings?.payuMerchantKey || ''),
+      payuMerchantSalt: updates.paymentSettings?.payuMerchantSalt !== undefined
+        ? String(updates.paymentSettings.payuMerchantSalt).trim()
+        : (current.paymentSettings?.payuMerchantSalt || ''),
+    },
   };
 
   const existing = await getDoc(COLLECTION, DOCUMENT_ID);
@@ -98,10 +129,23 @@ const updateSettings = async (updates = {}) => {
   return updateDoc(COLLECTION, DOCUMENT_ID, payload);
 };
 
+const getPaymentSettings = async () => {
+  const settings = await getAuthoritativeSettings();
+  const ps = settings.paymentSettings || {};
+  return {
+    codEnabled: ps.codEnabled !== false,
+    onlineEnabled: ps.onlineEnabled !== false,
+    walletEnabled: ps.walletEnabled !== false,
+    payuMerchantKey: ps.payuMerchantKey || '',
+    payuMerchantSalt: ps.payuMerchantSalt || '',
+  };
+};
+
 module.exports = {
   COLLECTION,
   DOCUMENT_ID,
   DEFAULT_SETTINGS,
   getAuthoritativeSettings,
   updateSettings,
+  getPaymentSettings,
 };

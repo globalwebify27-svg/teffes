@@ -1027,6 +1027,50 @@ const getInventoryHistory = async (req, res, next) => {
   }
 };
 
+const { getPaymentSettings: getPaymentSettingsFS, updateSettings: updateSiteSettingsFS } = require('../services/firestore/siteSettings.firestore.service');
+
+/**
+ * GET /api/super-admin/payment-settings
+ * Retrieve full payment method toggles and PayU credentials
+ */
+const getSuperAdminPaymentSettings = async (req, res, next) => {
+  try {
+    const settings = await getPaymentSettingsFS();
+    res.status(200).json({
+      success: true,
+      paymentSettings: settings,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PUT /api/super-admin/payment-settings
+ * Update payment method toggles and PayU credentials
+ */
+const updateSuperAdminPaymentSettings = async (req, res, next) => {
+  try {
+    const { codEnabled, onlineEnabled, walletEnabled, payuMerchantKey, payuMerchantSalt } = req.body;
+    const updated = await updateSiteSettingsFS({
+      paymentSettings: {
+        codEnabled,
+        onlineEnabled,
+        walletEnabled,
+        payuMerchantKey,
+        payuMerchantSalt,
+      },
+    });
+    res.status(200).json({
+      success: true,
+      message: 'Payment methods and PayU credentials saved successfully',
+      paymentSettings: updated.paymentSettings,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getPlatformDashboard,
   getStores,
@@ -1050,4 +1094,6 @@ module.exports = {
   getAllOrders,
   getSettings,
   getInventoryHistory,
+  getSuperAdminPaymentSettings,
+  updateSuperAdminPaymentSettings,
 };

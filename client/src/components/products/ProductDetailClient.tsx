@@ -676,55 +676,48 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
                     <span>Add to Cart</span>
                   </button>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={openCart}
-                    className="h-[44px] sm:h-[46px] px-6 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-extrabold text-[15px] shadow-sm hover:shadow transition-all cursor-pointer border-none flex items-center justify-center gap-2 active:scale-[0.98]"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">shopping_cart</span>
-                    <span>Go to Cart</span>
-                  </button>
-                )}
+                  <>
+                    <button
+                      type="button"
+                      onClick={openCart}
+                      className="h-[44px] sm:h-[46px] px-6 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-extrabold text-[15px] shadow-sm hover:shadow transition-all cursor-pointer border-none flex items-center justify-center gap-2 active:scale-[0.98]"
+                    >
+                      <span className="material-symbols-outlined text-[20px]">shopping_cart</span>
+                      <span>Go to Cart</span>
+                    </button>
 
-                {/* Right: Plus Minus Stepper */}
-                <div className="flex items-center bg-primary text-white rounded-full px-1.5 py-1 shadow-xs select-none h-[36px] sm:h-[38px]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (quantity > 0) {
-                        updateQuantity(product.id, quantity - 1);
-                      }
-                    }}
-                    disabled={quantity <= 0}
-                    className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-base border-none transition-all ${
-                      quantity > 0
-                        ? "bg-white/20 hover:bg-white/35 active:scale-90 text-white cursor-pointer"
-                        : "opacity-35 cursor-not-allowed bg-transparent text-white"
-                    }`}
-                    aria-label="Decrease quantity"
-                    title="Decrease quantity"
-                  >
-                    −
-                  </button>
-                  <span className="px-3 sm:px-3.5 font-black text-sm sm:text-base text-white min-w-[28px] text-center leading-none">
-                    {quantity > 0 ? quantity : 0}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (quantity > 0) {
-                        updateQuantity(product.id, quantity + 1);
-                      } else {
-                        addToCart(product);
-                      }
-                    }}
-                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 hover:bg-white/35 active:scale-90 text-white flex items-center justify-center font-bold text-base border-none cursor-pointer transition-all shrink-0"
-                    aria-label="Increase quantity"
-                    title="Increase quantity"
-                  >
-                    +
-                  </button>
-                </div>
+                    {/* Right: Plus Minus Stepper (Only visible when at least 1 item is added) */}
+                    <div className="flex items-center bg-primary text-white rounded-full px-1.5 py-1 shadow-xs select-none h-[36px] sm:h-[38px] animate-fade-in">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (quantity > 0) {
+                            updateQuantity(product.id, quantity - 1);
+                          }
+                        }}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-base border-none transition-all bg-white/20 hover:bg-white/35 active:scale-90 text-white cursor-pointer"
+                        aria-label="Decrease quantity"
+                        title="Decrease quantity"
+                      >
+                        −
+                      </button>
+                      <span className="px-3 sm:px-3.5 font-black text-sm sm:text-base text-white min-w-[28px] text-center leading-none">
+                        {quantity}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          updateQuantity(product.id, quantity + 1);
+                        }}
+                        className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/20 hover:bg-white/35 active:scale-90 text-white flex items-center justify-center font-bold text-base border-none cursor-pointer transition-all shrink-0"
+                        aria-label="Increase quantity"
+                        title="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* ─── Product Description Section ───────────────────────────── */}

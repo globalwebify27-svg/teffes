@@ -24,7 +24,7 @@ class CartProvider with ChangeNotifier {
   int get uniqueItemCount => _items.length;
 
   double get subtotal => _items.values.fold(0.0, (sum, item) => sum + item.totalPrice);
-  double get deliveryFee => (subtotal >= 399 || subtotal == 0) ? 0.0 : 35.0;
+  double get deliveryFee => (subtotal >= 399 || subtotal == 0) ? 0.0 : 40.0;
   double get couponDiscount => _couponDiscount;
   String? get appliedCoupon => _appliedCoupon;
   CouponModel? get appliedCouponModel => _appliedCouponModel;

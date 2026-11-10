@@ -48,6 +48,7 @@ const TABS = [
   { key: "banners", label: "Hero Banners", icon: "view_carousel", sub: "Promotional hero carousels and marketing banners on the home screen" },
   { key: "popups", label: "Promotional Pop-ups", icon: "campaign", sub: "Marketing alerts, modal pop-ups, and targeted announcements for storefront" },
   { key: "seo", label: "Homepage SEO", icon: "travel_explore", sub: "Search engine metadata, Open Graph tags, canonical URL, and JSON-LD structured data" },
+  { key: "payments", label: "Payment Methods", icon: "payments", sub: "Control COD, Wallet, and live PayU merchant credentials" },
 ];
 
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
@@ -7161,6 +7162,497 @@ function HomepageSeoTab() {
   );
 }
 
+function PaymentSettingsTab() {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [codEnabled, setCodEnabled] = useState(true);
+  const [walletEnabled, setWalletEnabled] = useState(true);
+  const [onlineEnabled, setOnlineEnabled] = useState(true);
+  const [payuMerchantKey, setPayuMerchantKey] = useState("");
+  const [payuMerchantSalt, setPayuMerchantSalt] = useState("");
+  const [showSalt, setShowSalt] = useState(false);
+
+  useEffect(() => {
+    setLoading(true);
+    api.get<{ success: boolean; paymentSettings: any }>("/super-admin/payment-settings")
+      .then((res) => {
+        if (res.data?.success && res.data.paymentSettings) {
+          const ps = res.data.paymentSettings;
+          setCodEnabled(ps.codEnabled !== false);
+          setOnlineEnabled(ps.onlineEnabled !== false);
+          setWalletEnabled(ps.walletEnabled !== false);
+          setPayuMerchantKey(ps.payuMerchantKey || "");
+          setPayuMerchantSalt(ps.payuMerchantSalt || "");
+        }
+      })
+      .catch((err) => {
+        console.warn("Failed to load payment settings:", err);
+        toast.error("Failed to load payment settings from server.", "Load Error");
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (onlineEnabled && (!payuMerchantKey.trim() || !payuMerchantSalt.trim())) {
+      toast.warning("Online Payment is enabled, but PayU Merchant Key or Salt is missing. Online orders will fail until valid live keys are provided.", "PayU Keys Incomplete");
+    }
+
+    setSaving(true);
+    try {
+      const res = await api.put<{ success: boolean; message: string; paymentSettings: any }>(
+        "/super-admin/payment-settings",
+        {
+          codEnabled,
+          onlineEnabled,
+          walletEnabled,
+          payuMerchantKey: payuMerchantKey.trim(),
+          payuMerchantSalt: payuMerchantSalt.trim(),
+        }
+      );
+
+      if (res.data?.success) {
+        toast.success(res.data.message || "Payment settings updated successfully!", "Saved");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to update payment settings.", "Save Failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "300px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", color: "#73695b", fontSize: "0.9rem" }}>
+          <span className="material-symbols-outlined text-[24px] animate-spin">sync</span>
+          <span>Loading payment methods configuration...</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ maxWidth: "860px" }}>
+      <form onSubmit={handleSave}>
+        {/* Card 1: Payment Method Switches */}
+        <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "16px", padding: "24px", marginBottom: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+            <span className="material-symbols-outlined text-[22px]" style={{ color: "#941717" }}>toggle_on</span>
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>Active Store Payment Methods</h2>
+          </div>
+          <p style={{ color: "#73695b", fontSize: "0.82rem", margin: "0 0 20px 0" }}>
+            Enable or disable customer checkout methods across the TeFFe website and mobile apps. Disabled options remain visible to customers in a disabled state.
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            {/* 1. Cash on Delivery */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "16px 18px",
+              borderRadius: "14px",
+              border: `1.5px solid ${codEnabled ? "#bbf7d0" : "#e5e7eb"}`,
+              background: codEnabled ? "#f0fdf4" : "#f9fafb",
+              transition: "all 200ms ease",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <div style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "12px",
+                  background: codEnabled ? "#dcfce7" : "#e5e7eb",
+                  color: codEnabled ? "#15803d" : "#9ca3af",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                  <span className="material-symbols-outlined text-[24px]">payments</span>
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "#171410" }}>
+                      Cash on Delivery (COD) & Pay at Counter
+                    </span>
+                    <span style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      background: codEnabled ? "#dcfce7" : "#f3f4f6",
+                      color: codEnabled ? "#166534" : "#6b7280",
+                    }}>
+                      {codEnabled ? "ENABLED" : "DISABLED"}
+                    </span>
+                  </div>
+                  <p style={{ margin: "3px 0 0 0", fontSize: "0.78rem", color: "#6b7280" }}>
+                    Accept physical cash or doorstep UPI QR payment on delivery and store pickups.
+                  </p>
+                </div>
+              </div>
+              <label style={{ position: "relative", display: "inline-block", width: "50px", height: "26px", cursor: "pointer", flexShrink: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={codEnabled}
+                  onChange={(e) => setCodEnabled(e.target.checked)}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{
+                  position: "absolute",
+                  cursor: "pointer",
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundColor: codEnabled ? "#16a34a" : "#d1d5db",
+                  transition: "0.3s",
+                  borderRadius: "34px",
+                }}>
+                  <span style={{
+                    position: "absolute",
+                    content: '""',
+                    height: "20px",
+                    width: "20px",
+                    left: codEnabled ? "26px" : "3px",
+                    bottom: "3px",
+                    backgroundColor: "white",
+                    transition: "0.3s",
+                    borderRadius: "50%",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                  }} />
+                </span>
+              </label>
+            </div>
+
+            {/* 2. Wallet Payment */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "16px 18px",
+              borderRadius: "14px",
+              border: `1.5px solid ${walletEnabled ? "#e9d5ff" : "#e5e7eb"}`,
+              background: walletEnabled ? "#faf5ff" : "#f9fafb",
+              transition: "all 200ms ease",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <div style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "12px",
+                  background: walletEnabled ? "#f3e8ff" : "#e5e7eb",
+                  color: walletEnabled ? "#7e22ce" : "#9ca3af",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                  <span className="material-symbols-outlined text-[24px]">account_balance_wallet</span>
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "#171410" }}>
+                      Teffes Cash (Wallet Checkout)
+                    </span>
+                    <span style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      background: walletEnabled ? "#f3e8ff" : "#f3f4f6",
+                      color: walletEnabled ? "#6b21a8" : "#6b7280",
+                    }}>
+                      {walletEnabled ? "ENABLED" : "DISABLED"}
+                    </span>
+                  </div>
+                  <p style={{ margin: "3px 0 0 0", fontSize: "0.78rem", color: "#6b7280" }}>
+                    Allow customers with sufficient Teffes Cash balance to pay with 1-click wallet deduction.
+                  </p>
+                </div>
+              </div>
+              <label style={{ position: "relative", display: "inline-block", width: "50px", height: "26px", cursor: "pointer", flexShrink: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={walletEnabled}
+                  onChange={(e) => setWalletEnabled(e.target.checked)}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{
+                  position: "absolute",
+                  cursor: "pointer",
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundColor: walletEnabled ? "#7e22ce" : "#d1d5db",
+                  transition: "0.3s",
+                  borderRadius: "34px",
+                }}>
+                  <span style={{
+                    position: "absolute",
+                    content: '""',
+                    height: "20px",
+                    width: "20px",
+                    left: walletEnabled ? "26px" : "3px",
+                    bottom: "3px",
+                    backgroundColor: "white",
+                    transition: "0.3s",
+                    borderRadius: "50%",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                  }} />
+                </span>
+              </label>
+            </div>
+
+            {/* 3. Online Payments (PayU) */}
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "16px 18px",
+              borderRadius: "14px",
+              border: `1.5px solid ${onlineEnabled ? "#bfdbfe" : "#e5e7eb"}`,
+              background: onlineEnabled ? "#eff6ff" : "#f9fafb",
+              transition: "all 200ms ease",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+                <div style={{
+                  width: "42px",
+                  height: "42px",
+                  borderRadius: "12px",
+                  background: onlineEnabled ? "#dbeafe" : "#e5e7eb",
+                  color: onlineEnabled ? "#1d4ed8" : "#9ca3af",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                  <span className="material-symbols-outlined text-[24px]">credit_card</span>
+                </div>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.95rem", color: "#171410" }}>
+                      Online Payments (PayU Gateway)
+                    </span>
+                    <span style={{
+                      fontSize: "0.7rem",
+                      fontWeight: 800,
+                      padding: "2px 8px",
+                      borderRadius: "6px",
+                      background: onlineEnabled ? "#dbeafe" : "#f3f4f6",
+                      color: onlineEnabled ? "#1e40af" : "#6b7280",
+                    }}>
+                      {onlineEnabled ? "ENABLED" : "DISABLED"}
+                    </span>
+                  </div>
+                  <p style={{ margin: "3px 0 0 0", fontSize: "0.78rem", color: "#6b7280" }}>
+                    Accept UPI, Credit/Debit Cards & NetBanking online during checkout.
+                  </p>
+                </div>
+              </div>
+              <label style={{ position: "relative", display: "inline-block", width: "50px", height: "26px", cursor: "pointer", flexShrink: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={onlineEnabled}
+                  onChange={(e) => setOnlineEnabled(e.target.checked)}
+                  style={{ opacity: 0, width: 0, height: 0 }}
+                />
+                <span style={{
+                  position: "absolute",
+                  cursor: "pointer",
+                  top: 0, left: 0, right: 0, bottom: 0,
+                  backgroundColor: onlineEnabled ? "#2563eb" : "#d1d5db",
+                  transition: "0.3s",
+                  borderRadius: "34px",
+                }}>
+                  <span style={{
+                    position: "absolute",
+                    content: '""',
+                    height: "20px",
+                    width: "20px",
+                    left: onlineEnabled ? "26px" : "3px",
+                    bottom: "3px",
+                    backgroundColor: "white",
+                    transition: "0.3s",
+                    borderRadius: "50%",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.3)",
+                  }} />
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Automatic Dependency Warning Notice */}
+          {!onlineEnabled && (
+            <div style={{
+              marginTop: "16px",
+              padding: "12px 14px",
+              background: "#fffbeb",
+              border: "1px solid #fde68a",
+              borderRadius: "10px",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: "10px",
+              fontSize: "0.8rem",
+              color: "#92400e",
+            }}>
+              <span className="material-symbols-outlined text-[18px]" style={{ color: "#d97706", flexShrink: 0, marginTop: "1px" }}>
+                info
+              </span>
+              <div>
+                <strong>Automatic Wallet Recharge Protection:</strong> Because Online Payment is turned OFF, customer Wallet Recharges on both Website and Mobile App are automatically disabled (since wallet recharges use the PayU gateway).
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Card 2: Live PayU Gateway Credentials */}
+        {onlineEnabled && (
+          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "16px", padding: "24px", marginBottom: "20px", boxShadow: "0 2px 8px rgba(0,0,0,0.02)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: "10px", marginBottom: "6px" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span className="material-symbols-outlined text-[22px]" style={{ color: "#2563eb" }}>key</span>
+                <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "#171410", margin: 0 }}>PayU Production Credentials</h2>
+              </div>
+              <span style={{
+                background: "#ecfdf5",
+                color: "#059669",
+                border: "1px solid #a7f3d0",
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                padding: "3px 10px",
+                borderRadius: "99px",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "5px",
+              }}>
+                <span className="material-symbols-outlined text-[14px]">shield_check</span>
+                Production Endpoint: https://secure.payu.in
+              </span>
+            </div>
+            <p style={{ color: "#73695b", fontSize: "0.82rem", margin: "0 0 18px 0" }}>
+              Configure your live client PayU merchant keys. Once saved, online payments and wallet recharges will immediately use these live credentials without needing developer intervention.
+            </p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "16px" }}>
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#374151", marginBottom: "6px" }}>
+                  PayU Merchant Key <span style={{ color: "#dc2626" }}>*</span>
+                </label>
+                <input
+                  type="text"
+                  value={payuMerchantKey}
+                  onChange={(e) => setPayuMerchantKey(e.target.value)}
+                  placeholder="e.g. 7rnFly or client production key"
+                  style={{
+                    width: "100%",
+                    padding: "10px 14px",
+                    borderRadius: "10px",
+                    border: "1px solid #d1d5db",
+                    fontSize: "0.875rem",
+                    boxSizing: "border-box",
+                    outline: "none",
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#374151", marginBottom: "6px" }}>
+                  PayU Merchant Salt <span style={{ color: "#dc2626" }}>*</span>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <input
+                    type={showSalt ? "text" : "password"}
+                    value={payuMerchantSalt}
+                    onChange={(e) => setPayuMerchantSalt(e.target.value)}
+                    placeholder="Enter production merchant salt"
+                    style={{
+                      width: "100%",
+                      padding: "10px 42px 10px 14px",
+                      borderRadius: "10px",
+                      border: "1px solid #d1d5db",
+                      fontSize: "0.875rem",
+                      boxSizing: "border-box",
+                      outline: "none",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowSalt(!showSalt)}
+                    style={{
+                      position: "absolute",
+                      right: "10px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "none",
+                      border: "none",
+                      color: "#9ca3af",
+                      cursor: "pointer",
+                      padding: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {showSalt ? "visibility_off" : "visibility"}
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {(!payuMerchantKey.trim() || !payuMerchantSalt.trim()) && (
+              <div style={{
+                marginTop: "16px",
+                padding: "12px 14px",
+                background: "#fef2f2",
+                border: "1px solid #fecaca",
+                borderRadius: "10px",
+                fontSize: "0.78rem",
+                color: "#991b1b",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}>
+                <span className="material-symbols-outlined text-[18px]">warning</span>
+                <span>Both Merchant Key and Salt must be entered. When empty, customers clicking PayU or Wallet Recharge will see a clear error that PayU is not configured.</span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Submit Button */}
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            type="submit"
+            disabled={saving}
+            style={{
+              padding: "12px 28px",
+              borderRadius: "12px",
+              background: saving ? "#9ca3af" : "#941717",
+              color: "#fff",
+              fontWeight: 800,
+              fontSize: "0.9rem",
+              border: "none",
+              cursor: saving ? "not-allowed" : "pointer",
+              boxShadow: "0 4px 14px rgba(148,23,23,0.3)",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              transition: "all 150ms ease",
+            }}
+          >
+            {saving ? (
+              <>
+                <span className="material-symbols-outlined text-[18px] animate-spin">sync</span>
+                <span>Saving Changes...</span>
+              </>
+            ) : (
+              <>
+                <span className="material-symbols-outlined text-[18px]">save</span>
+                <span>Save Payment Settings</span>
+              </>
+            )}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
 // ─── Main Super Admin Page ──────────────────────────────────────────────────────
 export default function SuperAdminPage() {
   const router = useRouter();
@@ -7218,6 +7710,7 @@ export default function SuperAdminPage() {
     banners: <BannersTab />,
     popups: <PromotionalPopupsTab />,
     seo: <HomepageSeoTab />,
+    payments: <PaymentSettingsTab />,
   };
 
   return (
