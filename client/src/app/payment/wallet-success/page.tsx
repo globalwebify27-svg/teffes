@@ -12,11 +12,14 @@ export default function WalletSuccessPage() {
       try {
         const raw = sessionStorage.getItem("pendingWalletRecharge");
         if (!raw) { router.replace("/dashboard"); return; }
-        const { amount } = JSON.parse(raw);
+        const { amount, txnid } = JSON.parse(raw);
         sessionStorage.removeItem("pendingWalletRecharge");
-        // Verify topup with PayU params from POST body (handled server-side via surl)
-        // For client-side, call verify-topup with the data PayU posts to us
-        await api.post("/wallet/add", { amount, description: "Online Wallet Recharge via PayU" });
+        // Verify topup with PayU transaction
+        await api.post("/wallet/verify-topup", {
+          amount,
+          txnid: txnid || `WAL${Date.now()}`,
+          status: "success",
+        });
         setStatus("success");
         setTimeout(() => router.replace("/dashboard"), 2000);
       } catch (e) {

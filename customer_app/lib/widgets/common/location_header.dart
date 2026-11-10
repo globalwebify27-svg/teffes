@@ -105,6 +105,7 @@ class LocationHeader extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      useSafeArea: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => const LocationPickerModal(),
     );
@@ -117,17 +118,25 @@ class LocationPickerModal extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final locationProvider = context.watch<LocationProvider>();
+    final bottomInset = MediaQuery.of(context).viewPadding.bottom;
 
-    return Container(
-      constraints: BoxConstraints(
-        maxHeight: MediaQuery.of(context).size.height * 0.85,
-      ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusXl)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg, vertical: AppDimensions.spaceMd),
-      child: SingleChildScrollView(
+    return SafeArea(
+      bottom: true,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.85,
+        ),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusXl)),
+        ),
+        padding: EdgeInsets.only(
+          left: AppDimensions.spaceLg,
+          right: AppDimensions.spaceLg,
+          top: AppDimensions.spaceMd,
+          bottom: bottomInset + AppDimensions.spaceMd,
+        ),
+        child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -391,8 +400,9 @@ class LocationPickerModal extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 /// Global reusable modal sheet to Add a New Delivery Address
@@ -408,10 +418,15 @@ void showAddAddressSheet(BuildContext context, LocationProvider location) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
+    useSafeArea: true,
     backgroundColor: Colors.transparent,
     builder: (ctx) {
       return StatefulBuilder(
         builder: (context, setModalState) {
+          final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+              ? MediaQuery.of(ctx).viewInsets.bottom
+              : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceLg;
+
           return Container(
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -421,7 +436,7 @@ void showAddAddressSheet(BuildContext context, LocationProvider location) {
               left: AppDimensions.spaceLg,
               right: AppDimensions.spaceLg,
               top: AppDimensions.spaceMd,
-              bottom: MediaQuery.of(ctx).viewInsets.bottom + AppDimensions.spaceLg,
+              bottom: bottomPadding,
             ),
             child: SingleChildScrollView(
               child: Column(
@@ -778,6 +793,7 @@ Future<void> showInitialLocationPrompt(BuildContext context, LocationProvider lo
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
+                          useSafeArea: true,
                           backgroundColor: Colors.transparent,
                           builder: (_) => const LocationPickerModal(),
                         );

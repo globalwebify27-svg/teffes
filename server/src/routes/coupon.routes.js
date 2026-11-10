@@ -11,6 +11,7 @@ const { optionalProtect } = require('../middlewares/auth');
 const router = Router();
 
 // Public / Tier-filtered discovery endpoints
+router.get('/', optionalProtect, getActiveCoupons);
 router.get('/active', optionalProtect, getActiveCoupons);
 router.get('/super-offer', optionalProtect, getSuperOffer);
 router.get('/my-tier', optionalProtect, getMyTier);

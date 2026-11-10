@@ -254,6 +254,7 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                       showModalBottomSheet(
                         context: context,
                         isScrollControlled: true,
+                        useSafeArea: true,
                         backgroundColor: Colors.transparent,
                         builder: (_) => const LocationPickerModal(),
                       );

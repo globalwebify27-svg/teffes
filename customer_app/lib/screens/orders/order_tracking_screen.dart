@@ -857,9 +857,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
 
     final status = order.status;
+    final isDelivered = status == 'Delivered';
     final isCancelled = status == 'Cancelled';
     final isRiderAssigned = order.rider != null && (order.rider?.name?.trim().isNotEmpty == true);
-    final isRiderDispatched = isRiderAssigned && ['Ready', 'Out for Delivery', 'Delivered'].contains(status);
+    final isRiderDispatched = isRiderAssigned && ['Ready', 'Out for Delivery'].contains(status);
     final canCancelOrder = !['Ready', 'Out for Delivery', 'Delivered', 'Cancelled'].contains(status);
     final etaInfo = _getEtaDisplayInfo(order);
 
@@ -879,11 +880,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
             tooltip: 'Sync Live Status from Store Admin',
             onPressed: _fetchLiveOrderDetails,
           ),
-          IconButton(
-            icon: const Icon(Icons.map_rounded, color: AppColors.primaryMaroon),
-            tooltip: 'Google Maps Route',
-            onPressed: _openGoogleMapsDirections,
-          ),
+          if (!isDelivered && !isCancelled)
+            IconButton(
+              icon: const Icon(Icons.map_rounded, color: AppColors.primaryMaroon),
+              tooltip: 'Google Maps Route',
+              onPressed: _openGoogleMapsDirections,
+            ),
         ],
       ),
       body: RefreshIndicator(
@@ -1058,7 +1060,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
               const SizedBox(height: AppDimensions.spaceMd),
 
               // 4-Digit Delivery Code Card (for customer to share with rider at doorstep)
-              if (order.deliveryOtp != null &&
+              if (!isDelivered &&
+                  !isCancelled &&
+                  order.deliveryOtp != null &&
                   order.deliveryOtp!.trim().isNotEmpty &&
                   !order.isPickup &&
                   (status == 'Out for Delivery' || isRiderDispatched)) ...[
@@ -1169,6 +1173,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                     ],
                   ),
                 )
+              else if (isDelivered)
+                const SizedBox.shrink()
               else if (isRiderDispatched)
                 Container(
                 height: 250,
@@ -1374,7 +1380,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                     ],
                   ),
                 ),
-              const SizedBox(height: AppDimensions.spaceMd),
+              if (!isDelivered) const SizedBox(height: AppDimensions.spaceMd),
 
               // 3. Contact Card (Store Counter for Pickup vs Rider for Delivery)
               if (!isCancelled)

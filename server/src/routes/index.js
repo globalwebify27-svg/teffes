@@ -249,8 +249,7 @@ router.post('/orders/:orderId/rate-rider', protectStaging, orderCtrl.rateRider);
 router.post('/orders/verify-payment', protectStaging, orderCtrl.verifyPayment);
 
 // Coupons
-router.post('/coupons/validate', orders.validateCoupon);
-router.get('/coupons', orders.listCoupons);
+router.use('/coupons', require('./coupon.routes'));
 
 // Wallet
 router.get('/wallet', protectStaging, orders.getWallet);

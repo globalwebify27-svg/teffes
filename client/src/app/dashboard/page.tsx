@@ -86,7 +86,6 @@ export default function DashboardPage() {
 
   const [isAddBalanceModalOpen, setIsAddBalanceModalOpen] = useState(false);
   const [balanceInput, setBalanceInput] = useState("");
-  const [rechargeMethod, setRechargeMethod] = useState<"payu" | "instant">("payu");
   const [isRecharging, setIsRecharging] = useState(false);
   const [rechargeFeedback, setRechargeFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
@@ -196,14 +195,26 @@ export default function DashboardPage() {
           bagTemp: rawRider.bagTemp || "Fresh-Lock Insulated Box",
         } : null;
 
-        setTrackingOrder((prev: any) => {
-          if (!prev) return null;
-          const updated = { ...prev };
-          if (newStatus) updated.status = newStatus;
-          if (rawRider !== undefined) updated.rider = formattedRider;
-          if (newDeliveryOtp) updated.deliveryOtp = newDeliveryOtp;
-          return updated;
-        });
+        if (newStatus === "Delivered") {
+          setTrackingOrder(null);
+          // Refetch orders so the delivered order moves to completed history
+          api.get<{ success: boolean; orders: any[] }>("/orders/my-orders")
+            .then((res) => {
+              if (res.data?.success && res.data?.orders) {
+                setLiveOrders(res.data.orders);
+              }
+            })
+            .catch(() => {});
+        } else {
+          setTrackingOrder((prev: any) => {
+            if (!prev) return null;
+            const updated = { ...prev };
+            if (newStatus) updated.status = newStatus;
+            if (rawRider !== undefined) updated.rider = formattedRider;
+            if (newDeliveryOtp) updated.deliveryOtp = newDeliveryOtp;
+            return updated;
+          });
+        }
         setLiveOrders((prev: any[]) =>
           prev.map((o) => {
             if (
@@ -268,6 +279,15 @@ export default function DashboardPage() {
         const res = await api.get<{ success: boolean; order: any }>(`/orders/${targetId}`);
         if (res.data?.success && res.data?.order) {
           const fresh = res.data.order;
+          if (fresh.status === "Delivered") {
+            setTrackingOrder(null);
+            clearInterval(interval);
+            const ordersRes = await api.get<{ success: boolean; orders: any[] }>("/orders/my-orders");
+            if (ordersRes.data?.success && ordersRes.data?.orders) {
+              setLiveOrders(ordersRes.data.orders);
+            }
+            return;
+          }
           setTrackingOrder((prev: any) => (prev ? { ...prev, ...fresh } : fresh));
           if (["Delivered", "Cancelled"].includes(fresh.status)) {
             clearInterval(interval);
@@ -380,6 +400,9 @@ export default function DashboardPage() {
                 (currentTracking.id && (o.id === currentTracking.id || o.orderId === currentTracking.id))
               );
               if (matching) {
+                if (matching.status === "Delivered") {
+                  return null;
+                }
                 return {
                   ...currentTracking,
                   status: matching.status,
@@ -449,44 +472,29 @@ export default function DashboardPage() {
     setRechargeFeedback(null);
 
     try {
-      if (rechargeMethod === "payu") {
-        const payuRes = await api.post<{ success: boolean; payuParams: any; payuUrl: string }>("/wallet/create-order", {
-          amount: amountNum,
-          firstname: user?.name || name || 'Customer',
-          email: user?.email || email || 'customer@teffes.com',
-          phone: (user?.phone || phone || '9999999999').replace(/\D/g, '').slice(-10),
-        });
-
-        if (!payuRes.data.success || !payuRes.data.payuParams) {
-          setRechargeFeedback({ type: "error", message: "Failed to initiate PayU payment" });
-          setIsRecharging(false);
-          return;
-        }
-
-        // Store recharge amount for the wallet-success callback page
-        sessionStorage.setItem('pendingWalletRecharge', JSON.stringify({ amount: amountNum }));
-
-        // Redirect to PayU via hidden form POST
-        submitPayUForm(payuRes.data.payuParams, payuRes.data.payuUrl);
-        return; // Page will redirect
-      }
-
-      // Instant Top-up or fallback mode
-      const res = await api.post<{ success: boolean; balance: number }>("/wallet/add", {
+      const payuRes = await api.post<{ success: boolean; payuParams: any; payuUrl: string }>("/wallet/create-order", {
         amount: amountNum,
-        description: "Instant Wallet Recharge",
+        firstname: user?.name || name || 'Customer',
+        email: user?.email || email || 'customer@teffes.com',
+        phone: (user?.phone || phone || '9999999999').replace(/\D/g, '').slice(-10),
       });
 
-      if (res.data.success) {
-        setTeffesCash(res.data.balance);
-        setRechargeFeedback({ type: "success", message: `₹${amountNum} successfully added to your Teffe's Cash!` });
-        setTimeout(() => {
-          closeAddBalanceModal();
-        }, 1200);
+      if (!payuRes.data.success || !payuRes.data.payuParams) {
+        setRechargeFeedback({ type: "error", message: "Failed to initiate PayU payment" });
+        setIsRecharging(false);
+        return;
       }
+
+      // Store recharge amount & txnid for the wallet-success callback page
+      sessionStorage.setItem('pendingWalletRecharge', JSON.stringify({
+        amount: amountNum,
+        txnid: payuRes.data.payuParams.txnid,
+      }));
+
+      // Redirect to PayU via hidden form POST
+      submitPayUForm(payuRes.data.payuParams, payuRes.data.payuUrl);
     } catch (err: any) {
-      setRechargeFeedback({ type: "error", message: err.response?.data?.message || "Failed to add money. Please try again." });
-    } finally {
+      setRechargeFeedback({ type: "error", message: err.response?.data?.message || "Failed to initiate PayU recharge." });
       setIsRecharging(false);
     }
   };
@@ -1819,7 +1827,7 @@ export default function DashboardPage() {
       </div>
 
       {/* ─── LIVE TRACK RIDER MODAL ────────────────────────────────────── */}
-      {trackingOrder && (
+      {trackingOrder && (trackingOrder.status || trackingOrder.rawOrder?.status) !== "Delivered" && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-gray-100 flex flex-col max-h-[90vh]">
             {/* Modal Header */}
@@ -1941,7 +1949,7 @@ export default function DashboardPage() {
               })()}
 
               {/* 4-Digit Doorstep Delivery OTP Banner */}
-              {trackingOrder.deliveryOtp && (
+              {trackingOrder.deliveryOtp && !["Delivered", "Cancelled"].includes(trackingOrder.status || trackingOrder.rawOrder?.status) && (
                 <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl p-4 border-2 border-dashed border-amber-300 flex items-center justify-between shadow-2xs">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0">
@@ -1969,7 +1977,7 @@ export default function DashboardPage() {
                   <h4 className="font-headline-sm font-black text-gray-900 text-base">Order Cancelled</h4>
                   <p className="text-xs text-slate-600 mt-1">This order was cancelled and inventory has been restocked.</p>
                 </div>
-              ) : trackingOrder.rider?.name && ["Ready", "Out for Delivery", "Delivered"].includes(trackingOrder.status || trackingOrder.rawOrder?.status) ? (
+              ) : trackingOrder.rider?.name && ["Ready", "Out for Delivery"].includes(trackingOrder.status || trackingOrder.rawOrder?.status) ? (
                 <GoogleLiveMap
                   riderLat={liveRiderCoords?.lat || trackingOrder.rider?.lat || 23.3512}
                   riderLng={liveRiderCoords?.lng || trackingOrder.rider?.lng || 85.3154}
@@ -2363,72 +2371,27 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Payment Option Selector */}
+                {/* Payment Option */}
                 <div>
                   <span className="block text-[11px] font-bold text-slate-500 mb-1.5 uppercase tracking-wider">
-                    Select Recharge Method
+                    Payment Gateway
                   </span>
-                  <div className="space-y-2">
-                    {/* Method 1: PayU Online */}
-                    <div
-                      onClick={() => setRechargeMethod("payu")}
-                      className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${rechargeMethod === "payu"
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                        : "border-gray-200 hover:border-gray-300 bg-white"
-                        }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
-                          <span className="material-symbols-outlined text-[18px]">credit_card</span>
-                        </div>
-                        <div>
-                          <span className="font-bold text-gray-900 text-xs sm:text-sm block">
-                            UPI &amp; Cards (PayU)
-                          </span>
-                          <span className="text-[11px] text-slate-500 block">
-                            GPay, PhonePe, Paytm, Cards &amp; NetBanking
-                          </span>
-                        </div>
+                  <div className="p-3.5 rounded-2xl border border-primary/30 bg-primary/5 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-primary text-white flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
                       </div>
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${rechargeMethod === "payu" ? "border-primary" : "border-gray-300"
-                          }`}
-                      >
-                        {rechargeMethod === "payu" && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
-                        )}
+                      <div>
+                        <span className="font-bold text-gray-900 text-xs sm:text-sm block">
+                          UPI, Cards &amp; NetBanking (PayU)
+                        </span>
+                        <span className="text-[11px] text-slate-500 block">
+                          Instant bank verification &amp; 256-bit encrypted checkout
+                        </span>
                       </div>
                     </div>
-
-                    {/* Method 2: Direct Instant Top-up */}
-                    <div
-                      onClick={() => setRechargeMethod("instant")}
-                      className={`p-3 rounded-2xl border cursor-pointer transition-all flex items-center justify-between ${rechargeMethod === "instant"
-                        ? "border-primary bg-primary/5 ring-1 ring-primary/20"
-                        : "border-gray-200 hover:border-gray-300 bg-white"
-                        }`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-                          <span className="material-symbols-outlined text-[18px]">add_card</span>
-                        </div>
-                        <div>
-                          <span className="font-bold text-gray-900 text-xs sm:text-sm block">
-                            Instant Express Top-Up
-                          </span>
-                          <span className="text-[11px] text-slate-500 block">
-                            Instant credit to wallet balance
-                          </span>
-                        </div>
-                      </div>
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${rechargeMethod === "instant" ? "border-primary" : "border-gray-300"
-                          }`}
-                      >
-                        {rechargeMethod === "instant" && (
-                          <div className="w-2 h-2 rounded-full bg-primary" />
-                        )}
-                      </div>
+                    <div className="w-5 h-5 rounded-full border-2 border-primary flex items-center justify-center shrink-0">
+                      <div className="w-2.5 h-2.5 rounded-full bg-primary" />
                     </div>
                   </div>
                 </div>
@@ -2438,23 +2401,25 @@ export default function DashboardPage() {
                   <button
                     type="button"
                     onClick={closeAddBalanceModal}
-                    className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-800 font-headline-sm font-bold text-xs sm:text-sm rounded-xl transition-colors cursor-pointer border-none"
+                    className="flex-1 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm rounded-xl transition-colors cursor-pointer border-none whitespace-nowrap"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    disabled={isRecharging}
-                    className="flex-1 py-3 bg-[#91000a] hover:bg-[#7a0008] disabled:opacity-60 text-white font-headline-sm font-bold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer border-none flex items-center justify-center gap-2"
+                    disabled={isRecharging || !balanceInput || isNaN(Number(balanceInput)) || Number(balanceInput) <= 0}
+                    className="flex-1 py-3 px-4 bg-[#91000a] hover:bg-[#7a0008] disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed disabled:shadow-none text-white font-medium text-sm rounded-xl shadow-md hover:shadow-lg transition-all cursor-pointer border-none flex items-center justify-center gap-1.5 whitespace-nowrap"
                   >
                     {isRecharging ? (
                       <>
                         <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                        <span>Processing...</span>
+                        <span>Connecting to PayU...</span>
                       </>
+                    ) : (!balanceInput || isNaN(Number(balanceInput)) || Number(balanceInput) <= 0) ? (
+                      <span>Enter Amount</span>
                     ) : (
                       <>
-                        <span>Proceed to Add ₹{balanceInput || "0"}</span>
+                        <span>Proceed to Pay</span>
                         <span className="material-symbols-outlined text-[16px]">arrow_forward</span>
                       </>
                     )}
