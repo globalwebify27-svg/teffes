@@ -4,8 +4,8 @@ module.exports = {
       name: 'teffes-backend',
       cwd: './server',
       script: 'src/index.js',
-      instances: 2,
-      exec_mode: 'cluster',
+      instances: 1,
+      exec_mode: 'fork',
       watch: false,
       max_memory_restart: '1G',
       env: {
