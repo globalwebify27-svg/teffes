@@ -70,7 +70,8 @@ export default function OTPForm({
   };
 
   /**
-   * Returns an active RecaptchaVerifier or safely initializes a fresh one.
+   * Returns an active RecaptchaVerifier or safely initializes a fresh one
+   * on a dynamically generated child node to prevent Google reCAPTCHA widget collisions.
    */
   const getOrCreateRecaptchaVerifier = (): RecaptchaVerifier => {
     if (recaptchaVerifierRef.current) {
@@ -78,12 +79,17 @@ export default function OTPForm({
     }
 
     const container = document.getElementById(containerId);
+    let targetNode: HTMLElement | string = containerId;
     if (container) {
       container.innerHTML = "";
+      const dynamicChild = document.createElement("div");
+      dynamicChild.id = `${containerId}-slot-${Date.now()}`;
+      container.appendChild(dynamicChild);
+      targetNode = dynamicChild;
     }
 
     const auth = getFirebaseAuth();
-    const verifier = new RecaptchaVerifier(auth, containerId, {
+    const verifier = new RecaptchaVerifier(auth, targetNode, {
       size: "invisible",
       callback: () => {
         // reCAPTCHA solved callback
