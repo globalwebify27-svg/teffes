@@ -4,10 +4,17 @@ let socket: Socket | null = null;
 
 export const getSocket = (): Socket => {
   if (!socket) {
-    const serverUrl =
-      process.env.NEXT_PUBLIC_SOCKET_URL ||
-      process.env.NEXT_PUBLIC_API_URL?.replace("/api", "") ||
-      "http://localhost:5000";
+    let serverUrl = "http://localhost:5000";
+    if (typeof window !== "undefined") {
+      if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+        serverUrl = window.location.origin;
+      }
+    }
+    if (process.env.NEXT_PUBLIC_SOCKET_URL && !process.env.NEXT_PUBLIC_SOCKET_URL.includes("localhost")) {
+      serverUrl = process.env.NEXT_PUBLIC_SOCKET_URL;
+    } else if (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes("localhost")) {
+      serverUrl = process.env.NEXT_PUBLIC_API_URL.replace("/api", "");
+    }
 
     socket = io(serverUrl, {
       transports: ["websocket", "polling"],

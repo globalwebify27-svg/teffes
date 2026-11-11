@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
+import api from "@/lib/api";
 import { Category, CATEGORIES } from "@/lib/products";
 
 // Real Teffes banner images — same CDN used by teffes.com
@@ -56,11 +57,10 @@ export default function HeroBanner({ selectedCategory, onSelectCategory }: HeroB
   const [activeCoupons, setActiveCoupons] = useState<any[]>([]);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || "https://teffes.onrender.com/api"}/coupons/active`)
-      .then((res) => res.json())
-      .then((data) => {
-        if (data.success && data.coupons) {
-          setActiveCoupons(data.coupons);
+    api.get<{ success: boolean; coupons: any[] }>("/coupons/active")
+      .then((res) => {
+        if (res.data?.success && res.data?.coupons) {
+          setActiveCoupons(res.data.coupons);
         }
       })
       .catch((err) => console.error("Error fetching coupons:", err));

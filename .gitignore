@@ -65,3 +65,8 @@ server/backups/
 server/uploads/
 *.backup.js
 
+# Migration Data
+*.xlsx
+server/src/scripts/legacy_orders_data.json
+server/src/scripts/migrate_legacy_data.js
+server/src/scripts/preprocess_legacy_excel.py
