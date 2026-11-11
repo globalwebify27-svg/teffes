@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faWhatsapp } from "@fortawesome/free-brands-svg-icons";
 
 export interface StoreHub {
   id?: string;
@@ -26,6 +28,20 @@ export interface StoreHub {
 // Universal dummy storefront placeholder image for shops without an uploaded photo
 const FALLBACK_STORE_IMAGE = "/store-placeholder.svg";
 
+const cleanPhone = (phone?: string) => {
+  if (!phone || phone === "—") return "919279682955";
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  return digits || "919279682955";
+};
+
+const getWhatsAppUrl = (phone?: string, storeName?: string) => {
+  const number = cleanPhone(phone);
+  const text = encodeURIComponent(
+    `Hello TeFFe's! I would like to inquire about fresh cuts and orders at ${storeName || "your store"}.`
+  );
+  return `https://wa.me/${number}?text=${text}`;
+};
 
 interface RegisteredShopsSectionProps {
   title?: string;
@@ -278,27 +294,41 @@ export default function RegisteredShopsSection({
               </div>
             </div>
 
-            {/* Hotline & Action Buttons */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
+            {/* Hotline & Action Buttons: Top = Directions, Bottom = Call + WhatsApp */}
+            <div className="flex flex-col gap-2.5 pt-2 w-full">
+              {/* Top: Directions (Google Maps) */}
               <a
                 href={getDirectionsUrl(stores[0])}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex-1 inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary-dark transition-colors shadow-sm"
+                className="w-full inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-primary text-white font-bold text-sm hover:bg-primary-dark transition-all duration-200 shadow-sm hover:shadow-md active:scale-[0.99]"
               >
-                <span className="material-symbols-outlined text-[18px]">directions</span>
+                <span className="material-symbols-outlined text-[19px]">directions</span>
                 <span>Get Directions (Google Maps)</span>
               </a>
 
-              {stores[0].phone && stores[0].phone !== "—" && (
+              {/* Bottom 2-Column Responsive Grid: Phone Call & WhatsApp */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full">
+                {/* 1. Direct Phone Call */}
                 <a
-                  href={`tel:${stores[0].phone.replace(/[^0-9+]/g, "")}`}
-                  className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 text-on-surface font-bold text-sm transition-colors border border-gray-200"
+                  href={`tel:${cleanPhone(stores[0].phone)}`}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-slate-800 font-bold text-sm transition-all border border-gray-200 shadow-2xs hover:shadow-xs active:scale-[0.99]"
                 >
                   <span className="material-symbols-outlined text-[18px] text-primary">call</span>
-                  <span>{stores[0].phone}</span>
+                  <span className="truncate">{stores[0].phone && stores[0].phone !== "—" ? stores[0].phone : "+91 9279682955"}</span>
                 </a>
-              )}
+
+                {/* 2. Chat on WhatsApp */}
+                <a
+                  href={getWhatsAppUrl(stores[0].phone, stores[0].name)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-sm transition-all shadow-sm hover:shadow-md active:scale-[0.99]"
+                >
+                  <FontAwesomeIcon icon={faWhatsapp} className="text-[18px]" />
+                  <span>Chat on WhatsApp</span>
+                </a>
+              </div>
             </div>
           </div>
         </div>
@@ -400,24 +430,41 @@ export default function RegisteredShopsSection({
                     )}
                   </div>
 
-                  {/* Actions Bar */}
-                  <div className="pt-2 border-t border-gray-100 flex items-center gap-2">
+                  {/* Actions Bar: Top = Directions, Bottom = Call & WhatsApp */}
+                  <div className="pt-2 border-t border-gray-100 flex flex-col gap-2">
+                    {/* Top: Full-Width Directions */}
                     <a
                       href={getDirectionsUrl(store)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl bg-primary text-white font-bold text-xs hover:bg-primary-dark transition-colors shadow-2xs"
+                      className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-primary text-white font-bold text-xs hover:bg-primary-dark transition-all duration-200 shadow-2xs hover:shadow-xs active:scale-[0.99]"
                     >
                       <span className="material-symbols-outlined text-[16px]">directions</span>
-                      <span>Directions</span>
+                      <span>Get Directions (Google Maps)</span>
                     </a>
-                    <Link
-                      href="/category?type=all"
-                      className="inline-flex items-center justify-center gap-1 px-3 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-on-surface font-bold text-xs transition-colors border border-gray-200"
-                    >
-                      <span>Browse Cuts</span>
-                      <span className="material-symbols-outlined text-[14px]">arrow_forward</span>
-                    </Link>
+
+                    {/* Bottom: 2-Column Responsive Grid (Call & WhatsApp) */}
+                    <div className="grid grid-cols-2 gap-2 w-full">
+                      <a
+                        href={`tel:${cleanPhone(store.phone)}`}
+                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-slate-800 font-bold text-xs transition-all border border-gray-200 shadow-2xs hover:shadow-xs active:scale-[0.99]"
+                        title={store.phone ? `Call ${store.phone}` : "Call Store"}
+                      >
+                        <span className="material-symbols-outlined text-[15px] text-primary shrink-0">call</span>
+                        <span className="truncate">{store.phone && store.phone !== "—" ? store.phone : "Call Hub"}</span>
+                      </a>
+
+                      <a
+                        href={getWhatsAppUrl(store.phone, store.name)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-1.5 px-2.5 py-2 rounded-xl bg-[#25D366] hover:bg-[#20ba59] text-white font-bold text-xs transition-all shadow-2xs hover:shadow-xs active:scale-[0.99]"
+                        title="Chat on WhatsApp"
+                      >
+                        <FontAwesomeIcon icon={faWhatsapp} className="text-[14px] shrink-0" />
+                        <span className="truncate">WhatsApp</span>
+                      </a>
+                    </div>
                   </div>
                 </div>
               </div>
