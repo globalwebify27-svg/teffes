@@ -556,6 +556,12 @@ export default function CartDrawer() {
       return;
     }
 
+    const outOfStockItem = items.find((i) => i.product.inStock === false);
+    if (outOfStockItem) {
+      toast.error(`"${outOfStockItem.product.name}" is out of stock. Please remove it from your cart before proceeding.`, "Out of Stock");
+      return;
+    }
+
     if (fulfillmentType === "delivery") {
       await fetchAddresses();
 
@@ -599,6 +605,11 @@ export default function CartDrawer() {
   // Final Order Confirmation (Cash on Delivery / Pay at Counter)
   const handleConfirmOrder = async () => {
     if (isPlacingOrder) return;
+    const outOfStockItem = items.find((i) => i.product.inStock === false);
+    if (outOfStockItem) {
+      toast.error(`"${outOfStockItem.product.name}" is out of stock. Please remove it from your cart.`, "Out of Stock");
+      return;
+    }
     if (fulfillmentType === "delivery" && !selectedAddressId && (!activeAddress || !activeAddress._id)) {
       toast.warning("Please select a delivery address to proceed.", "Address Required");
       openLocationModal();
@@ -646,6 +657,11 @@ export default function CartDrawer() {
   // Razorpay Online Payment
   const handleRazorpayPayment = async () => {
     if (isPlacingOrder) return;
+    const outOfStockItem = items.find((i) => i.product.inStock === false);
+    if (outOfStockItem) {
+      toast.error(`"${outOfStockItem.product.name}" is out of stock. Please remove it from your cart.`, "Out of Stock");
+      return;
+    }
     if (fulfillmentType === "delivery" && !selectedAddressId && (!activeAddress || !activeAddress._id)) {
       toast.warning("Please select a delivery address to proceed.", "Address Required");
       openLocationModal();
@@ -1200,8 +1216,13 @@ export default function CartDrawer() {
                           <img
                             src={item.product.image}
                             alt={item.product.name}
-                            className="w-full h-full object-cover"
+                            className={`w-full h-full object-cover ${item.product.inStock === false ? "opacity-60 grayscale-[30%]" : ""}`}
                           />
+                          {item.product.inStock === false && (
+                            <div className="absolute inset-0 bg-red-950/65 flex items-center justify-center p-0.5">
+                              <span className="text-[8.5px] font-black text-white text-center leading-tight uppercase">Out of Stock</span>
+                            </div>
+                          )}
                         </div>
 
                         <div className="flex-1 min-w-0">
@@ -1221,6 +1242,13 @@ export default function CartDrawer() {
                           <div className="font-body-sm text-slate-body text-[11.5px] mb-2 mt-0.5">
                             {item.selectedWeight} {item.product.cutType ? `• ${item.product.cutType}` : ""}
                           </div>
+
+                          {item.product.inStock === false && (
+                            <div className="mb-2 px-2 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold flex items-center gap-1.5">
+                              <span className="material-symbols-outlined text-[14px] text-red-600">block</span>
+                              <span>Out of Stock • Please remove to checkout</span>
+                            </div>
+                          )}
 
                           <div className="flex items-center justify-between">
                             <div className="flex items-baseline gap-1.5">
@@ -1840,21 +1868,32 @@ export default function CartDrawer() {
                   </div>
 
                   {/* Checkout CTA Button */}
-                  <button
-                    id="cart-checkout-btn"
-                    onClick={handleProceedToPayment}
-                    className="w-full py-3 rounded-full bg-primary hover:bg-primary-dark text-white font-label-lg font-bold shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 text-[14px]"
-                  >
-                    <span>
-                      {isLoggedIn
-                        ? fulfillmentType === "pickup"
-                          ? "Proceed to Store Pickup"
-                          : "Proceed to Checkout"
-                        : "Login to proceed"}
-                    </span>
-                    <span>•</span>
-                    <span>₹{finalPayable}</span>
-                  </button>
+                  {items.some((i) => i.product.inStock === false) ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-3 rounded-full bg-amber-50 border border-amber-300 text-amber-900 font-label-lg font-extrabold shadow-xs cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-amber-700">remove_shopping_cart</span>
+                      <span>Remove Out-of-Stock Item to Checkout</span>
+                    </button>
+                  ) : (
+                    <button
+                      id="cart-checkout-btn"
+                      onClick={handleProceedToPayment}
+                      className="w-full py-3 rounded-full bg-primary hover:bg-primary-dark text-white font-label-lg font-bold shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 text-[14px]"
+                    >
+                      <span>
+                        {isLoggedIn
+                          ? fulfillmentType === "pickup"
+                            ? "Proceed to Store Pickup"
+                            : "Proceed to Checkout"
+                          : "Login to proceed"}
+                      </span>
+                      <span>•</span>
+                      <span>₹{finalPayable}</span>
+                    </button>
+                  )}
 
                   <div className="text-center font-body-sm text-slate-subtle mt-2 text-[11.5px] flex items-center justify-center gap-1">
                     <span className="material-symbols-outlined text-[15px] text-slate-subtle">lock</span>

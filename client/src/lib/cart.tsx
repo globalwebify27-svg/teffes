@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { Product } from "./products";
 import { isAuthenticated } from "./auth";
 import { useRouter } from "next/navigation";
+import { toast } from "./toast";
 
 export interface CartItem {
   product: Product;
@@ -152,11 +153,11 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const closeCart = () => setIsOpen(false);
 
   const addToCart = (product: Product, selectedWeight?: string): boolean => {
-    // Auth check commented for UI demo preview
-    // if (!isAuthenticated()) {
-    //   router.push("/login");
-    //   return false;
-    // }
+    // Stock availability guard
+    if (product.inStock === false) {
+      toast.warning(`"${product.name}" is currently out of stock and cannot be added.`, "Out of Stock");
+      return false;
+    }
 
     setItems((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
@@ -185,16 +186,17 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateQuantity = (productId: string, quantity: number) => {
-    // Auth check commented for UI demo preview
-    // if (!isAuthenticated()) {
-    //   router.push("/login");
-    //   return;
-    // }
-
     if (quantity <= 0) {
       removeFromCart(productId);
       return;
     }
+
+    const currentItem = items.find((i) => i.product.id === productId);
+    if (currentItem && currentItem.product.inStock === false && quantity > currentItem.quantity) {
+      toast.warning(`"${currentItem.product.name}" is out of stock. Quantity cannot be increased.`, "Out of Stock");
+      return;
+    }
+
     setItems((prev) =>
       prev.map((item) =>
         item.product.id === productId ? { ...item, quantity } : item

@@ -267,6 +267,7 @@ function CategoryContent() {
             {sortedProducts.map((item: Product) => {
               const qty = getItemQuantity(item.id);
               const isLiked = isInWishlist(item.id);
+              const isOutOfStock = item.inStock === false;
               const discount = (item.originalPrice && item.originalPrice > item.price)
                 ? Math.round(((item.originalPrice - item.price) / item.originalPrice) * 100)
                 : 0;
@@ -283,11 +284,19 @@ function CategoryContent() {
                       <img
                         src={item.image || (item.images && item.images[0]) || "/images/chicken.png"}
                         alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isOutOfStock ? "opacity-75 grayscale-[25%]" : ""}`}
                         onError={(e) => {
                           e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/LtbiqVBO.jpeg";
                         }}
                       />
+
+                      {/* Out of Stock Badge */}
+                      {isOutOfStock && (
+                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">block</span>
+                          Out of Stock
+                        </span>
+                      )}
 
                       {/* Wishlist Heart */}
                       <button
@@ -339,16 +348,28 @@ function CategoryContent() {
                       )}
                     </div>
 
-                    {/* Quantity Stepper or + ADD Button */}
+                    {/* Quantity Stepper or Out of Stock Button */}
                     <div>
-                      <ProductQuantityStepper
-                        quantity={qty}
-                        addLabel="+ ADD"
-                        compact
-                        onAdd={() => addToCart(item)}
-                        onIncrease={() => updateQuantity(item.id, qty + 1)}
-                        onDecrease={() => updateQuantity(item.id, qty - 1)}
-                      />
+                      {isOutOfStock ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
+                          title="This cut is currently out of stock"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
+                          <span>Out of Stock</span>
+                        </button>
+                      ) : (
+                        <ProductQuantityStepper
+                          quantity={qty}
+                          addLabel="+ ADD"
+                          compact
+                          onAdd={() => addToCart(item)}
+                          onIncrease={() => updateQuantity(item.id, qty + 1)}
+                          onDecrease={() => updateQuantity(item.id, qty - 1)}
+                        />
+                      )}
                     </div>
                   </div>
                 </div>

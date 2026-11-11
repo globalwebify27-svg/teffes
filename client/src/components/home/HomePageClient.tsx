@@ -100,6 +100,7 @@ export default function HomePageClient() {
   }, [heroBanners.length, isBannerHovered]);
 
   const handleAdd = (product: Product, weight?: string) => {
+    if (product.inStock === false) return;
     addToCart(product, weight || product.netWeight);
     setAddedItem(product.id);
     setTimeout(() => setAddedItem(null), 1800);
@@ -454,6 +455,7 @@ export default function HomePageClient() {
               const wishlisted = isInWishlist(item.id);
               const origPrice = item.originalPrice || item.price || 0;
               const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
+              const isOutOfStock = item.inStock === false;
 
               return (
                 <article
@@ -465,12 +467,20 @@ export default function HomePageClient() {
                     <div className="relative w-full aspect-square overflow-hidden bg-surface-container">
                       <img
                         alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isOutOfStock ? "opacity-75 grayscale-[25%]" : ""}`}
                         src={item.image}
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
                         }}
                       />
+
+                      {/* Top Left: Out of Stock Badge */}
+                      {isOutOfStock && (
+                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">block</span>
+                          Out of Stock
+                        </span>
+                      )}
 
                       {/* Top Right: Wishlist Heart Icon Button */}
                       <button
@@ -517,15 +527,27 @@ export default function HomePageClient() {
                       )}
                     </div>
 
-                    <ProductQuantityStepper
-                      quantity={qty}
-                      isJustAdded={isJustAdded}
-                      addLabel="+ ADD"
-                      compact
-                      onAdd={() => handleAdd(item)}
-                      onIncrease={() => updateQuantity(item.id, qty + 1)}
-                      onDecrease={() => updateQuantity(item.id, qty - 1)}
-                    />
+                    {isOutOfStock ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
+                        title="This item is currently out of stock"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
+                        <span>Out of Stock</span>
+                      </button>
+                    ) : (
+                      <ProductQuantityStepper
+                        quantity={qty}
+                        isJustAdded={isJustAdded}
+                        addLabel="+ ADD"
+                        compact
+                        onAdd={() => handleAdd(item)}
+                        onIncrease={() => updateQuantity(item.id, qty + 1)}
+                        onDecrease={() => updateQuantity(item.id, qty - 1)}
+                      />
+                    )}
                   </div>
                 </article>
               );
@@ -589,6 +611,7 @@ export default function HomePageClient() {
               const wishlisted = isInWishlist(item.id);
               const origPrice = item.originalPrice || item.price || 0;
               const discount = origPrice > item.price ? `${Math.round(((origPrice - item.price) / origPrice) * 100)}% OFF` : null;
+              const isOutOfStock = item.inStock === false;
 
               return (
                 <article
@@ -600,12 +623,20 @@ export default function HomePageClient() {
                     <div className="relative w-full aspect-square overflow-hidden bg-surface-container">
                       <img
                         alt={item.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isOutOfStock ? "opacity-75 grayscale-[25%]" : ""}`}
                         src={item.image}
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
                         }}
                       />
+
+                      {/* Top Left: Out of Stock Badge */}
+                      {isOutOfStock && (
+                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">block</span>
+                          Out of Stock
+                        </span>
+                      )}
 
                       {/* Top Right: Wishlist Heart */}
                       <button
@@ -652,15 +683,27 @@ export default function HomePageClient() {
                       )}
                     </div>
 
-                    <ProductQuantityStepper
-                      quantity={qty}
-                      isJustAdded={isJustAdded}
-                      addLabel="+ ADD"
-                      compact
-                      onAdd={() => handleAdd(item)}
-                      onIncrease={() => updateQuantity(item.id, qty + 1)}
-                      onDecrease={() => updateQuantity(item.id, qty - 1)}
-                    />
+                    {isOutOfStock ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
+                        title="This cut is currently out of stock"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
+                        <span>Out of Stock</span>
+                      </button>
+                    ) : (
+                      <ProductQuantityStepper
+                        quantity={qty}
+                        isJustAdded={isJustAdded}
+                        addLabel="+ ADD"
+                        compact
+                        onAdd={() => handleAdd(item)}
+                        onIncrease={() => updateQuantity(item.id, qty + 1)}
+                        onDecrease={() => updateQuantity(item.id, qty - 1)}
+                      />
+                    )}
                   </div>
                 </article>
               );
@@ -726,6 +769,7 @@ export default function HomePageClient() {
                 const discountText = product.originalPrice && product.originalPrice > product.price
                   ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
                   : ((product as any).discount || "");
+                const isOutOfStock = product.inStock === false;
 
                 return (
                   <article
@@ -737,14 +781,21 @@ export default function HomePageClient() {
                       <div className="relative w-full aspect-[16/10] overflow-hidden bg-surface-container">
                         <img
                           alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isOutOfStock ? "opacity-75 grayscale-[25%]" : ""}`}
                           src={product.image || (product.images && product.images[0]) || "/images/mutton.png"}
                           onError={(e) => {
                             e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/p3pU05nL.webp";
                           }}
                         />
 
-                        {/* Top Left: Tag */}
+                        {/* Top Left: Out of Stock Badge */}
+                        {isOutOfStock && (
+                          <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[13px]">block</span>
+                            Out of Stock
+                          </span>
+                        )}
+
                         {/* Top Right: Wishlist Heart */}
                         <button
                           type="button"
@@ -792,15 +843,27 @@ export default function HomePageClient() {
                         )}
                       </div>
 
-                      <ProductQuantityStepper
-                        quantity={qty}
-                        isJustAdded={isJustAdded}
-                        addLabel="+ ADD"
-                        compact
-                        onAdd={() => handleAdd(product)}
-                        onIncrease={() => updateQuantity(product.id, qty + 1)}
-                        onDecrease={() => updateQuantity(product.id, qty - 1)}
-                      />
+                      {isOutOfStock ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
+                          title="This cut is currently out of stock"
+                        >
+                          <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
+                          <span>Out of Stock</span>
+                        </button>
+                      ) : (
+                        <ProductQuantityStepper
+                          quantity={qty}
+                          isJustAdded={isJustAdded}
+                          addLabel="+ ADD"
+                          compact
+                          onAdd={() => handleAdd(product)}
+                          onIncrease={() => updateQuantity(product.id, qty + 1)}
+                          onDecrease={() => updateQuantity(product.id, qty - 1)}
+                        />
+                      )}
                     </div>
                   </article>
                 );
@@ -841,6 +904,7 @@ export default function HomePageClient() {
               const discountText = product.originalPrice && product.originalPrice > product.price
                 ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
                 : ((product as any).discount || "");
+              const isOutOfStock = product.inStock === false;
 
               return (
                 <article
@@ -852,12 +916,20 @@ export default function HomePageClient() {
                     <div className="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
                       <img
                         alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isOutOfStock ? "opacity-75 grayscale-[25%]" : ""}`}
                         src={product.image || (product.images && product.images[0]) || "/images/fish.png"}
                         onError={(e) => {
                           e.currentTarget.src = "https://cdn.dotpe.in/longtail/store-items/7524323/4e3AEjkv.webp";
                         }}
                       />
+
+                      {/* Top Left: Out of Stock Badge */}
+                      {isOutOfStock && (
+                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">block</span>
+                          Out of Stock
+                        </span>
+                      )}
 
                       {/* Top Right: Wishlist Heart */}
                       <button
@@ -906,15 +978,27 @@ export default function HomePageClient() {
                       )}
                     </div>
 
-                    <ProductQuantityStepper
-                      quantity={qty}
-                      isJustAdded={isJustAdded}
-                      addLabel="+ ADD"
-                      compact
-                      onAdd={() => handleAdd(product)}
-                      onIncrease={() => updateQuantity(product.id, qty + 1)}
-                      onDecrease={() => updateQuantity(product.id, qty - 1)}
-                    />
+                    {isOutOfStock ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
+                        title="This fish cut is currently out of stock"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
+                        <span>Out of Stock</span>
+                      </button>
+                    ) : (
+                      <ProductQuantityStepper
+                        quantity={qty}
+                        isJustAdded={isJustAdded}
+                        addLabel="+ ADD"
+                        compact
+                        onAdd={() => handleAdd(product)}
+                        onIncrease={() => updateQuantity(product.id, qty + 1)}
+                        onDecrease={() => updateQuantity(product.id, qty - 1)}
+                      />
+                    )}
                   </div>
                 </article>
               );
@@ -988,6 +1072,7 @@ export default function HomePageClient() {
               const discountText = product.originalPrice && product.originalPrice > product.price
                 ? `${Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)}% OFF`
                 : ((product as any).discount || "");
+              const isOutOfStock = product.inStock === false;
 
               return (
                 <article
@@ -999,12 +1084,20 @@ export default function HomePageClient() {
                     <div className="relative w-full aspect-[4/3] overflow-hidden bg-surface-container">
                       <img
                         alt={product.name}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        className={`w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 ${isOutOfStock ? "opacity-75 grayscale-[25%]" : ""}`}
                         src={product.image || (product.images && product.images[0]) || "/images/eggs.png"}
                         onError={(e) => {
                           e.currentTarget.src = "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=800&q=80";
                         }}
                       />
+
+                      {/* Top Left: Out of Stock Badge */}
+                      {isOutOfStock && (
+                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[13px]">block</span>
+                          Out of Stock
+                        </span>
+                      )}
 
                       {/* Top Right: Wishlist Heart */}
                       <button
@@ -1053,15 +1146,27 @@ export default function HomePageClient() {
                       )}
                     </div>
 
-                    <ProductQuantityStepper
-                      quantity={qty}
-                      isJustAdded={isJustAdded}
-                      addLabel="+ ADD"
-                      compact
-                      onAdd={() => handleAdd(product)}
-                      onIncrease={() => updateQuantity(product.id, qty + 1)}
-                      onDecrease={() => updateQuantity(product.id, qty - 1)}
-                    />
+                    {isOutOfStock ? (
+                      <button
+                        type="button"
+                        disabled
+                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
+                        title="This item is currently out of stock"
+                      >
+                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
+                        <span>Out of Stock</span>
+                      </button>
+                    ) : (
+                      <ProductQuantityStepper
+                        quantity={qty}
+                        isJustAdded={isJustAdded}
+                        addLabel="+ ADD"
+                        compact
+                        onAdd={() => handleAdd(product)}
+                        onIncrease={() => updateQuantity(product.id, qty + 1)}
+                        onDecrease={() => updateQuantity(product.id, qty - 1)}
+                      />
+                    )}
                   </div>
                 </article>
               );

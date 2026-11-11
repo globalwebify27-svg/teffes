@@ -232,6 +232,10 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
     : 0;
 
   const handleAddToCart = () => {
+    if (isOutOfStock) {
+      toast.warning(`"${product.name}" is currently out of stock.`, "Out of Stock");
+      return;
+    }
     addToCart(product);
     setAddedAnimation(true);
     setTimeout(() => setAddedAnimation(false), 1500);
@@ -550,11 +554,16 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
                 )}
 
                 {/* Top Left Badge */}
-                {product.badge && (
+                {isOutOfStock ? (
+                  <span className="absolute top-3.5 left-3.5 bg-[#dc2626] text-white font-label-badge text-label-badge px-3 py-1 rounded-full font-bold shadow-md text-[12px] whitespace-nowrap z-20 flex items-center gap-1.5 uppercase tracking-wide">
+                    <span className="material-symbols-outlined text-[15px]">block</span>
+                    Out of Stock
+                  </span>
+                ) : product.badge ? (
                   <span className="absolute top-3.5 left-3.5 bg-white/95 backdrop-blur-xs text-tertiary font-label-badge text-label-badge px-3 py-1 rounded-full font-bold shadow-xs text-[11px] whitespace-nowrap pointer-events-none">
                     {product.badge}
                   </span>
-                )}
+                ) : null}
 
                 {/* Top Right Floating Action Icons (Wishlist & Share as shown in Image) */}
                 <div className="absolute top-3.5 right-3.5 flex flex-col gap-2 z-10">

@@ -124,6 +124,7 @@ export default function ProductCard({ product }: { product: Product }) {
             width: "100%",
             height: "100%",
             objectFit: "cover",
+            filter: isOutOfStock ? "grayscale(30%) opacity(0.8)" : "none",
             transition: "transform 400ms ease",
           }}
           onMouseEnter={(e) => (e.currentTarget.style.transform = "scale(1.05)")}
@@ -142,6 +143,27 @@ export default function ProductCard({ product }: { product: Product }) {
             zIndex: 2,
           }}
         >
+          {isOutOfStock && (
+            <span
+              style={{
+                background: "#dc2626",
+                color: "#ffffff",
+                fontWeight: 800,
+                fontSize: "0.72rem",
+                padding: "3px 8px",
+                borderRadius: "6px",
+                textTransform: "uppercase",
+                letterSpacing: "0.04em",
+                boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+              }}
+            >
+              <span className="material-symbols-outlined text-[13px]">block</span>
+              Out of Stock
+            </span>
+          )}
         </div>
 
         {/* Top Right Like / Heart Icon */}

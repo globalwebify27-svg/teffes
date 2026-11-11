@@ -69,10 +69,16 @@ const getProducts = async (options = {}) => {
     );
   }
 
-  // 1. Stock availability filter
-  if (!all) {
+  // 1. Stock availability filter (omit only if explicitly requested)
+  if (options.inStockOnly === true || options.inStockOnly === 'true') {
     products = products.filter((p) => p.inStock === true);
   }
+
+  // Normalize inStock property so it is strictly boolean across all catalog items
+  products = products.map((p) => ({
+    ...p,
+    inStock: p.inStock !== false,
+  }));
 
   // 2. Category filter
   if (category && category !== 'all') {

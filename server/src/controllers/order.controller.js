@@ -66,6 +66,21 @@ const createOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Order items cannot be empty' });
     }
 
+    // Re-verify that none of the items in the cart are marked Out of Stock in Firestore
+    for (const item of items) {
+      const pId = String(item.productId || item.id || '').trim();
+      if (pId) {
+        const prodDoc = await getDoc('products', pId);
+        if (prodDoc && prodDoc.inStock === false) {
+          return res.status(400).json({
+            success: false,
+            message: `"${prodDoc.name || item.name || 'This item'}" is currently out of stock. Please remove it from your cart before placing the order.`,
+            outOfStockProductId: pId,
+          });
+        }
+      }
+    }
+
     const userId = req.user?.id || req.user?._id;
     if (!userId) {
       return res.status(401).json({ success: false, message: 'Authentication required' });
