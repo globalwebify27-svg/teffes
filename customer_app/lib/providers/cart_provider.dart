@@ -124,6 +124,7 @@ class CartProvider with ChangeNotifier {
   }
 
   void addToCart(ProductModel product, {String? weight}) {
+    if (!product.inStock) return;
     if (_items.containsKey(product.id)) {
       _items[product.id]!.quantity += 1;
     } else {
@@ -143,6 +144,9 @@ class CartProvider with ChangeNotifier {
     if (quantity <= 0) {
       _items.remove(productId);
     } else {
+      if (!_items[productId]!.product.inStock && quantity > _items[productId]!.quantity) {
+        return;
+      }
       _items[productId]!.quantity = quantity;
     }
     _revalidateCoupon();
@@ -153,6 +157,7 @@ class CartProvider with ChangeNotifier {
 
   void increment(String productId) {
     if (_items.containsKey(productId)) {
+      if (!_items[productId]!.product.inStock) return;
       _items[productId]!.quantity += 1;
       _revalidateCoupon();
       _saveCartToStorage();
