@@ -3569,6 +3569,7 @@ function CategoriesTab() {
 
 function OrdersTab() {
   const [orders, setOrders] = useState<any[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
@@ -3577,59 +3578,47 @@ function OrdersTab() {
   const pageSize = 50;
 
   useEffect(() => {
-    api.get<{ success: boolean; orders: any[] }>("/super-admin/orders")
+    setLoading(true);
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    params.set("limit", String(pageSize));
+    if (statusFilter !== "All") params.set("status", statusFilter);
+    if (areaFilter !== "All") params.set("area", areaFilter);
+    if (dateFilter) params.set("date", dateFilter);
+
+    api.get<{ success: boolean; orders: any[]; totalCount?: number; count?: number }>(`/super-admin/orders?${params.toString()}`)
       .then(res => {
         if (res.data.success) {
           setOrders(res.data.orders || []);
+          setTotalCount(res.data.totalCount ?? res.data.count ?? (res.data.orders || []).length);
         }
       })
-      .catch(err => console.warn("Failed to fetch all orders:", err))
+      .catch(err => console.warn("Failed to fetch paginated orders:", err))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page, statusFilter, areaFilter, dateFilter]);
 
   // Reset pagination to page 1 whenever filters change
-  useEffect(() => {
+  const handleStatusFilterChange = (st: string) => {
+    setStatusFilter(st);
     setPage(1);
-  }, [statusFilter, areaFilter, dateFilter]);
+  };
+
+  const handleAreaFilterChange = (ar: string) => {
+    setAreaFilter(ar);
+    setPage(1);
+  };
+
+  const handleDateFilterChange = (dt: string) => {
+    setDateFilter(dt);
+    setPage(1);
+  };
 
   const availableAreas = useMemo(() => {
-    const set = new Set<string>();
-    orders.forEach(o => {
-      const addr = o.shippingAddress?.address || o.customer?.address || "";
-      const pincode = o.shippingAddress?.pincode || o.customer?.pincode;
-      if (pincode) set.add(String(pincode));
-      const knownLocalities = ["Kishore Ganj", "Doranda", "Harmu", "Lalpur", "Argora", "Booty More", "Kantatoli", "Ratu Road", "Bariatu", "Morabadi", "Hinoo"];
-      knownLocalities.forEach(loc => {
-        if (addr.toLowerCase().includes(loc.toLowerCase())) {
-          set.add(loc);
-        }
-      });
-    });
-    return Array.from(set).sort();
-  }, [orders]);
+    return ["Kishore Ganj", "Doranda", "Harmu", "Lalpur", "Argora", "Booty More", "Kantatoli", "Ratu Road", "Bariatu", "Morabadi", "Hinoo"];
+  }, []);
 
-  const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
-      if (statusFilter !== "All" && o.status !== statusFilter) return false;
-      if (areaFilter !== "All") {
-        const addr = (o.shippingAddress?.address || o.customer?.address || "").toLowerCase();
-        const pin = String(o.shippingAddress?.pincode || o.customer?.pincode || "");
-        const target = areaFilter.toLowerCase();
-        const matchesArea = addr.includes(target) || pin.includes(target);
-        if (!matchesArea) return false;
-      }
-      if (dateFilter) {
-        const orderDate = (o.createdAt || "").substring(0, 10);
-        if (orderDate !== dateFilter) return false;
-      }
-      return true;
-    });
-  }, [orders, statusFilter, areaFilter, dateFilter]);
+  const paginatedOrders = orders;
 
-  const paginatedOrders = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredOrders.slice(start, start + pageSize);
-  }, [filteredOrders, page, pageSize]);
 
   return (
     <div>
@@ -3651,7 +3640,7 @@ function OrdersTab() {
           {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"].map(s => (
             <button
               key={s}
-              onClick={() => setStatusFilter(s)}
+              onClick={() => handleStatusFilterChange(s)}
               style={{
                 padding: "6px 12px",
                 borderRadius: "99px",
@@ -3677,7 +3666,7 @@ function OrdersTab() {
               type="text"
               placeholder="Search area or pincode..."
               value={areaFilter === "All" ? "" : areaFilter}
-              onChange={(e) => setAreaFilter(e.target.value)}
+              onChange={(e) => handleAreaFilterChange(e.target.value)}
               style={{
                 padding: "6px 10px",
                 borderRadius: "8px",
@@ -3696,7 +3685,7 @@ function OrdersTab() {
             </datalist>
             {areaFilter && areaFilter !== "All" && (
               <button
-                onClick={() => setAreaFilter("All")}
+                onClick={() => handleAreaFilterChange("All")}
                 title="Clear area filter"
                 style={{
                   background: "none",
@@ -3717,7 +3706,7 @@ function OrdersTab() {
             <input
               type="date"
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              onChange={(e) => handleDateFilterChange(e.target.value)}
               style={{
                 padding: "5px 10px",
                 borderRadius: "8px",
@@ -3751,7 +3740,7 @@ function OrdersTab() {
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflowX: "auto" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading platform orders…</div>
-        ) : filteredOrders.length === 0 ? (
+        ) : paginatedOrders.length === 0 ? (
           <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>
             No orders match the selected filters.
           </div>
@@ -3811,7 +3800,7 @@ function OrdersTab() {
 
       <Pagination
         currentPage={page}
-        totalItems={filteredOrders.length}
+        totalItems={totalCount}
         pageSize={pageSize}
         onPageChange={setPage}
         itemLabel="orders"

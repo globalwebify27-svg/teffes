@@ -14,6 +14,7 @@ const {
 
 const {
   getStoreOrders,
+  getPaginatedOrders: getPaginatedOrdersFS,
   getOrderById: getOrderByIdFS,
   updateOrderStatus: updateOrderStatusFS,
 } = require('../services/firestore/order.firestore.service');
@@ -158,14 +159,38 @@ const getDashboardOverview = async (req, res, next) => {
 
 /**
  * GET /api/store-admin/orders
- * Retrieve orders for store admin
+ * Retrieve orders for store admin (with server-side pagination & live queue protection)
  */
 const getOrders = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
-    const { status } = req.query;
+    const { status, page, limit } = req.query;
 
-    const orders = await getStoreOrders(storeId, status);
+    if (page !== undefined || limit !== undefined) {
+      const result = await getPaginatedOrdersFS({
+        storeId,
+        status,
+        page: parseInt(page, 10) || 1,
+        limit: parseInt(limit, 10) || 50,
+      });
+
+      return res.status(200).json({
+        success: true,
+        count: result.orders.length,
+        totalCount: result.totalCount,
+        page: result.page,
+        pageSize: result.pageSize,
+        totalPages: result.totalPages,
+        orders: result.orders,
+      });
+    }
+
+    let orders = await getStoreOrders(storeId, status);
+    // For live store operations queue without pagination, protect from loading 11,000 legacy records
+    if (!status || status === 'all') {
+      orders = orders.filter((o) => !o.isMigrated);
+    }
+
     res.status(200).json({
       success: true,
       count: orders.length,

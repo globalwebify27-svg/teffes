@@ -25,6 +25,7 @@ const {
 
 const {
   getAllOrders: getAllOrdersFS,
+  getPaginatedOrders: getPaginatedOrdersFS,
   getOrderById,
 } = require('../services/firestore/order.firestore.service');
 
@@ -52,18 +53,20 @@ const {
 const getPlatformDashboard = async (req, res, next) => {
   try {
     const [
-      orders,
+      ordersResult,
       activeStores,
       allRiders,
       allCustomers,
       productsResult,
     ] = await Promise.all([
-      getAllOrdersFS(),
+      getPaginatedOrdersFS({ page: 1, limit: 150 }),
       getActiveStores(),
       queryDocs('users', (ref) => ref.where('role', '==', 'rider')),
       queryDocs('users', (ref) => ref.where('role', '==', 'customer')),
       getProducts({ all: true, limit: 1000 }),
     ]);
+
+    const orders = ordersResult?.orders || [];
 
     // Safe helper to convert any Firestore timestamp or ISO string into milliseconds
     const toEpoch = (val) => {
@@ -455,8 +458,7 @@ const deleteStoreAdmin = async (req, res, next) => {
 const getRiders = async (req, res, next) => {
   try {
     const riders = await queryDocs('users', (ref) => ref.where('role', '==', 'rider'));
-    const orders = await getAllOrdersFS();
-    const activeOrders = orders.filter((o) => o.status === 'Out for Delivery');
+    const activeOrders = await queryDocs('orders', (ref) => ref.where('status', '==', 'Out for Delivery'));
 
     const activeRiderIdentifiers = new Set();
     activeOrders.forEach((o) => {
@@ -977,12 +979,41 @@ const setSuperOffer = async (req, res, next) => {
 
 /**
  * GET /api/super-admin/orders
- * List all orders platform-wide
+ * List all orders platform-wide (with True Server-Side Pagination support)
  */
 const getAllOrders = async (req, res, next) => {
   try {
+    const { page, limit, status, area, date, storeId } = req.query;
+
+    if (page !== undefined || limit !== undefined) {
+      const result = await getPaginatedOrdersFS({
+        page: parseInt(page, 10) || 1,
+        limit: parseInt(limit, 10) || 50,
+        status,
+        area,
+        date,
+        storeId,
+      });
+
+      return res.status(200).json({
+        success: true,
+        count: result.orders.length,
+        totalCount: result.totalCount,
+        page: result.page,
+        pageSize: result.pageSize,
+        totalPages: result.totalPages,
+        orders: result.orders,
+      });
+    }
+
+    // Fallback if page not provided
     const orders = await getAllOrdersFS();
-    res.status(200).json({ success: true, count: orders.length, orders });
+    res.status(200).json({
+      success: true,
+      count: orders.length,
+      totalCount: orders.length,
+      orders,
+    });
   } catch (error) {
     next(error);
   }

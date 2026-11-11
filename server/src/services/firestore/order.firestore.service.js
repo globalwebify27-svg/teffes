@@ -5,6 +5,7 @@ const {
   updateDoc,
   deleteDoc,
   queryDocs,
+  formatQuerySnapshot,
   runTransaction,
   parseDateMillis,
 } = require('../../lib/firestore');
@@ -827,6 +828,81 @@ const getAllOrders = async (options = {}) => {
 };
 
 /**
+ * Retrieve paginated orders with server-side pagination & filtering.
+ * Native Firestore .count() + safe .offset() and .limit() for sub-second, quota-safe queries.
+ */
+const getPaginatedOrders = async (options = {}) => {
+  const page = Math.max(1, parseInt(options.page, 10) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(options.limit, 10) || 50));
+  const offset = (page - 1) * limit;
+  const status = options.status && options.status !== 'All' && options.status !== 'all' ? options.status.trim() : null;
+  const storeId = options.storeId && options.storeId !== 'all' ? options.storeId.trim() : null;
+  const area = options.area && options.area !== 'All' ? options.area.trim().toLowerCase() : null;
+  const date = options.date ? options.date.trim() : null;
+  const includeTest = Boolean(options.includeTest);
+
+  const db = getDb();
+  let baseQuery = db.collection(ORDERS_COLLECTION);
+
+  if (status) {
+    baseQuery = baseQuery.where('status', '==', status);
+  }
+  if (storeId) {
+    baseQuery = baseQuery.where('storeId', '==', storeId);
+  }
+
+  // Count total matching documents using native aggregate count (fast & cheap)
+  let totalCount = 0;
+  try {
+    const countSnap = await baseQuery.count().get();
+    totalCount = countSnap.data().count;
+  } catch (err) {
+    console.warn('[getPaginatedOrders] Aggregate count failed:', err.message);
+  }
+
+  // Try ordering by createdAt descending; if compound index is missing, fallback without orderBy
+  let snap;
+  try {
+    const orderedQuery = baseQuery.orderBy('createdAt', 'desc').offset(offset).limit(limit);
+    snap = await orderedQuery.get();
+  } catch (err) {
+    const fallbackQuery = baseQuery.offset(offset).limit(limit);
+    snap = await fallbackQuery.get();
+  }
+
+  let orders = formatQuerySnapshot(snap);
+
+  if (!includeTest) {
+    orders = orders.filter((o) => !isTestOrderRecord(o));
+  }
+
+  // In-memory filters for area or date if requested
+  if (area) {
+    orders = orders.filter((o) => {
+      const addr = (o.shippingAddress?.address || o.customer?.address || '').toLowerCase();
+      const pin = String(o.shippingAddress?.pincode || o.customer?.pincode || '');
+      return addr.includes(area) || pin.includes(area);
+    });
+  }
+  if (date) {
+    orders = orders.filter((o) => (o.createdAt || '').substring(0, 10) === date);
+  }
+
+  // Ensure latest sorted if fallback had to be used
+  orders.sort((a, b) => parseDateMillis(b.createdAt) - parseDateMillis(a.createdAt));
+
+  const totalPages = Math.ceil(totalCount / limit) || 1;
+
+  return {
+    orders,
+    totalCount,
+    page,
+    pageSize: limit,
+    totalPages,
+  };
+};
+
+/**
  * Safely delete an order (strictly for test cleanup).
  */
 const deleteOrder = async (orderId) => {
@@ -841,6 +917,7 @@ module.exports = {
   generateOrderId,
   getOrderById,
   getAllOrders,
+  getPaginatedOrders,
   getUserOrders,
   getStoreOrders,
   createOrderTransactional,
@@ -848,3 +925,4 @@ module.exports = {
   cancelOrderTransactional,
   deleteOrder,
 };
+
