@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import api from "@/lib/api";
+import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
+import { faFacebookF, faInstagram, faWhatsapp } from "@fortawesome/free-brands-svg-icons";
 
 export default function Footer() {
   const [stores, setStores] = useState<any[]>([]);
@@ -77,10 +79,47 @@ export default function Footer() {
             pasture-raised mutton, and pristine fresh catches with precision portioning right to your doorstep.
           </p>
 
-          <div className="flex items-center gap-space-xs mt-4 pt-1">
-            <span className="inline-flex items-center font-label-badge text-label-badge uppercase text-tertiary bg-tertiary-fixed-dim/20 px-3 py-1 rounded-full font-bold border border-tertiary/20 whitespace-nowrap text-[11px]">
-              FSSAI Central Reg: 21123004000192
-            </span>
+          {/* Social Media Channels */}
+          <div className="flex items-center gap-3.5 mt-5 pt-1">
+            {/* Facebook */}
+            <a
+              href="https://www.facebook.com/share/1CiB6pjwvK/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="TeFFe's on Facebook"
+              title="Follow TeFFe's on Facebook"
+              className="w-10 h-10 rounded-full bg-[#1877F2] text-white flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 shadow-md hover:shadow-lg shadow-[#1877F2]/25"
+            >
+              <FontAwesomeIcon icon={faFacebookF} className="text-[18px]" />
+            </a>
+
+            {/* Instagram */}
+            <a
+              href="https://www.instagram.com/teffes2?igsh=MTA5eXB0cmhyb29kYQ%3D%3D"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="TeFFe's on Instagram"
+              title="Follow TeFFe's on Instagram"
+              className="w-10 h-10 rounded-full text-white flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 shadow-md hover:shadow-lg shadow-[#d6249f]/25"
+              style={{
+                background:
+                  "radial-gradient(circle at 30% 107%, #fdf497 0%, #fdf497 5%, #fd5949 45%, #d6249f 60%, #285AEB 90%)",
+              }}
+            >
+              <FontAwesomeIcon icon={faInstagram} className="text-[20px]" />
+            </a>
+
+            {/* WhatsApp */}
+            <a
+              href="https://wa.me/919279682955"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Chat with TeFFe's on WhatsApp"
+              title="Chat with TeFFe's on WhatsApp (9279682955)"
+              className="w-10 h-10 rounded-full bg-[#25D366] text-white flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 shadow-md hover:shadow-lg shadow-[#25D366]/30"
+            >
+              <FontAwesomeIcon icon={faWhatsapp} className="text-[22px]" />
+            </a>
           </div>
         </div>
 
