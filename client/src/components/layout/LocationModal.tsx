@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { useLocation, UserAddress } from "@/context/LocationContext";
-import { isAuthenticated } from "@/lib/auth";
+import { isAuthenticated, updateUserInStorage } from "@/lib/auth";
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
 
@@ -67,6 +67,7 @@ export default function LocationModal() {
     try {
       const res = await api.post<{ success: boolean; addresses: UserAddress[] }>("/user/addresses", newAddr);
       if (res.data.success && res.data.addresses) {
+        updateUserInStorage({ addresses: res.data.addresses });
         await refreshSavedAddresses();
         const newest = res.data.addresses[res.data.addresses.length - 1];
         if (newest) selectSavedAddress(newest);

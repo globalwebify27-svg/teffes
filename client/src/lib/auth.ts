@@ -10,17 +10,35 @@ export interface User {
   storeId?: string;
   storeName?: string;
   tier?: string;
+  addresses?: any[];
+  address?: string;
 }
 
 // ─── Storage Helpers ──────────────────────────────────────────────────────────
 export const saveAuth = (accessToken: string, user: User) => {
   localStorage.setItem("accessToken", accessToken);
   localStorage.setItem("user", JSON.stringify(user));
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("teffes:user_updated", { detail: user }));
+  }
+};
+
+export const updateUserInStorage = (updatedFields: Partial<User>): User | null => {
+  if (typeof window === "undefined") return null;
+  const current = getStoredUser();
+  if (!current) return null;
+  const updated: User = { ...current, ...updatedFields };
+  localStorage.setItem("user", JSON.stringify(updated));
+  window.dispatchEvent(new CustomEvent("teffes:user_updated", { detail: updated }));
+  return updated;
 };
 
 export const clearAuth = () => {
   localStorage.removeItem("accessToken");
   localStorage.removeItem("user");
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("teffes:user_updated", { detail: null }));
+  }
 };
 
 export const getStoredUser = (): User | null => {

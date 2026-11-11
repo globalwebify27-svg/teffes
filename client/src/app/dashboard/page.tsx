@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { getStoredUser, clearAuth, User } from "@/lib/auth";
+import { getStoredUser, clearAuth, User, updateUserInStorage } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { getProductById } from "@/lib/products";
 import api from "@/lib/api";
@@ -127,6 +127,7 @@ export default function DashboardPage() {
     try {
       const res = await api.get<{ success: boolean; addresses: any[] }>("/user/addresses");
       if (res.data.success && Array.isArray(res.data.addresses)) {
+        updateUserInStorage({ addresses: res.data.addresses });
         setAddresses(
           res.data.addresses.map((a: any) => ({
             id: a._id || a.id,
@@ -528,12 +529,8 @@ export default function DashboardPage() {
         if (res.data.user.email) setEmail(res.data.user.email);
         if (res.data.user.phone) setPhone(res.data.user.phone);
 
-        // Update stored user in localStorage so refresh preserves updated name!
-        const stored = getStoredUser();
-        if (stored) {
-          const updated = { ...stored, ...res.data.user };
-          localStorage.setItem("user", JSON.stringify(updated));
-        }
+        // Update stored user in localStorage & notify Header in real-time
+        updateUserInStorage(res.data.user);
 
         setSavedSuccess(true);
         setTimeout(() => setSavedSuccess(false), 3000);
@@ -559,6 +556,7 @@ export default function DashboardPage() {
         isDefault: addresses.length === 0,
       });
       if (res.data.success && Array.isArray(res.data.addresses)) {
+        updateUserInStorage({ addresses: res.data.addresses });
         setAddresses(
           res.data.addresses.map((a: any) => ({
             id: a._id || a.id,
@@ -596,6 +594,7 @@ export default function DashboardPage() {
         try {
           const res = await api.delete<{ success: boolean; addresses: any[] }>(`/user/addresses/${id}`);
           if (res.data.success && Array.isArray(res.data.addresses)) {
+            updateUserInStorage({ addresses: res.data.addresses });
             setAddresses(
               res.data.addresses.map((a: any) => ({
                 id: a._id || a.id,
@@ -628,6 +627,7 @@ export default function DashboardPage() {
         isDefault: true,
       });
       if (res.data.success && Array.isArray(res.data.addresses)) {
+        updateUserInStorage({ addresses: res.data.addresses });
         setAddresses(
           res.data.addresses.map((a: any) => ({
             id: a._id || a.id,
@@ -803,6 +803,7 @@ export default function DashboardPage() {
         city: editingAddress.city || "Ranchi",
       });
       if (res.data.success && Array.isArray(res.data.addresses)) {
+        updateUserInStorage({ addresses: res.data.addresses });
         setAddresses(
           res.data.addresses.map((a: any) => ({
             id: a._id || a.id,

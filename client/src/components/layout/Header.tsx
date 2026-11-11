@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { getStoredUser, clearAuth, isAuthenticated } from "@/lib/auth";
+import { getStoredUser, clearAuth, isAuthenticated, updateUserInStorage } from "@/lib/auth";
 import type { User } from "@/lib/auth";
 import { useCart } from "@/lib/cart";
 import { useWishlist } from "@/lib/wishlist";
@@ -70,7 +70,23 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
-    setUser(getStoredUser());
+    const syncUser = () => {
+      const stored = getStoredUser();
+      setUser(stored);
+      // If user is authenticated and addresses have not been fetched yet into storage,
+      // load from /user/addresses once to guarantee accurate completion percentage
+      if (stored && stored.addresses === undefined && isAuthenticated()) {
+        api.get<{ success: boolean; addresses: any[] }>("/user/addresses")
+          .then((res) => {
+            if (res.data?.success && Array.isArray(res.data.addresses)) {
+              updateUserInStorage({ addresses: res.data.addresses });
+            }
+          })
+          .catch(() => {});
+      }
+    };
+
+    syncUser();
     setMobileMenuOpen(false);
     setActiveCategory("all");
 
@@ -94,11 +110,69 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
       })
       .catch((err) => console.warn("Failed to load header categories:", err));
 
+    // Real-time listener for user updates (name, email, addresses)
+    const handleUserUpdated = (e: any) => {
+      const u = e?.detail ?? getStoredUser();
+      setUser(u);
+    };
+
+    window.addEventListener("teffes:user_updated", handleUserUpdated);
+    window.addEventListener("storage", syncUser);
+
     // Global listener to open login modal from anywhere
     const handleOpenLogin = () => setShowLoginModal(true);
     window.addEventListener("open-login", handleOpenLogin);
-    return () => window.removeEventListener("open-login", handleOpenLogin);
+
+    return () => {
+      window.removeEventListener("teffes:user_updated", handleUserUpdated);
+      window.removeEventListener("storage", syncUser);
+      window.removeEventListener("open-login", handleOpenLogin);
+    };
   }, [pathname]);
+
+  // ─── Profile Completion Calculation ───────────────────────────────────────
+  const profileProgress = useMemo(() => {
+    if (!user) {
+      return { percentage: 0, hasPhone: false, hasName: false, hasEmail: false, hasAddress: false, missing: [] };
+    }
+
+    // 1. Phone (25%) - Customers always have phone on OTP login
+    const hasPhone = Boolean(user.phone && user.phone.trim().length > 0);
+
+    // 2. Name (25%) - Custom name added (not default placeholder)
+    const rawName = (user.name || "").trim();
+    const hasName = Boolean(rawName.length > 0 && rawName.toLowerCase() !== "valued customer");
+
+    // 3. Email (25%) - Valid email format
+    const rawEmail = (user.email || "").trim();
+    const hasEmail = Boolean(rawEmail.length > 0 && rawEmail.includes("@"));
+
+    // 4. Delivery Address (25%) - At least 1 saved delivery address
+    const hasAddress = Boolean(
+      (Array.isArray(user.addresses) && user.addresses.length > 0) ||
+      (user.address && user.address.trim().length > 0)
+    );
+
+    let count = 0;
+    if (hasPhone) count += 1;
+    if (hasName) count += 1;
+    if (hasEmail) count += 1;
+    if (hasAddress) count += 1;
+
+    const missing: string[] = [];
+    if (!hasName) missing.push("Name");
+    if (!hasEmail) missing.push("Email");
+    if (!hasAddress) missing.push("Delivery Address");
+
+    return {
+      percentage: count * 25,
+      hasPhone,
+      hasName,
+      hasEmail,
+      hasAddress,
+      missing,
+    };
+  }, [user]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -351,27 +425,70 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               )}
             </button>
 
-            {/* User Profile Avatar */}
+            {/* User Profile Avatar with Real-time Completion Progress Ring */}
             <div className="flex items-center pl-1">
-              <button
-                type="button"
-                onClick={handleUserClick}
-                className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden transition-all cursor-pointer p-0 shadow-sm ${
-                  isScrolled
-                    ? "bg-white border-2 border-white hover:scale-105"
-                    : "bg-surface-container-high border-2 border-primary/20 hover:border-primary"
-                }`}
-                title={user ? "My Account" : "Sign In"}
-              >
-                {user ? (
-                  <span
-                    className={`font-extrabold text-xs ${
-                      isScrolled ? "text-[#91000a]" : "text-primary"
-                    }`}
+              {user ? (
+                <div
+                  className="relative group flex items-center justify-center rounded-full transition-transform hover:scale-105 cursor-pointer"
+                  style={{
+                    width: "38px",
+                    height: "38px",
+                    padding: "2.5px",
+                    background:
+                      profileProgress.percentage === 100
+                        ? "#16a34a"
+                        : `conic-gradient(#16a34a 0% ${profileProgress.percentage}%, #f59e0b ${profileProgress.percentage}% 100%)`,
+                    boxShadow:
+                      profileProgress.percentage === 100
+                        ? "0 0 0 1px rgba(22, 163, 74, 0.3), 0 2px 6px rgba(22, 163, 74, 0.25)"
+                        : "0 0 0 1px rgba(245, 158, 11, 0.3), 0 2px 6px rgba(245, 158, 11, 0.2)",
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={handleUserClick}
+                    className="w-full h-full rounded-full flex items-center justify-center overflow-hidden bg-white shadow-xs p-0 border-none cursor-pointer select-none"
+                    aria-label={`My Account (${profileProgress.percentage}% profile completed)`}
+                    title={`Profile ${profileProgress.percentage}% Complete${profileProgress.missing.length > 0 ? ` • Missing: ${profileProgress.missing.join(', ')}` : ' • Fully Completed'}`}
                   >
-                    {(user.name || user.phone || "U").slice(0, 2).toUpperCase()}
-                  </span>
-                ) : (
+                    <span
+                      className={`font-black text-xs tracking-tight ${
+                        isScrolled ? "text-[#91000a]" : "text-primary"
+                      }`}
+                    >
+                      {(user.name || user.phone || "U").slice(0, 2).toUpperCase()}
+                    </span>
+                  </button>
+
+                  {/* Sleek Tooltip on Hover */}
+                  <div className="absolute right-0 top-full mt-2 hidden group-hover:flex flex-col items-center z-50 pointer-events-none">
+                    <div className="bg-slate-900/95 text-white text-[11px] font-semibold py-1.5 px-3 rounded-xl shadow-2xl whitespace-nowrap flex items-center gap-2 border border-slate-700/60 backdrop-blur-md">
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{
+                          backgroundColor:
+                            profileProgress.percentage === 100 ? "#22c55e" : "#f59e0b",
+                        }}
+                      />
+                      <span>
+                        {profileProgress.percentage === 100
+                          ? "Profile 100% Completed ✓"
+                          : `Profile ${profileProgress.percentage}% Complete (${profileProgress.missing.join(", ")} pending)`}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleUserClick}
+                  className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden transition-all cursor-pointer p-0 shadow-sm ${
+                    isScrolled
+                      ? "bg-white border-2 border-white hover:scale-105"
+                      : "bg-surface-container-high border-2 border-primary/20 hover:border-primary"
+                  }`}
+                  title="Sign In with OTP"
+                >
                   <span
                     className={`material-symbols-outlined text-[20px] ${
                       isScrolled ? "text-[#91000a]" : "text-on-surface-variant"
@@ -379,8 +496,8 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                   >
                     person
                   </span>
-                )}
-              </button>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -593,11 +710,24 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               {/* Account */}
               <button
                 type="button"
-                className="mobile-nav-link w-full text-left bg-transparent border-none cursor-pointer"
+                className="mobile-nav-link w-full text-left bg-transparent border-none cursor-pointer flex items-center justify-between"
                 onClick={handleUserClick}
               >
-                <span className="material-symbols-outlined text-primary text-[20px]">person</span>
-                <span>{user ? `Account (${user.name || user.phone})` : "Sign In with OTP"}</span>
+                <div className="flex items-center gap-3">
+                  <span className="material-symbols-outlined text-primary text-[20px]">person</span>
+                  <span>{user ? `Account (${user.name || user.phone})` : "Sign In with OTP"}</span>
+                </div>
+                {user && (
+                  <span
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-full text-white shadow-xs"
+                    style={{
+                      backgroundColor:
+                        profileProgress.percentage === 100 ? "#16a34a" : "#f59e0b",
+                    }}
+                  >
+                    {profileProgress.percentage}%
+                  </span>
+                )}
               </button>
 
               {user && (

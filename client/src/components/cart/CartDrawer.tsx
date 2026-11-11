@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { useCart } from "@/lib/cart";
 import type { Product } from "@/lib/products";
-import { isAuthenticated, getStoredUser } from "@/lib/auth";
+import { isAuthenticated, getStoredUser, updateUserInStorage } from "@/lib/auth";
 import api from "@/lib/api";
 import { useLocation } from "@/context/LocationContext";
 import { toast } from "@/lib/toast";
@@ -503,6 +503,7 @@ export default function CartDrawer() {
       });
 
       if (res.data.success && Array.isArray(res.data.addresses)) {
+        updateUserInStorage({ addresses: res.data.addresses });
         setAddresses(res.data.addresses);
         const newest = res.data.addresses[res.data.addresses.length - 1];
         if (newest) {
