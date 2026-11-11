@@ -41,6 +41,7 @@ const {
 } = require('../services/firestore/coupon.firestore.service');
 
 const {
+  ensureStoreInventory,
   getInventoryHistory: getInventoryHistoryFS,
 } = require('../services/firestore/inventory.firestore.service');
 
@@ -241,6 +242,13 @@ const createStore = async (req, res, next) => {
     }
 
     const created = await createStoreFS({ storeId, ...rest });
+
+    try {
+      await ensureStoreInventory(storeId, { defaultFreshStock: 0, defaultDefreezeStock: 0, defaultWasteStock: 0 });
+    } catch (invErr) {
+      console.warn(`[createStore] Auto-init inventory warning for ${storeId}:`, invErr.message);
+    }
+
     res.status(201).json({ success: true, store: created });
   } catch (error) {
     next(error);

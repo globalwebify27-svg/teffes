@@ -5,6 +5,7 @@ const {
   updateDoc,
   deleteDoc,
   queryDocs,
+  countDocs,
   runTransaction,
   parseDateMillis,
 } = require('../../lib/firestore');
@@ -157,12 +158,145 @@ const getItemRequiredAmount = (item, inventoryUnit = 'kg') => {
 };
 
 /**
+ * Ensure all active products from the master 'products' collection
+ * exist in the store's inventory. Auto-initializes missing items with 0 stock
+ * (or initial stock if configured).
+ */
+const ensureStoreInventory = async (storeId, options = {}) => {
+  if (!storeId || typeof storeId !== 'string') return [];
+  const cleanStoreId = storeId.trim();
+
+  // 1. Fetch all products from master catalog
+  const products = await queryDocs('products');
+  if (!products || products.length === 0) return [];
+
+  // 2. Fetch existing inventory records for this store
+  const existingItems = await queryDocs(INVENTORY_COLLECTION, (ref) =>
+    ref.where('storeId', '==', cleanStoreId)
+  );
+
+  const existingByItemId = new Map();
+  for (const item of existingItems) {
+    const key = item.itemId || (item.id && item.id.replace(`${cleanStoreId}_`, ''));
+    if (key) existingByItemId.set(key, item);
+  }
+
+  const db = getDb();
+  let batch = db.batch();
+  let opsCount = 0;
+  const now = new Date().toISOString();
+
+  const validProductIds = new Set(products.map((p) => p.id || p._id).filter(Boolean));
+
+  // Clean obsolete seed dummy cuts (INV-001..INV-013 or old test items) if requested or for S001
+  if (options.cleanObsoleteSeed || cleanStoreId === 'S001') {
+    for (const item of existingItems) {
+      const itId = item.itemId || (item.id && item.id.replace(`${cleanStoreId}_`, ''));
+      if (!validProductIds.has(itId) || itId.startsWith('INV-') || itId.startsWith('test_')) {
+        const docRef = db.collection(INVENTORY_COLLECTION).doc(item.id || `${cleanStoreId}_${itId}`);
+        batch.delete(docRef);
+        opsCount++;
+        if (opsCount >= 400) {
+          await batch.commit();
+          batch = db.batch();
+          opsCount = 0;
+        }
+      }
+    }
+  }
+
+  for (const prod of products) {
+    const prodId = prod.id || prod._id;
+    if (!prodId) continue;
+
+    const existing = existingByItemId.get(prodId);
+    const unit = prod.unit || (prod.category === 'eggs' || /pcs|pieces|eggs/i.test(prod.name || '') ? 'pcs' : 'kg');
+
+    if (!existing) {
+      const stock = options.defaultFreshStock !== undefined ? options.defaultFreshStock : (cleanStoreId === 'S001' ? 50 : 0);
+      const defreezeStock = options.defaultDefreezeStock !== undefined ? options.defaultDefreezeStock : 0;
+      const wasteStock = options.defaultWasteStock !== undefined ? options.defaultWasteStock : 0;
+      const min = options.defaultMin !== undefined ? options.defaultMin : 10;
+      const status = calculateInventoryStatus(stock, min);
+      const docId = getInventoryDocId(cleanStoreId, prodId);
+      const docRef = db.collection(INVENTORY_COLLECTION).doc(docId);
+
+      const payload = {
+        id: docId,
+        storeId: cleanStoreId,
+        itemId: prodId,
+        item: prod.name || 'Product Cut',
+        category: prod.category || prod.categoryLabel || 'fresh cuts',
+        stock,
+        defreezeStock,
+        wasteStock,
+        min,
+        unit,
+        status,
+        lastRestocked: stock > 0 ? `Today ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '—',
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      batch.set(docRef, payload, { merge: true });
+      opsCount++;
+    } else if (options.forceStock !== undefined) {
+      const stock = options.forceStock;
+      const defreezeStock = options.forceDefreezeStock !== undefined ? options.forceDefreezeStock : 0;
+      const wasteStock = options.forceWasteStock !== undefined ? options.forceWasteStock : 0;
+      const min = Number(existing.min) || 10;
+      const status = calculateInventoryStatus(stock, min);
+      const docId = getInventoryDocId(cleanStoreId, prodId);
+      const docRef = db.collection(INVENTORY_COLLECTION).doc(docId);
+
+      batch.update(docRef, {
+        stock,
+        defreezeStock,
+        wasteStock,
+        status,
+        updatedAt: now,
+      });
+      opsCount++;
+    }
+
+    if (opsCount >= 400) {
+      await batch.commit();
+      batch = db.batch();
+      opsCount = 0;
+    }
+  }
+
+  if (opsCount > 0) {
+    await batch.commit();
+  }
+
+  return true;
+};
+
+/**
  * Retrieve inventory items for a specific store.
+ * Automatically self-heals any missing products so all catalog items appear.
  */
 const getStoreInventory = async (storeId) => {
   if (!storeId || typeof storeId !== 'string') return [];
+  const cleanStoreId = storeId.trim();
+
+  try {
+    const existing = await queryDocs(INVENTORY_COLLECTION, (ref) =>
+      ref.where('storeId', '==', cleanStoreId)
+    );
+    const hasObsolete = existing.some((it) => it.itemId && it.itemId.startsWith('INV-'));
+    const totalProducts = await countDocs('products');
+
+    if (existing.length < totalProducts || hasObsolete) {
+      await ensureStoreInventory(cleanStoreId);
+    }
+  } catch (err) {
+    console.warn(`[getStoreInventory] Auto-sync warning for store ${cleanStoreId}:`, err.message);
+  }
+
   const items = await queryDocs(INVENTORY_COLLECTION, (ref) =>
-    ref.where('storeId', '==', storeId.trim())
+    ref.where('storeId', '==', cleanStoreId)
   );
   return items.sort((a, b) => (a.item || '').localeCompare(b.item || ''));
 };
@@ -916,6 +1050,7 @@ module.exports = {
   matchCartItemToInventory,
   parseWeightInKg,
   getItemRequiredAmount,
+  ensureStoreInventory,
   getStoreInventory,
   getInventoryItem,
   createInventoryItem,

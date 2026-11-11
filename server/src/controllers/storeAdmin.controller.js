@@ -613,6 +613,28 @@ const updateInventoryItem = async (req, res, next) => {
 
     const updated = await updateInventoryItemFS(storeId, id, updates, req.user, reason);
 
+    const targetProdId = existing.productId || existing.itemId || id;
+
+    // Keep product catalog inStock status synced
+    if (updated && updated.stock !== undefined) {
+      (async () => {
+        try {
+          const { updateDoc, queryDocs } = require('../lib/firestore');
+          if (Number(updated.stock) > 0) {
+            await updateDoc('products', targetProdId, { inStock: true });
+          } else {
+            const allStoreInv = await queryDocs('inventory', (ref) =>
+              ref.where('itemId', '==', targetProdId)
+            );
+            const anyInStock = allStoreInv.some((it) => it.storeId !== storeId && Number(it.stock) > 0);
+            if (!anyInStock) {
+              await updateDoc('products', targetProdId, { inStock: false });
+            }
+          }
+        } catch (_) {}
+      })();
+    }
+
     // Notify waiting customers if fresh stock was replenished and is now > 0
     if (updated && Number(updated.stock) > 0) {
       (async () => {
@@ -620,7 +642,7 @@ const updateInventoryItem = async (req, res, next) => {
           const { queryDocs, updateDoc } = require('../lib/firestore');
           const notificationService = require('../services/notificationService');
           const allSubs = await queryDocs('stock_notifications', (ref) =>
-            ref.where('productId', '==', productId)
+            ref.where('productId', '==', targetProdId)
           );
           const pendingSubs = allSubs.filter((s) => s.status === 'pending');
 
@@ -679,6 +701,13 @@ const transferDefreezeStock = async (req, res, next) => {
       notes,
     });
 
+    if (result && Number(result.stock) > 0) {
+      try {
+        const { updateDoc } = require('../lib/firestore');
+        await updateDoc('products', itemId, { inStock: true });
+      } catch (_) {}
+    }
+
     res.status(200).json({ success: true, ...result });
   } catch (error) {
     next(error);
@@ -707,6 +736,21 @@ const recordInventoryWaste = async (req, res, next) => {
       notes,
       user: req.user,
     });
+
+    if (sourceClassification === 'fresh' && result && Number(result.remainingSourceStock) <= 0) {
+      try {
+        const { queryDocs, updateDoc } = require('../lib/firestore');
+        const otherStoreInv = await queryDocs('inventory', (ref) =>
+          ref.where('itemId', '==', itemId)
+        );
+        const anyOtherInStock = otherStoreInv.some(
+          (inv) => inv.storeId !== storeId && Number(inv.stock) > 0
+        );
+        if (!anyOtherInStock) {
+          await updateDoc('products', itemId, { inStock: false });
+        }
+      } catch (_) {}
+    }
 
     res.status(200).json({ success: true, ...result });
   } catch (error) {
