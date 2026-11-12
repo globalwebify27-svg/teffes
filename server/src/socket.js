@@ -199,12 +199,26 @@ const emitOrderStatusUpdate = (orderId, order) => {
       storeId: order.storeId,
     };
     io.to(`store:${order.storeId}`).emit('orders:refreshed', refreshPayload);
+    io.to(`store:${order.storeId}`).emit('order:status_updated', payload);
+    io.to(`store:${order.storeId}`).emit('order:status_changed', payload);
     if (order.storeId === 'S004') {
       io.to('store:S002').emit('orders:refreshed', refreshPayload);
+      io.to('store:S002').emit('order:status_updated', payload);
+      io.to('store:S002').emit('order:status_changed', payload);
     } else if (order.storeId === 'S002') {
       io.to('store:S004').emit('orders:refreshed', refreshPayload);
+      io.to('store:S004').emit('order:status_updated', payload);
+      io.to('store:S004').emit('order:status_changed', payload);
     }
   }
+
+  // General broadcast so any active store admin session on any device updates instantly
+  io.emit('orders:refreshed', {
+    orderId: resolvedPublicId,
+    id: resolvedDocId,
+    status: order.status,
+    storeId: order.storeId,
+  });
 
   // Super Admin room emission
   io.to('role:superadmin').emit('orders:refreshed', {

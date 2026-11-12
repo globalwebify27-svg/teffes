@@ -1081,6 +1081,19 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
 
   useEffect(() => {
     const socket = getSocket();
+    const storedUser = getStoredUser();
+    const currentStoreId = storedUser?.storeId || "S001";
+
+    const joinStoreRoom = () => {
+      if (currentStoreId) {
+        socket.emit("join:store", currentStoreId);
+      }
+      if (storedUser?.role) {
+        socket.emit("join:role", storedUser.role);
+      }
+    };
+    joinStoreRoom();
+
     const handleRefresh = () => {
       fetchOrders();
     };
@@ -1093,6 +1106,7 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
       );
       fetchOrders();
     };
+
     socket.on("orders:refreshed", handleRefresh);
     socket.on("order:created", handleRefresh);
     socket.on("order:status_updated", handleRefresh);
@@ -1100,7 +1114,10 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
     socket.on("order:updated", handleRefresh);
     socket.on("store:order:declined", handleOrderDeclined);
     socket.on("order:declined", handleOrderDeclined);
-    socket.on("connect", handleRefresh);
+    socket.on("connect", () => {
+      joinStoreRoom();
+      handleRefresh();
+    });
 
     const handleFocusSync = () => {
       if (typeof document !== "undefined" && !document.hidden) {
@@ -1112,18 +1129,14 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
       document.addEventListener("visibilitychange", handleFocusSync);
     }
 
-    // 60-second (1 minute) gentle fallback polling (real-time updates arrive via WebSockets)
-    const pollTimer = setInterval(() => {
-      fetchOrders();
-    }, 60000);
+    // Zero polling: live updates are driven 100% by WebSockets
 
     return () => {
-      clearInterval(pollTimer);
       if (typeof window !== "undefined") {
         window.removeEventListener("focus", handleFocusSync);
         document.removeEventListener("visibilitychange", handleFocusSync);
       }
-      socket.off("connect", handleRefresh);
+      socket.off("connect");
       socket.off("orders:refreshed", handleRefresh);
       socket.off("order:created", handleRefresh);
       socket.off("order:status_updated", handleRefresh);
