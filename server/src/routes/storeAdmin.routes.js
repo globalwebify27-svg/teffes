@@ -21,6 +21,9 @@ const {
   assignRiderToOrder,
   getStoreStatus,
   updateStoreStatus,
+  getStoreSchedules,
+  setStoreSchedule,
+  removeStoreSchedule,
   getStoreRemittances,
   confirmRemittance,
   collectRiderCash,
@@ -39,6 +42,11 @@ router.use(protect, authorize('storeadmin', 'superadmin', 'admin'));
 // Store Live Status & Timings
 router.get('/store-status', getStoreStatus);
 router.patch('/store-status', updateStoreStatus);
+
+// Operating Schedule & Special Hours (Half-Day, Late Opening, Custom Dates)
+router.get('/schedule', getStoreSchedules);
+router.post('/schedule', setStoreSchedule);
+router.delete('/schedule/:date', removeStoreSchedule);
 
 // 1. Dashboard
 router.get('/dashboard', getDashboardOverview);

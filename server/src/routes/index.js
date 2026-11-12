@@ -125,6 +125,11 @@ const getAvailableStoresHandler = async (req, res, next) => {
         }
       }
 
+      const nowUtc = new Date();
+      const istMs = nowUtc.getTime() + (5.5 * 60 * 60 * 1000);
+      const todayIST = new Date(istMs).toISOString().slice(0, 10);
+      const todaySchedule = store.specialSchedules?.[todayIST] || null;
+
       evaluatedStores.push({
         ...store,
         freeDeliveryThreshold: store.freeDeliveryThreshold ?? 399,
@@ -142,6 +147,8 @@ const getAvailableStoresHandler = async (req, res, next) => {
         isAvailable,
         outOfStockItems,
         stockStatus: isAvailable ? 'In Stock' : 'Out of Stock',
+        todaySpecialSchedule: todaySchedule,
+        specialSchedules: store.specialSchedules || {},
       });
     }
 

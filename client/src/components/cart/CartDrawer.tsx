@@ -76,6 +76,13 @@ interface StoreOption {
   freeGiftThreshold?: number;
   freeGiftName?: string;
   deliveryRadiusKm?: number;
+  todaySpecialSchedule?: {
+    date: string;
+    mode: "half_day" | "late_opening" | "custom_hours" | "closed";
+    openTime?: string;
+    closeTime?: string;
+    customerNote?: string;
+  } | null;
 }
 
 export default function CartDrawer() {
@@ -126,9 +133,33 @@ export default function CartDrawer() {
   const [isLoadingCrossSell, setIsLoadingCrossSell] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Hourly slots from 8 AM to 8 PM with past hours disabled
+  // Effective fulfilling store
+  const selectedStore =
+    stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
+
+  // Hourly slots from 8 AM to 8 PM with past hours and special hours respected
   const hourlySlots = useMemo(() => {
     const currentHour = new Date().getHours();
+    const todaySpecial = selectedStore?.todaySpecialSchedule;
+    let specialOpenH = 8;
+    let specialCloseH = 20;
+
+    if (todaySpecial) {
+      if (todaySpecial.mode === "closed") {
+        specialOpenH = 24;
+        specialCloseH = 0;
+      } else {
+        if (todaySpecial.openTime) {
+          const [h] = todaySpecial.openTime.split(":").map(Number);
+          if (!isNaN(h)) specialOpenH = h;
+        }
+        if (todaySpecial.closeTime) {
+          const [h] = todaySpecial.closeTime.split(":").map(Number);
+          if (!isNaN(h)) specialCloseH = h;
+        }
+      }
+    }
+
     const allSlots = [
       { start: 8, label: "08:00 AM - 09:00 AM" },
       { start: 9, label: "09:00 AM - 10:00 AM" },
@@ -146,9 +177,9 @@ export default function CartDrawer() {
 
     return allSlots.map((s) => ({
       ...s,
-      isPassed: s.start <= currentHour,
+      isPassed: s.start <= currentHour || s.start < specialOpenH || s.start >= specialCloseH,
     }));
-  }, []);
+  }, [selectedStore]);
 
   // Ensure an available custom slot is pre-selected
   useEffect(() => {
@@ -437,8 +468,6 @@ export default function CartDrawer() {
   if (!isOpen) return null;
 
   const isPickup = fulfillmentType === "pickup";
-  const selectedStore =
-    stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
 
   // Store is operational only if stores are present and selectedStore is active & not paused
   const isStoreOperational = Boolean(
@@ -457,6 +486,49 @@ export default function CartDrawer() {
   const storeRainSurgeFee = storeRainSurgeEnabled ? (selectedStore?.rainSurgeFee ?? 15) : 0;
   const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 5;
 
+  // Format 24-hr time string (HH:MM) to 12-hr
+  const formatTime12 = (t?: string) => {
+    if (!t) return "";
+    const [hStr, mStr] = t.split(":");
+    let h = parseInt(hStr, 10);
+    const m = mStr || "00";
+    if (isNaN(h)) return t;
+    const ampm = h >= 12 ? "PM" : "AM";
+    if (h > 12) h -= 12;
+    if (h === 0) h = 12;
+    return `${h}:${m} ${ampm}`;
+  };
+
+  // Check special operating schedule for today
+  const todaySpecial = selectedStore?.todaySpecialSchedule || null;
+  const isSpecialClosedToday = todaySpecial?.mode === "closed";
+
+  const isPastSpecialClose = () => {
+    if (!todaySpecial?.closeTime) return false;
+    const now = new Date();
+    const ist = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + 5.5 * 3600 * 1000);
+    const [cH, cM] = todaySpecial.closeTime.split(":").map(Number);
+    const currentMins = ist.getHours() * 60 + ist.getMinutes();
+    const closeMins = cH * 60 + (isNaN(cM) ? 0 : cM);
+    return currentMins >= closeMins;
+  };
+
+  const isBeforeSpecialOpen = () => {
+    if (!todaySpecial?.openTime) return false;
+    const now = new Date();
+    const ist = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + 5.5 * 3600 * 1000);
+    const [oH, oM] = todaySpecial.openTime.split(":").map(Number);
+    const currentMins = ist.getHours() * 60 + ist.getMinutes();
+    const openMins = oH * 60 + (isNaN(oM) ? 0 : oM);
+    return currentMins < openMins;
+  };
+
+  const isSpecialCutoffPassed = Boolean(
+    todaySpecial &&
+    (todaySpecial.mode === "half_day" || todaySpecial.mode === "custom_hours") &&
+    isPastSpecialClose()
+  );
+
   // Check if current time in IST is after 7:59 PM (20:00 to 07:59)
   const isAfter8PM = () => {
     const now = new Date();
@@ -466,7 +538,8 @@ export default function CartDrawer() {
     const minute = ist.getMinutes();
     return hour >= 20 || (hour === 19 && minute >= 59) || hour < 8;
   };
-  const isAfterHours = !isPickup && isAfter8PM();
+
+  const isAfterHours = !isPickup && (isAfter8PM() || isSpecialClosedToday || isSpecialCutoffPassed);
 
   const isFreeDelivery = subtotal >= storeFreeDeliveryThreshold;
   const effectiveDeliveryFee = isPickup ? 0 : (isFreeDelivery ? 0 : storeStandardDeliveryFee);
@@ -479,11 +552,13 @@ export default function CartDrawer() {
     ? "Store Pickup"
     : isAfterHours
       ? "Next-Day Delivery: Tomorrow by 09:00 AM"
-      : slot === "express60"
-        ? "Express Delivery (60 min)"
-        : slot === "custom"
-          ? `Custom Delivery: ${customSlotTime}`
-          : "90 Min Delivery";
+      : (todaySpecial && (todaySpecial.mode === "late_opening" || todaySpecial.mode === "custom_hours") && isBeforeSpecialOpen())
+        ? `Delivering Today After ${formatTime12(todaySpecial.openTime)}`
+        : slot === "express60"
+          ? "Express Delivery (60 min)"
+          : slot === "custom"
+            ? `Custom Delivery: ${customSlotTime}`
+            : "90 Min Delivery";
 
   const amountForFreeDelivery = Math.max(0, storeFreeDeliveryThreshold - subtotal);
 
@@ -1136,14 +1211,26 @@ export default function CartDrawer() {
                           <div className="p-3.5 bg-amber-50/90 rounded-xl border border-amber-200/90 shadow-2xs">
                             <div className="flex items-start gap-3">
                               <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
-                                <span className="material-symbols-outlined text-[20px]">nightlight</span>
+                                <span className="material-symbols-outlined text-[20px]">
+                                  {isSpecialClosedToday ? "store" : isSpecialCutoffPassed ? "hourglass_bottom" : "nightlight"}
+                                </span>
                               </div>
                               <div className="flex-1">
                                 <h4 className="font-headline-sm font-extrabold text-amber-950 text-[13px] leading-tight">
-                                  Teffes Store Hours: 8:00 AM – 8:00 PM
+                                  {isSpecialClosedToday
+                                    ? "Store Closed Today for Operations"
+                                    : isSpecialCutoffPassed
+                                    ? `Today's Cutoff Passed (${formatTime12(todaySpecial?.closeTime)})`
+                                    : "Teffes Store Hours: 8:00 AM – 8:00 PM"}
                                 </h4>
                                 <p className="font-body-sm text-amber-900/90 text-[11.5px] leading-relaxed mt-1">
-                                  Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM.
+                                  {isSpecialClosedToday
+                                    ? (todaySpecial?.customerNote || "Our fulfilling store is closed today for special kitchen maintenance. Orders placed now will be delivered tomorrow morning by 9:00 AM.")
+                                    : isSpecialCutoffPassed
+                                    ? (todaySpecial?.customerNote
+                                      ? `${todaySpecial.customerNote}. Your order will be prepared fresh and delivered tomorrow morning by 9:00 AM.`
+                                      : `Today's same-day delivery closed at ${formatTime12(todaySpecial?.closeTime)}. Orders placed now will be delivered tomorrow morning by 9:00 AM.`)
+                                    : "Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM."}
                                 </p>
                                 <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100/90 border border-emerald-200 rounded-lg text-emerald-900 text-[11px] font-bold">
                                   <span className="material-symbols-outlined text-[15px] text-emerald-700">wb_sunny</span>
@@ -1154,6 +1241,18 @@ export default function CartDrawer() {
                           </div>
                         ) : (
                           <>
+                            {/* Live Late Opening Notice if placed before store opens */}
+                            {todaySpecial && (todaySpecial.mode === "late_opening" || todaySpecial.mode === "custom_hours") && isBeforeSpecialOpen() && (
+                              <div className="mb-2.5 px-3 py-2 bg-sky-50 border border-sky-200 rounded-xl flex items-start gap-2 text-sky-950 text-xs shadow-2xs">
+                                <span className="material-symbols-outlined text-[17px] text-sky-600 mt-0.5 shrink-0">schedule</span>
+                                <div>
+                                  <span className="font-extrabold block text-[12px]">Store Opens at {formatTime12(todaySpecial.openTime)} Today</span>
+                                  <span className="text-[11px] text-sky-800">
+                                    {todaySpecial.customerNote || `Deliveries will commence once the kitchen opens at ${formatTime12(todaySpecial.openTime)}.`}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                             {/* Live Bad Weather / Rain Surge Alert if enabled by Store Admin */}
                             {storeRainSurgeEnabled && (
                               <div className="mb-2 px-2.5 py-1.5 bg-amber-50 border border-amber-200/90 rounded-xl flex items-center justify-between text-[11px] text-amber-950 font-semibold shadow-xs">
@@ -1956,6 +2055,17 @@ export default function CartDrawer() {
                       <span>To Pay</span>
                       <span className="text-primary font-black text-[17px]">₹{finalPayable}</span>
                     </div>
+
+                    {/* Delivery Timing Confirmation Line */}
+                    {fulfillmentType === "delivery" && isStoreOperational && (
+                      <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-[#faf8f5] border border-[#ede8e0] flex items-center justify-between text-xs text-[#524538]">
+                        <span className="flex items-center gap-1.5 font-bold text-gray-700">
+                          <span className="material-symbols-outlined text-[16px] text-primary">schedule</span>
+                          <span>Delivery Timing:</span>
+                        </span>
+                        <span className="font-extrabold text-[#941717]">{resolvedDeliverySlot}</span>
+                      </div>
+                    )}
                   </div>
 
                   {/* Checkout CTA Button */}

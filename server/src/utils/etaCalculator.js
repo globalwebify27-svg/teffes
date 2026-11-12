@@ -85,14 +85,87 @@ function calculateNextDay9AM(date = new Date()) {
 }
 
 /**
+ * Helper to get today's date string in IST (YYYY-MM-DD)
+ */
+function getTodayISTDateString(date = new Date()) {
+  const comp = getISTDateComponents(date);
+  const m = String(comp.month + 1).padStart(2, '0');
+  const d = String(comp.date).padStart(2, '0');
+  return `${comp.year}-${m}-${d}`;
+}
+
+/**
+ * Checks if a given time is at or past a cutoff time in IST (e.g. '13:00')
+ */
+function isPastSpecialCloseTime(closeTimeStr, date = new Date()) {
+  if (!closeTimeStr || typeof closeTimeStr !== 'string') return false;
+  const [cH, cM] = closeTimeStr.split(':').map(Number);
+  if (isNaN(cH)) return false;
+  const comp = getISTDateComponents(date);
+  const closeMinutes = cH * 60 + (isNaN(cM) ? 0 : cM);
+  const currentMinutes = comp.hours * 60 + comp.minutes;
+  return currentMinutes >= closeMinutes;
+}
+
+/**
+ * Checks if a given time is before an opening time in IST (e.g. '12:00')
+ */
+function isBeforeSpecialOpenTime(openTimeStr, date = new Date()) {
+  if (!openTimeStr || typeof openTimeStr !== 'string') return false;
+  const [oH, oM] = openTimeStr.split(':').map(Number);
+  if (isNaN(oH)) return false;
+  const comp = getISTDateComponents(date);
+  const openMinutes = oH * 60 + (isNaN(oM) ? 0 : oM);
+  const currentMinutes = comp.hours * 60 + comp.minutes;
+  return currentMinutes < openMinutes;
+}
+
+/**
+ * Calculates delivery time for orders placed before a late opening time.
+ * Delivery = today's open time + prep time + transit time.
+ */
+function calculateSpecialOpenDeliveryTime(openTimeStr, prepTimeMinutes = 25, transitMinutes = 15, date = new Date()) {
+  const comp = getISTDateComponents(date);
+  const [oH, oM] = (openTimeStr || '08:00').split(':').map(Number);
+  const safeOH = isNaN(oH) ? 8 : oH;
+  const safeOM = isNaN(oM) ? 0 : oM;
+
+  // Compute opening timestamp in UTC:
+  // IST hours/minutes converted to UTC: Subtract 5 hours and 30 minutes
+  const totalOpenMinutesIST = safeOH * 60 + safeOM + prepTimeMinutes + transitMinutes;
+  const openDateIST = new Date(Date.UTC(comp.year, comp.month, comp.date, 0, totalOpenMinutesIST, 0, 0));
+  // Subtract 5:30 to get UTC
+  return new Date(openDateIST.getTime() - (5.5 * 60 * 60 * 1000));
+}
+
+/**
  * Calculates the initial target delivery timestamp when order is placed.
- * If after 7:59 PM or if deliverySlot is for next day, sets to tomorrow 9:00 AM.
+ * If after 7:59 PM or if deliverySlot is for next day or after special cutoff, sets to tomorrow 9:00 AM.
+ * If placed before late opening, schedules after opening time.
  * Otherwise targetDeliveryTime = Placed Time + Prep Time (default 25m) + Est. Travel (15m).
  */
-function calculateTargetDeliveryTime(placedAt = new Date(), prepTimeMinutes = 25, transitMinutes = 15, deliverySlot = '') {
+function calculateTargetDeliveryTime(placedAt = new Date(), prepTimeMinutes = 25, transitMinutes = 15, deliverySlot = '', specialSchedule = null) {
   const slotStr = String(deliverySlot || '').toLowerCase();
-  const isNextDay = isAfter8PM(placedAt) || slotStr.includes('tomorrow') || slotStr.includes('next-day') || slotStr.includes('9:00 am');
-  if (isNextDay) {
+  const isGenericNextDay = isAfter8PM(placedAt) || slotStr.includes('tomorrow') || slotStr.includes('next-day') || slotStr.includes('9:00 am');
+
+  // Check special schedule rules if active for today
+  if (specialSchedule) {
+    if (specialSchedule.mode === 'closed') {
+      return calculateNextDay9AM(placedAt);
+    }
+    if ((specialSchedule.mode === 'half_day' || specialSchedule.mode === 'custom_hours') && specialSchedule.closeTime) {
+      if (isPastSpecialCloseTime(specialSchedule.closeTime, placedAt)) {
+        return calculateNextDay9AM(placedAt);
+      }
+    }
+    if ((specialSchedule.mode === 'late_opening' || specialSchedule.mode === 'custom_hours') && specialSchedule.openTime) {
+      if (isBeforeSpecialOpenTime(specialSchedule.openTime, placedAt)) {
+        return calculateSpecialOpenDeliveryTime(specialSchedule.openTime, prepTimeMinutes, transitMinutes, placedAt);
+      }
+    }
+  }
+
+  if (isGenericNextDay) {
     return calculateNextDay9AM(placedAt);
   }
   const baseTime = new Date(placedAt).getTime();
@@ -201,4 +274,8 @@ module.exports = {
   calculateNextDay9AM,
   isAfter8PM,
   getEtaDetails,
+  getTodayISTDateString,
+  isPastSpecialCloseTime,
+  isBeforeSpecialOpenTime,
+  calculateSpecialOpenDeliveryTime,
 };

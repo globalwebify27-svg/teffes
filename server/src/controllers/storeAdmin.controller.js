@@ -57,6 +57,7 @@ const {
 
 const notificationService = require('../services/notificationService');
 const { emitOrderStatusUpdate, emitInventoryUpdate, emitOrderCreated } = require('../socket');
+const { getTodayISTDateString } = require('../utils/etaCalculator');
 
 const {
   getStoreBatchConfig,
@@ -1322,6 +1323,184 @@ const updateStoreStatus = async (req, res, next) => {
 };
 
 /**
+ * GET /api/store-admin/schedule
+ * List all upcoming/active special operating schedules for this store
+ */
+const getStoreSchedules = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const store = await getStoreById(storeId);
+    if (!store) {
+      return res.status(404).json({ success: false, message: 'Store not found' });
+    }
+    const todayIST = getTodayISTDateString(new Date());
+    const specialSchedules = store.specialSchedules || {};
+
+    // Sort upcoming schedules by date ascending
+    const scheduleList = Object.keys(specialSchedules)
+      .filter((dateStr) => dateStr >= todayIST)
+      .sort()
+      .map((dateStr) => specialSchedules[dateStr]);
+
+    res.status(200).json({
+      success: true,
+      storeId,
+      storeName: store.name,
+      normalTimings: store.timings || '08:00 AM - 08:00 PM',
+      todayIST,
+      todaySchedule: specialSchedules[todayIST] || null,
+      upcomingSchedules: scheduleList,
+      allSchedules: specialSchedules,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/store-admin/schedule
+ * Create or edit a special operating schedule for a given date
+ */
+const setStoreSchedule = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const { date, mode, openTime, closeTime, customerNote } = req.body;
+
+    if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return res.status(400).json({ success: false, message: 'Valid date in YYYY-MM-DD format is required' });
+    }
+
+    const todayIST = getTodayISTDateString(new Date());
+    if (date < todayIST) {
+      return res.status(400).json({ success: false, message: 'Cannot configure schedule for past dates' });
+    }
+
+    const validModes = ['half_day', 'late_opening', 'custom_hours', 'closed'];
+    if (!validModes.includes(mode)) {
+      return res.status(400).json({ success: false, message: `Invalid schedule mode. Must be one of: ${validModes.join(', ')}` });
+    }
+
+    const store = await getStoreById(storeId);
+    if (!store) {
+      return res.status(404).json({ success: false, message: 'Store not found' });
+    }
+
+    // ─── Conflict Check: If modifying TODAY, ensure no active orders conflict ───
+    if (date === todayIST) {
+      const activeOrders = await getStoreOrders(storeId);
+      const pendingActive = activeOrders.filter(
+        (o) => o.status !== 'Delivered' && o.status !== 'Cancelled' && !o.isArchived
+      );
+
+      if (mode === 'closed' && pendingActive.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot mark store as closed today. You have ${pendingActive.length} active order(s) (e.g. ${pendingActive[0]?.orderId || pendingActive[0]?.id}) in progress. Please fulfill or reassign them first.`,
+          conflictingCount: pendingActive.length,
+        });
+      }
+
+      if ((mode === 'half_day' || mode === 'custom_hours') && closeTime) {
+        const [cH, cM] = closeTime.split(':').map(Number);
+        const cutoffMinutes = cH * 60 + (isNaN(cM) ? 0 : cM);
+
+        const conflicting = pendingActive.filter((order) => {
+          if (order.targetDeliveryTime) {
+            const dt = new Date(order.targetDeliveryTime);
+            const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000);
+            const istDt = new Date(istMs);
+            const targetMinutes = istDt.getUTCHours() * 60 + istDt.getUTCMinutes();
+            const orderDateIST = istDt.toISOString().slice(0, 10);
+            if (orderDateIST === todayIST && targetMinutes > cutoffMinutes) {
+              return true;
+            }
+          }
+          const slot = String(order.deliverySlot || '');
+          if (slot.includes('PM') || slot.includes('AM')) {
+            const match = slot.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+            if (match) {
+              let h = parseInt(match[1], 10);
+              const m = parseInt(match[2], 10);
+              const mer = match[3].toUpperCase();
+              if (mer === 'PM' && h < 12) h += 12;
+              if (mer === 'AM' && h === 12) h = 0;
+              const slotMins = h * 60 + m;
+              if (slotMins > cutoffMinutes) return true;
+            }
+          }
+          return false;
+        });
+
+        if (conflicting.length > 0) {
+          const sampleIds = conflicting.slice(0, 3).map((o) => o.orderId || o.id).join(', ');
+          return res.status(400).json({
+            success: false,
+            message: `Cannot set closing time to ${closeTime}. You have ${conflicting.length} active order(s) (${sampleIds}) scheduled after this time. Please fulfill or reassign them first.`,
+            conflictingCount: conflicting.length,
+          });
+        }
+      }
+    }
+
+    // Save schedule in store.specialSchedules map
+    const specialSchedules = { ...(store.specialSchedules || {}) };
+    specialSchedules[date] = {
+      date,
+      mode,
+      openTime: (mode === 'late_opening' || mode === 'custom_hours') ? (openTime || '12:00') : '08:00',
+      closeTime: (mode === 'half_day' || mode === 'custom_hours') ? (closeTime || '13:00') : '20:00',
+      customerNote: (customerNote || '').trim(),
+      updatedAt: new Date().toISOString(),
+      updatedBy: req.user?.email || req.user?.name || 'storeadmin',
+    };
+
+    await updateStoreFS(storeId, { specialSchedules });
+
+    res.status(200).json({
+      success: true,
+      message: `Operating schedule for ${date} updated successfully.`,
+      schedule: specialSchedules[date],
+      specialSchedules,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * DELETE /api/store-admin/schedule/:date
+ * Remove a special operating schedule for a given date
+ */
+const removeStoreSchedule = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const { date } = req.params;
+
+    if (!date) {
+      return res.status(400).json({ success: false, message: 'Date is required' });
+    }
+
+    const store = await getStoreById(storeId);
+    if (!store) {
+      return res.status(404).json({ success: false, message: 'Store not found' });
+    }
+
+    const specialSchedules = { ...(store.specialSchedules || {}) };
+    delete specialSchedules[date];
+
+    await updateStoreFS(storeId, { specialSchedules });
+
+    res.status(200).json({
+      success: true,
+      message: `Special schedule for ${date} removed. Store will follow standard operating hours.`,
+      specialSchedules,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /api/store-admin/remittances
  * List all cash remittance requests for this store
  */
@@ -1561,6 +1740,9 @@ module.exports = {
   assignRiderToOrder,
   getStoreStatus,
   updateStoreStatus,
+  getStoreSchedules,
+  setStoreSchedule,
+  removeStoreSchedule,
   getStoreRemittances,
   confirmRemittance,
   collectRiderCash,

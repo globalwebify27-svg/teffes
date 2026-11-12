@@ -142,6 +142,10 @@ const storeSchema = new mongoose.Schema(
         default: [85.3096, 23.3441], // default Ranchi coords
       },
     },
+    specialSchedules: {
+      type: mongoose.Schema.Types.Mixed,
+      default: {},
+    },
   },
   {
     timestamps: true,

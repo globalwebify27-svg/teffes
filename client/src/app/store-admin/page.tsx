@@ -28,11 +28,13 @@ import ChangePasswordModal from "@/components/common/ChangePasswordModal";
 import StoreAdminInventoryLogsTab from "@/components/store-admin/InventoryLogsTab";
 import StoreTransfersSection from "@/components/store-admin/StoreTransfersSection";
 import Pagination from "@/components/common/Pagination";
+import StoreScheduleTab from "@/components/store-admin/StoreScheduleTab";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
   { key: "dashboard", label: "Dashboard", icon: "dashboard", sub: "Live overview of today's orders, revenue, and inventory" },
   { key: "orders", label: "Live Orders", icon: "local_shipping", sub: "Manage today's orders from cutting to customer delivery" },
+  { key: "schedule", label: "Operating Schedule", icon: "calendar_month", sub: "Manage today's special hours, half-day, late openings, or future holiday timings" },
   { key: "products", label: "Products & Stock", icon: "restaurant", sub: "Toggle live availability of fresh cuts for your store" },
   { key: "cross_sell", label: "Cross-Selling", icon: "shopping_basket", sub: "Manage addon products shown to customers in cart" },
   { key: "inventory", label: "Inventory", icon: "inventory_2", sub: "Track fresh stock levels and morning fresh batches" },
@@ -7652,6 +7654,7 @@ export default function StoreAdminPage() {
   const tabComponents: Record<string, React.ReactNode> = {
     dashboard: <DashboardTab setActiveTab={setActiveTab} />,
     orders: <LiveOrdersTab onOrderAdvanced={handleOrderAdvanced} />,
+    schedule: <StoreScheduleTab storeId={effectiveStoreId} storeName={storeDisplayName} />,
     products: <ProductsStockTab />,
     cross_sell: <CrossSellTab />,
     inventory: <InventoryTab />,

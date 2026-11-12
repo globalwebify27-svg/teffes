@@ -151,6 +151,7 @@ const createStore = async (data = {}) => {
         ? data.location.coordinates
         : [85.3096, 23.3441],
     },
+    specialSchedules: data.specialSchedules && typeof data.specialSchedules === 'object' ? data.specialSchedules : {},
   };
 
   return createDoc(COLLECTION, cleanStoreId, payload, { overwrite: false });

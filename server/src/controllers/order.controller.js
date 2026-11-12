@@ -32,7 +32,14 @@ const {
 } = require('../services/firestore/return.firestore.service');
 const notificationService = require('../services/notificationService');
 const { emitOrderCreated, emitOrderStatusUpdate, emitReturnCreated } = require('../socket');
-const { calculateTargetDeliveryTime, getEtaDetails, isAfter8PM, calculateNextDay9AM } = require('../utils/etaCalculator');
+const {
+  calculateTargetDeliveryTime,
+  getEtaDetails,
+  isAfter8PM,
+  calculateNextDay9AM,
+  getTodayISTDateString,
+  isPastSpecialCloseTime,
+} = require('../utils/etaCalculator');
 const { getPaymentSettings } = require('../services/firestore/siteSettings.firestore.service');
 
 const generateOrderId = () => {
@@ -141,6 +148,17 @@ const createOrder = async (req, res, next) => {
       });
     }
 
+    // Check special schedule for today
+    const nowUtc = new Date();
+    const todayIST = getTodayISTDateString(nowUtc);
+    const todaySchedule = storeDoc?.specialSchedules?.[todayIST] || null;
+    if (todaySchedule && todaySchedule.mode === 'closed') {
+      return res.status(400).json({
+        success: false,
+        message: todaySchedule.customerNote || 'Our store is closed today for special operations. Please check back tomorrow.',
+      });
+    }
+
     // Calculate authoritative items subtotal directly from items
     const itemsSubtotal = items.reduce(
       (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
@@ -196,9 +214,16 @@ const createOrder = async (req, res, next) => {
       }).catch(() => {});
     }
 
-    const nowUtc = new Date();
+    const isSpecialCutoffPassed = Boolean(
+      todaySchedule &&
+      (todaySchedule.mode === 'half_day' || todaySchedule.mode === 'custom_hours') &&
+      todaySchedule.closeTime &&
+      isPastSpecialCloseTime(todaySchedule.closeTime, nowUtc)
+    );
+
     const isAfterHours = !isPickup && (
       isAfter8PM(nowUtc) ||
+      isSpecialCutoffPassed ||
       (deliverySlot && (deliverySlot.toLowerCase().includes('tomorrow') || deliverySlot.toLowerCase().includes('next-day') || deliverySlot.toLowerCase().includes('9:00 am')))
     );
 
@@ -248,7 +273,7 @@ const createOrder = async (req, res, next) => {
     const initialTransit = isPickup ? 0 : 15;
     const targetDeliveryDateObj = isAfterHours
       ? calculateNextDay9AM(nowUtc)
-      : calculateTargetDeliveryTime(nowUtc, prepMinutes, initialTransit, resolvedDeliverySlot);
+      : calculateTargetDeliveryTime(nowUtc, prepMinutes, initialTransit, resolvedDeliverySlot, todaySchedule);
     const targetDelivery = targetDeliveryDateObj.toISOString();
 
     // IST date string (YYYY-MM-DD) for date filtering in store admin
