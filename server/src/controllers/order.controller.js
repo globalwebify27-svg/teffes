@@ -132,12 +132,12 @@ const createOrder = async (req, res, next) => {
     const resolvedStoreId = (rawStoreId === 'S002' || rawStoreId === 'S004') ? 'S004' : rawStoreId;
     const resolvedStoreName = (resolvedStoreId === 'S004') ? "TeFFe's — Doranda Hub" : (storeName || "TeFFe's Store");
 
-    // Guard: strictly block order creation if store is paused or offline
+    // Guard: strictly block order creation if store is missing, paused, or offline
     const storeDoc = await getDoc('stores', resolvedStoreId);
-    if (storeDoc && (storeDoc.isOpen === false || storeDoc.status === 'Inactive')) {
+    if (!storeDoc || storeDoc.isOpen === false || storeDoc.status === 'Inactive') {
       return res.status(400).json({
         success: false,
-        message: storeDoc.emergencyNotice || 'Our store is currently paused and not accepting new orders. Please check back shortly.',
+        message: storeDoc?.emergencyNotice || 'Our store is currently paused and not accepting new orders. Please check back shortly.',
       });
     }
 
