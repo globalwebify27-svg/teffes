@@ -1237,7 +1237,8 @@ const getStoreCustomers = async (req, res, next) => {
       const key = cleanPhone || rawPhone || 'Unknown';
 
       const amt = Number(o.amount != null ? o.amount : o.totalAmount) || 0;
-      const orderDate = o.createdAt ? new Date(o.createdAt) : new Date();
+      const orderDateMs = parseDateToMillis(o.createdAt) || Date.now();
+      const orderDate = new Date(orderDateMs);
 
       if (!map.has(key)) {
         map.set(key, {
@@ -1248,8 +1249,9 @@ const getStoreCustomers = async (req, res, next) => {
           orders: 1,
           totalOrders: 1,
           totalSpent: amt,
-          lastOrder: o.createdAt ? new Date(o.createdAt).toLocaleDateString() : 'Today',
-          _lastOrderDate: orderDate,
+          lastOrder: orderDate.toLocaleDateString(),
+          lastOrderDate: orderDate.toISOString(),
+          _lastOrderMs: orderDateMs,
         });
       } else {
         const entry = map.get(key);
@@ -1266,9 +1268,10 @@ const getStoreCustomers = async (req, res, next) => {
         }
 
         // Keep latest address and order date
-        if (orderDate >= entry._lastOrderDate) {
-          entry._lastOrderDate = orderDate;
-          entry.lastOrder = o.createdAt ? new Date(o.createdAt).toLocaleDateString() : 'Today';
+        if (orderDateMs >= (entry._lastOrderMs || 0)) {
+          entry._lastOrderMs = orderDateMs;
+          entry.lastOrderDate = orderDate.toISOString();
+          entry.lastOrder = orderDate.toLocaleDateString();
           if (o.customer?.address || o.shippingAddress?.address) {
             entry.address = o.customer?.address || o.shippingAddress?.address;
           }
@@ -1276,9 +1279,23 @@ const getStoreCustomers = async (req, res, next) => {
       }
     }
 
+    const nowMs = Date.now();
     const customers = Array.from(map.values()).map((c) => {
-      delete c._lastOrderDate;
+      const lastMs = c._lastOrderMs || null;
+      delete c._lastOrderMs;
       c.totalSpent = Math.round(c.totalSpent * 100) / 100;
+
+      const daysSince = lastMs ? Math.floor((nowMs - lastMs) / (1000 * 60 * 60 * 24)) : null;
+      c.daysSinceLastOrder = daysSince;
+
+      const count = Number(c.totalOrders || c.orders || 0);
+      if (count >= 2) {
+        c.segment = (daysSince != null && daysSince <= 30) ? 'active' : 'inactive';
+      } else if (count === 1) {
+        c.segment = (daysSince != null && daysSince <= 30) ? 'new' : 'inactive';
+      } else {
+        c.segment = 'new';
+      }
       return c;
     });
 

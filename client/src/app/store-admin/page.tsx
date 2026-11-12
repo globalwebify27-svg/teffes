@@ -5678,6 +5678,7 @@ function CustomersTab() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [segmentFilter, setSegmentFilter] = useState<"all" | "active" | "new" | "inactive">("all");
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
@@ -5692,21 +5693,43 @@ function CustomersTab() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Reset page when search changes
+  // Reset page when search or segment filter changes
   useEffect(() => {
     setPage(1);
-  }, [searchQuery]);
+  }, [searchQuery, segmentFilter]);
+
+  // Counts for segmentation pills
+  const segmentCounts = useMemo(() => {
+    let active = 0;
+    let newCust = 0;
+    let inactive = 0;
+    customers.forEach(c => {
+      const seg = c.segment || "new";
+      if (seg === "active") active++;
+      else if (seg === "new") newCust++;
+      else if (seg === "inactive") inactive++;
+    });
+    return { all: customers.length, active, new: newCust, inactive };
+  }, [customers]);
 
   const filteredCustomers = useMemo(() => {
-    if (!searchQuery.trim()) return customers;
-    const q = searchQuery.toLowerCase().trim();
     return customers.filter(c => {
-      const name = (c.name || "").toLowerCase();
-      const phone = (c.phone || "").toLowerCase();
-      const addr = (c.address || "").toLowerCase();
-      return name.includes(q) || phone.includes(q) || addr.includes(q);
+      // Segment filter
+      if (segmentFilter !== "all") {
+        const seg = c.segment || "new";
+        if (seg !== segmentFilter) return false;
+      }
+      // Search query filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const name = (c.name || "").toLowerCase();
+        const phone = (c.phone || "").toLowerCase();
+        const addr = (c.address || "").toLowerCase();
+        if (!name.includes(q) && !phone.includes(q) && !addr.includes(q)) return false;
+      }
+      return true;
     });
-  }, [customers, searchQuery]);
+  }, [customers, searchQuery, segmentFilter]);
 
   const paginatedCustomers = useMemo(() => {
     const start = (page - 1) * pageSize;
@@ -5715,6 +5738,68 @@ function CustomersTab() {
 
   return (
     <div>
+      {/* Segment Filter Pills Bar */}
+      <div
+        className="no-scrollbar"
+        style={{
+          display: "flex",
+          gap: "8px",
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+          paddingBottom: "10px",
+          marginBottom: "16px",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        {[
+          { key: "all", label: "All Customers", count: segmentCounts.all, color: "#1e3a8a", bg: "#eff6ff" },
+          { key: "active", label: "Active / Repeat", count: segmentCounts.active, color: "#047857", bg: "#ecfdf5", desc: "≥ 2 orders, last 30d" },
+          { key: "new", label: "New Customers", count: segmentCounts.new, color: "#2563eb", bg: "#eff6ff", desc: "1st order, last 30d" },
+          { key: "inactive", label: "Inactive (Win-Back)", count: segmentCounts.inactive, color: "#dc2626", bg: "#fef2f2", desc: "No order > 30d" },
+        ].map(tab => {
+          const isSelected = segmentFilter === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setSegmentFilter(tab.key as any)}
+              style={{
+                padding: "8px 16px",
+                borderRadius: "10px",
+                border: "1.5px solid",
+                borderColor: isSelected ? tab.color : "#e5e7eb",
+                background: isSelected ? tab.bg : "#ffffff",
+                color: isSelected ? tab.color : "#4b5563",
+                fontWeight: 700,
+                fontSize: "0.83rem",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                flexShrink: 0,
+                boxShadow: isSelected ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                transition: "all 120ms ease",
+              }}
+            >
+              <span>{tab.label}</span>
+              <span
+                style={{
+                  background: isSelected ? tab.color : "#f3f4f6",
+                  color: isSelected ? "#ffffff" : "#4b5563",
+                  padding: "1px 8px",
+                  borderRadius: "99px",
+                  fontSize: "0.72rem",
+                  fontWeight: 800,
+                  lineHeight: 1.2,
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       {/* Search Toolbar */}
       <div style={{
         display: "flex",
@@ -5763,7 +5848,7 @@ function CustomersTab() {
           )}
         </div>
         <div style={{ fontSize: "0.8rem", color: "#73695b", fontWeight: 600 }}>
-          Store Customers: <strong style={{ color: "#941717" }}>{filteredCustomers.length}</strong>
+          Showing: <strong style={{ color: "#941717" }}>{filteredCustomers.length}</strong> customers
         </div>
       </div>
 
@@ -5771,10 +5856,10 @@ function CustomersTab() {
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading customers…</div>
         ) : (
-          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "640px" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "0.875rem", minWidth: "750px" }}>
             <thead>
               <tr style={{ background: "#faf8f5", borderBottom: "1px solid #ede8e0" }}>
-                {["Name", "Phone", "Total Orders", "Total Spent", "Address", "Last Order"].map(h => (
+                {["Customer", "Status / Segment", "Phone", "Total Orders", "Total Spent", "Last Order", "Actions"].map(h => (
                   <th key={h} style={{ padding: "12px 16px", textAlign: "left", fontWeight: 700, color: "#423b32", fontSize: "0.8rem", whiteSpace: "nowrap" }}>{h}</th>
                 ))}
               </tr>
@@ -5782,21 +5867,108 @@ function CustomersTab() {
             <tbody>
               {filteredCustomers.length === 0 ? (
                 <tr>
-                  <td colSpan={6} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>
-                    No customer accounts found matching your search.
+                  <td colSpan={7} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>
+                    No customer accounts found matching this segment/search.
                   </td>
                 </tr>
               ) : (
-                paginatedCustomers.map((c, i) => (
-                  <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < paginatedCustomers.length - 1 ? "1px solid #ede8e0" : "none" }}>
-                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#171410" }}>{c.name}</td>
-                    <td style={{ padding: "14px 16px", color: "#423b32" }}>{c.phone}</td>
-                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#941717" }}>{c.totalOrders ?? c.orders ?? 0}</td>
-                    <td style={{ padding: "14px 16px", fontWeight: 700, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
-                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.address}</td>
-                    <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem" }}>{c.lastOrder}</td>
-                  </tr>
-                ))
+                paginatedCustomers.map((c, i) => {
+                  const seg = c.segment || "new";
+                  const cleanPhone = String(c.phone || "").replace(/\D/g, "").slice(-10);
+                  const isInactive = seg === "inactive";
+                  const isActive = seg === "active";
+                  const isNew = seg === "new";
+
+                  return (
+                    <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < paginatedCustomers.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                      <td style={{ padding: "14px 16px" }}>
+                        <div style={{ fontWeight: 700, color: "#171410" }}>{c.name}</div>
+                        <div style={{ color: "#73695b", fontSize: "0.75rem", marginTop: "2px" }}>{c.address}</div>
+                      </td>
+                      <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                        {isActive && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "99px", background: "#ecfdf5", color: "#047857", fontSize: "0.74rem", fontWeight: 800 }}>
+                            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#059669" }} />
+                            Active Repeat ({c.daysSinceLastOrder != null ? `${c.daysSinceLastOrder}d ago` : "Recent"})
+                          </span>
+                        )}
+                        {isNew && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "99px", background: "#eff6ff", color: "#1d4ed8", fontSize: "0.74rem", fontWeight: 800 }}>
+                            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2563eb" }} />
+                            New Customer (1st order)
+                          </span>
+                        )}
+                        {isInactive && (
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "99px", background: "#fef2f2", color: "#b91c1c", fontSize: "0.74rem", fontWeight: 800 }}>
+                            <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#dc2626" }} />
+                            Inactive ({c.daysSinceLastOrder != null ? `${c.daysSinceLastOrder}d idle` : "No recent orders"})
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: "14px 16px", color: "#423b32", fontWeight: 600, fontSize: "0.82rem" }}>{c.phone}</td>
+                      <td style={{ padding: "14px 16px", fontWeight: 800, color: "#941717" }}>{c.totalOrders ?? c.orders ?? 0}</td>
+                      <td style={{ padding: "14px 16px", fontWeight: 800, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
+                      <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem", whiteSpace: "nowrap" }}>
+                        <div>{c.lastOrder || "—"}</div>
+                        {c.daysSinceLastOrder != null && (
+                          <div style={{ fontSize: "0.72rem", color: isInactive ? "#dc2626" : "#4b5563" }}>
+                            {c.daysSinceLastOrder === 0 ? "Today" : `${c.daysSinceLastOrder} days ago`}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          {cleanPhone && (
+                            <>
+                              <a
+                                href={`https://wa.me/91${cleanPhone}?text=${encodeURIComponent(
+                                  isInactive
+                                    ? `Hello ${c.name || "Customer"}, we miss you at Teffes! We have fresh premium cuts ready today with special discounts. Order now!`
+                                    : `Hello ${c.name || "Customer"}, thank you for being a valued Teffes customer! Need fresh cuts today?`
+                                )}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                title="Chat on WhatsApp"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "30px",
+                                  height: "30px",
+                                  borderRadius: "7px",
+                                  background: "#dcfce7",
+                                  color: "#15803d",
+                                  textDecoration: "none",
+                                  fontWeight: 800,
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[16px]">chat</span>
+                              </a>
+                              <a
+                                href={`tel:${cleanPhone}`}
+                                title="Call Customer"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "30px",
+                                  height: "30px",
+                                  borderRadius: "7px",
+                                  background: "#f3f4f6",
+                                  color: "#374151",
+                                  textDecoration: "none",
+                                  fontWeight: 800,
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[16px]">call</span>
+                              </a>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

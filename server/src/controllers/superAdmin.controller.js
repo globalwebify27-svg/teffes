@@ -782,11 +782,37 @@ const getPlatformCustomers = async (req, res, next) => {
         entry.orders = entry.totalOrders;
         entry.totalSpent = Math.round((entry.totalSpent + amt) * 100) / 100;
       }
+
+      // Track latest order date across all customer orders
+      const oDateMs = parseDateMillis(o.createdAt);
+      if (oDateMs && (!entry._lastOrderDateMs || oDateMs > entry._lastOrderDateMs)) {
+        entry._lastOrderDateMs = oDateMs;
+        entry.lastOrderDate = new Date(oDateMs).toISOString();
+        entry.lastOrder = new Date(oDateMs).toLocaleDateString();
+      }
     }
 
+    const nowMs = Date.now();
     const safeCustomers = Array.from(customerMap.values()).map((c) => {
       delete c._orderIds;
+      const lastMs = c._lastOrderDateMs || null;
+      delete c._lastOrderDateMs;
       c.totalSpent = Math.round((Number(c.totalSpent) || 0) * 100) / 100;
+
+      const daysSince = lastMs ? Math.floor((nowMs - lastMs) / (1000 * 60 * 60 * 24)) : null;
+      c.daysSinceLastOrder = daysSince;
+
+      const count = Number(c.totalOrders || c.orders || 0);
+      const createdMs = parseDateMillis(c.createdAt);
+      const accountAge = createdMs ? Math.floor((nowMs - createdMs) / (1000 * 60 * 60 * 24)) : 0;
+
+      if (count >= 2) {
+        c.segment = (daysSince != null && daysSince <= 30) ? 'active' : 'inactive';
+      } else if (count === 1) {
+        c.segment = (daysSince != null && daysSince <= 30) ? 'new' : 'inactive';
+      } else {
+        c.segment = accountAge <= 30 ? 'new' : 'inactive';
+      }
       return c;
     });
 
