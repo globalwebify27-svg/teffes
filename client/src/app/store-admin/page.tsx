@@ -489,10 +489,10 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
     socket.on("order:status_changed", handleUpdate);
     socket.on("inventory:updated", handleUpdate);
 
-    // 10-second polling to ensure desktop & mobile stay synchronized
+    // 60-second (1 minute) gentle backup polling (real-time updates arrive via WebSockets)
     const pollTimer = setInterval(() => {
       loadData();
-    }, 10000);
+    }, 60000);
 
     return () => {
       clearInterval(pollTimer);
@@ -1100,14 +1100,30 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
     socket.on("order:updated", handleRefresh);
     socket.on("store:order:declined", handleOrderDeclined);
     socket.on("order:declined", handleOrderDeclined);
+    socket.on("connect", handleRefresh);
 
-    // 10-second polling fallback so desktop & mobile remain 100% in sync
+    const handleFocusSync = () => {
+      if (typeof document !== "undefined" && !document.hidden) {
+        fetchOrders();
+      }
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("focus", handleFocusSync);
+      document.addEventListener("visibilitychange", handleFocusSync);
+    }
+
+    // 60-second (1 minute) gentle fallback polling (real-time updates arrive via WebSockets)
     const pollTimer = setInterval(() => {
       fetchOrders();
-    }, 10000);
+    }, 60000);
 
     return () => {
       clearInterval(pollTimer);
+      if (typeof window !== "undefined") {
+        window.removeEventListener("focus", handleFocusSync);
+        document.removeEventListener("visibilitychange", handleFocusSync);
+      }
+      socket.off("connect", handleRefresh);
       socket.off("orders:refreshed", handleRefresh);
       socket.off("order:created", handleRefresh);
       socket.off("order:status_updated", handleRefresh);
@@ -7758,10 +7774,11 @@ export default function StoreAdminPage() {
 
     checkPendingOrders();
     checkPendingReturns();
+    // 60-second (1 minute) gentle fallback polling (instant alerts arrive via order:created socket)
     const pollInterval = setInterval(() => {
       checkPendingOrders();
       checkPendingReturns();
-    }, 12000);
+    }, 60000);
 
     return () => {
       if (currentStoreId) {
