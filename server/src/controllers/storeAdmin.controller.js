@@ -231,14 +231,20 @@ const updateOrderStatus = async (req, res, next) => {
       }
     }
 
+    const cancelReason = req.body?.reason ? String(req.body.reason).trim() : '';
     const updatedResult = await updateOrderStatusFS(id, status, {
       id: req.user?._id || req.user?.id,
       name: req.user?.name || 'Store Admin',
       role: req.user?.role || 'storeadmin',
-    });
+    }, cancelReason);
 
     const updatedOrder = updatedResult.order || order;
     updatedOrder.status = status;
+
+    if (status === 'Cancelled' && cancelReason) {
+      await updateDoc('orders', id, { cancellationReason: cancelReason, updatedAt: new Date().toISOString() }).catch(() => {});
+      updatedOrder.cancellationReason = cancelReason;
+    }
 
     if (status === 'Out for Delivery' && !updatedOrder.deliveryOtp && updatedOrder.fulfillmentType !== 'pickup') {
       const generatedOtp = Math.floor(1000 + Math.random() * 9000).toString();
@@ -347,7 +353,9 @@ const updateOrderStatus = async (req, res, next) => {
           : `Order #${order.orderId || id} is packed and awaiting rider dispatch.`,
         'Out for Delivery': `Your order #${order.orderId || id} is on the way to your address!`,
         Delivered: `Your order #${order.orderId || id} has been delivered. Thank you for choosing Teffe's!`,
-        Cancelled: `Your order #${order.orderId || id} has been cancelled.`,
+        Cancelled: cancelReason
+          ? `Order #${order.orderId || id} was cancelled: ${cancelReason}`
+          : `Your order #${order.orderId || id} has been cancelled.`,
       };
 
       if (titles[status]) {
@@ -358,6 +366,7 @@ const updateOrderStatus = async (req, res, next) => {
             notificationType: 'ORDER_STATUS',
             orderId: order.orderId || id,
             status,
+            reason: cancelReason || '',
             clickAction: `/dashboard?orderId=${order.orderId || id}`,
           },
         }).catch((err) => console.warn('[FCM] Status notification error:', err.message));

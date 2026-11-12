@@ -483,10 +483,21 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
     };
     socket.on("orders:refreshed", handleUpdate);
     socket.on("order:created", handleUpdate);
+    socket.on("order:status_updated", handleUpdate);
+    socket.on("order:status_changed", handleUpdate);
     socket.on("inventory:updated", handleUpdate);
+
+    // 10-second polling to ensure desktop & mobile stay synchronized
+    const pollTimer = setInterval(() => {
+      loadData();
+    }, 10000);
+
     return () => {
+      clearInterval(pollTimer);
       socket.off("orders:refreshed", handleUpdate);
       socket.off("order:created", handleUpdate);
+      socket.off("order:status_updated", handleUpdate);
+      socket.off("order:status_changed", handleUpdate);
       socket.off("inventory:updated", handleUpdate);
     };
   }, []);
@@ -543,17 +554,52 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>No active orders in queue</div>
         ) : (
           latestOrders.map((o, i, arr) => (
-            <div key={o.orderId || o.id} style={{
-              padding: "16px 20px",
-              borderBottom: i < arr.length - 1 ? "1px solid #ede8e0" : "none",
-              display: "flex",
-              alignItems: "center",
-              gap: "16px",
-              flexWrap: "wrap",
-            }}>
-              <div style={{ flex: 1, minWidth: "200px" }}>
-                <div style={{ fontWeight: 700, color: "#171410", fontSize: "0.9rem" }}>#{o.orderId || o.id} — {o.customer?.name}</div>
-                <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "2px" }}>
+            <div
+              key={o.orderId || o.id}
+              onClick={() => setActiveTab("orders")}
+              title="Click to view in Live Orders"
+              className="cursor-pointer transition-colors hover:bg-[#faf7f2]"
+              style={{
+                padding: "14px 18px",
+                borderBottom: i < arr.length - 1 ? "1px solid #ede8e0" : "none",
+                display: "flex",
+                alignItems: "center",
+                gap: "14px",
+                flexWrap: "wrap",
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ flex: 1, minWidth: "220px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <span style={{ fontWeight: 800, color: "#171410", fontSize: "0.92rem" }}>
+                    #{o.orderId || o.id}
+                  </span>
+                  <span style={{ color: "#423b32", fontWeight: 700, fontSize: "0.88rem" }}>
+                    — {o.customer?.name || "Customer"}
+                  </span>
+                  {o.customer?.phone && (
+                    <span style={{ color: "#0284c7", fontSize: "0.82rem", fontWeight: 600, display: "inline-flex", alignItems: "center", gap: "2px" }}>
+                      · <span className="material-symbols-outlined text-[14px]">call</span> {o.customer.phone}
+                    </span>
+                  )}
+                  {o.createdAt && (
+                    <span style={{
+                      fontSize: "0.72rem",
+                      color: "#78716c",
+                      background: "#f5f5f4",
+                      padding: "2px 7px",
+                      borderRadius: "6px",
+                      fontWeight: 600,
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: "3px"
+                    }}>
+                      <span className="material-symbols-outlined text-[12px]">schedule</span>
+                      {new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                  )}
+                </div>
+                <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "3px" }}>
                   {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
                 </div>
                 {(o.deliveryInstruction || o.customer?.deliveryInstruction) && (
@@ -576,12 +622,15 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
                 )}
               </div>
               <div style={{ textAlign: "right" }}>
-                <div style={{ fontWeight: 800, color: "#941717", fontSize: "1rem" }}>₹{o.amount}</div>
-                <div style={{ color: "#73695b", fontSize: "0.75rem" }}>{o.deliverySlot}</div>
+                <div style={{ fontWeight: 900, color: "#941717", fontSize: "1rem", fontFamily: "Outfit, sans-serif" }}>₹{o.amount}</div>
+                <div style={{ color: "#73695b", fontSize: "0.75rem", fontWeight: 600 }}>{o.deliverySlot}</div>
               </div>
-              <Badge label={o.status} color={
-                o.status === "Pending" ? "#941717" : o.status === "Cutting" ? "#d97706" : o.status === "Delivered" ? "#059669" : "#7c3aed"
-              } />
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <Badge label={o.status} color={
+                  o.status === "Pending" ? "#941717" : o.status === "Cutting" ? "#d97706" : o.status === "Delivered" ? "#059669" : "#7c3aed"
+                } />
+                <span className="material-symbols-outlined text-[18px] text-gray-400">chevron_right</span>
+              </div>
             </div>
           ))
         )}
@@ -606,6 +655,39 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
   const [loadingRiders, setLoadingRiders] = useState(false);
   const [selectedRiderId, setSelectedRiderId] = useState("");
   const [assigningRider, setAssigningRider] = useState(false);
+
+  // Store Admin Cancel Order Modal state
+  const [cancelModalOrder, setCancelModalOrder] = useState<any | null>(null);
+  const [cancelReasonInput, setCancelReasonInput] = useState("");
+  const [cancellingOrder, setCancellingOrder] = useState(false);
+
+  const handleCancelOrderStoreAdmin = async () => {
+    if (!cancelModalOrder) return;
+    if (!cancelReasonInput.trim()) {
+      toast.warning("Please provide a reason for cancellation", "Reason Required");
+      return;
+    }
+    setCancellingOrder(true);
+    try {
+      const orderId = cancelModalOrder.orderId || cancelModalOrder.id;
+      const res = await api.patch<{ success: boolean; message?: string }>(`/store-admin/orders/${orderId}/status`, {
+        status: "Cancelled",
+        reason: cancelReasonInput.trim(),
+      });
+      if (res.data?.success) {
+        toast.success("Order cancelled. Customer has been notified.", "Order Cancelled");
+        setCancelModalOrder(null);
+        setCancelReasonInput("");
+        fetchOrders();
+      } else {
+        toast.error(res.data?.message || "Failed to cancel order", "Cancellation Failed");
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to cancel order", "Cancellation Failed");
+    } finally {
+      setCancellingOrder(false);
+    }
+  };
 
   // Manual / Phone Order Creation Modal state
   const [showCreateOrderModal, setShowCreateOrderModal] = useState(false);
@@ -938,11 +1020,24 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
     };
     socket.on("orders:refreshed", handleRefresh);
     socket.on("order:created", handleRefresh);
+    socket.on("order:status_updated", handleRefresh);
+    socket.on("order:status_changed", handleRefresh);
+    socket.on("order:updated", handleRefresh);
     socket.on("store:order:declined", handleOrderDeclined);
     socket.on("order:declined", handleOrderDeclined);
+
+    // 10-second polling fallback so desktop & mobile remain 100% in sync
+    const pollTimer = setInterval(() => {
+      fetchOrders();
+    }, 10000);
+
     return () => {
+      clearInterval(pollTimer);
       socket.off("orders:refreshed", handleRefresh);
       socket.off("order:created", handleRefresh);
+      socket.off("order:status_updated", handleRefresh);
+      socket.off("order:status_changed", handleRefresh);
+      socket.off("order:updated", handleRefresh);
       socket.off("store:order:declined", handleOrderDeclined);
       socket.off("order:declined", handleOrderDeclined);
     };
@@ -1498,6 +1593,33 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                       <span className="material-symbols-outlined text-[16px]">print</span>
                       <span>Print KOT</span>
                     </button>
+                    {o.status !== "Delivered" && o.status !== "Cancelled" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCancelModalOrder(o);
+                          setCancelReasonInput("");
+                        }}
+                        title="Cancel this order if cannot deliver"
+                        style={{
+                          background: "#fff1f2",
+                          border: "1.5px solid #fecdd3",
+                          borderRadius: "8px",
+                          padding: "7px 12px",
+                          color: "#e11d48",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">cancel</span>
+                        <span>Cancel Order</span>
+                      </button>
+                    )}
                     <div style={{
                       background: "#faf8f5",
                       border: "1px solid #ede8e0",
@@ -2559,6 +2681,147 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
           order={printModalOrder}
           onClose={() => setPrintModalOrder(null)}
         />
+      )}
+
+      {/* ─── CANCEL ORDER CONFIRMATION MODAL (MOBILE RESPONSIVE) ─── */}
+      {cancelModalOrder && (
+        <div style={{
+          position: "fixed",
+          inset: 0,
+          background: "rgba(15, 23, 42, 0.65)",
+          backdropFilter: "blur(4px)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          zIndex: 9999,
+          padding: "16px"
+        }}>
+          <div style={{
+            background: "#fff",
+            borderRadius: "16px",
+            width: "100%",
+            maxWidth: "460px",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.2)",
+            overflow: "hidden"
+          }}>
+            <div style={{
+              padding: "16px 20px",
+              background: "#fff1f2",
+              borderBottom: "1px solid #ffe4e6",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between"
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                <div style={{ width: "36px", height: "36px", borderRadius: "10px", background: "#fecdd3", display: "flex", alignItems: "center", justifyContent: "center", color: "#e11d48", flexShrink: 0 }}>
+                  <span className="material-symbols-outlined text-[20px]">cancel</span>
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 800, color: "#9f1239" }}>
+                    Cancel Order #{cancelModalOrder.orderId || cancelModalOrder.id}
+                  </h3>
+                  <p style={{ margin: "2px 0 0 0", fontSize: "0.74rem", color: "#e11d48" }}>
+                    Customer will be notified with this reason
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCancelModalOrder(null)}
+                style={{ background: "transparent", border: "none", cursor: "pointer", color: "#be123c", padding: "4px" }}
+              >
+                <span className="material-symbols-outlined text-[20px]">close</span>
+              </button>
+            </div>
+
+            <div style={{ padding: "18px 20px", display: "flex", flexDirection: "column", gap: "14px" }}>
+              <div style={{ background: "#faf8f5", border: "1px solid #ede8e0", borderRadius: "10px", padding: "10px 14px", fontSize: "0.82rem" }}>
+                <div style={{ fontWeight: 700, color: "#171410" }}>
+                  {cancelModalOrder.customer?.name || "Customer"}{cancelModalOrder.customer?.phone ? ` · 📞 ${cancelModalOrder.customer.phone}` : ""}
+                </div>
+                <div style={{ color: "#73695b", fontSize: "0.76rem", marginTop: "2px", wordBreak: "break-word" }}>
+                  {cancelModalOrder.customer?.address || "Ranchi"}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#374151", marginBottom: "6px" }}>
+                  Reason for Cancellation *
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="e.g. Delivery location outside coverage area / Stock unavailable / Customer requested cancellation"
+                  value={cancelReasonInput}
+                  onChange={(e) => setCancelReasonInput(e.target.value)}
+                  style={{
+                    width: "100%",
+                    padding: "10px 12px",
+                    borderRadius: "10px",
+                    border: "1.5px solid #d1d5db",
+                    fontSize: "0.85rem",
+                    outline: "none",
+                    fontFamily: "inherit",
+                    boxSizing: "border-box"
+                  }}
+                />
+              </div>
+            </div>
+
+            <div style={{
+              padding: "14px 20px",
+              background: "#faf8f5",
+              borderTop: "1px solid #ede8e0",
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "flex-end",
+              gap: "10px"
+            }}>
+              <button
+                type="button"
+                disabled={cancellingOrder}
+                onClick={() => setCancelModalOrder(null)}
+                style={{
+                  padding: "9px 16px",
+                  borderRadius: "8px",
+                  background: "#fff",
+                  border: "1px solid #d1d5db",
+                  color: "#374151",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  flex: "1 1 auto",
+                  textAlign: "center"
+                }}
+              >
+                Keep Order
+              </button>
+              <button
+                type="button"
+                disabled={cancellingOrder || !cancelReasonInput.trim()}
+                onClick={handleCancelOrderStoreAdmin}
+                style={{
+                  padding: "9px 18px",
+                  borderRadius: "8px",
+                  background: cancellingOrder || !cancelReasonInput.trim() ? "#fca5a5" : "#e11d48",
+                  color: "#fff",
+                  border: "none",
+                  fontWeight: 700,
+                  fontSize: "0.82rem",
+                  cursor: cancellingOrder || !cancelReasonInput.trim() ? "not-allowed" : "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  flex: "1 1 auto"
+                }}
+              >
+                <span className="material-symbols-outlined text-[16px]">cancel</span>
+                <span>{cancellingOrder ? "Cancelling…" : "Confirm Cancel"}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

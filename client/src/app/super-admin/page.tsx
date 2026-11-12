@@ -3811,6 +3811,7 @@ function OrdersTab() {
 
 function RidersTab() {
   const [riders, setRiders] = useState<any[]>([]);
+  const [stores, setStores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddRiderModal, setShowAddRiderModal] = useState(false);
   const [newRider, setNewRider] = useState({
@@ -3843,6 +3844,20 @@ function RidersTab() {
   const [page, setPage] = useState(1);
   const pageSize = 50;
 
+  const fetchStores = () => {
+    api.get<{ success: boolean; stores: any[] }>("/super-admin/stores")
+      .then(res => {
+        if (res.data.success && Array.isArray(res.data.stores)) {
+          setStores(res.data.stores);
+          if (res.data.stores.length > 0) {
+            const firstId = res.data.stores[0].storeId || res.data.stores[0].id || "S001";
+            setNewRider(prev => ({ ...prev, storeId: prev.storeId || firstId }));
+          }
+        }
+      })
+      .catch(err => console.warn("Failed to fetch stores in RidersTab:", err));
+  };
+
   const fetchRiders = () => {
     setLoading(true);
     api.get<{ success: boolean; riders: any[] }>("/super-admin/riders")
@@ -3857,6 +3872,7 @@ function RidersTab() {
 
   useEffect(() => {
     fetchRiders();
+    fetchStores();
   }, []);
 
   // Reset page when search or status filter changes
@@ -4206,9 +4222,15 @@ function RidersTab() {
                   onChange={e => setNewRider({ ...newRider, storeId: e.target.value })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
                 >
-                  <option value="S001">S001 — Ranchi Kishore Ganj</option>
-                  <option value="S003">S003 — Ranchi Harmu Road</option>
-                  <option value="S004">S004 — Ranchi Doranda (Teffes - Doranda store)</option>
+                  {stores.length > 0 ? (
+                    stores.map(s => (
+                      <option key={s.storeId || s.id} value={s.storeId || s.id}>
+                        {s.storeId || s.id} — {s.name || s.branch || "Store Hub"}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="S001">S001 — Ranchi Kishore Ganj</option>
+                  )}
                 </select>
               </div>
             </div>
@@ -4366,9 +4388,15 @@ function RidersTab() {
                   onChange={e => setEditForm({ ...editForm, storeId: e.target.value })}
                   style={{ padding: "10px 12px", borderRadius: "8px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.9rem", background: "#fff", boxSizing: "border-box" }}
                 >
-                  <option value="S001">S001 — Ranchi Kishore Ganj</option>
-                  <option value="S003">S003 — Ranchi Harmu Road</option>
-                  <option value="S004">S004 — Ranchi Doranda (Teffes - Doranda store)</option>
+                  {stores.length > 0 ? (
+                    stores.map(s => (
+                      <option key={s.storeId || s.id} value={s.storeId || s.id}>
+                        {s.storeId || s.id} — {s.name || s.branch || "Store Hub"}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="S001">S001 — Ranchi Kishore Ganj</option>
+                  )}
                 </select>
               </div>
 

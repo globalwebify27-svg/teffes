@@ -65,8 +65,13 @@ export default function DashboardPage() {
   const [addressActionLoading, setAddressActionLoading] = useState(false);
   const [addressFeedback, setAddressFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
   const [showAddAddressModal, setShowAddAddressModal] = useState(false);
-  const [newAddressInput, setNewAddressInput] = useState("");
-  const [newLabelInput, setNewLabelInput] = useState("Home");
+  const [newAddressForm, setNewAddressForm] = useState({
+    tag: "Home",
+    line1: "",
+    line2: "",
+    city: "Ranchi",
+    pincode: "",
+  });
 
   // Teffes Cash Balance
   const [teffesCash, setTeffesCash] = useState(0);
@@ -544,15 +549,38 @@ export default function DashboardPage() {
 
   const handleAddAddress = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newAddressInput.trim()) return;
+    const line1 = newAddressForm.line1.trim();
+    const line2 = newAddressForm.line2.trim();
+    const city = newAddressForm.city.trim() || "Ranchi";
+    const pincode = newAddressForm.pincode.trim();
+
+    if (!line1) {
+      setAddressFeedback({ type: "error", message: "Flat / House No. is required" });
+      return;
+    }
+    if (!line2) {
+      setAddressFeedback({ type: "error", message: "Area, Landmark, Street is required" });
+      return;
+    }
+    if (!city) {
+      setAddressFeedback({ type: "error", message: "City is required" });
+      return;
+    }
+    if (!pincode || pincode.length !== 6) {
+      setAddressFeedback({ type: "error", message: "Please enter a valid 6-digit Pincode" });
+      return;
+    }
+
     setAddressActionLoading(true);
     setAddressFeedback(null);
     try {
       const res = await api.post<{ success: boolean; addresses: any[] }>("/user/addresses", {
-        tag: newLabelInput,
-        line1: newAddressInput.trim(),
-        city: "Ranchi",
-        pincode: "834001",
+        tag: newAddressForm.tag,
+        line1,
+        line2,
+        landmark: line2,
+        city,
+        pincode,
         isDefault: addresses.length === 0,
       });
       if (res.data.success && Array.isArray(res.data.addresses)) {
@@ -564,14 +592,14 @@ export default function DashboardPage() {
             address: formatAddressString(a),
             isDefault: !!a.isDefault,
             line1: a.line1 || "",
-            line2: a.line2 || "",
+            line2: a.line2 || a.landmark || "",
             city: a.city || "Ranchi",
             pincode: a.pincode || "834001",
             landmark: a.landmark || "",
           }))
         );
         setAddressFeedback({ type: "success", message: "Address saved successfully!" });
-        setNewAddressInput("");
+        setNewAddressForm({ tag: "Home", line1: "", line2: "", city: "Ranchi", pincode: "" });
         setShowAddAddressModal(false);
         setTimeout(() => setAddressFeedback(null), 3500);
       }
@@ -793,14 +821,39 @@ export default function DashboardPage() {
 
   const handleSaveEditedAddress = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingAddress || !editingAddress.address.trim()) return;
+    if (!editingAddress) return;
+    const line1 = (editingAddress.line1 || "").trim();
+    const line2 = (editingAddress.line2 || "").trim();
+    const city = (editingAddress.city || "Ranchi").trim();
+    const pincode = (editingAddress.pincode || "").trim();
+
+    if (!line1) {
+      setAddressFeedback({ type: "error", message: "Flat / House No. is required" });
+      return;
+    }
+    if (!line2) {
+      setAddressFeedback({ type: "error", message: "Area, Landmark, Street is required" });
+      return;
+    }
+    if (!city) {
+      setAddressFeedback({ type: "error", message: "City is required" });
+      return;
+    }
+    if (!pincode || pincode.length !== 6) {
+      setAddressFeedback({ type: "error", message: "Please enter a valid 6-digit Pincode" });
+      return;
+    }
+
     setAddressActionLoading(true);
     setAddressFeedback(null);
     try {
       const res = await api.put<{ success: boolean; addresses: any[] }>(`/user/addresses/${editingAddress.id}`, {
         tag: editingAddress.label,
-        line1: editingAddress.address.trim(),
-        city: editingAddress.city || "Ranchi",
+        line1,
+        line2,
+        landmark: line2,
+        city,
+        pincode,
       });
       if (res.data.success && Array.isArray(res.data.addresses)) {
         updateUserInStorage({ addresses: res.data.addresses });
@@ -811,7 +864,7 @@ export default function DashboardPage() {
             address: formatAddressString(a),
             isDefault: !!a.isDefault,
             line1: a.line1 || "",
-            line2: a.line2 || "",
+            line2: a.line2 || a.landmark || "",
             city: a.city || "Ranchi",
             pincode: a.pincode || "834001",
             landmark: a.landmark || "",
@@ -1198,8 +1251,29 @@ export default function DashboardPage() {
                         ))}
                       </div>
 
-                      {/* Action CTA: Track Rider / Cancel for in-progress vs Order Again for completed */}
-                      {order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status) ? (
+                      {/* Action CTA: Cancelled vs In-Progress vs Completed */}
+                      {order.status === "Cancelled" || order.rawOrder?.status === "Cancelled" ? (
+                        <div className="p-3.5 bg-rose-50/90 border-t border-rose-200/80 flex flex-col sm:flex-row items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-rose-600 text-[18px]">cancel</span>
+                            <div className="text-xs">
+                              <span className="font-extrabold text-rose-900 block">Order Cancelled</span>
+                              <span className="text-rose-700 font-medium">
+                                {order.cancellationReason || order.rawOrder?.cancellationReason
+                                  ? `Reason: ${order.cancellationReason || order.rawOrder?.cancellationReason}`
+                                  : "This order was cancelled."}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleOrderAgain(order.items.map((i: any) => i.name))}
+                            className="w-full sm:w-auto py-2 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-xs shadow-xs transition-all border-none cursor-pointer"
+                          >
+                            Order Again
+                          </button>
+                        </div>
+                      ) : (order.orderCategory === "in-progress" || !["Delivered", "Cancelled"].includes(order.status)) ? (
                         <div className="p-3.5 bg-amber-50/80 border-t border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-3">
                           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
                             <div className="flex items-center gap-2">
@@ -1257,42 +1331,59 @@ export default function DashboardPage() {
                           </div>
                         </div>
                       ) : (
-                        <div className="flex w-full border-t border-gray-100 divide-x divide-gray-100">
+                        <div className="flex flex-wrap w-full border-t border-gray-100 divide-x divide-gray-100">
                           {(order.status === "Delivered" || order.orderCategory === "delivered") && order.rawOrder?.returnStatus === "Not Requested" && (
                             <button
                               type="button"
                               onClick={() => handleOpenReturnModal(order.id)}
-                              className="flex-1 py-3 text-center font-headline-sm font-bold text-gray-700 hover:bg-gray-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none"
+                              className="flex-1 min-w-[100px] py-3 text-center font-headline-sm font-bold text-gray-700 hover:bg-gray-50 text-[13px] cursor-pointer bg-white transition-colors border-none"
                             >
                               Return/Exchange
                             </button>
                           )}
                           {order.rawOrder?.returnStatus && order.rawOrder?.returnStatus !== "Not Requested" && (
-                            <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-600 text-[13.5px] bg-amber-50/30">
+                            <div className="flex-1 min-w-[100px] py-3 text-center font-headline-sm font-bold text-amber-600 text-[13px] bg-amber-50/30">
                               Return {order.rawOrder?.returnStatus}
                             </div>
                           )}
                           {(order.status === "Delivered" || order.orderCategory === "delivered") && (
                             order.rawOrder?.riderRating ? (
-                              <div className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 text-[13px] bg-amber-50/40 flex items-center justify-center gap-1">
-                                <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
+                              <div className="flex-1 min-w-[100px] py-3 text-center font-headline-sm font-bold text-amber-700 text-[12.5px] bg-amber-50/40 flex items-center justify-center gap-1">
+                                <span className="material-symbols-outlined text-amber-500 text-[15px]">star</span>
                                 <span>Rated {order.rawOrder.riderRating}★</span>
                               </div>
                             ) : (
                               <button
                                 type="button"
                                 onClick={() => handleOpenRatingModal(order)}
-                                className="flex-1 py-3 text-center font-headline-sm font-bold text-amber-700 hover:bg-amber-50 text-[13.5px] cursor-pointer bg-white transition-colors border-none flex items-center justify-center gap-1"
+                                className="flex-1 min-w-[100px] py-3 text-center font-headline-sm font-bold text-amber-700 hover:bg-amber-50 text-[13px] cursor-pointer bg-white transition-colors border-none flex items-center justify-center gap-1"
                               >
-                                <span className="material-symbols-outlined text-amber-500 text-[16px]">star</span>
+                                <span className="material-symbols-outlined text-amber-500 text-[15px]">star</span>
                                 <span>Rate Rider</span>
                               </button>
                             )
                           )}
+                          {(order.status === "Delivered" || order.orderCategory === "delivered") && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+                                if (isMobile) {
+                                  window.open("https://play.google.com/store/apps/details?id=com.teffes.app", "_blank");
+                                } else {
+                                  window.open("https://www.google.com/search?q=Teffe%27s+Meat+Store+Ranchi+reviews", "_blank");
+                                }
+                              }}
+                              className="flex-1 min-w-[100px] py-3 text-center font-headline-sm font-bold text-emerald-700 hover:bg-emerald-50 text-[13px] cursor-pointer bg-white transition-colors border-none flex items-center justify-center gap-1"
+                            >
+                              <span className="material-symbols-outlined text-emerald-600 text-[15px]">thumb_up</span>
+                              <span>Rate Us</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleOrderAgain(order.items.map((i: any) => i.name))}
-                            className="flex-1 py-3 text-center font-headline-sm font-bold text-primary hover:bg-crimson-soft text-[13.5px] cursor-pointer bg-white transition-colors border-none"
+                            className="flex-1 min-w-[100px] py-3 text-center font-headline-sm font-bold text-primary hover:bg-crimson-soft text-[13px] cursor-pointer bg-white transition-colors border-none"
                           >
                             Order Again
                           </button>
@@ -1454,8 +1545,13 @@ export default function DashboardPage() {
                                 setEditingAddress({
                                   id: addr.id,
                                   label: addr.label,
-                                  address: addr.line1 || addr.address,
+                                  address: addr.address,
                                   isDefault: addr.isDefault,
+                                  line1: addr.line1 || addr.address,
+                                  line2: addr.line2 || addr.landmark || "",
+                                  city: addr.city || "Ranchi",
+                                  pincode: addr.pincode || "834001",
+                                  landmark: addr.landmark || "",
                                 });
                               }}
                               className="hover:text-gray-700 border-none bg-transparent cursor-pointer p-1.5 rounded-lg hover:bg-gray-100 transition-colors disabled:opacity-50"
@@ -1483,7 +1579,7 @@ export default function DashboardPage() {
                 {editingAddress && (
                   <form
                     onSubmit={handleSaveEditedAddress}
-                    className="p-5 bg-amber-50/50 border border-amber-200/80 rounded-2xl space-y-3 animate-fade-in"
+                    className="p-4 sm:p-5 bg-amber-50/60 border border-amber-200/90 rounded-2xl space-y-3.5 animate-fade-in shadow-2xs"
                   >
                     <div className="flex justify-between items-center">
                       <h4 className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
@@ -1498,34 +1594,85 @@ export default function DashboardPage() {
                         Cancel
                       </button>
                     </div>
-                    <div className="flex gap-2">
-                      {["Home", "Office", "Other"].map((lbl) => (
-                        <button
-                          key={lbl}
-                          type="button"
-                          onClick={() => setEditingAddress({ ...editingAddress, label: lbl })}
-                          className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${editingAddress.label === lbl
-                            ? "bg-primary text-white border-primary"
-                            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                            }`}
-                        >
-                          {lbl}
-                        </button>
-                      ))}
+
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 block mb-1.5">Address Type</label>
+                      <div className="flex gap-2">
+                        {["Home", "Office", "Other"].map((lbl) => (
+                          <button
+                            key={lbl}
+                            type="button"
+                            onClick={() => setEditingAddress({ ...editingAddress, label: lbl })}
+                            className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${editingAddress.label === lbl
+                              ? "bg-primary text-white border-primary"
+                              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                              }`}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <input
-                      type="text"
-                      required
-                      placeholder="Enter flat / house no., street, area in Ranchi"
-                      value={editingAddress.address}
-                      onChange={(e) => setEditingAddress({ ...editingAddress, address: e.target.value })}
-                      className="form-input text-xs"
-                    />
-                    <div className="flex gap-2">
+
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">
+                        Flat / House No., Apartment, Building *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Flat 402, Shivalik Heights, Harmu Road"
+                        value={editingAddress.line1 || ""}
+                        onChange={(e) => setEditingAddress({ ...editingAddress, line1: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">
+                        Area, Landmark, Street *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Near Kishore Ganj Chowk"
+                        value={editingAddress.line2 || ""}
+                        onChange={(e) => setEditingAddress({ ...editingAddress, line2: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-700 block mb-1">City *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Ranchi"
+                          value={editingAddress.city || "Ranchi"}
+                          onChange={(e) => setEditingAddress({ ...editingAddress, city: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-700 block mb-1">Pincode * (6 digits)</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 834001"
+                          maxLength={6}
+                          value={editingAddress.pincode || ""}
+                          onChange={(e) => setEditingAddress({ ...editingAddress, pincode: e.target.value.replace(/\D/g, "") })}
+                          className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
                       <button
                         type="submit"
-                        disabled={addressActionLoading}
-                        className="px-4 py-2 bg-primary hover:bg-[#91000a] text-white rounded-xl text-xs font-bold border-none cursor-pointer disabled:opacity-60 transition-colors flex items-center gap-1.5"
+                        disabled={addressActionLoading || !editingAddress.line1?.trim() || !editingAddress.line2?.trim() || !editingAddress.city?.trim() || (editingAddress.pincode || "").length !== 6}
+                        className="px-4 py-2 bg-primary hover:bg-[#91000a] text-white rounded-xl text-xs font-bold border-none cursor-pointer disabled:opacity-60 transition-colors flex items-center gap-1.5 shadow-sm"
                       >
                         {addressActionLoading && (
                           <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
@@ -1548,7 +1695,7 @@ export default function DashboardPage() {
                 {showAddAddressModal && (
                   <form
                     onSubmit={handleAddAddress}
-                    className="p-5 bg-slate-50 border border-gray-200 rounded-2xl space-y-3"
+                    className="p-4 sm:p-5 bg-slate-50 border border-gray-200 rounded-2xl space-y-3.5 animate-fade-in shadow-2xs"
                   >
                     <div className="flex justify-between items-center">
                       <h4 className="font-bold text-sm text-gray-900">Add New Ranchi Delivery Address</h4>
@@ -1560,34 +1707,85 @@ export default function DashboardPage() {
                         Cancel
                       </button>
                     </div>
-                    <div className="flex gap-2">
-                      {["Home", "Office", "Other"].map((lbl) => (
-                        <button
-                          key={lbl}
-                          type="button"
-                          onClick={() => setNewLabelInput(lbl)}
-                          className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${newLabelInput === lbl
-                            ? "bg-primary text-white border-primary"
-                            : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
-                            }`}
-                        >
-                          {lbl}
-                        </button>
-                      ))}
+
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-600 block mb-1.5">Address Type</label>
+                      <div className="flex gap-2">
+                        {["Home", "Office", "Other"].map((lbl) => (
+                          <button
+                            key={lbl}
+                            type="button"
+                            onClick={() => setNewAddressForm({ ...newAddressForm, tag: lbl })}
+                            className={`px-3 py-1 rounded-full text-xs font-bold border cursor-pointer transition-colors ${newAddressForm.tag === lbl
+                              ? "bg-primary text-white border-primary"
+                              : "bg-white text-gray-700 border-gray-200 hover:bg-gray-50"
+                              }`}
+                          >
+                            {lbl}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Flat 402, Shivalik Heights, Kishore Ganj Chowk, Harmu Road, Ranchi"
-                      value={newAddressInput}
-                      onChange={(e) => setNewAddressInput(e.target.value)}
-                      className="form-input text-xs"
-                    />
-                    <div className="flex gap-2">
+
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">
+                        Flat / House No., Apartment, Building *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Flat 402, Shivalik Heights, Harmu Road"
+                        value={newAddressForm.line1}
+                        onChange={(e) => setNewAddressForm({ ...newAddressForm, line1: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-gray-700 block mb-1">
+                        Area, Landmark, Street *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        placeholder="e.g. Near Kishore Ganj Chowk"
+                        value={newAddressForm.line2}
+                        onChange={(e) => setNewAddressForm({ ...newAddressForm, line2: e.target.value })}
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-700 block mb-1">City *</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. Ranchi"
+                          value={newAddressForm.city}
+                          onChange={(e) => setNewAddressForm({ ...newAddressForm, city: e.target.value })}
+                          className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-gray-700 block mb-1">Pincode * (6 digits)</label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. 834001"
+                          maxLength={6}
+                          value={newAddressForm.pincode}
+                          onChange={(e) => setNewAddressForm({ ...newAddressForm, pincode: e.target.value.replace(/\D/g, "") })}
+                          className="w-full px-3 py-2 rounded-xl border border-gray-300 bg-white text-xs font-medium focus:border-primary focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 pt-1">
                       <button
                         type="submit"
-                        disabled={addressActionLoading}
-                        className="px-4 py-2 bg-primary hover:bg-[#91000a] text-white rounded-xl text-xs font-bold border-none cursor-pointer disabled:opacity-60 transition-colors flex items-center gap-1.5"
+                        disabled={addressActionLoading || !newAddressForm.line1.trim() || !newAddressForm.line2.trim() || !newAddressForm.city.trim() || newAddressForm.pincode.length !== 6}
+                        className="px-4 py-2 bg-primary hover:bg-[#91000a] text-white rounded-xl text-xs font-bold border-none cursor-pointer disabled:opacity-60 transition-colors flex items-center gap-1.5 shadow-sm"
                       >
                         {addressActionLoading && (
                           <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />

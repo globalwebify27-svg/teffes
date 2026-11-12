@@ -347,6 +347,53 @@ export default function CartDrawer() {
   const [showSimulatedPaymentModal, setShowSimulatedPaymentModal] = useState<boolean>(false);
   const [simulatedOrderData, setSimulatedOrderData] = useState<any>(null);
 
+  // Mandatory Customer Name Modal state
+  const [showNameModal, setShowNameModal] = useState<boolean>(false);
+  const [customerNameInput, setCustomerNameInput] = useState<string>("");
+  const [savingName, setSavingName] = useState<boolean>(false);
+  const [postNameAction, setPostNameAction] = useState<"confirm" | "razorpay" | null>(null);
+
+  const checkCustomerName = (action: "confirm" | "razorpay"): boolean => {
+    const user = getStoredUser();
+    const name = (user?.name || "").trim();
+    if (!name || name.toLowerCase() === "valued customer" || name.toLowerCase() === "customer") {
+      setPostNameAction(action);
+      setCustomerNameInput(name && name.toLowerCase() !== "valued customer" ? name : "");
+      setShowNameModal(true);
+      return false;
+    }
+    return true;
+  };
+
+  const handleSaveCustomerName = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = customerNameInput.trim();
+    if (!cleanName) {
+      toast.warning("Please enter your full name to proceed.", "Name Required");
+      return;
+    }
+    setSavingName(true);
+    try {
+      const res = await api.put<{ success: boolean; user?: any }>("/auth/me", { name: cleanName });
+      const updated = res.data?.user || { ...getStoredUser(), name: cleanName };
+      updateUserInStorage(updated);
+      setShowNameModal(false);
+      toast.success("Name saved to your profile", "Profile Updated");
+
+      const actionToRun = postNameAction;
+      setPostNameAction(null);
+      if (actionToRun === "confirm") {
+        setTimeout(() => handleConfirmOrder(), 50);
+      } else if (actionToRun === "razorpay") {
+        setTimeout(() => handleRazorpayPayment(), 50);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Failed to save your name", "Error");
+    } finally {
+      setSavingName(false);
+    }
+  };
+
   const [orderSummary, setOrderSummary] = useState<{
     id: string;
     totalAmount: number;
@@ -605,6 +652,7 @@ export default function CartDrawer() {
   // Final Order Confirmation (Cash on Delivery / Pay at Counter)
   const handleConfirmOrder = async () => {
     if (isPlacingOrder) return;
+    if (!checkCustomerName("confirm")) return;
     const outOfStockItem = items.find((i) => i.product.inStock === false);
     if (outOfStockItem) {
       toast.error(`"${outOfStockItem.product.name}" is out of stock. Please remove it from your cart.`, "Out of Stock");
@@ -657,6 +705,7 @@ export default function CartDrawer() {
   // Razorpay Online Payment
   const handleRazorpayPayment = async () => {
     if (isPlacingOrder) return;
+    if (!checkCustomerName("razorpay")) return;
     const outOfStockItem = items.find((i) => i.product.inStock === false);
     if (outOfStockItem) {
       toast.error(`"${outOfStockItem.product.name}" is out of stock. Please remove it from your cart.`, "Out of Stock");
@@ -2792,6 +2841,69 @@ export default function CartDrawer() {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+        {/* Mandatory Customer Name Modal */}
+        {showNameModal && (
+          <div className="fixed inset-0 z-[9999] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+              <div className="p-5 border-b border-gray-100 flex items-center justify-between bg-primary/5">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                    <span className="material-symbols-outlined text-[20px]">person</span>
+                  </div>
+                  <div>
+                    <h3 className="font-extrabold text-sm text-gray-900">Your Full Name</h3>
+                    <p className="text-[11px] text-gray-500">Required for delivery and order receipt</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowNameModal(false)}
+                  className="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer p-1"
+                >
+                  <span className="material-symbols-outlined text-[20px]">close</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveCustomerName} className="p-5 space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                    Enter Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    autoFocus
+                    placeholder="e.g. Satyam Kumar"
+                    value={customerNameInput}
+                    onChange={(e) => setCustomerNameInput(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-primary focus:border-primary"
+                  />
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    This will be saved to your profile so you won&apos;t have to enter it again.
+                  </p>
+                </div>
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowNameModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-gray-200 bg-white text-gray-700 font-bold text-xs hover:bg-gray-50 cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={savingName || !customerNameInput.trim()}
+                    className="flex-1 py-2.5 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-xs disabled:opacity-50 cursor-pointer border-none flex items-center justify-center gap-1.5"
+                  >
+                    {savingName && <div className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />}
+                    <span>{savingName ? "Saving…" : "Save & Proceed"}</span>
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         )}
