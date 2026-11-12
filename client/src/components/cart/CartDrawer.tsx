@@ -441,12 +441,20 @@ export default function CartDrawer() {
   const selectedStore =
     stores.find((s) => s.storeId === selectedStoreId) || stores[0] || null;
 
+  // Store is operational only if stores are present and selectedStore is active & not paused
+  const isStoreOperational = Boolean(
+    selectedStore &&
+    stores.length > 0 &&
+    (selectedStore as any).isOpen !== false &&
+    (selectedStore as any).isAvailable !== false
+  );
+
   // Dynamic store-configurable delivery fees, thresholds, express fee, and rain surge
   const storeFreeDeliveryThreshold = selectedStore?.freeDeliveryThreshold ?? freeDeliveryThreshold;
   const storeStandardDeliveryFee = selectedStore?.standardDeliveryFee ?? 40;
   const storeExpressDeliveryFee = selectedStore?.expressDeliveryFee ?? 50;
-  const storeExpressEnabled = selectedStore?.expressDeliveryEnabled !== false;
-  const storeRainSurgeEnabled = selectedStore?.rainSurgeEnabled === true;
+  const storeExpressEnabled = isStoreOperational && selectedStore?.expressDeliveryEnabled !== false;
+  const storeRainSurgeEnabled = isStoreOperational && selectedStore?.rainSurgeEnabled === true;
   const storeRainSurgeFee = storeRainSurgeEnabled ? (selectedStore?.rainSurgeFee ?? 15) : 0;
   const storeFreeGiftThreshold = selectedStore?.freeGiftThreshold ?? freeRiceThreshold;
   const storeFreeGiftName = selectedStore?.freeGiftName || "Free Biryani Rice (500g)";
@@ -609,6 +617,11 @@ export default function CartDrawer() {
       return;
     }
 
+    if (!isStoreOperational) {
+      toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
+      return;
+    }
+
     if (fulfillmentType === "delivery") {
       await fetchAddresses();
 
@@ -652,6 +665,10 @@ export default function CartDrawer() {
   // Final Order Confirmation (Cash on Delivery / Pay at Counter)
   const handleConfirmOrder = async () => {
     if (isPlacingOrder) return;
+    if (!isStoreOperational) {
+      toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
+      return;
+    }
     if (!checkCustomerName("confirm")) return;
     const outOfStockItem = items.find((i) => i.product.inStock === false);
     if (outOfStockItem) {
@@ -705,6 +722,10 @@ export default function CartDrawer() {
   // Razorpay Online Payment
   const handleRazorpayPayment = async () => {
     if (isPlacingOrder) return;
+    if (!isStoreOperational) {
+      toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
+      return;
+    }
     if (!checkCustomerName("razorpay")) return;
     const outOfStockItem = items.find((i) => i.product.inStock === false);
     if (outOfStockItem) {
@@ -955,10 +976,20 @@ export default function CartDrawer() {
                           <span className="material-symbols-outlined text-primary text-[18px]">location_searching</span>
                           <span>Select Pickup Store nearby you</span>
                         </div>
-                        <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200/60">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${stores.filter((s) => s.isAvailable !== false).length > 0 ? "text-emerald-700 bg-emerald-50 border-emerald-200/60" : "text-rose-700 bg-rose-50 border-rose-200"}`}>
                           {stores.filter((s) => s.isAvailable !== false).length} Available
                         </span>
                       </div>
+
+                      {stores.filter((s) => s.isAvailable !== false).length === 0 && (
+                        <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs flex items-start gap-2">
+                          <span className="material-symbols-outlined text-amber-700 text-[18px] shrink-0 mt-0.5">storefront</span>
+                          <div>
+                            <p className="font-bold text-amber-950">No Pickup Stores Available</p>
+                            <p className="text-[11px] text-amber-800 mt-0.5">Stores are currently paused or outside operating hours.</p>
+                          </div>
+                        </div>
+                      )}
 
                       <div className="space-y-2">
                         {stores.map((store, idx) => {
@@ -1063,7 +1094,7 @@ export default function CartDrawer() {
                         </div>
 
                         {/* Selected Store Summary */}
-                        {selectedStore && (
+                        {isStoreOperational && selectedStore ? (
                           <div className="flex items-start gap-2.5 p-2.5 bg-slate-50/90 rounded-xl border border-gray-200/80">
                             <span className="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">location_on</span>
                             <div className="flex-1 min-w-0">
@@ -1086,6 +1117,18 @@ export default function CartDrawer() {
                                 <span>•</span>
                                 <span>Dispatching to your address</span>
                               </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-start gap-2.5 p-3 bg-amber-50/90 rounded-xl border border-amber-200/90 text-amber-950">
+                            <span className="material-symbols-outlined text-amber-700 text-[20px] shrink-0 mt-0.5">storefront</span>
+                            <div>
+                              <p className="font-bold text-[12.5px] text-amber-950 leading-tight">
+                                Store Paused / Temporarily Offline
+                              </p>
+                              <p className="text-[11px] text-amber-800 leading-relaxed mt-1">
+                                Our fulfilling store hub is currently paused and not accepting delivery orders. Please check back shortly.
+                              </p>
                             </div>
                           </div>
                         )}
@@ -1137,27 +1180,27 @@ export default function CartDrawer() {
                               {/* 1. Express Delivery (60 min) */}
                               <button
                                 type="button"
-                                disabled={!storeExpressEnabled}
-                                onClick={() => storeExpressEnabled && setSlot("express60")}
-                                style={slot === "express60" && storeExpressEnabled ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
-                                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${!storeExpressEnabled
-                                  ? "border-gray-200 bg-gray-100/70 opacity-60 cursor-not-allowed"
+                                disabled={!isStoreOperational || !storeExpressEnabled}
+                                onClick={() => isStoreOperational && storeExpressEnabled && setSlot("express60")}
+                                style={slot === "express60" && isStoreOperational && storeExpressEnabled ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                                className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${!isStoreOperational || !storeExpressEnabled
+                                  ? "border-gray-200 bg-gray-100/70 opacity-50 cursor-not-allowed"
                                   : slot === "express60"
-                                    ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
-                                    : "border-gray-200 bg-white hover:border-gray-300"
+                                    ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25 cursor-pointer"
+                                    : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
                                   }`}
-                                title={!storeExpressEnabled ? "Express 60-min delivery temporarily paused by store hub (Kitchen Busy)" : undefined}
+                                title={!isStoreOperational ? "Store is currently paused" : !storeExpressEnabled ? "Express 60-min delivery temporarily paused by store hub" : undefined}
                               >
                                 <div className="flex items-center justify-between gap-1">
-                                  <span className="font-bold text-[12px] text-gray-900 leading-tight">Express</span>
-                                  <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${storeExpressEnabled ? "bg-amber-100 text-amber-900" : "bg-gray-200 text-gray-600"}`}>
-                                    {storeExpressEnabled ? `+₹${storeExpressDeliveryFee}` : "Paused"}
+                                  <span className={`font-bold text-[12px] leading-tight ${!isStoreOperational ? "text-gray-400" : "text-gray-900"}`}>Express</span>
+                                  <span className={`text-[9.5px] font-black px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${isStoreOperational && storeExpressEnabled ? "bg-amber-100 text-amber-900" : "bg-gray-200 text-gray-500"}`}>
+                                    {isStoreOperational && storeExpressEnabled ? `+₹${storeExpressDeliveryFee}` : "Paused"}
                                   </span>
                                 </div>
                                 <div className="mt-1.5">
-                                  <div className="text-[11px] font-bold text-[#91000a] leading-tight">60 Mins</div>
+                                  <div className={`text-[11px] font-bold leading-tight ${isStoreOperational && storeExpressEnabled ? "text-[#91000a]" : "text-gray-400"}`}>60 Mins</div>
                                   <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">
-                                    {storeExpressEnabled ? "Priority Rush" : "Kitchen Backlog"}
+                                    {!isStoreOperational ? "Store Offline" : storeExpressEnabled ? "Priority Rush" : "Kitchen Backlog"}
                                   </div>
                                 </div>
                               </button>
@@ -1165,43 +1208,66 @@ export default function CartDrawer() {
                               {/* 2. 90 Min Delivery */}
                               <button
                                 type="button"
-                                onClick={() => setSlot("standard90")}
-                                style={slot === "standard90" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
-                                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "standard90"
-                                  ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
-                                  : "border-gray-200 bg-white hover:border-gray-300"
+                                disabled={!isStoreOperational}
+                                onClick={() => isStoreOperational && setSlot("standard90")}
+                                style={slot === "standard90" && isStoreOperational ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                                className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${!isStoreOperational
+                                  ? "border-gray-200 bg-gray-100/70 opacity-50 cursor-not-allowed"
+                                  : slot === "standard90"
+                                    ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25 cursor-pointer"
+                                    : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
                                   }`}
+                                title={!isStoreOperational ? "Store is currently paused" : undefined}
                               >
                                 <div className="flex items-center justify-between gap-1">
-                                  <span className="font-bold text-[12px] text-gray-900 leading-tight">90 Min</span>
-                                  <span className="text-[9.5px] font-bold text-emerald-800 bg-emerald-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
+                                  <span className={`font-bold text-[12px] leading-tight ${!isStoreOperational ? "text-gray-400" : "text-gray-900"}`}>90 Min</span>
+                                  <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${isStoreOperational ? "text-emerald-800 bg-emerald-100/70" : "bg-gray-200 text-gray-500"}`}>
+                                    {isStoreOperational ? "Free" : "Paused"}
+                                  </span>
                                 </div>
                                 <div className="mt-1.5">
-                                  <div className="text-[11px] font-bold text-gray-900 leading-tight">Fresh Cut</div>
-                                  <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">Standard</div>
+                                  <div className={`text-[11px] font-bold leading-tight ${isStoreOperational ? "text-gray-900" : "text-gray-400"}`}>Fresh Cut</div>
+                                  <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">
+                                    {!isStoreOperational ? "Store Offline" : "Standard"}
+                                  </div>
                                 </div>
                               </button>
 
                               {/* 3. Custom Delivery */}
                               <button
                                 type="button"
-                                onClick={() => setSlot("custom")}
-                                style={slot === "custom" ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
-                                className={`p-2.5 rounded-xl border text-left cursor-pointer transition-all flex flex-col justify-between ${slot === "custom"
-                                  ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25"
-                                  : "border-gray-200 bg-white hover:border-gray-300"
+                                disabled={!isStoreOperational}
+                                onClick={() => isStoreOperational && setSlot("custom")}
+                                style={slot === "custom" && isStoreOperational ? { borderColor: "#91000a", borderWidth: "1.5px" } : undefined}
+                                className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${!isStoreOperational
+                                  ? "border-gray-200 bg-gray-100/70 opacity-50 cursor-not-allowed"
+                                  : slot === "custom"
+                                    ? "border-[#91000a] bg-red-50/60 shadow-xs ring-1 ring-[#91000a]/25 cursor-pointer"
+                                    : "border-gray-200 bg-white hover:border-gray-300 cursor-pointer"
                                   }`}
+                                title={!isStoreOperational ? "Store is currently paused" : undefined}
                               >
                                 <div className="flex items-center justify-between gap-1">
-                                  <span className="font-bold text-[12px] text-gray-900 leading-tight">Custom</span>
-                                  <span className="text-[9.5px] font-bold text-sky-800 bg-sky-100/70 px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap">Free</span>
+                                  <span className={`font-bold text-[12px] leading-tight ${!isStoreOperational ? "text-gray-400" : "text-gray-900"}`}>Custom</span>
+                                  <span className={`text-[9.5px] font-bold px-1.5 py-0.5 rounded-md leading-none whitespace-nowrap ${isStoreOperational ? "text-sky-800 bg-sky-100/70" : "bg-gray-200 text-gray-500"}`}>
+                                    {isStoreOperational ? "Free" : "Paused"}
+                                  </span>
                                 </div>
                                 <div className="mt-1.5">
-                                  <div className="text-[11px] font-bold text-sky-900 leading-tight">Choose</div>
-                                  <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">8 AM - 8 PM</div>
+                                  <div className={`text-[11px] font-bold leading-tight ${isStoreOperational ? "text-sky-900" : "text-gray-400"}`}>Choose</div>
+                                  <div className="text-[9.5px] text-gray-500 font-medium leading-tight mt-0.5">
+                                    {!isStoreOperational ? "Store Offline" : "8 AM - 8 PM"}
+                                  </div>
                                 </div>
                               </button>
                             </div>
+
+                            {!isStoreOperational && (
+                              <p className="text-[11px] text-rose-700 font-semibold mt-2 flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-[15px]">pause_circle</span>
+                                <span>Delivery speeds disabled — store hub is currently paused / offline.</span>
+                              </p>
+                            )}
 
                             {/* Custom Delivery Dropdown when Custom is selected */}
                             {slot === "custom" && (
@@ -1926,6 +1992,15 @@ export default function CartDrawer() {
                       <span className="material-symbols-outlined text-[18px] text-amber-700">remove_shopping_cart</span>
                       <span>Remove Out-of-Stock Item to Checkout</span>
                     </button>
+                  ) : !isStoreOperational ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-3 rounded-full bg-gray-200 border border-gray-300 text-gray-500 font-label-lg font-extrabold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">store_mall_directory</span>
+                      <span>Store Paused — Orders Disabled</span>
+                    </button>
                   ) : (
                     <button
                       id="cart-checkout-btn"
@@ -2283,7 +2358,7 @@ export default function CartDrawer() {
                 {selectedPayment === "cod" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={handleConfirmOrder}
                     className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50"
                   >
@@ -2296,7 +2371,7 @@ export default function CartDrawer() {
                 ) : selectedPayment === "wallet" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={async () => {
                       // Let's use the handleConfirmOrder but set the paymentMethod to Wallet on backend
                       await handleConfirmOrder();
