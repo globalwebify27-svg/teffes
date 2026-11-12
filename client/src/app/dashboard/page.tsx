@@ -979,6 +979,8 @@ export default function DashboardPage() {
         quantity: it.quantity || 1,
         netWeight: it.netWeight || it.weight || "1 unit",
       })),
+      isModified: Boolean(o.isModified || o.rawOrder?.isModified),
+      additionalAmountDue: Number(o.additionalAmountDue || o.rawOrder?.additionalAmountDue || 0),
       rawOrder: o,
     };
   });
@@ -2277,6 +2279,20 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
+
+                  {(trackingOrder.isModified || trackingOrder.rawOrder?.isModified) && (
+                    <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between text-[11px] font-bold text-amber-900">
+                      <span className="inline-flex items-center gap-1">
+                        <span className="material-symbols-outlined text-[14px] text-amber-700">edit_note</span>
+                        <span>Revised Order (Items/Weight adjusted on call)</span>
+                      </span>
+                      {Number(trackingOrder.additionalAmountDue || trackingOrder.rawOrder?.additionalAmountDue || 0) > 0 && (
+                        <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10.5px] font-extrabold">
+                          Pay ₹{trackingOrder.additionalAmountDue || trackingOrder.rawOrder?.additionalAmountDue} Extra on Delivery
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

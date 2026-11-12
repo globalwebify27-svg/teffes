@@ -81,77 +81,197 @@ const getEffectiveStoreId = (req) => {
 };
 
 /**
+ * Resolves the operational delivery date for an order in YYYY-MM-DD IST format.
+ * If order was placed after 8PM, or during half-day / holiday cutoff, or explicitly marked
+ * for next-day delivery, it is credited to the date it is SCHEDULED TO BE DELIVERED.
+ */
+const getOrderDeliveryDateIST = (order) => {
+  if (!order) return '';
+
+  // 1. Explicit scheduled delivery date (YYYY-MM-DD)
+  if (order.scheduledDeliveryDate && typeof order.scheduledDeliveryDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(order.scheduledDeliveryDate)) {
+    return order.scheduledDeliveryDate;
+  }
+
+  // 2. targetDeliveryTime ISO timestamp converted to IST date string
+  if (order.targetDeliveryTime) {
+    try {
+      const dt = new Date(order.targetDeliveryTime);
+      if (!isNaN(dt.getTime())) {
+        const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000);
+        return new Date(istMs).toISOString().slice(0, 10);
+      }
+    } catch (_) {}
+  }
+
+  // 3. Fallback to createdAt + next-day detection
+  if (order.createdAt) {
+    try {
+      const dt = new Date(order.createdAt);
+      if (!isNaN(dt.getTime())) {
+        const slot = String(order.deliverySlot || '').toLowerCase();
+        const isNextDay = Boolean(
+          order.isNextDayOrder ||
+          slot.includes('tomorrow') ||
+          slot.includes('next-day') ||
+          slot.includes('9:00 am')
+        );
+        const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000) + (isNextDay ? 24 * 60 * 60 * 1000 : 0);
+        return new Date(istMs).toISOString().slice(0, 10);
+      }
+    } catch (_) {}
+  }
+
+  return '';
+};
+
+/**
+ * Checks if an order's scheduled delivery date matches the chosen time range.
+ */
+const isOrderInDateRange = (order, timeRange = 'all', customStart = '', customEnd = '') => {
+  const deliveryDate = getOrderDeliveryDateIST(order);
+  if (!deliveryDate) return true;
+  const todayIST = getTodayISTDateString();
+
+  const getPastDateIST = (daysAgo) => {
+    const todayMs = new Date(todayIST + 'T00:00:00Z').getTime();
+    return new Date(todayMs - (daysAgo * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
+  };
+
+  const mode = String(timeRange || 'all').toLowerCase();
+  switch (mode) {
+    case 'today':
+      return deliveryDate === todayIST;
+    case 'last7days':
+      return deliveryDate >= getPastDateIST(6) && deliveryDate <= todayIST;
+    case 'last30days':
+      return deliveryDate >= getPastDateIST(29) && deliveryDate <= todayIST;
+    case 'last90days':
+      return deliveryDate >= getPastDateIST(89) && deliveryDate <= todayIST;
+    case 'last12months':
+      return deliveryDate >= getPastDateIST(365) && deliveryDate <= todayIST;
+    case 'custom':
+      if (customStart && customEnd) {
+        return deliveryDate >= customStart && deliveryDate <= customEnd;
+      }
+      if (customStart) return deliveryDate >= customStart;
+      if (customEnd) return deliveryDate <= customEnd;
+      return true;
+    case 'all':
+    default:
+      return true;
+  }
+};
+
+/**
  * GET /api/store-admin/dashboard
- * Store Admin KPI summary & latest orders
+ * Store Admin KPI summary & latest orders with operational delivery date filtering
  */
 const getDashboardOverview = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
+    const timeRange = (req.query?.timeRange || req.query?.filter || 'all').toLowerCase();
+    const customStart = req.query?.startDate || '';
+    const customEnd = req.query?.endDate || '';
 
-    const [orders, inventory, allRiders] = await Promise.all([
+    const [orders, allRiders] = await Promise.all([
       getStoreOrders(storeId),
-      getStoreInventory(storeId),
       queryDocs('users', (ref) => ref.where('role', '==', 'rider')),
     ]);
 
-    const pendingCount = orders.filter((o) => ['Pending', 'Cutting'].includes(o.status)).length;
-    const deliveredOrders = orders.filter((o) => o.status === 'Delivered');
-    const deliveredTodayCount = deliveredOrders.length;
-    const totalOrders = orders.length;
+    // Authoritative date filtering based on operational delivery date
+    const filteredOrders = orders.filter((o) => isOrderInDateRange(o, timeRange, customStart, customEnd));
 
-    const chickenInv = inventory.find((i) => (i.category || '').toLowerCase() === 'chicken' || (i.item || '').toLowerCase().includes('chicken'));
-    const muttonInv = inventory.find((i) => (i.category || '').toLowerCase() === 'mutton' || (i.item || '').toLowerCase().includes('mutton'));
+    const totalOrdersCount = filteredOrders.length;
+    const totalRevenue = filteredOrders
+      .filter((o) => o.status !== 'Cancelled' && o.status !== 'Rejected')
+      .reduce((sum, o) => sum + (Number(o.amount || o.totalAmount || 0)), 0);
 
-    const activeRidersCount = allRiders.filter((r) => r.isActive !== false && (!r.storeId || resolveStoreId(r.storeId) === storeId)).length || allRiders.length;
+    const pendingOrdersCount = filteredOrders.filter((o) =>
+      ['Pending', 'Cutting', 'Ready', 'Out for Delivery'].includes(o.status)
+    ).length;
+
+    const completedOrdersCount = filteredOrders.filter((o) =>
+      o.status === 'Delivered' || o.status === 'Completed'
+    ).length;
+
+    const totalRidersCount = allRiders.length;
+    const activeRidersCount = allRiders.filter((r) => r.isActive !== false && (!r.storeId || resolveStoreId(r.storeId) === storeId)).length;
+
+    // Formatted Indian revenue string
+    const formattedRevenue = new Intl.NumberFormat('en-IN', {
+      maximumFractionDigits: 1,
+      minimumFractionDigits: 0,
+    }).format(totalRevenue);
 
     const kpis = [
       {
-        icon: 'pending_actions',
-        label: 'Orders to Prepare',
-        value: `${pendingCount}`,
-        sub: pendingCount > 0 ? `${pendingCount} orders in Teffes store prep` : 'All caught up',
-        color: '#941717',
+        icon: 'receipt_long',
+        label: 'Total orders',
+        value: `${totalOrdersCount}`,
+        sub: timeRange === 'today' ? "Today's placed orders" : 'In selected period',
+        color: '#1e3a8a',
         tab: 'orders',
+        hasInfo: true,
+        infoText: 'Total orders scheduled for delivery in selected date range',
+      },
+      {
+        icon: 'payments',
+        label: 'Total revenue',
+        value: `₹${formattedRevenue}`,
+        sub: 'Excluding cancellations',
+        color: '#047857',
+        tab: 'orders',
+        hasInfo: true,
+        infoText: 'Gross revenue of valid orders in selected date range',
+      },
+      {
+        icon: 'pending_actions',
+        label: 'Total pending orders',
+        value: `${pendingOrdersCount}`,
+        sub: 'Pending, Cutting, Ready & In Transit',
+        color: '#b45309',
+        tab: 'orders',
+        hasInfo: true,
+        infoText: 'Orders currently awaiting cutting, packaging or doorstep delivery',
       },
       {
         icon: 'check_circle',
-        label: 'Delivered Today',
-        value: `${deliveredTodayCount}`,
-        sub: `Out of ${totalOrders} total orders`,
+        label: 'Total completed orders',
+        value: `${completedOrdersCount}`,
+        sub: 'Successfully delivered',
         color: '#059669',
         tab: 'orders',
-      },
-      {
-        icon: 'set_meal',
-        label: 'Chicken Stock',
-        value: chickenInv ? `${chickenInv.stock} ${chickenInv.unit || 'kg'}` : 'In Stock',
-        sub: 'Fresh batch available',
-        color: '#7c3aed',
-        tab: 'inventory',
-      },
-      {
-        icon: 'kebab_dining',
-        label: 'Mutton Stock',
-        value: muttonInv ? `${muttonInv.stock} ${muttonInv.unit || 'kg'}` : 'In Stock',
-        sub: 'Young goat fresh batch',
-        color: '#d97706',
-        tab: 'inventory',
+        hasInfo: true,
+        infoText: 'Orders successfully delivered in selected date range',
       },
       {
         icon: 'two_wheeler',
-        label: 'Active Riders',
-        value: `${activeRidersCount}`,
-        sub: `${allRiders.filter((r) => r.riderStatus === 'On Delivery').length} on delivery`,
+        label: 'Total riders',
+        value: `${totalRidersCount}`,
+        sub: `${activeRidersCount} active on field`,
         color: '#0284c7',
         tab: 'riders',
+        hasInfo: true,
+        infoText: 'Total delivery fleet partners registered in system',
       },
     ];
 
     res.status(200).json({
       success: true,
       storeId,
+      timeRange,
       kpis,
-      latestOrders: orders.slice(0, 10),
+      statusBreakdown: {
+        all: totalOrdersCount,
+        new: filteredOrders.filter((o) => o.status === 'Pending').length,
+        cutting: filteredOrders.filter((o) => o.status === 'Cutting').length,
+        ready: filteredOrders.filter((o) => o.status === 'Ready').length,
+        inTransit: filteredOrders.filter((o) => o.status === 'Out for Delivery').length,
+        completed: completedOrdersCount,
+        others: filteredOrders.filter((o) => o.status === 'Cancelled' || o.status === 'Rejected').length,
+      },
+      latestOrders: filteredOrders.slice(0, 15),
     });
   } catch (error) {
     next(error);
@@ -391,32 +511,204 @@ const updateOrderStatus = async (req, res, next) => {
 const delayPrepTime = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const extraMinutes = Number(req.body.extraMinutes) || 10;
+    const extraMinutes = Number(req.body.extraMinutes);
+
+    if (!extraMinutes || isNaN(extraMinutes) || extraMinutes <= 0) {
+      return res.status(400).json({ success: false, message: 'extraMinutes must be a positive number (e.g. 10, 20, 30, 60).' });
+    }
 
     const order = await getOrderByIdFS(id);
     if (!order) {
       return res.status(404).json({ success: false, message: 'Order not found' });
     }
 
+    // Status guard: Cannot delay if already delivered or cancelled
+    if (order.status === 'Delivered' || order.status === 'Cancelled') {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot delay preparation because order is already ${order.status}.`,
+      });
+    }
+
+    const docId = order.id || order._id || id;
     const newPrepTime = (order.prepTimeMinutes || 25) + extraMinutes;
     const currentTarget = order.targetDeliveryTime ? new Date(order.targetDeliveryTime).getTime() : Date.now();
     const newTarget = new Date(currentTarget + extraMinutes * 60 * 1000).toISOString();
+    const now = new Date().toISOString();
 
-    await updateDoc('orders', id, {
+    await updateDoc('orders', docId, {
       prepTimeMinutes: newPrepTime,
       targetDeliveryTime: newTarget,
-      updatedAt: new Date().toISOString(),
+      updatedAt: now,
     });
 
     order.prepTimeMinutes = newPrepTime;
     order.targetDeliveryTime = newTarget;
+    order.updatedAt = now;
+
+    // Send push notification to customer informing them of the delay
+    const customerUserId = order.customer?.userId || order.userId;
+    if (customerUserId) {
+      let formattedEta = '';
+      try {
+        formattedEta = new Date(newTarget).toLocaleTimeString('en-IN', {
+          hour: '2-digit',
+          minute: '2-digit',
+          hour12: true,
+        });
+      } catch (_) {}
+
+      notificationService.sendToUser(customerUserId, {
+        title: 'Order Preparation Delay',
+        body: `Our butchery counter added +${extraMinutes} mins for fresh cutting. New estimated delivery: ${formattedEta || 'Updated'}.`,
+        data: {
+          notificationType: 'ORDER_DELAY',
+          orderId: order.orderId || id,
+          extraMinutes: String(extraMinutes),
+          newTargetDeliveryTime: newTarget,
+        },
+      }).catch((err) => console.warn('[FCM] Delay push error:', err.message));
+    }
 
     emitOrderStatusUpdate(order.orderId || id, order);
+    if (docId !== (order.orderId || id)) {
+      emitOrderStatusUpdate(docId, order);
+    }
 
     res.status(200).json({
       success: true,
       message: `Prep time extended by +${extraMinutes} mins. New customer ETA updated.`,
       order,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * PATCH /api/store-admin/orders/:id/modify-items
+ * Modify items, weight, quantity or piece count in an active order
+ */
+const modifyOrderItems = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { items: newItems, reason } = req.body;
+
+    if (!newItems || !Array.isArray(newItems) || newItems.length === 0) {
+      return res.status(400).json({ success: false, message: 'Updated items array cannot be empty.' });
+    }
+
+    const order = await getOrderByIdFS(id);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    // Guard: Only allow modifications while still in store preparation
+    const currentStatus = String(order.status || 'Pending').toLowerCase();
+    const allowedStatuses = ['pending', 'cutting', 'ready'];
+    if (!allowedStatuses.includes(currentStatus)) {
+      return res.status(400).json({
+        success: false,
+        message: `Cannot modify items because order is already in "${order.status}" stage.`,
+      });
+    }
+
+    const docId = order.id || order._id || id;
+
+    // Authoritative calculation of new items array and subtotal
+    let newSubtotal = 0;
+    const processedItems = newItems.map((item) => {
+      const qty = Math.max(1, Number(item.quantity) || 1);
+      const unitPrice = Math.max(0, Number(item.itemPrice ?? item.price ?? 0));
+      const lineTotal = Math.round(unitPrice * qty);
+      newSubtotal += lineTotal;
+
+      return {
+        productId: item.productId || item.id || '',
+        name: item.name || 'Cut Item',
+        price: unitPrice,
+        quantity: qty,
+        netWeight: item.netWeight || item.weight || '',
+        image: item.image || '',
+        isModified: Boolean(item.isModified),
+        notes: item.notes || '',
+      };
+    });
+
+    const deliveryFee = Number(order.deliveryFee) || 0;
+    const expressFee = Number(order.expressFee) || 0;
+    const tip = Number(order.tip || order.tipAmount) || 0;
+    const discountAmount = Number(order.discountAmount) || 0;
+
+    const newGrandTotal = Math.max(0, newSubtotal + deliveryFee + expressFee + tip - discountAmount);
+    // Preserve true initial amount even across multiple modifications
+    const originalAmount = Number(order.originalAmount != null ? order.originalAmount : (order.amount ?? order.totalAmount ?? 0));
+
+    // Build human-readable item summary for KOT and dashboard
+    const itemSummary = processedItems
+      .map((it) => `${it.name}${it.netWeight ? ` (${it.netWeight})` : ''} ×${it.quantity}`)
+      .join(', ');
+
+    const now = new Date().toISOString();
+    const updatePayload = {
+      items: processedItems,
+      itemSummary,
+      subtotal: newSubtotal,
+      amount: newGrandTotal,
+      totalAmount: newGrandTotal,
+      isModified: true,
+      modifiedAt: now,
+      modificationReason: reason || 'Customer requested quantity/weight adjustment on call',
+      updatedAt: now,
+    };
+
+    // If order was paid online, preserve record of original payment and track extra balance due
+    const isOnlinePrepaid = order.paymentStatus === 'Paid' && (
+      order.paymentMethod?.toLowerCase().includes('online') ||
+      order.paymentMethod?.toLowerCase().includes('payu') ||
+      order.paymentMethod?.toLowerCase().includes('razorpay') ||
+      order.paymentMethod?.toLowerCase().includes('upi') ||
+      order.paymentMethod?.toLowerCase().includes('wallet')
+    );
+
+    if (isOnlinePrepaid) {
+      const additionalDue = Math.max(0, newGrandTotal - originalAmount);
+      updatePayload.originalAmount = originalAmount;
+      updatePayload.additionalAmountDue = additionalDue;
+      updatePayload.additionalPaymentStatus = additionalDue > 0 ? 'Pending Collection on Delivery' : 'Settled';
+    }
+
+    await updateDoc('orders', docId, updatePayload);
+
+    const updatedOrder = {
+      ...order,
+      ...updatePayload,
+    };
+
+    // Notify customer about the order revision
+    const customerUserId = order.customer?.userId || order.userId;
+    if (customerUserId) {
+      notificationService.sendToUser(customerUserId, {
+        title: 'Order Items Revised',
+        body: `Your order #${order.orderId || id} has been updated. New Total: ₹${newGrandTotal}.`,
+        data: {
+          notificationType: 'ORDER_MODIFIED',
+          orderId: order.orderId || id,
+          newAmount: String(newGrandTotal),
+        },
+      }).catch((err) => console.warn('[FCM] Order modified push error:', err.message));
+    }
+
+    // Real-time WebSocket emission to all devices and store room
+    emitOrderStatusUpdate(order.orderId || id, updatedOrder);
+    if (docId !== (order.orderId || id)) {
+      emitOrderStatusUpdate(docId, updatedOrder);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order items and bill successfully updated.',
+      order: updatedOrder,
     });
   } catch (error) {
     next(error);
@@ -1751,4 +2043,5 @@ module.exports = {
   getStoreBatchSettings,
   updateStoreBatchSettings,
   createManualOrder,
+  modifyOrderItems,
 };

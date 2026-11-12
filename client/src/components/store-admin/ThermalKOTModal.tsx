@@ -46,6 +46,11 @@ interface ThermalOrder {
   itemSummary?: string;
   storeName?: string;
   storeAddress?: string;
+  isModified?: boolean;
+  originalAmount?: number;
+  additionalAmountDue?: number;
+  modifiedAt?: string;
+  modificationReason?: string;
 }
 
 interface ThermalKOTModalProps {
@@ -372,12 +377,19 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
 
               {/* Payment Status Strip */}
               <div className="py-3 border-b border-dashed border-black text-center text-black">
+                {order.isModified && (
+                  <div className="mb-2 p-1.5 bg-yellow-100 border border-black font-black text-[13px] uppercase tracking-wider">
+                    REVISED ORDER (ITEMS / WEIGHT MODIFIED)
+                  </div>
+                )}
                 <div className="font-black text-[16px]">
                   PAYMENT: {isPaid ? "PAID ONLINE" : "CASH ON DELIVERY (COD)"}
                 </div>
                 <div className="text-[14px] font-bold mt-0.5">
                   {isPaid
-                    ? `Paid via ${order.paymentMethod || "Online Gateway"} · Collect ₹0`
+                    ? ((order.additionalAmountDue ?? 0) > 0
+                        ? `Online Paid: ₹${order.originalAmount || (order.amount - (order.additionalAmountDue || 0))} · COLLECT ₹${order.additionalAmountDue} EXTRA IN CASH/UPI`
+                        : `Paid via ${order.paymentMethod || "Online Gateway"} · Collect ₹0`)
                     : `Please collect ₹${order.amount} in cash from customer`}
                 </div>
               </div>

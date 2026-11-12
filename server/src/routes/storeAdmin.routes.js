@@ -32,6 +32,7 @@ const {
   getStoreBatchSettings,
   updateStoreBatchSettings,
   createManualOrder,
+  modifyOrderItems,
 } = require('../controllers/storeAdmin.controller');
 
 const router = Router();
@@ -56,6 +57,7 @@ router.get('/orders', getOrders);
 router.post('/orders/create-manual', createManualOrder);
 router.patch('/orders/:id/status', updateOrderStatus);
 router.post('/orders/:id/delay-prep', delayPrepTime);
+router.patch('/orders/:id/modify-items', modifyOrderItems);
 router.patch('/orders/:id/assign-rider', assignRiderToOrder);
 
 // Multi-Order Delivery Batches

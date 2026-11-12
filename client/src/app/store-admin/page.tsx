@@ -29,6 +29,8 @@ import StoreAdminInventoryLogsTab from "@/components/store-admin/InventoryLogsTa
 import StoreTransfersSection from "@/components/store-admin/StoreTransfersSection";
 import Pagination from "@/components/common/Pagination";
 import StoreScheduleTab from "@/components/store-admin/StoreScheduleTab";
+import OrderEditModal from "@/components/store-admin/OrderEditModal";
+import DateFilterDropdown from "@/components/store-admin/DateFilterDropdown";
 
 // ─── Sidebar tabs ─────────────────────────────────────────────────────────────
 const TABS = [
@@ -64,6 +66,8 @@ const KPICard = ({
   sub,
   color = "#941717",
   onClick,
+  hasInfo = false,
+  infoText = "",
 }: {
   icon: string;
   label: string;
@@ -71,6 +75,8 @@ const KPICard = ({
   sub: string;
   color?: string;
   onClick?: () => void;
+  hasInfo?: boolean;
+  infoText?: string;
 }) => {
   const [hovered, setHovered] = useState(false);
   const [active, setActive] = useState(false);
@@ -216,10 +222,22 @@ const KPICard = ({
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
+            display: "flex",
+            alignItems: "center",
+            gap: "5px",
           }}
-          title={label}
+          title={infoText || label}
         >
-          {label}
+          <span>{label}</span>
+          {(hasInfo || infoText) && (
+            <span
+              className="material-symbols-outlined text-[13px] text-gray-400 hover:text-gray-700 cursor-help"
+              style={{ display: "inline-block", verticalAlign: "middle" }}
+              title={infoText || label}
+            >
+              info
+            </span>
+          )}
         </div>
 
         {/* Subtext info with optional trend chip */}
@@ -452,25 +470,64 @@ const FileUploadButton = ({
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
-let cachedStoreDashboardData: { kpis: any[]; latestOrders: any[] } | null = null;
+let cachedStoreDashboardData: { kpis: any[]; latestOrders: any[]; statusBreakdown?: any } | null = null;
 
 function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.kpis || []);
   const [latestOrders, setLatestOrders] = useState<any[]>(cachedStoreDashboardData?.latestOrders || []);
   const [loading, setLoading] = useState(!cachedStoreDashboardData);
+  const [timeRange, setTimeRange] = useState("all");
+  const [customStartDate, setCustomStartDate] = useState("");
+  const [customEndDate, setCustomEndDate] = useState("");
+  const [statusSubtab, setStatusSubtab] = useState("All");
+  const [statusBreakdown, setStatusBreakdown] = useState<any>(
+    cachedStoreDashboardData?.statusBreakdown || {
+      all: 0,
+      new: 0,
+      cutting: 0,
+      ready: 0,
+      inTransit: 0,
+      completed: 0,
+      others: 0,
+    }
+  );
 
-  const loadData = () => {
+  const loadData = (range = timeRange, start = customStartDate, end = customEndDate) => {
     if (!cachedStoreDashboardData) {
       setLoading(true);
     }
-    api.get<{ success: boolean; kpis: any[]; latestOrders: any[] }>("/store-admin/dashboard")
+    api.get<{ success: boolean; kpis: any[]; latestOrders: any[]; statusBreakdown?: any }>(
+      "/store-admin/dashboard",
+      {
+        params: {
+          timeRange: range,
+          startDate: start || undefined,
+          endDate: end || undefined,
+        },
+      }
+    )
       .then(res => {
         if (res.data.success) {
           const freshKpis = res.data.kpis || [];
           const freshOrders = res.data.latestOrders || [];
-          cachedStoreDashboardData = { kpis: freshKpis, latestOrders: freshOrders };
+          const freshBreakdown = res.data.statusBreakdown || {
+            all: freshOrders.length,
+            new: freshOrders.filter(o => o.status === "Pending").length,
+            cutting: freshOrders.filter(o => o.status === "Cutting").length,
+            ready: freshOrders.filter(o => o.status === "Ready").length,
+            inTransit: freshOrders.filter(o => o.status === "Out for Delivery").length,
+            completed: freshOrders.filter(o => o.status === "Delivered").length,
+            others: freshOrders.filter(o => o.status === "Cancelled" || o.status === "Rejected").length,
+          };
+
+          cachedStoreDashboardData = {
+            kpis: freshKpis,
+            latestOrders: freshOrders,
+            statusBreakdown: freshBreakdown,
+          };
           setKpis(freshKpis);
           setLatestOrders(freshOrders);
+          setStatusBreakdown(freshBreakdown);
         }
       })
       .catch(err => console.warn("Failed to load store-admin dashboard:", err))
@@ -478,10 +535,10 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   };
 
   useEffect(() => {
-    loadData();
+    loadData(timeRange, customStartDate, customEndDate);
     const socket = getSocket();
     const handleUpdate = () => {
-      loadData();
+      loadData(timeRange, customStartDate, customEndDate);
     };
     socket.on("orders:refreshed", handleUpdate);
     socket.on("order:created", handleUpdate);
@@ -489,9 +546,9 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
     socket.on("order:status_changed", handleUpdate);
     socket.on("inventory:updated", handleUpdate);
 
-    // 60-second (1 minute) gentle backup polling (real-time updates arrive via WebSockets)
+    // 60-second backup polling
     const pollTimer = setInterval(() => {
-      loadData();
+      loadData(timeRange, customStartDate, customEndDate);
     }, 60000);
 
     return () => {
@@ -502,40 +559,78 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
       socket.off("order:status_changed", handleUpdate);
       socket.off("inventory:updated", handleUpdate);
     };
-  }, []);
+  }, [timeRange, customStartDate, customEndDate]);
 
   const placeholderKpis = [
-    { icon: "inventory_2", label: "Orders to Prepare", value: "—", sub: "Awaiting cutting or dispatch", color: "#941717", tab: "orders" },
-    { icon: "check_circle", label: "Delivered Today", value: "—", sub: "Successfully completed", color: "#059669", tab: "orders" },
-    { icon: "restaurant", label: "Chicken Stock", value: "—", sub: "Fresh stock available", color: "#7c3aed", tab: "inventory" },
-    { icon: "kebab_dining", label: "Mutton Stock", value: "—", sub: "Young goat — fresh batch", color: "#d97706", tab: "inventory" },
-    { icon: "two_wheeler", label: "Active Riders", value: "—", sub: "Available in Ranchi", color: "#0284c7", tab: "riders" },
+    { icon: "receipt_long", label: "Total orders", value: "—", sub: "All placed orders", color: "#1e3a8a", tab: "orders", hasInfo: true, infoText: "Total orders scheduled for delivery in selected date range" },
+    { icon: "payments", label: "Total revenue", value: "—", sub: "Excluding cancellations", color: "#047857", tab: "orders", hasInfo: true, infoText: "Gross revenue of valid orders in selected date range" },
+    { icon: "pending_actions", label: "Total pending orders", value: "—", sub: "Pending, Cutting & Transit", color: "#b45309", tab: "orders", hasInfo: true, infoText: "Orders currently awaiting fulfillment or in transit" },
+    { icon: "check_circle", label: "Total completed orders", value: "—", sub: "Successfully delivered", color: "#059669", tab: "orders", hasInfo: true, infoText: "Orders successfully delivered in selected date range" },
+    { icon: "two_wheeler", label: "Total riders", value: "—", sub: "Delivery fleet partners", color: "#0284c7", tab: "riders", hasInfo: true, infoText: "Total registered delivery partners" },
   ];
 
   const displayKpis = kpis.length > 0 ? kpis : placeholderKpis;
 
   const labelToTab: Record<string, string> = {
-    "Pending Orders": "orders",
-    "Orders to Prepare": "orders",
-    "Delivered Today": "orders",
-    "Today's Revenue": "orders",
-    "Chicken Stock": "inventory",
-    "Mutton Stock": "inventory",
-    "Active Riders": "riders",
+    "Total orders": "orders",
+    "Total revenue": "orders",
+    "Total pending orders": "orders",
+    "Total completed orders": "orders",
+    "Total riders": "riders",
   };
+
+  const displayedOrders = useMemo(() => {
+    if (!latestOrders || latestOrders.length === 0) return [];
+    if (statusSubtab === "All") return latestOrders;
+    if (statusSubtab === "New") return latestOrders.filter(o => o.status === "Pending");
+    if (statusSubtab === "Bill Sent") return latestOrders.filter(o => o.status === "Cutting");
+    if (statusSubtab === "Ready To Pick") return latestOrders.filter(o => o.status === "Ready");
+    if (statusSubtab === "In Transit") return latestOrders.filter(o => o.status === "Out for Delivery");
+    if (statusSubtab === "Completed") return latestOrders.filter(o => o.status === "Delivered");
+    if (statusSubtab === "Others") return latestOrders.filter(o => o.status === "Cancelled" || o.status === "Rejected");
+    return latestOrders;
+  }, [latestOrders, statusSubtab]);
 
   return (
     <div>
-      {/* Responsive Grid: 6 cards in 1 row on wide screens, 3-3 on laptops, 2-2-2 on tablets */}
+      {/* Top Header: Orders title + Date Range Dropdown Filter */}
       <div
-        className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          marginBottom: "18px",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+          <h2 style={{ fontSize: "1.45rem", fontWeight: 800, color: "#171410", margin: 0 }}>
+            Orders
+          </h2>
+          <DateFilterDropdown
+            selectedRange={timeRange}
+            customStartDate={customStartDate}
+            customEndDate={customEndDate}
+            onApply={(range, start, end) => {
+              setTimeRange(range);
+              setCustomStartDate(start || "");
+              setCustomEndDate(end || "");
+              loadData(range, start || "", end || "");
+            }}
+          />
+        </div>
+      </div>
+
+      {/* 5 KPI Cards in responsive 5-column grid */}
+      <div
+        className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5"
         style={{
           gap: "14px",
-          marginBottom: "32px",
+          marginBottom: "24px",
         }}
       >
         {displayKpis.map(k => {
-          // Explicitly map Active Riders to 'riders' tab even if remote backend sends 'slots'
           const targetTab = labelToTab[k.label] || (k.tab === "slots" ? "riders" : k.tab);
           return (
             <KPICard
@@ -547,15 +642,83 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
         })}
       </div>
 
-      {/* Live order summary mini-list */}
-      <SectionTitle title="Latest Incoming Orders" sub="Live queue from Cloud Firestore" />
+      {/* Status Sub-tabs bar matching Image 2 */}
+      <div
+        className="no-scrollbar"
+        style={{
+          display: "flex",
+          gap: "8px",
+          overflowX: "auto",
+          whiteSpace: "nowrap",
+          paddingBottom: "10px",
+          marginBottom: "18px",
+          borderBottom: "1.5px solid #ede8e0",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
+        {[
+          { key: "All", label: "All", count: statusBreakdown.all ?? latestOrders.length },
+          { key: "New", label: "New", count: statusBreakdown.new ?? 0 },
+          { key: "Bill Sent", label: "Bill Sent", count: statusBreakdown.cutting ?? 0 },
+          { key: "Ready To Pick", label: "Ready To Pick", count: statusBreakdown.ready ?? 0 },
+          { key: "In Transit", label: "In Transit", count: statusBreakdown.inTransit ?? 0 },
+          { key: "Completed", label: "Completed", count: statusBreakdown.completed ?? 0 },
+          { key: "Others", label: "Others", count: statusBreakdown.others ?? 0 },
+        ].map(tab => {
+          const isSelected = statusSubtab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setStatusSubtab(tab.key)}
+              style={{
+                padding: "6px 14px",
+                borderRadius: "8px",
+                border: "1.5px solid",
+                borderColor: isSelected ? "#2563eb" : "#e5e7eb",
+                background: isSelected ? "#eff6ff" : "#ffffff",
+                color: isSelected ? "#1d4ed8" : "#4b5563",
+                fontWeight: 700,
+                fontSize: "0.82rem",
+                cursor: "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "7px",
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+                boxShadow: isSelected ? "0 1px 3px rgba(37, 99, 235, 0.15)" : "none",
+                transition: "all 120ms ease",
+              }}
+            >
+              <span>{tab.label}</span>
+              <span
+                style={{
+                  background: isSelected ? "#2563eb" : "#f3f4f6",
+                  color: isSelected ? "#ffffff" : "#4b5563",
+                  padding: "1px 7px",
+                  borderRadius: "99px",
+                  fontSize: "0.72rem",
+                  fontWeight: 800,
+                  lineHeight: 1.2,
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Orders List for selected subtab */}
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading live orders from server…</div>
-        ) : latestOrders.length === 0 ? (
-          <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>No active orders in queue</div>
+        ) : displayedOrders.length === 0 ? (
+          <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>
+            No orders found under &quot;{statusSubtab}&quot; for the selected time range.
+          </div>
         ) : (
-          latestOrders.map((o, i, arr) => (
+          displayedOrders.map((o, i, arr) => (
             <div
               key={o.orderId || o.id}
               onClick={() => setActiveTab("orders")}
@@ -663,6 +826,9 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
   const [cancelReasonInput, setCancelReasonInput] = useState("");
   const [cancellingOrder, setCancellingOrder] = useState(false);
 
+  // Edit Order & Prep Delay Modal state
+  const [editModalOrder, setEditModalOrder] = useState<any | null>(null);
+
   const handleCancelOrderStoreAdmin = async () => {
     if (!cancelModalOrder) return;
     if (!cancelReasonInput.trim()) {
@@ -725,6 +891,21 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
     });
     return groups;
   }, [catalogProducts]);
+
+  const openEditOrderModal = (orderToEdit: any) => {
+    setEditModalOrder(orderToEdit);
+    if (catalogProducts.length === 0) {
+      setLoadingCatalog(true);
+      api.get<{ success: boolean; products: any[] }>("/products?limit=250&all=true")
+        .then(res => {
+          if (res.data?.success && Array.isArray(res.data.products)) {
+            setCatalogProducts(res.data.products);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoadingCatalog(false));
+    }
+  };
 
   const openCreateManualOrderModal = () => {
     setShowCreateOrderModal(true);
@@ -934,10 +1115,33 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
         if (!matchesArea) return false;
       }
       if (dateFilter) {
-        const scheduledDate = o.scheduledDeliveryDate || (o.targetDeliveryTime ? o.targetDeliveryTime.substring(0, 10) : "");
-        const createdDate = (o.createdAt || "").substring(0, 10);
-        const matchesDate = scheduledDate === dateFilter || createdDate === dateFilter;
-        if (!matchesDate) return false;
+        let deliveryDate = o.scheduledDeliveryDate;
+        if (!deliveryDate && o.targetDeliveryTime) {
+          try {
+            const dt = new Date(o.targetDeliveryTime);
+            if (!isNaN(dt.getTime())) {
+              const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000);
+              deliveryDate = new Date(istMs).toISOString().slice(0, 10);
+            }
+          } catch (_) {}
+        }
+        if (!deliveryDate && o.createdAt) {
+          try {
+            const dt = new Date(o.createdAt);
+            if (!isNaN(dt.getTime())) {
+              const slot = String(o.deliverySlot || '').toLowerCase();
+              const isNextDay = Boolean(
+                o.isNextDayOrder ||
+                slot.includes('tomorrow') ||
+                slot.includes('next-day') ||
+                slot.includes('9:00 am')
+              );
+              const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000) + (isNextDay ? 24 * 60 * 60 * 1000 : 0);
+              deliveryDate = new Date(istMs).toISOString().slice(0, 10);
+            }
+          } catch (_) {}
+        }
+        if (deliveryDate !== dateFilter) return false;
       }
       return true;
     });
@@ -1519,6 +1723,42 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                           DELIVER TOMORROW BY 9:00 AM
                         </span>
                       )}
+                      {o.isModified && (
+                        <span style={{
+                          background: "#fef3c7",
+                          color: "#92400e",
+                          border: "1px solid #fde68a",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}>
+                          <span className="material-symbols-outlined text-[13px]">edit_note</span>
+                          REVISED ORDER
+                        </span>
+                      )}
+                      {o.additionalAmountDue > 0 && (
+                        <span style={{
+                          background: "#ecfdf5",
+                          color: "#065f46",
+                          border: "1px solid #a7f3d0",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}>
+                          <span className="material-symbols-outlined text-[13px]">payments</span>
+                          Collect ₹{o.additionalAmountDue} Extra
+                        </span>
+                      )}
                     </div>
                     <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
                       <span style={{ color: "#1f2937", fontSize: "0.82rem", fontWeight: 700 }}>
@@ -1677,10 +1917,11 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                     )}
                   </div>
 
-                  {(o.status === "Pending" || o.status === "Cutting") && (
+                  {(o.status === "Pending" || o.status === "Cutting" || o.status === "Ready") && (
                     <button
-                      onClick={() => handleDelayPrep(o.orderId || o.id)}
-                      title="Extend prep time by 10 mins during counter rush"
+                      type="button"
+                      onClick={() => openEditOrderModal(o)}
+                      title="Open delay & item adjustment modal"
                       style={{
                         background: "#fffbeb",
                         border: "1px solid #fcd34d",
@@ -1690,9 +1931,13 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                         fontWeight: 700,
                         color: "#b45309",
                         cursor: "pointer",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "4px",
                       }}
                     >
-                      +10m Rush Delay
+                      <span className="material-symbols-outlined text-[14px]">more_time</span>
+                      <span>+ Delay / Edit</span>
                     </button>
                   )}
                 </div>
@@ -1803,6 +2048,30 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                       <span className="material-symbols-outlined text-[16px]">print</span>
                       <span>Print KOT</span>
                     </button>
+                    {["Pending", "Cutting", "Ready"].includes(o.status) && (
+                      <button
+                        type="button"
+                        onClick={() => openEditOrderModal(o)}
+                        title="Edit order items / add weight or pieces / extend prep delay"
+                        style={{
+                          background: "#eff6ff",
+                          border: "1.5px solid #bfdbfe",
+                          borderRadius: "8px",
+                          padding: "7px 12px",
+                          color: "#1d4ed8",
+                          fontSize: "0.8rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">edit_note</span>
+                        <span>Edit / Delay</span>
+                      </button>
+                    )}
                     {o.status !== "Delivered" && o.status !== "Cancelled" && (
                       <button
                         type="button"
@@ -3063,6 +3332,18 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
         <ThermalKOTModal
           order={printModalOrder}
           onClose={() => setPrintModalOrder(null)}
+        />
+      )}
+
+      {editModalOrder && (
+        <OrderEditModal
+          order={editModalOrder}
+          catalogProducts={catalogProducts}
+          onClose={() => setEditModalOrder(null)}
+          onSuccess={() => {
+            setEditModalOrder(null);
+            fetchOrders();
+          }}
         />
       )}
 
