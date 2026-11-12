@@ -215,7 +215,6 @@ const createOrder = async (req, res, next) => {
       (deliverySlot && deliverySlot.toLowerCase().includes('60 min')) ||
       (deliverySlot && deliverySlot.toLowerCase().includes('express (60'))
     );
-    const storeDoc = await getDoc('stores', resolvedStoreId);
     const freeThreshold = typeof storeDoc?.freeDeliveryThreshold === 'number' ? storeDoc.freeDeliveryThreshold : 399;
     const storeDeliveryFee = typeof storeDoc?.standardDeliveryFee === 'number' ? storeDoc.standardDeliveryFee : 40;
     const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= freeThreshold ? 0 : storeDeliveryFee);
