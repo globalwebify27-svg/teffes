@@ -351,6 +351,7 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
     }
 
     // Cross-check actual order status in Firestore: exclude any order that is already Delivered or Cancelled
+    let healExistingBatchRef = null;
     if (existingActiveOrderIds.length > 0) {
       const liveActiveIds = [];
       for (const oid of existingActiveOrderIds) {
@@ -370,20 +371,9 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       }
       existingActiveOrderIds = liveActiveIds;
 
-      // If all orders in batch are actually delivered/cancelled, heal batch and rider state
-      if (existingActiveOrderIds.length === 0 && existingBatchRef && existingBatchSnap && existingBatchSnap.exists) {
-        transaction.update(existingBatchRef, {
-          status: 'Completed',
-          completedAt: now,
-          activeOrderId: null,
-          updatedAt: now,
-        });
-        transaction.update(riderRef, {
-          riderStatus: 'Available',
-          activeBatchId: null,
-          currentOrderId: null,
-          updatedAt: now,
-        });
+      // If all orders in existing batch are delivered/cancelled, schedule old batch completion for write phase
+      if (existingActiveOrderIds.length === 0 && existingBatchRef) {
+        healExistingBatchRef = existingBatchRef;
       }
     }
 
@@ -580,6 +570,15 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       updatedAt: now,
       completedAt: null,
     };
+
+    if (healExistingBatchRef) {
+      transaction.update(healExistingBatchRef, {
+        status: 'Completed',
+        completedAt: now,
+        activeOrderId: null,
+        updatedAt: now,
+      });
+    }
 
     transaction.set(batchRef, batchData);
 
