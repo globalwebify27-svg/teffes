@@ -1677,64 +1677,7 @@ const setStoreSchedule = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Store not found' });
     }
 
-    // ─── Conflict Check: If modifying TODAY, ensure no active orders conflict ───
-    if (date === todayIST) {
-      const activeOrders = await getStoreOrders(storeId);
-      const pendingActive = activeOrders.filter(
-        (o) => o.status !== 'Delivered' && o.status !== 'Cancelled' && !o.isArchived
-      );
-
-      if (mode === 'closed' && pendingActive.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message: `Cannot mark store as closed today. You have ${pendingActive.length} active order(s) (e.g. ${pendingActive[0]?.orderId || pendingActive[0]?.id}) in progress. Please fulfill or reassign them first.`,
-          conflictingCount: pendingActive.length,
-        });
-      }
-
-      if ((mode === 'half_day' || mode === 'custom_hours') && closeTime) {
-        const [cH, cM] = closeTime.split(':').map(Number);
-        const cutoffMinutes = cH * 60 + (isNaN(cM) ? 0 : cM);
-
-        const conflicting = pendingActive.filter((order) => {
-          if (order.targetDeliveryTime) {
-            const dt = new Date(order.targetDeliveryTime);
-            const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000);
-            const istDt = new Date(istMs);
-            const targetMinutes = istDt.getUTCHours() * 60 + istDt.getUTCMinutes();
-            const orderDateIST = istDt.toISOString().slice(0, 10);
-            if (orderDateIST === todayIST && targetMinutes > cutoffMinutes) {
-              return true;
-            }
-          }
-          const slot = String(order.deliverySlot || '');
-          if (slot.includes('PM') || slot.includes('AM')) {
-            const match = slot.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-            if (match) {
-              let h = parseInt(match[1], 10);
-              const m = parseInt(match[2], 10);
-              const mer = match[3].toUpperCase();
-              if (mer === 'PM' && h < 12) h += 12;
-              if (mer === 'AM' && h === 12) h = 0;
-              const slotMins = h * 60 + m;
-              if (slotMins > cutoffMinutes) return true;
-            }
-          }
-          return false;
-        });
-
-        if (conflicting.length > 0) {
-          const sampleIds = conflicting.slice(0, 3).map((o) => o.orderId || o.id).join(', ');
-          return res.status(400).json({
-            success: false,
-            message: `Cannot set closing time to ${closeTime}. You have ${conflicting.length} active order(s) (${sampleIds}) scheduled after this time. Please fulfill or reassign them first.`,
-            conflictingCount: conflicting.length,
-          });
-        }
-      }
-    }
-
-    // Save schedule in store.specialSchedules map
+    // Save schedule in store.specialSchedules map (Existing orders continue normal fulfillment; new incoming orders will be scheduled for next day according to cutoff)
     const specialSchedules = { ...(store.specialSchedules || {}) };
     specialSchedules[date] = {
       date,

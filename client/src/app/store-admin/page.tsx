@@ -470,7 +470,7 @@ const FileUploadButton = ({
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
-let cachedStoreDashboardData: { kpis: any[]; latestOrders: any[]; statusBreakdown?: any } | null = null;
+let cachedStoreDashboardData: { kpis: any[]; latestOrders: any[] } | null = null;
 
 function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.kpis || []);
@@ -479,24 +479,12 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   const [timeRange, setTimeRange] = useState("all");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
-  const [statusSubtab, setStatusSubtab] = useState("All");
-  const [statusBreakdown, setStatusBreakdown] = useState<any>(
-    cachedStoreDashboardData?.statusBreakdown || {
-      all: 0,
-      new: 0,
-      cutting: 0,
-      ready: 0,
-      inTransit: 0,
-      completed: 0,
-      others: 0,
-    }
-  );
 
   const loadData = (range = timeRange, start = customStartDate, end = customEndDate) => {
     if (!cachedStoreDashboardData) {
       setLoading(true);
     }
-    api.get<{ success: boolean; kpis: any[]; latestOrders: any[]; statusBreakdown?: any }>(
+    api.get<{ success: boolean; kpis: any[]; latestOrders: any[] }>(
       "/store-admin/dashboard",
       {
         params: {
@@ -510,24 +498,13 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
         if (res.data.success) {
           const freshKpis = res.data.kpis || [];
           const freshOrders = res.data.latestOrders || [];
-          const freshBreakdown = res.data.statusBreakdown || {
-            all: freshOrders.length,
-            new: freshOrders.filter(o => o.status === "Pending").length,
-            cutting: freshOrders.filter(o => o.status === "Cutting").length,
-            ready: freshOrders.filter(o => o.status === "Ready").length,
-            inTransit: freshOrders.filter(o => o.status === "Out for Delivery").length,
-            completed: freshOrders.filter(o => o.status === "Delivered").length,
-            others: freshOrders.filter(o => o.status === "Cancelled" || o.status === "Rejected").length,
-          };
 
           cachedStoreDashboardData = {
             kpis: freshKpis,
             latestOrders: freshOrders,
-            statusBreakdown: freshBreakdown,
           };
           setKpis(freshKpis);
           setLatestOrders(freshOrders);
-          setStatusBreakdown(freshBreakdown);
         }
       })
       .catch(err => console.warn("Failed to load store-admin dashboard:", err))
@@ -579,18 +556,6 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
     "Total riders": "riders",
   };
 
-  const displayedOrders = useMemo(() => {
-    if (!latestOrders || latestOrders.length === 0) return [];
-    if (statusSubtab === "All") return latestOrders;
-    if (statusSubtab === "New") return latestOrders.filter(o => o.status === "Pending");
-    if (statusSubtab === "Bill Sent") return latestOrders.filter(o => o.status === "Cutting");
-    if (statusSubtab === "Ready To Pick") return latestOrders.filter(o => o.status === "Ready");
-    if (statusSubtab === "In Transit") return latestOrders.filter(o => o.status === "Out for Delivery");
-    if (statusSubtab === "Completed") return latestOrders.filter(o => o.status === "Delivered");
-    if (statusSubtab === "Others") return latestOrders.filter(o => o.status === "Cancelled" || o.status === "Rejected");
-    return latestOrders;
-  }, [latestOrders, statusSubtab]);
-
   return (
     <div>
       {/* Top Header: Orders title + Date Range Dropdown Filter */}
@@ -627,7 +592,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
         className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-5"
         style={{
           gap: "14px",
-          marginBottom: "24px",
+          marginBottom: "32px",
         }}
       >
         {displayKpis.map(k => {
@@ -642,83 +607,15 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
         })}
       </div>
 
-      {/* Status Sub-tabs bar matching Image 2 */}
-      <div
-        className="no-scrollbar"
-        style={{
-          display: "flex",
-          gap: "8px",
-          overflowX: "auto",
-          whiteSpace: "nowrap",
-          paddingBottom: "10px",
-          marginBottom: "18px",
-          borderBottom: "1.5px solid #ede8e0",
-          WebkitOverflowScrolling: "touch",
-        }}
-      >
-        {[
-          { key: "All", label: "All", count: statusBreakdown.all ?? latestOrders.length },
-          { key: "New", label: "New", count: statusBreakdown.new ?? 0 },
-          { key: "Bill Sent", label: "Bill Sent", count: statusBreakdown.cutting ?? 0 },
-          { key: "Ready To Pick", label: "Ready To Pick", count: statusBreakdown.ready ?? 0 },
-          { key: "In Transit", label: "In Transit", count: statusBreakdown.inTransit ?? 0 },
-          { key: "Completed", label: "Completed", count: statusBreakdown.completed ?? 0 },
-          { key: "Others", label: "Others", count: statusBreakdown.others ?? 0 },
-        ].map(tab => {
-          const isSelected = statusSubtab === tab.key;
-          return (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setStatusSubtab(tab.key)}
-              style={{
-                padding: "6px 14px",
-                borderRadius: "8px",
-                border: "1.5px solid",
-                borderColor: isSelected ? "#2563eb" : "#e5e7eb",
-                background: isSelected ? "#eff6ff" : "#ffffff",
-                color: isSelected ? "#1d4ed8" : "#4b5563",
-                fontWeight: 700,
-                fontSize: "0.82rem",
-                cursor: "pointer",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: "7px",
-                whiteSpace: "nowrap",
-                flexShrink: 0,
-                boxShadow: isSelected ? "0 1px 3px rgba(37, 99, 235, 0.15)" : "none",
-                transition: "all 120ms ease",
-              }}
-            >
-              <span>{tab.label}</span>
-              <span
-                style={{
-                  background: isSelected ? "#2563eb" : "#f3f4f6",
-                  color: isSelected ? "#ffffff" : "#4b5563",
-                  padding: "1px 7px",
-                  borderRadius: "99px",
-                  fontSize: "0.72rem",
-                  fontWeight: 800,
-                  lineHeight: 1.2,
-                }}
-              >
-                {tab.count}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Orders List for selected subtab */}
+      {/* Live order summary mini-list */}
+      <SectionTitle title="Latest Incoming Orders" sub="Live queue from Cloud Firestore" />
       <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", overflow: "hidden" }}>
         {loading ? (
           <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>Loading live orders from server…</div>
-        ) : displayedOrders.length === 0 ? (
-          <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>
-            No orders found under &quot;{statusSubtab}&quot; for the selected time range.
-          </div>
+        ) : latestOrders.length === 0 ? (
+          <div style={{ padding: "30px", textAlign: "center", color: "#73695b" }}>No active orders in queue for selected period</div>
         ) : (
-          displayedOrders.map((o, i, arr) => (
+          latestOrders.map((o, i, arr) => (
             <div
               key={o.orderId || o.id}
               onClick={() => setActiveTab("orders")}
