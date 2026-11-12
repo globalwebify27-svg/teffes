@@ -121,7 +121,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
     window.print();
   };
 
-  const receiptWidthPx = paperWidth === "80mm" ? "360px" : "280px";
+  const receiptWidthPx = paperWidth === "80mm" ? "420px" : "330px";
 
   return (
     <>
@@ -154,13 +154,13 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
             left: 50% !important;
             top: 0 !important;
             transform: translateX(-50%) !important;
-            width: ${paperWidth === "80mm" ? "80mm" : "60mm"} !important;
+            width: ${paperWidth === "80mm" ? "105mm" : "75mm"} !important;
             max-width: 98% !important;
             height: auto !important;
             min-height: fit-content !important;
             overflow: visible !important;
             margin: 0 !important;
-            padding: 2mm 3mm !important;
+            padding: 3mm 4mm !important;
             background: #ffffff !important;
             color: #000000 !important;
             box-shadow: none !important;
@@ -176,7 +176,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
         onClick={onClose}
       >
         <div
-          className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[94vh] flex flex-col overflow-hidden print:max-w-none print:w-auto print:shadow-none print:rounded-none"
+          className="bg-white rounded-2xl shadow-2xl max-w-xl w-full max-h-[94vh] flex flex-col overflow-hidden print:max-w-none print:w-auto print:shadow-none print:rounded-none"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Top modal control bar (Hidden in print) */}
@@ -185,7 +185,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               <span className="material-symbols-outlined text-emerald-800 text-[22px]">print</span>
               <div>
                 <h3 className="font-bold text-gray-900 text-sm">Thermal Kitchen Order Ticket (KOT)</h3>
-                <p className="text-xs text-gray-500">Optimized high-contrast readable print layout</p>
+                <p className="text-xs text-gray-500">Wide high-contrast readable print layout</p>
               </div>
             </div>
 
@@ -195,9 +195,9 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                 <button
                   type="button"
                   onClick={() => setPaperWidth("80mm")}
-                  className={`px-3 py-1 rounded-md transition-all ${paperWidth === "80mm" ? "bg-white text-emerald-900 font-bold shadow-sm" : "hover:text-gray-900"}`}
+                  className={`px-3.5 py-1 rounded-md transition-all ${paperWidth === "80mm" ? "bg-white text-emerald-900 font-bold shadow-sm" : "hover:text-gray-900"}`}
                 >
-                  80mm
+                  80mm (Wide)
                 </button>
                 <button
                   type="button"
@@ -224,58 +224,58 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               id="thermal-print-area"
               ref={receiptRef}
               style={{ width: receiptWidthPx }}
-              className="mx-auto bg-white p-4 shadow-xl text-black font-mono leading-tight select-none border border-gray-300 rounded-sm mb-8 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full min-h-fit"
+              className="mx-auto bg-white p-5 shadow-xl text-black font-mono leading-normal select-none border border-gray-300 rounded-sm mb-8 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full min-h-fit"
             >
               {/* Top KOT Download / Print Date-Time Header */}
-              <div className="flex justify-between items-center text-[11.5px] font-bold pb-1 border-b border-black text-black">
+              <div className="flex justify-between items-center text-[13px] font-bold pb-1.5 border-b border-black text-black">
                 <span>{formattedPrintDate}, {formattedPrintTime}</span>
                 <span>KOT / Digital Invoice</span>
               </div>
 
               {/* Receipt Header with Teffe's Logo & Details */}
-              <div className="text-center pt-2.5 pb-2.5 border-b border-dashed border-black">
+              <div className="text-center pt-3 pb-3 border-b border-dashed border-black">
                 {/* Black square logo container matching Teffe's original bill */}
-                <div className="w-14 h-14 bg-black p-1.5 mx-auto flex items-center justify-center mb-1.5 rounded-sm">
+                <div className="w-16 h-16 bg-black p-2 mx-auto flex items-center justify-center mb-1.5 rounded-sm">
                   <img
                     src="/teffes-logo-white.png"
                     alt="TeFFe's"
                     className="max-h-full max-w-full object-contain filter invert-0"
                   />
                 </div>
-                <div className="font-black text-lg tracking-wider uppercase text-black">
+                <div className="font-black text-2xl tracking-wider uppercase text-black">
                   Teffes
                 </div>
-                <div className="text-[12.5px] font-medium leading-snug text-black mt-1">
+                <div className="text-[14px] font-semibold leading-normal text-black mt-1">
                   teffes.com , near Kishore Ganj chowk, harmu road, ranchi , Jharkhand - 834001
                 </div>
-                <div className="text-[12px] font-bold text-black mt-1">
+                <div className="text-[14px] font-bold text-black mt-1">
                   Order Placed On: {formattedOrderDate} {formattedOrderTime}
                 </div>
-                <div className="text-[13px] font-bold text-black mt-0.5">
+                <div className="text-[15.5px] font-black text-black mt-0.5">
                   Phone Number - 9279682955
                 </div>
 
-                <div className="mt-2 inline-block border-2 border-black px-3 py-1 font-black text-xs tracking-wider uppercase">
+                <div className="mt-2.5 inline-block border-2 border-black px-4 py-1.5 font-black text-[13.5px] tracking-wider uppercase">
                   {isPickup ? "STORE COUNTER TAKEAWAY KOT" : "HOME DELIVERY KOT"}
                 </div>
               </div>
 
               {/* Customer Information Section */}
-              <div className="py-2.5 border-b border-dashed border-black space-y-1 text-[13px] text-black">
-                <div className="flex items-baseline gap-1">
+              <div className="py-3 border-b border-dashed border-black space-y-1.5 text-[15px] text-black">
+                <div className="flex items-baseline gap-1.5">
                   <span className="font-bold whitespace-nowrap">Customer Name -</span>
                   <span className="font-semibold">{customerName}</span>
                 </div>
-                <div className="flex items-baseline gap-1">
+                <div className="flex items-baseline gap-1.5">
                   <span className="font-bold whitespace-nowrap">Customer Number -</span>
                   <span className="font-semibold">{customerPhone}</span>
                 </div>
-                <div className="flex items-baseline gap-1">
+                <div className="flex items-baseline gap-1.5">
                   <span className="font-bold whitespace-nowrap">Order Number -</span>
-                  <span className="font-black text-[14px]">{orderId}</span>
+                  <span className="font-black text-[16px]">{orderId}</span>
                 </div>
                 {order.deliverySlot && (
-                  <div className="flex items-baseline gap-1">
+                  <div className="flex items-baseline gap-1.5">
                     <span className="font-bold whitespace-nowrap">Delivery Slot -</span>
                     <span className="font-semibold">{order.deliverySlot}</span>
                   </div>
@@ -289,7 +289,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                   </span>
                 </div>
                 {specialInstruction && (
-                  <div className="mt-1.5 p-1.5 bg-gray-100 border border-black text-[12px] font-bold">
+                  <div className="mt-2 p-2 bg-gray-100 border border-black text-[14px] font-bold">
                     <span>INSTRUCTION: </span>
                     <span>{specialInstruction}</span>
                   </div>
@@ -297,43 +297,43 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               </div>
 
               {/* Items & Cutting Specifications Table */}
-              <div className="py-2.5 border-b border-dashed border-black">
-                <div className="border-b border-black pb-1 mb-2 flex justify-between font-bold text-[13px] text-black uppercase">
+              <div className="py-3 border-b border-dashed border-black">
+                <div className="border-b border-black pb-1.5 mb-2.5 flex justify-between font-black text-[15px] text-black uppercase">
                   <span className="flex-1">Items</span>
-                  <span className="w-12 text-center">Qty.</span>
-                  <span className="w-20 text-right">Total(₹)</span>
+                  <span className="w-14 text-center">Qty.</span>
+                  <span className="w-24 text-right">Total(₹)</span>
                 </div>
 
-                <div className="space-y-2.5">
+                <div className="space-y-3">
                   {items.length > 0 ? (
                     items.map((item, idx) => (
-                      <div key={idx} className="border-b border-dotted border-gray-400 pb-2">
+                      <div key={idx} className="border-b border-dotted border-gray-400 pb-2.5">
                         <div className="flex justify-between items-start text-black">
                           <div className="flex-1 pr-2">
-                            <div className="font-bold text-[13.5px] leading-snug">
+                            <div className="font-black text-[16px] leading-snug">
                               {item.name}
                             </div>
-                            <div className="text-[12px] font-semibold text-black mt-0.5">
+                            <div className="text-[14.5px] font-bold text-black mt-0.5">
                               <span>Weight: <strong>{item.netWeight || "500g"}</strong></span>
                               {item.cutType && <span> · Cut: <strong>{item.cutType}</strong></span>}
                             </div>
                           </div>
-                          <div className="w-12 text-center font-bold text-[14px] text-black">
+                          <div className="w-14 text-center font-black text-[16.5px] text-black">
                             {item.quantity || 1}
                           </div>
-                          <div className="w-20 text-right font-bold text-[13.5px] text-black">
+                          <div className="w-24 text-right font-black text-[16px] text-black">
                             ₹{(item.price * (item.quantity || 1)).toFixed(2)}
                           </div>
                         </div>
                         {(item.cuttingInstructions || item.notes) && (
-                          <div className="mt-1 p-1 bg-gray-100 border border-black text-[12px] font-bold text-black font-sans">
+                          <div className="mt-1.5 p-1.5 bg-gray-100 border border-black text-[14px] font-bold text-black font-sans">
                             <strong>Note:</strong> {item.cuttingInstructions || item.notes}
                           </div>
                         )}
                       </div>
                     ))
                   ) : (
-                    <div className="text-[13px] font-semibold italic text-black">
+                    <div className="text-[15px] font-semibold italic text-black">
                       {order.itemSummary || "Fresh Meat Items"}
                     </div>
                   )}
@@ -341,41 +341,41 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               </div>
 
               {/* Financial Bill Summary */}
-              <div className="py-2.5 border-b border-dashed border-black space-y-1 text-[13px] text-black font-semibold">
+              <div className="py-3 border-b border-dashed border-black space-y-1.5 text-[15px] text-black font-semibold">
                 <div className="flex justify-between">
                   <span>Subtotal:</span>
-                  <span>₹{Number(subtotal).toFixed(2)}</span>
+                  <span className="font-bold">₹{Number(subtotal).toFixed(2)}</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between">
                     <span>Discount:</span>
-                    <span>-₹{Number(discount).toFixed(2)}</span>
+                    <span className="font-bold">-₹{Number(discount).toFixed(2)}</span>
                   </div>
                 )}
                 {!isPickup && (
                   <div className="flex justify-between">
                     <span>Delivery Charge:</span>
-                    <span>₹{Number(deliveryFee).toFixed(2)}</span>
+                    <span className="font-bold">₹{Number(deliveryFee).toFixed(2)}</span>
                   </div>
                 )}
                 {order.tipAmount != null && order.tipAmount > 0 && (
                   <div className="flex justify-between">
                     <span>Rider Tip:</span>
-                    <span>₹{Number(order.tipAmount).toFixed(2)}</span>
+                    <span className="font-bold">₹{Number(order.tipAmount).toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-black text-[17px] pt-1.5 border-t border-dashed border-black text-black">
+                <div className="flex justify-between font-black text-[20px] pt-2 border-t-2 border-dashed border-black text-black">
                   <span>TOTAL AMOUNT:</span>
                   <span>₹{Number(order.amount).toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Payment Status Strip */}
-              <div className="py-2.5 border-b border-dashed border-black text-center text-black">
-                <div className="font-bold text-[13.5px]">
+              <div className="py-3 border-b border-dashed border-black text-center text-black">
+                <div className="font-black text-[16px]">
                   PAYMENT: {isPaid ? "PAID ONLINE" : "CASH ON DELIVERY (COD)"}
                 </div>
-                <div className="text-[12px] font-semibold mt-0.5">
+                <div className="text-[14px] font-bold mt-0.5">
                   {isPaid
                     ? `Paid via ${order.paymentMethod || "Online Gateway"} · Collect ₹0`
                     : `Please collect ₹${order.amount} in cash from customer`}
@@ -384,24 +384,24 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
 
               {/* Customer Delivery OTP Verification */}
               {order.deliveryOtp && (
-                <div className="py-2.5 border-b border-dashed border-black text-center text-black">
-                  <div className="text-[12px] font-bold text-black uppercase">
+                <div className="py-3 border-b border-dashed border-black text-center text-black">
+                  <div className="text-[14px] font-black uppercase">
                     CUSTOMER DELIVERY OTP:
                   </div>
-                  <div className="inline-block border-2 border-black px-4 py-1 font-black text-xl tracking-[0.25em] my-1 text-black bg-white">
+                  <div className="inline-block border-2 border-black px-5 py-1.5 font-black text-2xl tracking-[0.3em] my-1 text-black bg-white">
                     {order.deliveryOtp.split("").join(" ")}
                   </div>
-                  <div className="text-[11px] font-medium text-black">
+                  <div className="text-[12.5px] font-bold">
                     Rider must verify this code at doorstep
                   </div>
                 </div>
               )}
 
               {/* Thermal Receipt Footer */}
-              <div className="pt-3 pb-2 text-center text-[12px] text-black font-medium space-y-0.5">
+              <div className="pt-3 pb-2 text-center text-[13.5px] text-black font-semibold space-y-0.5">
                 <div>Freshly cut & packed hygienically.</div>
                 <div>Store chilled at 0°C to 4°C.</div>
-                <div className="font-bold text-[13px] mt-1.5 text-black">
+                <div className="font-black text-[15px] mt-1.5 text-black">
                   *** THANK YOU FOR YOUR ORDER ***
                 </div>
               </div>
