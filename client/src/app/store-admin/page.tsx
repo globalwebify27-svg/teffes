@@ -470,18 +470,18 @@ const FileUploadButton = ({
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
-let cachedStoreDashboardData: { kpis: any[]; latestOrders: any[] } | null = null;
+let cachedStoreDashboardData: { range: string; kpis: any[]; latestOrders: any[] } | null = null;
 
 function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
-  const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.kpis || []);
-  const [latestOrders, setLatestOrders] = useState<any[]>(cachedStoreDashboardData?.latestOrders || []);
-  const [loading, setLoading] = useState(!cachedStoreDashboardData);
-  const [timeRange, setTimeRange] = useState("all");
+  const [timeRange, setTimeRange] = useState("today");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.range === "today" ? cachedStoreDashboardData.kpis : []);
+  const [latestOrders, setLatestOrders] = useState<any[]>(cachedStoreDashboardData?.range === "today" ? cachedStoreDashboardData.latestOrders : []);
+  const [loading, setLoading] = useState(!cachedStoreDashboardData || cachedStoreDashboardData?.range !== "today");
 
   const loadData = (range = timeRange, start = customStartDate, end = customEndDate) => {
-    if (!cachedStoreDashboardData) {
+    if (!cachedStoreDashboardData || cachedStoreDashboardData.range !== range) {
       setLoading(true);
     }
     api.get<{ success: boolean; kpis: any[]; latestOrders: any[] }>(
@@ -500,6 +500,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
           const freshOrders = res.data.latestOrders || [];
 
           cachedStoreDashboardData = {
+            range,
             kpis: freshKpis,
             latestOrders: freshOrders,
           };

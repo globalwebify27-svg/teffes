@@ -81,6 +81,30 @@ const getEffectiveStoreId = (req) => {
 };
 
 /**
+ * Safely parses any date/timestamp format from Firestore (Timestamp object, seconds, ISO string, Date) to milliseconds.
+ */
+const parseDateToMillis = (val) => {
+  if (!val) return null;
+  if (typeof val?.toDate === 'function') {
+    try { return val.toDate().getTime(); } catch (_) {}
+  }
+  if (typeof val === 'object') {
+    const s = val._seconds ?? val.seconds;
+    if (typeof s === 'number') return s * 1000;
+  }
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    const t = new Date(val).getTime();
+    if (!isNaN(t)) return t;
+  }
+  if (val instanceof Date) {
+    const t = val.getTime();
+    if (!isNaN(t)) return t;
+  }
+  return null;
+};
+
+/**
  * Resolves the operational delivery date for an order in YYYY-MM-DD IST format.
  * If order was placed after 8PM, or during half-day / holiday cutoff, or explicitly marked
  * for next-day delivery, it is credited to the date it is SCHEDULED TO BE DELIVERED.
@@ -93,33 +117,25 @@ const getOrderDeliveryDateIST = (order) => {
     return order.scheduledDeliveryDate;
   }
 
-  // 2. targetDeliveryTime ISO timestamp converted to IST date string
-  if (order.targetDeliveryTime) {
-    try {
-      const dt = new Date(order.targetDeliveryTime);
-      if (!isNaN(dt.getTime())) {
-        const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000);
-        return new Date(istMs).toISOString().slice(0, 10);
-      }
-    } catch (_) {}
+  // 2. targetDeliveryTime converted to IST date string
+  const targetMs = parseDateToMillis(order.targetDeliveryTime);
+  if (targetMs) {
+    const istMs = targetMs + (5.5 * 60 * 60 * 1000);
+    return new Date(istMs).toISOString().slice(0, 10);
   }
 
-  // 3. Fallback to createdAt + next-day detection
-  if (order.createdAt) {
-    try {
-      const dt = new Date(order.createdAt);
-      if (!isNaN(dt.getTime())) {
-        const slot = String(order.deliverySlot || '').toLowerCase();
-        const isNextDay = Boolean(
-          order.isNextDayOrder ||
-          slot.includes('tomorrow') ||
-          slot.includes('next-day') ||
-          slot.includes('9:00 am')
-        );
-        const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000) + (isNextDay ? 24 * 60 * 60 * 1000 : 0);
-        return new Date(istMs).toISOString().slice(0, 10);
-      }
-    } catch (_) {}
+  // 3. Fallback to createdAt / created_at / orderDate + next-day detection
+  const createdMs = parseDateToMillis(order.createdAt || order.created_at || order.orderDate);
+  if (createdMs) {
+    const slot = String(order.deliverySlot || '').toLowerCase();
+    const isNextDay = Boolean(
+      order.isNextDayOrder ||
+      slot.includes('tomorrow') ||
+      slot.includes('next-day') ||
+      slot.includes('9:00 am')
+    );
+    const istMs = createdMs + (5.5 * 60 * 60 * 1000) + (isNextDay ? 24 * 60 * 60 * 1000 : 0);
+    return new Date(istMs).toISOString().slice(0, 10);
   }
 
   return '';
@@ -129,8 +145,13 @@ const getOrderDeliveryDateIST = (order) => {
  * Checks if an order's scheduled delivery date matches the chosen time range.
  */
 const isOrderInDateRange = (order, timeRange = 'all', customStart = '', customEnd = '') => {
+  const mode = String(timeRange || 'all').toLowerCase();
+  if (mode === 'all') return true;
+
   const deliveryDate = getOrderDeliveryDateIST(order);
-  if (!deliveryDate) return true;
+  // If an order has no identifiable delivery date, do NOT include it in specific date filters like 'today'
+  if (!deliveryDate) return false;
+
   const todayIST = getTodayISTDateString();
 
   const getPastDateIST = (daysAgo) => {
@@ -138,7 +159,6 @@ const isOrderInDateRange = (order, timeRange = 'all', customStart = '', customEn
     return new Date(todayMs - (daysAgo * 24 * 60 * 60 * 1000)).toISOString().slice(0, 10);
   };
 
-  const mode = String(timeRange || 'all').toLowerCase();
   switch (mode) {
     case 'today':
       return deliveryDate === todayIST;
