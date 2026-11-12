@@ -121,13 +121,24 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
     window.print();
   };
 
-  const receiptWidthPx = paperWidth === "80mm" ? "330px" : "250px";
+  const receiptWidthPx = paperWidth === "80mm" ? "360px" : "280px";
 
   return (
     <>
       {/* Print-specific style isolation */}
       <style jsx global>{`
         @media print {
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #ffffff !important;
+            width: 100% !important;
+            height: auto !important;
+          }
+          @page {
+            size: auto;
+            margin: 0mm;
+          }
           /* Hide all surrounding page content */
           body * {
             visibility: hidden !important;
@@ -140,22 +151,21 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
           }
           #thermal-print-area {
             position: absolute !important;
-            left: 0 !important;
+            left: 50% !important;
             top: 0 !important;
-            width: ${paperWidth === "80mm" ? "76mm" : "54mm"} !important;
+            transform: translateX(-50%) !important;
+            width: ${paperWidth === "80mm" ? "80mm" : "60mm"} !important;
+            max-width: 98% !important;
             height: auto !important;
             min-height: fit-content !important;
             overflow: visible !important;
             margin: 0 !important;
-            padding: 2mm !important;
+            padding: 2mm 3mm !important;
             background: #ffffff !important;
             color: #000000 !important;
             box-shadow: none !important;
             border: none !important;
-          }
-          @page {
-            size: ${paperWidth === "80mm" ? "80mm" : "58mm"} auto;
-            margin: 0mm;
+            box-sizing: border-box !important;
           }
         }
       `}</style>
