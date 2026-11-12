@@ -441,6 +441,7 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       vehicleNumber: riderData.vehicleNumber || 'JH-01-BK-1234',
       lat: storeCoords.lat,
       lng: storeCoords.lng,
+      assignedAt: now,
     };
 
     // 5. Case A: Rider already has an active batch -> Append new order(s) to this batch
@@ -454,6 +455,7 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
         transaction.update(od.ref, {
           status: 'Out for Delivery',
           rider: riderInfo,
+          riderAssignedAt: now,
           deliveryOtp: randomOtp,
           batchId: existingBatchData.batchId,
           batchSequence: seq,
@@ -590,6 +592,7 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
       transaction.update(od.ref, {
         status: 'Out for Delivery',
         rider: riderInfo,
+        riderAssignedAt: now,
         deliveryOtp: randomOtp,
         batchId,
         batchSequence: seq,

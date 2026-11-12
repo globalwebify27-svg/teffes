@@ -561,6 +561,9 @@ export default function CartDrawer() {
             : "90 Min Delivery";
 
   const amountForFreeDelivery = Math.max(0, storeFreeDeliveryThreshold - subtotal);
+  const MIN_ORDER_AMOUNT = 200;
+  const isUnderMinOrder = subtotal < MIN_ORDER_AMOUNT;
+  const amountForMinOrder = Math.max(0, MIN_ORDER_AMOUNT - subtotal);
 
   // Tip handler
   const handleSelectTip = (amount: number) => {
@@ -688,6 +691,11 @@ export default function CartDrawer() {
       return;
     }
 
+    if (isUnderMinOrder) {
+      toast.warning(`Minimum cart order value is ₹${MIN_ORDER_AMOUNT}. Please add ₹${amountForMinOrder} more to proceed.`, "Minimum Order Amount");
+      return;
+    }
+
     if (!isStoreOperational) {
       toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
       return;
@@ -736,6 +744,10 @@ export default function CartDrawer() {
   // Final Order Confirmation (Cash on Delivery / Pay at Counter)
   const handleConfirmOrder = async () => {
     if (isPlacingOrder) return;
+    if (isUnderMinOrder) {
+      toast.warning(`Minimum cart order value is ₹${MIN_ORDER_AMOUNT}. Please add ₹${amountForMinOrder} more to proceed.`, "Minimum Order Amount");
+      return;
+    }
     if (!isStoreOperational) {
       toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
       return;
@@ -793,6 +805,10 @@ export default function CartDrawer() {
   // Razorpay Online Payment
   const handleRazorpayPayment = async () => {
     if (isPlacingOrder) return;
+    if (isUnderMinOrder) {
+      toast.warning(`Minimum cart order value is ₹${MIN_ORDER_AMOUNT}. Please add ₹${amountForMinOrder} more to proceed.`, "Minimum Order Amount");
+      return;
+    }
     if (!isStoreOperational) {
       toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
       return;
@@ -2087,6 +2103,21 @@ export default function CartDrawer() {
                       <span className="material-symbols-outlined text-[18px]">store_mall_directory</span>
                       <span>Store Paused — Orders Disabled</span>
                     </button>
+                  ) : isUnderMinOrder ? (
+                    <div className="space-y-2">
+                      <button
+                        type="button"
+                        disabled
+                        className="w-full py-3 rounded-full bg-gray-200 border border-gray-300 text-gray-500 font-label-lg font-extrabold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
+                      >
+                        <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
+                        <span>Add ₹{amountForMinOrder} More to Order</span>
+                      </button>
+                      <div className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold text-amber-900 bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200 text-center">
+                        <span className="material-symbols-outlined text-[15px] text-amber-700">info</span>
+                        <span>Minimum cart order is ₹{MIN_ORDER_AMOUNT}. Add ₹{amountForMinOrder} more items to proceed.</span>
+                      </div>
+                    </div>
                   ) : (
                     <button
                       id="cart-checkout-btn"
@@ -2441,12 +2472,18 @@ export default function CartDrawer() {
 
               {/* Action Button */}
               <div className="pt-2">
+                {isUnderMinOrder && (
+                  <div className="mb-2.5 flex items-center justify-center gap-1.5 text-[11.5px] font-bold text-amber-900 bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200 text-center">
+                    <span className="material-symbols-outlined text-[15px] text-amber-700">info</span>
+                    <span>Minimum cart order is ₹{MIN_ORDER_AMOUNT}. Please add ₹{amountForMinOrder} more to proceed.</span>
+                  </div>
+                )}
                 {selectedPayment === "cod" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={handleConfirmOrder}
-                    className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPlacingOrder ? (
                       <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -2457,12 +2494,12 @@ export default function CartDrawer() {
                 ) : selectedPayment === "wallet" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={async () => {
                       // Let's use the handleConfirmOrder but set the paymentMethod to Wallet on backend
                       await handleConfirmOrder();
                     }}
-                    className="w-full py-4 rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-4 rounded-xl bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPlacingOrder ? (
                       <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
@@ -2476,9 +2513,9 @@ export default function CartDrawer() {
                 ) : (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={handleRazorpayPayment}
-                    className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50"
+                    className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isPlacingOrder ? (
                       <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />

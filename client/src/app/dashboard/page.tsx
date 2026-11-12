@@ -194,12 +194,12 @@ export default function DashboardPage() {
           isAssigned: true,
           name: rawRider.name || "",
           phone: rawRider.phone || "",
-          vehicle: rawRider.vehicle || rawRider.vehicleNumber || "Insulated Cold Box (Fleet)",
+          vehicle: rawRider.vehicle || rawRider.vehicleNumber || "",
           lat: Number(rawRider.lat) || 23.3441,
           lng: Number(rawRider.lng) || 85.3096,
           rating: (rawRider.rating || rawRider.riderRating || "4.9").toString(),
           deliveriesCount: rawRider.deliveriesCount || "Fleet Partner",
-          bagTemp: rawRider.bagTemp || "Fresh-Lock Insulated Box",
+          bagTemp: rawRider.bagTemp || "Fresh-Lock Box",
         } : null;
 
         if (newStatus === "Delivered") {
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                 setLiveOrders(res.data.orders);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         } else {
           setTrackingOrder((prev: any) => {
             if (!prev) return null;
@@ -300,7 +300,7 @@ export default function DashboardPage() {
             clearInterval(interval);
           }
         }
-      } catch (_) {}
+      } catch (_) { }
     }, 12000);
 
     return () => clearInterval(interval);
@@ -431,12 +431,12 @@ export default function DashboardPage() {
                     isAssigned: true,
                     name: matching.rider.name || "",
                     phone: matching.rider.phone || "",
-                    vehicle: matching.rider.vehicle || matching.rider.vehicleNumber || "Insulated Cold Box (Fleet)",
+                    vehicle: matching.rider.vehicle || matching.rider.vehicleNumber || "",
                     lat: Number(matching.rider.lat) || 23.3441,
                     lng: Number(matching.rider.lng) || 85.3096,
                     rating: (matching.rider.rating || matching.rider.riderRating || "4.9").toString(),
                     deliveriesCount: matching.rider.deliveriesCount || "Fleet Partner",
-                    bagTemp: matching.rider.bagTemp || "Fresh-Lock Insulated Box",
+                    bagTemp: matching.rider.bagTemp || "Fresh-Lock Box",
                   } : currentTracking.rider,
                 };
               }
@@ -964,12 +964,12 @@ export default function DashboardPage() {
         isAssigned: !!(o.rider?.name || o.rider?.riderId),
         name: o.rider?.name || (o.deliverySlot === "Store Pickup" ? "Store Pickup Counter" : ""),
         phone: o.rider?.phone || "",
-        vehicle: o.rider?.vehicleNumber || o.rider?.vehicle || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : "Insulated Cold Box (Fleet)"),
+        vehicle: o.rider?.vehicleNumber || o.rider?.vehicle || (o.deliverySlot === "Store Pickup" ? "Self Pickup" : ""),
         lat: Number(o.rider?.lat) || 23.3441,
         lng: Number(o.rider?.lng) || 85.3096,
         rating: o.rider?.rating || "4.9",
         deliveriesCount: o.rider?.deliveriesCount || "Fleet Partner",
-        bagTemp: o.rider?.bagTemp || "Fresh-Lock Insulated Box",
+        bagTemp: o.rider?.bagTemp || "Fresh-Lock Box",
         eta: etaText,
       },
       items: (o.items || []).map((it: any) => ({
@@ -1431,7 +1431,7 @@ export default function DashboardPage() {
                       Need Immediate Help with Your Order?
                     </h4>
                     <p className="text-xs text-slate-body mt-0.5">
-                      Call our Ranchi store directly at <strong>+91 94311 00000</strong> (7 AM – 9 PM).
+                      Call our Ranchi store directly at <strong>+91 6203770055</strong> (8 AM – 8 PM).
                     </p>
                   </div>
                 </div>
@@ -2299,7 +2299,7 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <p className="text-xs text-slate-500 font-medium">
-                          {trackingOrder.rider?.vehicle || "Insulated Cold Box (Fleet)"}
+                          {trackingOrder.rider?.vehicle || ""}
                         </p>
                       </div>
                     </div>
@@ -2624,15 +2624,13 @@ export default function DashboardPage() {
                       </span>
                     </div>
                   )}
-                  <div className={`p-3.5 rounded-2xl border flex items-center justify-between ${
-                    (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured)
-                      ? "border-gray-200 bg-gray-50 opacity-60"
-                      : "border-primary/30 bg-primary/5"
-                  }`}>
+                  <div className={`p-3.5 rounded-2xl border flex items-center justify-between ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured)
+                    ? "border-gray-200 bg-gray-50 opacity-60"
+                    : "border-primary/30 bg-primary/5"
+                    }`}>
                     <div className="flex items-center gap-3">
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                        (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-300 text-gray-500" : "bg-primary text-white"
-                      }`}>
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-300 text-gray-500" : "bg-primary text-white"
+                        }`}>
                         <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
                       </div>
                       <div>
@@ -2646,12 +2644,10 @@ export default function DashboardPage() {
                         </span>
                       </div>
                     </div>
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${
-                      (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "border-gray-300" : "border-primary"
-                    }`}>
-                      <div className={`w-2.5 h-2.5 rounded-full ${
-                        (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-300" : "bg-primary"
-                      }`} />
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "border-gray-300" : "border-primary"
+                      }`}>
+                      <div className={`w-2.5 h-2.5 rounded-full ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-300" : "bg-primary"
+                        }`} />
                     </div>
                   </div>
                 </div>

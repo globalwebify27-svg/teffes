@@ -73,6 +73,19 @@ const createOrder = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Order items cannot be empty' });
     }
 
+    // Enforce minimum cart order amount of ₹200 for customer orders
+    const initialItemsSubtotal = items.reduce(
+      (sum, item) => sum + (Number(item.price || 0) * Number(item.quantity || 1)),
+      0
+    );
+    const orderTotal = Number(amount ?? totalAmount ?? initialItemsSubtotal);
+    if (initialItemsSubtotal < 200 && orderTotal < 200) {
+      return res.status(400).json({
+        success: false,
+        message: 'Minimum order amount is ₹200. Please add more items to your cart to proceed.',
+      });
+    }
+
     // Re-verify that none of the items in the cart are marked Out of Stock in Firestore
     for (const item of items) {
       const pId = String(item.productId || item.id || '').trim();

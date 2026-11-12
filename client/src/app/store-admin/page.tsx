@@ -1390,6 +1390,13 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
             const nextLabel = getNextStatusLabel(o.status, isPickup);
             const canBatch = !isPickup && (o.status === "Ready" || o.status === "Packed");
             const orderKey = o.orderId || o.id;
+            const rawPhone = o.customer?.phone || o.customerPhone || o.phone || "";
+            const cleanPhone = String(rawPhone).replace(/\D/g, "");
+            const phoneForWa = cleanPhone.length === 10 ? `91${cleanPhone}` : cleanPhone;
+            const waUrl = cleanPhone
+              ? `https://wa.me/${phoneForWa}?text=${encodeURIComponent(`Hello ${o.customer?.name || "Customer"}, this is TeFFe's regarding your order #${orderKey}.`)}`
+              : "";
+            const callUrl = cleanPhone ? `tel:${cleanPhone}` : "";
 
             return (
               <div
@@ -1513,8 +1520,71 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                         </span>
                       )}
                     </div>
-                    <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "3px" }}>
-                      {o.customer?.name} · {o.customer?.phone}
+                    <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: "6px", marginTop: "4px" }}>
+                      <span style={{ color: "#1f2937", fontSize: "0.82rem", fontWeight: 700 }}>
+                        {o.customer?.name || "Customer"}
+                      </span>
+                      {rawPhone && (
+                        <>
+                          <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>·</span>
+                          <span style={{ color: "#4b5563", fontSize: "0.8rem", fontWeight: 600 }}>{rawPhone}</span>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", marginLeft: "2px" }}>
+                            {/* Phone call button */}
+                            <a
+                              href={callUrl}
+                              title={`Call Customer (${rawPhone})`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "3px",
+                                background: "#eff6ff",
+                                color: "#0284c7",
+                                border: "1px solid #bae6fd",
+                                borderRadius: "6px",
+                                padding: "2px 7px",
+                                fontSize: "0.72rem",
+                                fontWeight: 700,
+                                textDecoration: "none",
+                                cursor: "pointer",
+                                transition: "all 150ms ease",
+                              }}
+                            >
+                              <span className="material-symbols-outlined text-[13px]">call</span>
+                              <span>Call</span>
+                            </a>
+
+                            {/* WhatsApp chat button */}
+                            <a
+                              href={waUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              title={`Message Customer on WhatsApp (${rawPhone})`}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                gap: "3px",
+                                background: "#ecfdf5",
+                                color: "#059669",
+                                border: "1px solid #a7f3d0",
+                                borderRadius: "6px",
+                                padding: "2px 7px",
+                                fontSize: "0.72rem",
+                                fontWeight: 700,
+                                textDecoration: "none",
+                                cursor: "pointer",
+                                transition: "all 150ms ease",
+                              }}
+                            >
+                              <svg style={{ width: "12px", height: "12px", fill: "#10b981", flexShrink: 0 }} viewBox="0 0 24 24">
+                                <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.698.077-2.029-.474-1.615-.67-2.661-2.316-2.741-2.424-.08-.108-.655-.87-.655-1.659 0-.788.411-1.177.558-1.336.146-.16.32-.2.427-.2.107 0 .213.001.307.006.098.005.231-.037.361.277.134.324.457 1.116.498 1.199.041.083.068.181.014.288-.053.107-.08.173-.16.266-.08.093-.167.208-.239.279-.08.08-.163.167-.07.327.093.16.415.684.889 1.106.611.543 1.127.712 1.287.792.16.08.254.067.348-.04.093-.107.4-.467.507-.627.107-.16.213-.133.361-.08.147.054.934.441 1.094.521.16.08.267.12.307.187.04.067.04.387-.104.792z" />
+                              </svg>
+                              <span>WhatsApp</span>
+                            </a>
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div style={{
                       color: isPickup ? "#b45309" : "#73695b",
@@ -1642,12 +1712,48 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                         padding: "6px 10px",
                         display: "inline-flex",
                         alignItems: "center",
-                        gap: "5px",
-                        fontWeight: 700,
-                        whiteSpace: "nowrap",
+                        flexWrap: "wrap",
+                        gap: "6px",
+                        fontWeight: 600,
                       }}>
-                        <span className="material-symbols-outlined text-[15px]">two_wheeler</span>
-                        <span>Rider: {o.rider.name}</span>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "4px", fontWeight: 700 }}>
+                          <span className="material-symbols-outlined text-[15px]">two_wheeler</span>
+                          <span>Rider: {o.rider.name}</span>
+                        </div>
+                        {(() => {
+                          const assignedTime = o.riderAssignedAt || o.rider?.assignedAt || o.dispatchedAt || (o.rider?.name && o.status === "Out for Delivery" ? o.updatedAt : null);
+                          if (!assignedTime) return null;
+                          let formatted = "";
+                          try {
+                            const d = new Date(assignedTime);
+                            if (!isNaN(d.getTime())) {
+                              formatted = d.toLocaleString("en-IN", {
+                                day: "2-digit",
+                                month: "short",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                                hour12: true,
+                              });
+                            }
+                          } catch {}
+                          if (!formatted) return null;
+                          return (
+                            <span style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "3px",
+                              color: "#0284c7",
+                              fontSize: "0.71rem",
+                              background: "#e0f2fe",
+                              padding: "1px 6px",
+                              borderRadius: "4px",
+                              fontWeight: 700,
+                            }}>
+                              <span className="material-symbols-outlined text-[13px]">schedule</span>
+                              <span>Assigned: {formatted}</span>
+                            </span>
+                          );
+                        })()}
                       </div>
                     )}
                     {nextLabel && (

@@ -732,6 +732,19 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
     final isPickup = _fulfillmentType == 'pickup';
 
+    // Enforce minimum cart order amount of ₹200
+    if (cart.subtotal < 200) {
+      final diff = (200 - cart.subtotal).ceil();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Minimum cart order value is ₹200. Please add ₹$diff more to proceed.'),
+          backgroundColor: AppColors.primaryMaroon,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     if (!isPickup && location.selectedAddress == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please add a delivery address to proceed with your order.')),
@@ -2592,34 +2605,69 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 top: 12,
                 bottom: 12 + bottomInset,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('TOTAL AMOUNT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                      Text(CurrencyFormatter.format(effectiveGrandTotal), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                    ],
-                  ),
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primaryMaroon,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
-                    ),
-                    onPressed: _isPlacingOrder ? null : () => _handlePlaceOrder(cart, location, auth),
-                    child: _isPlacingOrder
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                        : Text(
-                            !auth.isAuthenticated
-                                ? 'Login to proceed'
-                                : (_selectedPaymentMethod == 'payu'
-                                    ? 'Proceed to Pay →'
-                                    : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
-                            style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+                  if (cart.subtotal < 200)
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF3C7),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF92400E)),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Minimum order value is ₹200. Add ₹${(200 - cart.subtotal).ceil()} more to proceed.',
+                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
+                        ],
+                      ),
+                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('TOTAL AMOUNT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                          Text(CurrencyFormatter.format(effectiveGrandTotal), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                        ],
+                      ),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: cart.subtotal < 200 ? Colors.grey.shade400 : AppColors.primaryMaroon,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                          elevation: cart.subtotal < 200 ? 0 : 2,
+                        ),
+                        onPressed: (_isPlacingOrder || cart.subtotal < 200) ? null : () => _handlePlaceOrder(cart, location, auth),
+                        child: _isPlacingOrder
+                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : Text(
+                                cart.subtotal < 200
+                                    ? 'Add ₹${(200 - cart.subtotal).ceil()} More'
+                                    : !auth.isAuthenticated
+                                        ? 'Login to proceed'
+                                        : (_selectedPaymentMethod == 'payu'
+                                            ? 'Proceed to Pay →'
+                                            : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: cart.subtotal < 200 ? Colors.grey.shade800 : Colors.white,
+                                ),
+                              ),
+                      ),
+                    ],
                   ),
                 ],
               ),

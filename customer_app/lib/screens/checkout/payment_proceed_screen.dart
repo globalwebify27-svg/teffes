@@ -460,16 +460,39 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
             const SizedBox(height: 24),
 
             // 5. Razorpay Proceed Button
+            if (widget.payableAmount < 200)
+              Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF3C7),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.info_outline_rounded, size: 16, color: Color(0xFF92400E)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Minimum order amount is ₹200. Please add ₹${(200 - widget.payableAmount).ceil()} more to proceed.',
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             SizedBox(
               width: double.infinity,
               height: 52,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primaryMaroon,
+                  backgroundColor: widget.payableAmount < 200 ? Colors.grey.shade400 : AppColors.primaryMaroon,
                   shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
-                  elevation: 2,
+                  elevation: widget.payableAmount < 200 ? 0 : 2,
                 ),
-                onPressed: _isProcessing ? null : _processPayUPayment,
+                onPressed: (_isProcessing || widget.payableAmount < 200) ? null : _processPayUPayment,
                 child: _isProcessing
                     ? const Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -485,8 +508,14 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
                           const Icon(Icons.lock_rounded, size: 16, color: Colors.white),
                           const SizedBox(width: 8),
                           Text(
-                            'Pay ${CurrencyFormatter.format(widget.payableAmount)} via PayU',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Colors.white),
+                            widget.payableAmount < 200
+                                ? 'Add ₹${(200 - widget.payableAmount).ceil()} More to Order'
+                                : 'Pay ${CurrencyFormatter.format(widget.payableAmount)} via PayU',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w800,
+                              color: widget.payableAmount < 200 ? Colors.grey.shade800 : Colors.white,
+                            ),
                           ),
                         ],
                       ),

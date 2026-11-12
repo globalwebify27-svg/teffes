@@ -771,7 +771,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       return {
         'badge': 'FRESH MEAT CUT & PACKED',
         'title': 'Packed & Sealed Fresh',
-        'sub': 'Insulated cold pack ready for rider pickup',
+        'sub': 'Package ready for rider pickup',
       };
     } else if (status == 'Cutting') {
       return {
