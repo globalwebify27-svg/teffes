@@ -105,6 +105,39 @@ const parseDateToMillis = (val) => {
 };
 
 /**
+ * Formats a timestamp into DD/MM/YYYY in Indian Standard Time (IST).
+ */
+const formatDDMMYYYY_IST = (dateInput) => {
+  const ms = parseDateToMillis(dateInput);
+  if (!ms) return '';
+  const istDate = new Date(ms + (5.5 * 60 * 60 * 1000));
+  const day = String(istDate.getUTCDate()).padStart(2, '0');
+  const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+  const year = istDate.getUTCFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+/**
+ * Calculates calendar days elapsed between an order and today in IST.
+ * - Order placed today in IST -> 0
+ * - Order placed yesterday in IST -> 1
+ * - Order placed N calendar days ago in IST -> N
+ */
+const getCalendarDaysSinceOrderIST = (orderDateInput, refNowMs = Date.now()) => {
+  const orderMs = parseDateToMillis(orderDateInput);
+  if (!orderMs) return null;
+
+  const orderIST = new Date(orderMs + (5.5 * 60 * 60 * 1000));
+  const orderDayStartMs = Date.UTC(orderIST.getUTCFullYear(), orderIST.getUTCMonth(), orderIST.getUTCDate());
+
+  const nowIST = new Date(refNowMs + (5.5 * 60 * 60 * 1000));
+  const nowDayStartMs = Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate());
+
+  const diffDays = Math.round((nowDayStartMs - orderDayStartMs) / (24 * 60 * 60 * 1000));
+  return Math.max(0, diffDays);
+};
+
+/**
  * Resolves the operational delivery date for an order in YYYY-MM-DD IST format.
  * If order was placed after 8PM, or during half-day / holiday cutoff, or explicitly marked
  * for next-day delivery, it is credited to the date it is SCHEDULED TO BE DELIVERED.
@@ -1249,7 +1282,7 @@ const getStoreCustomers = async (req, res, next) => {
           orders: 1,
           totalOrders: 1,
           totalSpent: amt,
-          lastOrder: orderDate.toLocaleDateString(),
+          lastOrder: formatDDMMYYYY_IST(orderDateMs),
           lastOrderDate: orderDate.toISOString(),
           _lastOrderMs: orderDateMs,
         });
@@ -1271,7 +1304,7 @@ const getStoreCustomers = async (req, res, next) => {
         if (orderDateMs >= (entry._lastOrderMs || 0)) {
           entry._lastOrderMs = orderDateMs;
           entry.lastOrderDate = orderDate.toISOString();
-          entry.lastOrder = orderDate.toLocaleDateString();
+          entry.lastOrder = formatDDMMYYYY_IST(orderDateMs);
           if (o.customer?.address || o.shippingAddress?.address) {
             entry.address = o.customer?.address || o.shippingAddress?.address;
           }
@@ -1285,7 +1318,7 @@ const getStoreCustomers = async (req, res, next) => {
       delete c._lastOrderMs;
       c.totalSpent = Math.round(c.totalSpent * 100) / 100;
 
-      const daysSince = lastMs ? Math.floor((nowMs - lastMs) / (1000 * 60 * 60 * 24)) : null;
+      const daysSince = lastMs ? getCalendarDaysSinceOrderIST(lastMs, nowMs) : null;
       c.daysSinceLastOrder = daysSince;
 
       const count = Number(c.totalOrders || c.orders || 0);

@@ -1666,7 +1666,7 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                         <>
                           <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>·</span>
                           <span style={{ color: "#4b5563", fontSize: "0.8rem", fontWeight: 600 }}>{rawPhone}</span>
-                          <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", marginLeft: "2px" }}>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", marginLeft: "4px" }}>
                             {/* Phone call button */}
                             <a
                               href={callUrl}
@@ -1675,21 +1675,18 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                                 display: "inline-flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                gap: "3px",
+                                width: "28px",
+                                height: "28px",
                                 background: "#eff6ff",
                                 color: "#0284c7",
                                 border: "1px solid #bae6fd",
-                                borderRadius: "6px",
-                                padding: "2px 7px",
-                                fontSize: "0.72rem",
-                                fontWeight: 700,
+                                borderRadius: "7px",
                                 textDecoration: "none",
                                 cursor: "pointer",
                                 transition: "all 150ms ease",
                               }}
                             >
-                              <span className="material-symbols-outlined text-[13px]">call</span>
-                              <span>Call</span>
+                              <span className="material-symbols-outlined text-[16px]">call</span>
                             </a>
 
                             {/* WhatsApp chat button */}
@@ -1702,23 +1699,20 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                                 display: "inline-flex",
                                 alignItems: "center",
                                 justifyContent: "center",
-                                gap: "3px",
+                                width: "28px",
+                                height: "28px",
                                 background: "#ecfdf5",
-                                color: "#059669",
+                                color: "#16a34a",
                                 border: "1px solid #a7f3d0",
-                                borderRadius: "6px",
-                                padding: "2px 7px",
-                                fontSize: "0.72rem",
-                                fontWeight: 700,
+                                borderRadius: "7px",
                                 textDecoration: "none",
                                 cursor: "pointer",
                                 transition: "all 150ms ease",
                               }}
                             >
-                              <svg style={{ width: "12px", height: "12px", fill: "#10b981", flexShrink: 0 }} viewBox="0 0 24 24">
-                                <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.582 2.128 2.182-.573c.978.58 1.911.928 3.145.929 3.178 0 5.767-2.587 5.768-5.766.001-3.187-2.575-5.77-5.764-5.771zm3.392 8.244c-.144.405-.837.774-1.17.824-.312.045-.698.077-2.029-.474-1.615-.67-2.661-2.316-2.741-2.424-.08-.108-.655-.87-.655-1.659 0-.788.411-1.177.558-1.336.146-.16.32-.2.427-.2.107 0 .213.001.307.006.098.005.231-.037.361.277.134.324.457 1.116.498 1.199.041.083.068.181.014.288-.053.107-.08.173-.16.266-.08.093-.167.208-.239.279-.08.08-.163.167-.07.327.093.16.415.684.889 1.106.611.543 1.127.712 1.287.792.16.08.254.067.348-.04.093-.107.4-.467.507-.627.107-.16.213-.133.361-.08.147.054.934.441 1.094.521.16.08.267.12.307.187.04.067.04.387-.104.792z" />
+                              <svg style={{ width: "16px", height: "16px", fill: "currentColor", flexShrink: 0 }} viewBox="0 0 24 24">
+                                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
                               </svg>
-                              <span>WhatsApp</span>
                             </a>
                           </div>
                         </>
@@ -4703,10 +4697,10 @@ function InventoryTab() {
 
                     const dateObj = h.createdAt ? new Date(h.createdAt) : null;
                     const dateDisplay = dateObj && !isNaN(dateObj.getTime())
-                      ? dateObj.toLocaleDateString([], { month: "short", day: "numeric" })
+                      ? dateObj.toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })
                       : "—";
                     const timeDisplay = dateObj && !isNaN(dateObj.getTime())
-                      ? dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+                      ? dateObj.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })
                       : "";
 
                     const actorName = h.actor?.name || (typeof h.performedBy === "string" ? h.performedBy : h.performedBy?.name) || "System";
@@ -5674,6 +5668,33 @@ function InventoryTab() {
   );
 }
 
+const formatDateDDMMYYYY = (val: any) => {
+  if (!val) return "—";
+  const str = String(val).trim();
+  // If already in DD/MM/YYYY format
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(str)) return str;
+  // If in MM/DD/YYYY format from older node locale (e.g. 11/12/2026), check and convert
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(str)) {
+    const parts = str.split('/');
+    if (parts.length === 3) {
+      const p1 = Number(parts[0]);
+      const p2 = Number(parts[1]);
+      const p3 = parts[2];
+      if (p1 > 12) {
+        return `${String(p1).padStart(2, '0')}/${String(p2).padStart(2, '0')}/${p3}`;
+      }
+    }
+  }
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return str;
+  // Format in IST DD/MM/YYYY
+  const istDate = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+  const day = String(istDate.getUTCDate()).padStart(2, '0');
+  const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+  const year = istDate.getUTCFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 function CustomersTab() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -5738,7 +5759,7 @@ function CustomersTab() {
 
   return (
     <div>
-      {/* Segment Filter Pills Bar */}
+      {/* Segment Filter Pills Bar - Mobile View Optimized */}
       <div
         className="no-scrollbar"
         style={{
@@ -5746,9 +5767,10 @@ function CustomersTab() {
           gap: "8px",
           overflowX: "auto",
           whiteSpace: "nowrap",
-          paddingBottom: "10px",
+          padding: "2px 2px 10px 2px",
           marginBottom: "16px",
           WebkitOverflowScrolling: "touch",
+          scrollbarWidth: "none",
         }}
       >
         {[
@@ -5764,18 +5786,18 @@ function CustomersTab() {
               type="button"
               onClick={() => setSegmentFilter(tab.key as any)}
               style={{
-                padding: "8px 16px",
+                padding: "8px 14px",
                 borderRadius: "10px",
                 border: "1.5px solid",
                 borderColor: isSelected ? tab.color : "#e5e7eb",
                 background: isSelected ? tab.bg : "#ffffff",
                 color: isSelected ? tab.color : "#4b5563",
                 fontWeight: 700,
-                fontSize: "0.83rem",
+                fontSize: "0.8rem",
                 cursor: "pointer",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "8px",
+                gap: "7px",
                 flexShrink: 0,
                 boxShadow: isSelected ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
                 transition: "all 120ms ease",
@@ -5786,9 +5808,9 @@ function CustomersTab() {
                 style={{
                   background: isSelected ? tab.color : "#f3f4f6",
                   color: isSelected ? "#ffffff" : "#4b5563",
-                  padding: "1px 8px",
+                  padding: "1px 7px",
                   borderRadius: "99px",
-                  fontSize: "0.72rem",
+                  fontSize: "0.7rem",
                   fontWeight: 800,
                   lineHeight: 1.2,
                 }}
@@ -5889,13 +5911,13 @@ function CustomersTab() {
                         {isActive && (
                           <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "99px", background: "#ecfdf5", color: "#047857", fontSize: "0.74rem", fontWeight: 800 }}>
                             <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#059669" }} />
-                            Active Repeat ({c.daysSinceLastOrder != null ? `${c.daysSinceLastOrder}d ago` : "Recent"})
+                            Active Repeat ({c.daysSinceLastOrder != null ? (c.daysSinceLastOrder === 0 ? "Today" : c.daysSinceLastOrder === 1 ? "1d ago" : `${c.daysSinceLastOrder}d ago`) : "Recent"})
                           </span>
                         )}
                         {isNew && (
                           <span style={{ display: "inline-flex", alignItems: "center", gap: "5px", padding: "3px 10px", borderRadius: "99px", background: "#eff6ff", color: "#1d4ed8", fontSize: "0.74rem", fontWeight: 800 }}>
                             <span style={{ width: "6px", height: "6px", borderRadius: "50%", background: "#2563eb" }} />
-                            New Customer (1st order)
+                            New Customer ({c.daysSinceLastOrder != null ? (c.daysSinceLastOrder === 0 ? "Today" : c.daysSinceLastOrder === 1 ? "1d ago" : `${c.daysSinceLastOrder}d ago`) : "1st order"})
                           </span>
                         )}
                         {isInactive && (
@@ -5909,10 +5931,16 @@ function CustomersTab() {
                       <td style={{ padding: "14px 16px", fontWeight: 800, color: "#941717" }}>{c.totalOrders ?? c.orders ?? 0}</td>
                       <td style={{ padding: "14px 16px", fontWeight: 800, color: "#059669" }}>₹{c.totalSpent != null ? Number(c.totalSpent).toLocaleString("en-IN") : 0}</td>
                       <td style={{ padding: "14px 16px", color: "#73695b", fontSize: "0.8rem", whiteSpace: "nowrap" }}>
-                        <div>{c.lastOrder || "—"}</div>
+                        <div style={{ fontWeight: 600, color: "#1f2937" }}>
+                          {formatDateDDMMYYYY(c.lastOrder || c.lastOrderDate)}
+                        </div>
                         {c.daysSinceLastOrder != null && (
-                          <div style={{ fontSize: "0.72rem", color: isInactive ? "#dc2626" : "#4b5563" }}>
-                            {c.daysSinceLastOrder === 0 ? "Today" : `${c.daysSinceLastOrder} days ago`}
+                          <div style={{ fontSize: "0.72rem", marginTop: "2px", color: isInactive ? "#dc2626" : "#4b5563", fontWeight: 600 }}>
+                            {c.daysSinceLastOrder === 0
+                              ? "Today"
+                              : c.daysSinceLastOrder === 1
+                              ? "Yesterday (1d ago)"
+                              : `${c.daysSinceLastOrder} days ago`}
                           </div>
                         )}
                       </td>
@@ -5936,13 +5964,16 @@ function CustomersTab() {
                                   width: "30px",
                                   height: "30px",
                                   borderRadius: "7px",
-                                  background: "#dcfce7",
-                                  color: "#15803d",
+                                  background: "#ecfdf5",
+                                  color: "#16a34a",
+                                  border: "1px solid #a7f3d0",
                                   textDecoration: "none",
                                   fontWeight: 800,
                                 }}
                               >
-                                <span className="material-symbols-outlined text-[16px]">chat</span>
+                                <svg style={{ width: "16px", height: "16px", fill: "currentColor", flexShrink: 0 }} viewBox="0 0 24 24">
+                                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                                </svg>
                               </a>
                               <a
                                 href={`tel:${cleanPhone}`}

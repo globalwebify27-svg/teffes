@@ -845,7 +845,7 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
                         </div>
                       </div>
                       <span className="text-xs text-gray-400">
-                        {new Date(rev.createdAt).toLocaleDateString()}
+                        {new Date(rev.createdAt).toLocaleDateString("en-IN")}
                       </span>
                     </div>
                     {rev.title && <h5 className="font-bold text-gray-800 text-sm mb-1">{rev.title}</h5>}

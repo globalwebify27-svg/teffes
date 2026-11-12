@@ -658,6 +658,39 @@ const deleteRider = async (req, res, next) => {
 };
 
 /**
+ * Formats a timestamp into DD/MM/YYYY in Indian Standard Time (IST).
+ */
+const formatDDMMYYYY_IST = (dateInput) => {
+  const ms = parseDateMillis(dateInput);
+  if (!ms) return '';
+  const istDate = new Date(ms + (5.5 * 60 * 60 * 1000));
+  const day = String(istDate.getUTCDate()).padStart(2, '0');
+  const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+  const year = istDate.getUTCFullYear();
+  return `${day}/${month}/${year}`;
+};
+
+/**
+ * Calculates calendar days elapsed between an order and today in IST.
+ * - Order placed today in IST -> 0
+ * - Order placed yesterday in IST -> 1
+ * - Order placed N calendar days ago in IST -> N
+ */
+const getCalendarDaysSinceOrderIST = (orderDateInput, refNowMs = Date.now()) => {
+  const orderMs = parseDateMillis(orderDateInput);
+  if (!orderMs) return null;
+
+  const orderIST = new Date(orderMs + (5.5 * 60 * 60 * 1000));
+  const orderDayStartMs = Date.UTC(orderIST.getUTCFullYear(), orderIST.getUTCMonth(), orderIST.getUTCDate());
+
+  const nowIST = new Date(refNowMs + (5.5 * 60 * 60 * 1000));
+  const nowDayStartMs = Date.UTC(nowIST.getUTCFullYear(), nowIST.getUTCMonth(), nowIST.getUTCDate());
+
+  const diffDays = Math.round((nowDayStartMs - orderDayStartMs) / (24 * 60 * 60 * 1000));
+  return Math.max(0, diffDays);
+};
+
+/**
  * GET /api/super-admin/customers
  * List customers platform-wide
  */
@@ -788,7 +821,7 @@ const getPlatformCustomers = async (req, res, next) => {
       if (oDateMs && (!entry._lastOrderDateMs || oDateMs > entry._lastOrderDateMs)) {
         entry._lastOrderDateMs = oDateMs;
         entry.lastOrderDate = new Date(oDateMs).toISOString();
-        entry.lastOrder = new Date(oDateMs).toLocaleDateString();
+        entry.lastOrder = formatDDMMYYYY_IST(oDateMs);
       }
     }
 
@@ -799,7 +832,7 @@ const getPlatformCustomers = async (req, res, next) => {
       delete c._lastOrderDateMs;
       c.totalSpent = Math.round((Number(c.totalSpent) || 0) * 100) / 100;
 
-      const daysSince = lastMs ? Math.floor((nowMs - lastMs) / (1000 * 60 * 60 * 24)) : null;
+      const daysSince = lastMs ? getCalendarDaysSinceOrderIST(lastMs, nowMs) : null;
       c.daysSinceLastOrder = daysSince;
 
       const count = Number(c.totalOrders || c.orders || 0);
