@@ -63,7 +63,7 @@ const getStoreBatchConfig = async (storeId) => {
     const store = await getDoc(STORES_COLLECTION, String(storeId).trim());
     if (store && store.batchConfig) {
       return {
-        maxBatchSize: Math.max(1, Math.min(6, Number(store.batchConfig.maxBatchSize) || DEFAULT_BATCH_CONFIG.maxBatchSize)),
+        maxBatchSize: Math.max(1, Number(store.batchConfig.maxBatchSize) || DEFAULT_BATCH_CONFIG.maxBatchSize),
         maxDetourKm: Math.max(1, Number(store.batchConfig.maxDetourKm) || DEFAULT_BATCH_CONFIG.maxDetourKm),
         maxTotalRouteKm: Math.max(2, Number(store.batchConfig.maxTotalRouteKm) || DEFAULT_BATCH_CONFIG.maxTotalRouteKm),
         maxEstimatedMinutes: Math.max(15, Number(store.batchConfig.maxEstimatedMinutes) || DEFAULT_BATCH_CONFIG.maxEstimatedMinutes),
@@ -86,7 +86,7 @@ const updateStoreBatchConfig = async (storeId, newConfig) => {
   const current = await getStoreBatchConfig(cleanStoreId);
 
   const updatedConfig = {
-    maxBatchSize: newConfig.maxBatchSize != null ? Math.max(1, Math.min(6, parseInt(newConfig.maxBatchSize, 10))) : current.maxBatchSize,
+    maxBatchSize: newConfig.maxBatchSize != null ? Math.max(1, parseInt(newConfig.maxBatchSize, 10)) : current.maxBatchSize,
     maxDetourKm: newConfig.maxDetourKm != null ? Math.max(1, parseFloat(newConfig.maxDetourKm)) : current.maxDetourKm,
     maxTotalRouteKm: newConfig.maxTotalRouteKm != null ? Math.max(2, parseFloat(newConfig.maxTotalRouteKm)) : current.maxTotalRouteKm,
     maxEstimatedMinutes: newConfig.maxEstimatedMinutes != null ? Math.max(15, parseInt(newConfig.maxEstimatedMinutes, 10)) : current.maxEstimatedMinutes,
@@ -348,6 +348,43 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
         .where('status', '==', 'Out for Delivery')
         .get();
       existingActiveOrderIds = activeQuery.docs.map((d) => d.data().orderId || d.id);
+    }
+
+    // Cross-check actual order status in Firestore: exclude any order that is already Delivered or Cancelled
+    if (existingActiveOrderIds.length > 0) {
+      const liveActiveIds = [];
+      for (const oid of existingActiveOrderIds) {
+        let oSnap = await transaction.get(db.collection(ORDERS_COLLECTION).doc(oid));
+        if (!oSnap.exists) {
+          const qSnap = await db.collection(ORDERS_COLLECTION).where('orderId', '==', oid).limit(1).get();
+          if (!qSnap.empty) {
+            oSnap = await transaction.get(qSnap.docs[0].ref);
+          }
+        }
+        if (oSnap && oSnap.exists) {
+          const st = oSnap.data()?.status;
+          if (st === 'Out for Delivery' || st === 'Ready') {
+            liveActiveIds.push(oid);
+          }
+        }
+      }
+      existingActiveOrderIds = liveActiveIds;
+
+      // If all orders in batch are actually delivered/cancelled, heal batch and rider state
+      if (existingActiveOrderIds.length === 0 && existingBatchRef && existingBatchSnap && existingBatchSnap.exists) {
+        transaction.update(existingBatchRef, {
+          status: 'Completed',
+          completedAt: now,
+          activeOrderId: null,
+          updatedAt: now,
+        });
+        transaction.update(riderRef, {
+          riderStatus: 'Available',
+          activeBatchId: null,
+          currentOrderId: null,
+          updatedAt: now,
+        });
+      }
     }
 
     // Exclude orders that are already active for this rider

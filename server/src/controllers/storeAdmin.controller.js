@@ -248,6 +248,89 @@ const updateOrderStatus = async (req, res, next) => {
 
     emitOrderStatusUpdate(id, updatedOrder);
 
+    // Reconcile batch and rider quota when an order is marked Delivered or Cancelled
+    if (status === 'Delivered' || status === 'Cancelled') {
+      try {
+        const orderIdVal = order.orderId || id;
+        const batchId = order.batchId || updatedOrder.batchId;
+        const riderId = order.rider?.riderId || order.rider?.id || updatedOrder.rider?.riderId;
+
+        if (batchId) {
+          const batchDoc = await getDoc('delivery_batches', String(batchId).trim());
+          if (batchDoc) {
+            const completedList = Array.from(new Set([
+              ...(batchDoc.completedOrderIds || []),
+              ...(status === 'Delivered' ? [id, orderIdVal] : []),
+            ]));
+            const cancelledList = Array.from(new Set([
+              ...(batchDoc.cancelledOrderIds || []),
+              ...(status === 'Cancelled' ? [id, orderIdVal] : []),
+            ]));
+            const allOrderIds = batchDoc.orderIds || [];
+            const remaining = allOrderIds.filter(
+              (oid) => !completedList.includes(oid) && !cancelledList.includes(oid)
+            );
+
+            const batchPatch = {
+              completedOrderIds: completedList,
+              cancelledOrderIds: cancelledList,
+              updatedAt: new Date().toISOString(),
+            };
+
+            let isBatchDone = false;
+            if (remaining.length === 0) {
+              isBatchDone = true;
+              batchPatch.status = 'Completed';
+              batchPatch.completedAt = new Date().toISOString();
+              batchPatch.activeOrderId = null;
+            } else if (batchDoc.activeOrderId === id || batchDoc.activeOrderId === orderIdVal) {
+              batchPatch.activeOrderId = remaining[0];
+              batchPatch.currentSequence = allOrderIds.indexOf(remaining[0]) + 1;
+            }
+
+            await updateDoc('delivery_batches', String(batchId).trim(), batchPatch).catch(() => {});
+
+            const targetRiderId = riderId || batchDoc.riderId;
+            if (isBatchDone && targetRiderId) {
+              await updateDoc('users', String(targetRiderId).trim(), {
+                riderStatus: 'Available',
+                activeBatchId: null,
+                currentOrderId: null,
+                updatedAt: new Date().toISOString(),
+              }).catch(() => {});
+              await updateDoc('riders', String(targetRiderId).trim(), {
+                riderStatus: 'Available',
+                activeBatchId: null,
+                currentOrderId: null,
+                updatedAt: new Date().toISOString(),
+              }).catch(() => {});
+            }
+          }
+        } else if (riderId) {
+          const activeOrders = await queryDocs('orders', (ref) =>
+            ref.where('rider.riderId', '==', String(riderId).trim()).where('status', '==', 'Out for Delivery')
+          );
+          const stillActive = (activeOrders || []).filter((o) => (o.id !== id && o.orderId !== orderIdVal));
+          if (stillActive.length === 0) {
+            await updateDoc('users', String(riderId).trim(), {
+              riderStatus: 'Available',
+              activeBatchId: null,
+              currentOrderId: null,
+              updatedAt: new Date().toISOString(),
+            }).catch(() => {});
+            await updateDoc('riders', String(riderId).trim(), {
+              riderStatus: 'Available',
+              activeBatchId: null,
+              currentOrderId: null,
+              updatedAt: new Date().toISOString(),
+            }).catch(() => {});
+          }
+        }
+      } catch (syncErr) {
+        console.warn('[StoreAdmin] Batch/Rider reconcile on status update warning:', syncErr.message);
+      }
+    }
+
     // Push notification to customer on status update
     if (order.customer && order.customer.userId) {
       const titles = {
@@ -1441,6 +1524,7 @@ const updateStoreBatchSettings = async (req, res, next) => {
       success: true,
       message: 'Batch settings updated successfully.',
       config,
+      settings: config,
     });
   } catch (error) {
     next(error);

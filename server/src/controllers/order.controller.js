@@ -222,7 +222,16 @@ const createOrder = async (req, res, next) => {
     if (!isPickup && addressId && Array.isArray(user.addresses)) {
       const addr = user.addresses.find((a) => String(a.id || a._id) === String(addressId));
       if (addr) {
-        orderAddress = `${addr.line1 || ''}, ${addr.line2 ? addr.line2 + ', ' : ''}${addr.city || ''} - ${addr.pincode || ''}`.trim();
+        const street = (addr.line1 || addr.street || addr.address || addr.houseNo || addr.fullAddress || '').trim();
+        const landmark = (addr.line2 || addr.landmark || '').trim();
+        const city = (addr.city || 'Ranchi').trim();
+        const pincode = (addr.pincode || '').trim();
+        const parts = [
+          street,
+          landmark,
+          city ? (pincode ? `${city} - ${pincode}` : city) : pincode,
+        ].filter(Boolean);
+        orderAddress = parts.join(', ');
       }
     }
 

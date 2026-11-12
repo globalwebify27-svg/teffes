@@ -5214,9 +5214,9 @@ function RidersTab({ storeId }: { storeId?: string }) {
     if (!isBatchConfigDirty) return;
     setSavingBatchConfig(true);
     try {
-      const res = await api.patch<{ success: boolean; settings: any; message?: string }>("/store-admin/batches/settings", draftBatchConfig);
-      if (res.data?.success && res.data?.settings) {
-        const bs = res.data.settings;
+      const res = await api.patch<{ success: boolean; settings?: any; config?: any; message?: string }>("/store-admin/batches/settings", draftBatchConfig);
+      const bs = res.data?.settings || res.data?.config;
+      if (res.data?.success && bs) {
         const cfg = {
           maxBatchSize: Number(bs.maxBatchSize) || 3,
           maxDetourKm: Number(bs.maxDetourKm) || 3.5,
@@ -6265,10 +6265,9 @@ function RidersTab({ storeId }: { storeId?: string }) {
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   <input
                     type="number"
-                    min={2}
-                    max={5}
+                    min={1}
                     value={draftBatchConfig.maxBatchSize}
-                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxBatchSize: Math.max(2, Math.min(5, Number(e.target.value) || 2)) })}
+                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxBatchSize: Math.max(1, Number(e.target.value) || 1) })}
                     style={{
                       width: "100%",
                       padding: "10px 14px",
@@ -6284,7 +6283,7 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <span style={{ fontWeight: 800, color: "#73695b", fontSize: "0.9rem", paddingRight: "4px" }}>Orders</span>
                 </div>
                 <span style={{ fontSize: "0.72rem", color: "#8a7f72", marginTop: "4px", display: "block" }}>
-                  Maximum ready orders clubbed into a single rider dispatch (range: 2 to 5)
+                  Maximum ready orders clubbed into a single rider dispatch (minimum: 1)
                 </span>
               </div>
 
