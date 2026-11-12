@@ -122,17 +122,16 @@ function isBeforeSpecialOpenTime(openTimeStr, date = new Date()) {
 
 /**
  * Calculates delivery time for orders placed before a late opening time.
- * Delivery = today's open time + prep time + transit time.
+ * Delivery = today's open time + 90 minutes.
  */
-function calculateSpecialOpenDeliveryTime(openTimeStr, prepTimeMinutes = 25, transitMinutes = 15, date = new Date()) {
+function calculateSpecialOpenDeliveryTime(openTimeStr, date = new Date()) {
   const comp = getISTDateComponents(date);
   const [oH, oM] = (openTimeStr || '08:00').split(':').map(Number);
   const safeOH = isNaN(oH) ? 8 : oH;
   const safeOM = isNaN(oM) ? 0 : oM;
 
-  // Compute opening timestamp in UTC:
-  // IST hours/minutes converted to UTC: Subtract 5 hours and 30 minutes
-  const totalOpenMinutesIST = safeOH * 60 + safeOM + prepTimeMinutes + transitMinutes;
+  // Store opening time + 90 minutes (standard delivery buffer before rider allotment)
+  const totalOpenMinutesIST = safeOH * 60 + safeOM + 90;
   const openDateIST = new Date(Date.UTC(comp.year, comp.month, comp.date, 0, totalOpenMinutesIST, 0, 0));
   // Subtract 5:30 to get UTC
   return new Date(openDateIST.getTime() - (5.5 * 60 * 60 * 1000));
@@ -141,8 +140,9 @@ function calculateSpecialOpenDeliveryTime(openTimeStr, prepTimeMinutes = 25, tra
 /**
  * Calculates the initial target delivery timestamp when order is placed.
  * If after 7:59 PM or if deliverySlot is for next day or after special cutoff, sets to tomorrow 9:00 AM.
- * If placed before late opening, schedules after opening time.
- * Otherwise targetDeliveryTime = Placed Time + Prep Time (default 25m) + Est. Travel (15m).
+ * If placed before late opening, schedules at store opening time + 90 min.
+ * Otherwise targetDeliveryTime = Placed Time + 90 min (standard, never less than 90 min before rider allotment).
+ * If express 60-min slot is selected, targetDeliveryTime = Placed Time + 60 min.
  */
 function calculateTargetDeliveryTime(placedAt = new Date(), prepTimeMinutes = 25, transitMinutes = 15, deliverySlot = '', specialSchedule = null) {
   const slotStr = String(deliverySlot || '').toLowerCase();
@@ -160,7 +160,7 @@ function calculateTargetDeliveryTime(placedAt = new Date(), prepTimeMinutes = 25
     }
     if ((specialSchedule.mode === 'late_opening' || specialSchedule.mode === 'custom_hours') && specialSchedule.openTime) {
       if (isBeforeSpecialOpenTime(specialSchedule.openTime, placedAt)) {
-        return calculateSpecialOpenDeliveryTime(specialSchedule.openTime, prepTimeMinutes, transitMinutes, placedAt);
+        return calculateSpecialOpenDeliveryTime(specialSchedule.openTime, placedAt);
       }
     }
   }
@@ -169,7 +169,9 @@ function calculateTargetDeliveryTime(placedAt = new Date(), prepTimeMinutes = 25
     return calculateNextDay9AM(placedAt);
   }
   const baseTime = new Date(placedAt).getTime();
-  const totalDurationMs = (prepTimeMinutes + transitMinutes) * 60 * 1000;
+  const isExpress = slotStr.includes('60 min') || slotStr.includes('express');
+  const durationMinutes = isExpress ? 60 : 90; // Never less than 90 mins for standard delivery
+  const totalDurationMs = durationMinutes * 60 * 1000;
   return new Date(baseTime + totalDurationMs);
 }
 

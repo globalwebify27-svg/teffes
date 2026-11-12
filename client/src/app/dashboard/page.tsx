@@ -2098,12 +2098,22 @@ export default function DashboardPage() {
                 const transitMins = trackingOrder.remainingTransitMinutes != null ? trackingOrder.remainingTransitMinutes : 15;
                 const isNearDoorstep = isOutForDelivery && (transitMins <= 5 || trackingOrder.etaStage === "NEAR_DOORSTEP");
 
+                const isNextDayOrder = Boolean(
+                  (trackingOrder.deliverySlot && (trackingOrder.deliverySlot.toLowerCase().includes("tomorrow") || trackingOrder.deliverySlot.toLowerCase().includes("next-day") || trackingOrder.deliverySlot.toLowerCase().includes("9:00 am"))) ||
+                  (trackingOrder.targetDeliveryTime && new Date(trackingOrder.targetDeliveryTime).getDate() !== new Date(trackingOrder.createdAt || Date.now()).getDate())
+                );
+
+                const formattedTargetTime = isNextDayOrder
+                  ? "Tomorrow by 09:00 AM"
+                  : trackingOrder.targetDeliveryTime
+                    ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
+                    : "90 mins";
+
                 let badgeText = "Order in Preparation";
-                let mainHeading = "Preparing your cuts";
-                let subHeading = `Arriving by ${trackingOrder.targetDeliveryTime
-                  ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                  : "30-40 mins"
-                  }`;
+                let mainHeading = isNextDayOrder ? "Scheduled Delivery" : "Preparing your cuts";
+                let subHeading = isNextDayOrder
+                  ? "Scheduled: Tomorrow by 09:00 AM"
+                  : `Arriving by ${formattedTargetTime}`;
                 let iconName = "skillet";
                 let bannerColor = "bg-amber-50 border-amber-200/80 text-amber-950";
                 let iconColor = "bg-amber-500/20 text-amber-800";
@@ -2131,19 +2141,13 @@ export default function DashboardPage() {
                   iconColor = "bg-sky-500/20 text-sky-800";
                 } else if (status === "Cutting") {
                   badgeText = "Live Cutting Station";
-                  mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
-                    ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                    : "soon"
-                    }`;
-                  subHeading = "Store team slicing & packing your fresh cuts";
+                  mainHeading = isNextDayOrder ? "Scheduled for Tomorrow" : `Arriving by ${formattedTargetTime}`;
+                  subHeading = isNextDayOrder ? "Order confirmed • Fresh cuts prepared tomorrow morning" : "Store team slicing & packing your fresh cuts";
                   iconName = "content_cut";
                 } else if (status === "Ready") {
                   badgeText = "Packed & Ready";
-                  mainHeading = `Arriving by ${trackingOrder.targetDeliveryTime
-                    ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
-                    : "soon"
-                    }`;
-                  subHeading = "Insulated fresh pack assigned to delivery rider";
+                  mainHeading = isNextDayOrder ? "Scheduled for Tomorrow" : `Arriving by ${formattedTargetTime}`;
+                  subHeading = isNextDayOrder ? "Scheduled: Tomorrow by 09:00 AM" : "Insulated fresh pack assigned to delivery rider";
                   iconName = "inventory_2";
                 }
 
@@ -2443,6 +2447,10 @@ export default function DashboardPage() {
                   {/* Step 4: Delivered to Doorstep */}
                   {(() => {
                     const isDelivered = (trackingOrder.status === "Delivered" || trackingOrder.rawOrder?.status === "Delivered");
+                    const isNextDayOrder = Boolean(
+                      (trackingOrder.deliverySlot && (trackingOrder.deliverySlot.toLowerCase().includes("tomorrow") || trackingOrder.deliverySlot.toLowerCase().includes("next-day") || trackingOrder.deliverySlot.toLowerCase().includes("9:00 am"))) ||
+                      (trackingOrder.targetDeliveryTime && new Date(trackingOrder.targetDeliveryTime).getDate() !== new Date(trackingOrder.createdAt || Date.now()).getDate())
+                    );
                     return (
                       <div className={`flex items-start gap-2.5 ${!isDelivered ? "opacity-50" : ""}`}>
                         <span
@@ -2456,9 +2464,11 @@ export default function DashboardPage() {
                           <span className={`text-[11px] ${isDelivered ? "text-emerald-600 font-medium" : "text-slate-500"}`}>
                             {isDelivered
                               ? "Handed over fresh & verified"
-                              : trackingOrder.targetDeliveryTime
-                                ? `Arriving by ${new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
-                                : "Temperature-controlled doorstep delivery"}
+                              : isNextDayOrder
+                                ? "Scheduled: Tomorrow by 09:00 AM"
+                                : trackingOrder.targetDeliveryTime
+                                  ? `Arriving by ${new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
+                                  : "Temperature-controlled doorstep delivery"}
                           </span>
                         </div>
                       </div>
