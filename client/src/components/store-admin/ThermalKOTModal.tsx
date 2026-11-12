@@ -143,6 +143,9 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
             left: 0 !important;
             top: 0 !important;
             width: ${paperWidth === "80mm" ? "76mm" : "54mm"} !important;
+            height: auto !important;
+            min-height: fit-content !important;
+            overflow: visible !important;
             margin: 0 !important;
             padding: 2mm !important;
             background: #ffffff !important;
@@ -206,12 +209,12 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
           </div>
 
           {/* Scrollable Receipt Preview */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-gray-100 flex justify-center print:p-0 print:bg-white print:overflow-visible">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-200/90 print:p-0 print:bg-white print:overflow-visible">
             <div
               id="thermal-print-area"
               ref={receiptRef}
               style={{ width: receiptWidthPx }}
-              className="bg-white p-3.5 shadow-md text-black font-mono leading-tight select-none border border-gray-200 print:border-none print:shadow-none print:p-1"
+              className="mx-auto bg-white p-4 shadow-xl text-black font-mono leading-tight select-none border border-gray-300 rounded-sm mb-8 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full min-h-fit"
             >
               {/* Top KOT Download / Print Date-Time Header */}
               <div className="flex justify-between items-center text-[11.5px] font-bold pb-1 border-b border-black text-black">
@@ -371,20 +374,24 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
 
               {/* Customer Delivery OTP Verification */}
               {order.deliveryOtp && (
-                <div className="py-2.5 border-b border-dashed border-black text-center bg-gray-50 text-black">
-                  <div className="text-[11.5px] font-bold">CUSTOMER DELIVERY OTP:</div>
-                  <div className="font-black text-[19px] tracking-widest my-0.5">
-                    [ {order.deliveryOtp.split("").join(" ")} ]
+                <div className="py-2.5 border-b border-dashed border-black text-center text-black">
+                  <div className="text-[12px] font-bold text-black uppercase">
+                    CUSTOMER DELIVERY OTP:
                   </div>
-                  <div className="text-[11px] font-semibold">Rider must verify this code at doorstep</div>
+                  <div className="inline-block border-2 border-black px-4 py-1 font-black text-xl tracking-[0.25em] my-1 text-black bg-white">
+                    {order.deliveryOtp.split("").join(" ")}
+                  </div>
+                  <div className="text-[11px] font-medium text-black">
+                    Rider must verify this code at doorstep
+                  </div>
                 </div>
               )}
 
               {/* Thermal Receipt Footer */}
-              <div className="pt-2.5 text-center text-[11.5px] text-black font-medium space-y-0.5">
+              <div className="pt-3 pb-2 text-center text-[12px] text-black font-medium space-y-0.5">
                 <div>Freshly cut & packed hygienically.</div>
                 <div>Store chilled at 0°C to 4°C.</div>
-                <div className="font-bold text-[12.5px] mt-1 text-black">
+                <div className="font-bold text-[13px] mt-1.5 text-black">
                   *** THANK YOU FOR YOUR ORDER ***
                 </div>
               </div>
