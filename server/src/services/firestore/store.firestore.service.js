@@ -141,8 +141,8 @@ const createStore = async (data = {}) => {
     expressDeliveryEnabled: typeof data.expressDeliveryEnabled === 'boolean' ? data.expressDeliveryEnabled : true,
     rainSurgeEnabled: typeof data.rainSurgeEnabled === 'boolean' ? data.rainSurgeEnabled : false,
     rainSurgeFee: Number(data.rainSurgeFee) || 15,
-    freeGiftThreshold: Number(data.freeGiftThreshold) || 499,
-    freeGiftName: (data.freeGiftName || 'Free Biryani Rice (500g)').trim(),
+    freeGiftThreshold: Number(data.freeGiftThreshold) || 0,
+    freeGiftName: (data.freeGiftName || '').trim(),
     deliveryRadiusKm: Math.max(1, Number(data.deliveryRadiusKm) || 5),
     defaultRiderDailyTarget: Math.max(1, Number(data.defaultRiderDailyTarget) || 16),
     location: {

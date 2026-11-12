@@ -91,7 +91,6 @@ export default function CartDrawer() {
     subtotal,
     deliveryFee,
     total,
-    freeRiceThreshold,
     freeDeliveryThreshold,
     totalItemsCount,
     appliedCoupon,
@@ -456,8 +455,6 @@ export default function CartDrawer() {
   const storeExpressEnabled = isStoreOperational && selectedStore?.expressDeliveryEnabled !== false;
   const storeRainSurgeEnabled = isStoreOperational && selectedStore?.rainSurgeEnabled === true;
   const storeRainSurgeFee = storeRainSurgeEnabled ? (selectedStore?.rainSurgeFee ?? 15) : 0;
-  const storeFreeGiftThreshold = selectedStore?.freeGiftThreshold ?? freeRiceThreshold;
-  const storeFreeGiftName = selectedStore?.freeGiftName || "Free Biryani Rice (500g)";
   const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 5;
 
   // Check if current time in IST is after 7:59 PM (20:00 to 07:59)
@@ -489,7 +486,6 @@ export default function CartDrawer() {
           : "90 Min Delivery";
 
   const amountForFreeDelivery = Math.max(0, storeFreeDeliveryThreshold - subtotal);
-  const amountForFreeGift = Math.max(0, storeFreeGiftThreshold - subtotal);
 
   // Tip handler
   const handleSelectTip = (amount: number) => {
@@ -1875,27 +1871,7 @@ export default function CartDrawer() {
                   </div>
                 </div>
 
-                {/* ─── FREE GIFT REWARD TIER BANNER ─── */}
-                <div className="px-5 pt-2 pb-0 shrink-0">
-                  <div className="px-3.5 py-2 bg-gradient-to-r from-amber-50/90 via-orange-50/80 to-amber-50/90 border border-amber-200/80 rounded-xl flex items-center justify-between gap-2 shadow-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="material-symbols-outlined text-amber-600 text-[18px] shrink-0">featured_seasonal_and_gifts</span>
-                      <div className="min-w-0">
-                        <div className="text-[11.5px] font-extrabold text-amber-950 truncate">
-                          {amountForFreeGift <= 0
-                            ? `Unlocked: ${storeFreeGiftName}!`
-                            : `Add ₹${amountForFreeGift} more for ${storeFreeGiftName}`}
-                        </div>
-                        <div className="text-[10px] text-amber-700 font-medium">
-                          {amountForFreeGift <= 0 ? "Complimentary gift unlocked with your order" : `Free reward on carts ≥ ₹${storeFreeGiftThreshold}`}
-                        </div>
-                      </div>
-                    </div>
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wider shrink-0 ${amountForFreeGift <= 0 ? "bg-emerald-600 text-white" : "bg-amber-200/80 text-amber-900"}`}>
-                      {amountForFreeGift <= 0 ? "FREE" : `₹${amountForFreeGift} to unlock`}
-                    </span>
-                  </div>
-                </div>
+
 
                 {/* ─── BILL SUMMARY & CTA ────────────────────────────────────────── */}
                 <div className="border-t border-gray-200 px-5 py-4 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.03)] shrink-0">

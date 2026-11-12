@@ -114,12 +114,12 @@ const storeSchema = new mongoose.Schema(
     },
     freeGiftThreshold: {
       type: Number,
-      default: 499,
+      default: 0,
       min: 0,
     },
     freeGiftName: {
       type: String,
-      default: 'Free Biryani Rice (500g)',
+      default: '',
     },
     deliveryRadiusKm: {
       type: Number,

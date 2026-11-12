@@ -40,8 +40,8 @@ export default function StoreStatusModal({
   const [expressDeliveryEnabled, setExpressDeliveryEnabled] = useState<boolean>(true);
   const [rainSurgeEnabled, setRainSurgeEnabled] = useState<boolean>(false);
   const [rainSurgeFee, setRainSurgeFee] = useState<number>(15);
-  const [freeGiftThreshold, setFreeGiftThreshold] = useState<number>(499);
-  const [freeGiftName, setFreeGiftName] = useState<string>("Free Biryani Rice (500g)");
+  const [freeGiftThreshold, setFreeGiftThreshold] = useState<number>(0);
+  const [freeGiftName, setFreeGiftName] = useState<string>("");
   const [deliveryRadiusKm, setDeliveryRadiusKm] = useState<number>(5);
   const [defaultRiderDailyTarget, setDefaultRiderDailyTarget] = useState<number>(16);
 
@@ -536,7 +536,7 @@ export default function StoreStatusModal({
                     type="text"
                     value={freeGiftName}
                     onChange={(e) => setFreeGiftName(e.target.value)}
-                    placeholder="e.g. Free Biryani Rice (500g)"
+                    placeholder="e.g. Free Gift Name (optional)"
                     className="w-full px-2 py-1 mt-1 text-xs font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
                   />
                 </div>
