@@ -710,9 +710,39 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
   const [quickItemWeight, setQuickItemWeight] = useState("500g");
   const [inventorySuggestions, setInventorySuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
+  const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  const [selectedProductId, setSelectedProductId] = useState<string>("");
+  const [isCustomItem, setIsCustomItem] = useState(false);
+
+  // Group catalog products by categoryLabel or category for clean optgroup display
+  const groupedCatalogProducts = useMemo(() => {
+    const groups: { [cat: string]: any[] } = {};
+    catalogProducts.forEach((prod: any) => {
+      const cat = prod.categoryLabel || prod.category || "Fresh Cuts";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push(prod);
+    });
+    return groups;
+  }, [catalogProducts]);
 
   const openCreateManualOrderModal = () => {
     setShowCreateOrderModal(true);
+    setSelectedProductId("");
+    setIsCustomItem(false);
+
+    if (catalogProducts.length === 0) {
+      setLoadingCatalog(true);
+      api.get<{ success: boolean; products: any[] }>("/products?limit=250&all=true")
+        .then(res => {
+          if (res.data?.success && Array.isArray(res.data.products)) {
+            setCatalogProducts(res.data.products);
+          }
+        })
+        .catch(err => console.warn("Failed to load catalog products for manual order:", err))
+        .finally(() => setLoadingCatalog(false));
+    }
+
     if (inventorySuggestions.length === 0) {
       setLoadingSuggestions(true);
       api.get<{ success: boolean; inventory: any[] }>("/store-admin/inventory")
@@ -726,9 +756,56 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
     }
   };
 
+  const handleSelectProduct = (prodId: string) => {
+    setSelectedProductId(prodId);
+    if (!prodId) {
+      setIsCustomItem(false);
+      setQuickItemName("");
+      setQuickItemPrice("");
+      setQuickItemWeight("500g");
+      return;
+    }
+    if (prodId === "custom") {
+      setIsCustomItem(true);
+      setQuickItemName("");
+      setQuickItemPrice("");
+      setQuickItemWeight("500g");
+      return;
+    }
+    setIsCustomItem(false);
+    const prod = catalogProducts.find((p: any) => String(p.id) === String(prodId));
+    if (prod) {
+      setQuickItemName(prod.name || "");
+      setQuickItemPrice(prod.price != null ? String(prod.price) : "");
+      setQuickItemWeight(prod.netWeight || prod.grossWeight || "500g");
+    }
+  };
+
+  const handleSelectInventorySuggestion = (invItem: any) => {
+    const itemName = invItem.item || invItem.name || "";
+    const matched = catalogProducts.find(
+      (p: any) =>
+        String(p.id) === String(invItem.id || invItem.productId) ||
+        (p.name && itemName && p.name.toLowerCase().trim() === itemName.toLowerCase().trim())
+    );
+    if (matched) {
+      setSelectedProductId(matched.id);
+      setIsCustomItem(false);
+      setQuickItemName(matched.name || itemName);
+      setQuickItemPrice(matched.price != null ? String(matched.price) : (invItem.price ? String(invItem.price) : "220"));
+      setQuickItemWeight(matched.netWeight || matched.grossWeight || (invItem.unit === "piece" ? "1 piece" : "500g"));
+    } else {
+      setSelectedProductId("custom");
+      setIsCustomItem(true);
+      setQuickItemName(itemName);
+      setQuickItemPrice(invItem.price ? String(invItem.price) : "220");
+      setQuickItemWeight(invItem.unit === "piece" ? "1 piece" : "500g");
+    }
+  };
+
   const handleAddManualItem = () => {
     if (!quickItemName.trim()) {
-      toast.error("Please enter item name", "Item Missing");
+      toast.error("Please select a product or enter item name", "Item Missing");
       return;
     }
     const priceNum = Number(quickItemPrice) || 0;
@@ -746,16 +823,12 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
         netWeight: quickItemWeight,
       }
     ]);
+    setSelectedProductId("");
+    setIsCustomItem(false);
     setQuickItemName("");
     setQuickItemPrice("");
     setQuickItemQty(1);
     setQuickItemWeight("500g");
-  };
-
-  const handleSelectInventorySuggestion = (invItem: any) => {
-    setQuickItemName(invItem.item || invItem.name || "");
-    setQuickItemPrice(invItem.price ? String(invItem.price) : "220");
-    setQuickItemWeight(invItem.unit === "piece" ? "1 piece" : "500g");
   };
 
   const handleSaveManualOrder = async () => {
@@ -2211,23 +2284,13 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
 
       {/* Create Manual / Phone Order Modal */}
       {showCreateOrderModal && (
-        <div style={{
-          position: "fixed",
-          inset: 0,
-          background: "rgba(0, 0, 0, 0.65)",
-          backdropFilter: "blur(4px)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          zIndex: 1000,
-          padding: "16px",
-        }}>
+        <div className="fixed inset-0 bg-black/65 backdrop-blur-sm flex items-center justify-center z-[1000] p-2 sm:p-4">
           <div style={{
             background: "#fff",
             borderRadius: "18px",
             width: "100%",
             maxWidth: "660px",
-            maxHeight: "90vh",
+            maxHeight: "92vh",
             display: "flex",
             flexDirection: "column",
             boxShadow: "0 20px 50px rgba(0,0,0,0.35)",
@@ -2273,14 +2336,14 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
             </div>
 
             {/* Modal Scrollable Body */}
-            <div style={{ padding: "18px 20px", overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: "16px" }}>
+            <div className="p-3 sm:p-5 overflow-y-auto flex-1 flex flex-col gap-3.5">
               {/* Section 1: Customer Details */}
               <div style={{ background: "#f9fafb", padding: "14px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
                 <div style={{ fontSize: "0.82rem", fontWeight: 800, color: "#111827", marginBottom: "10px", display: "flex", alignItems: "center", gap: "6px" }}>
                   <span className="material-symbols-outlined text-[16px] text-emerald-700">person</span>
                   <span>Customer Information</span>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
                     <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
                       Phone Number * (10 Digits)
@@ -2442,78 +2505,261 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                   </div>
                 )}
 
-                {/* Item Entry Row */}
-                <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr auto", gap: "8px", alignItems: "end" }}>
+                {/* Item Entry Row: Responsive on Mobile & Desktop */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {/* Product Selection Dropdown */}
                   <div>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
-                      Item Name
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Chicken Curry Cut"
-                      value={quickItemName}
-                      onChange={(e) => setQuickItemName(e.target.value)}
-                      style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem" }}
-                    />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+                      <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151" }}>
+                        Select Product / Meat Cut *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isCustomItem) {
+                            setIsCustomItem(false);
+                            setSelectedProductId("");
+                            setQuickItemName("");
+                            setQuickItemPrice("");
+                            setQuickItemWeight("500g");
+                          } else {
+                            setIsCustomItem(true);
+                            setSelectedProductId("custom");
+                            setQuickItemName("");
+                            setQuickItemPrice("");
+                            setQuickItemWeight("500g");
+                          }
+                        }}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "#047857",
+                          fontSize: "0.7rem",
+                          fontWeight: 700,
+                          cursor: "pointer",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "3px",
+                          padding: "2px 4px",
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[13px]">
+                          {isCustomItem ? "format_list_bulleted" : "edit_note"}
+                        </span>
+                        <span>{isCustomItem ? "Select from Dropdown" : "Write Custom Item"}</span>
+                      </button>
+                    </div>
+
+                    {!isCustomItem ? (
+                      <div style={{ position: "relative" }}>
+                        <select
+                          value={selectedProductId}
+                          onChange={(e) => handleSelectProduct(e.target.value)}
+                          disabled={loadingCatalog}
+                          style={{
+                            width: "100%",
+                            padding: "8px 30px 8px 10px",
+                            borderRadius: "8px",
+                            border: "1.5px solid #10b981",
+                            fontSize: "0.82rem",
+                            fontWeight: 600,
+                            color: selectedProductId ? "#111827" : "#6b7280",
+                            background: "#fff",
+                            cursor: "pointer",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+                          }}
+                        >
+                          <option value="">
+                            {loadingCatalog ? "Loading products catalog..." : "-- Choose Product (Auto-fills Price & Weight) --"}
+                          </option>
+                          {Object.entries(groupedCatalogProducts).map(([categoryName, prods]) => (
+                            <optgroup key={categoryName} label={categoryName}>
+                              {prods.map((p: any) => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} — ₹{p.price} ({p.netWeight || p.grossWeight || "500g"})
+                                  {!p.inStock ? " [Out of Stock]" : ""}
+                                </option>
+                              ))}
+                            </optgroup>
+                          ))}
+                          <option value="custom">✏️ Enter Custom / Unlisted Cut...</option>
+                        </select>
+                      </div>
+                    ) : (
+                      <input
+                        type="text"
+                        placeholder="e.g. Skinless Special Cut, Soup Bones, Custom Cut"
+                        value={quickItemName}
+                        onChange={(e) => setQuickItemName(e.target.value)}
+                        style={{
+                          width: "100%",
+                          padding: "8px 10px",
+                          borderRadius: "8px",
+                          border: "1.5px solid #10b981",
+                          fontSize: "0.82rem",
+                          fontWeight: 500,
+                        }}
+                        autoFocus
+                      />
+                    )}
                   </div>
-                  <div>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
-                      Weight/Cut
-                    </label>
-                    <select
-                      value={quickItemWeight}
-                      onChange={(e) => setQuickItemWeight(e.target.value)}
-                      style={{ width: "100%", padding: "7px 8px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem", background: "#fff" }}
-                    >
-                      <option value="500g">500g</option>
-                      <option value="1kg">1kg</option>
-                      <option value="250g">250g</option>
-                      <option value="750g">750g</option>
-                      <option value="1 piece">1 piece</option>
-                    </select>
+
+                  {/* Auto-filled Item Details: Weight, Price, Qty, Add button */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 items-end">
+                    <div>
+                      <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "3px" }}>
+                        Weight / Cut
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. 500g, 1kg"
+                        value={quickItemWeight}
+                        onChange={(e) => setQuickItemWeight(e.target.value)}
+                        list="weight-preset-options"
+                        style={{
+                          width: "100%",
+                          padding: "7px 10px",
+                          borderRadius: "6px",
+                          border: "1px solid #d1d5db",
+                          fontSize: "0.8rem",
+                          fontWeight: 600,
+                          background: "#fff",
+                          height: "35px",
+                        }}
+                      />
+                      <datalist id="weight-preset-options">
+                        <option value="250g" />
+                        <option value="500g" />
+                        <option value="750g" />
+                        <option value="1kg" />
+                        <option value="1 piece" />
+                        <option value="4 pieces" />
+                        <option value="6 pieces" />
+                      </datalist>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "3px" }}>
+                        Price (₹)
+                      </label>
+                      <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                        <span style={{ position: "absolute", left: "8px", fontSize: "0.8rem", color: "#6b7280", fontWeight: 700 }}>₹</span>
+                        <input
+                          type="number"
+                          placeholder="220"
+                          value={quickItemPrice}
+                          onChange={(e) => setQuickItemPrice(e.target.value)}
+                          style={{
+                            width: "100%",
+                            padding: "7px 10px 7px 22px",
+                            borderRadius: "6px",
+                            border: "1px solid #d1d5db",
+                            fontSize: "0.8rem",
+                            fontWeight: 700,
+                            height: "35px",
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "3px" }}>
+                        Qty
+                      </label>
+                      <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        border: "1px solid #d1d5db",
+                        borderRadius: "6px",
+                        overflow: "hidden",
+                        background: "#fff",
+                        height: "35px",
+                      }}>
+                        <button
+                          type="button"
+                          onClick={() => setQuickItemQty((q) => Math.max(1, q - 1))}
+                          style={{
+                            width: "32px",
+                            height: "100%",
+                            background: "#f3f4f6",
+                            border: "none",
+                            color: "#374151",
+                            fontWeight: 800,
+                            fontSize: "0.9rem",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          −
+                        </button>
+                        <input
+                          type="number"
+                          min={1}
+                          max={50}
+                          value={quickItemQty}
+                          onChange={(e) => setQuickItemQty(Math.max(1, Number(e.target.value) || 1))}
+                          style={{
+                            width: "100%",
+                            textAlign: "center",
+                            fontWeight: 800,
+                            fontSize: "0.82rem",
+                            border: "none",
+                            outline: "none",
+                            height: "100%",
+                            color: "#111827",
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setQuickItemQty((q) => Math.min(50, q + 1))}
+                          style={{
+                            width: "32px",
+                            height: "100%",
+                            background: "#f3f4f6",
+                            border: "none",
+                            color: "#374151",
+                            fontWeight: 800,
+                            fontSize: "0.9rem",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <button
+                        type="button"
+                        onClick={handleAddManualItem}
+                        style={{
+                          width: "100%",
+                          background: "#065f46",
+                          color: "#fff",
+                          border: "none",
+                          borderRadius: "6px",
+                          padding: "8px 12px",
+                          fontWeight: 800,
+                          fontSize: "0.82rem",
+                          cursor: "pointer",
+                          height: "35px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "4px",
+                          boxShadow: "0 1px 3px rgba(6, 95, 70, 0.25)",
+                        }}
+                      >
+                        <span className="material-symbols-outlined text-[16px]">add</span>
+                        <span>Add Item</span>
+                      </button>
+                    </div>
                   </div>
-                  <div>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
-                      Price (₹)
-                    </label>
-                    <input
-                      type="number"
-                      placeholder="₹220"
-                      value={quickItemPrice}
-                      onChange={(e) => setQuickItemPrice(e.target.value)}
-                      style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem" }}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ fontSize: "0.72rem", fontWeight: 700, color: "#4b5563", display: "block", marginBottom: "2px" }}>
-                      Qty
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={quickItemQty}
-                      onChange={(e) => setQuickItemQty(Math.max(1, Number(e.target.value) || 1))}
-                      style={{ width: "100%", padding: "7px 10px", borderRadius: "6px", border: "1px solid #d1d5db", fontSize: "0.8rem" }}
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleAddManualItem}
-                    style={{
-                      background: "#065f46",
-                      color: "#fff",
-                      border: "none",
-                      borderRadius: "6px",
-                      padding: "8px 12px",
-                      fontWeight: 800,
-                      fontSize: "0.8rem",
-                      cursor: "pointer",
-                      height: "35px",
-                    }}
-                  >
-                    + Add
-                  </button>
                 </div>
 
                 {/* Added Items List */}
@@ -2557,7 +2803,7 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
 
               {/* Section 3: Payment & Notes */}
               <div style={{ background: "#f9fafb", padding: "14px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
                     <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
                       Payment Method
