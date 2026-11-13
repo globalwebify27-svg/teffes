@@ -65,6 +65,7 @@ class OrderModel {
   final String? cancellationReason;
   final String? createdByType;
   final String? orderSource;
+  final String? scheduledDeliveryDate;
 
   bool get isStoreDirect =>
       createdByType == 'self_store_admin' || orderSource == 'store_direct';
@@ -114,6 +115,7 @@ class OrderModel {
     this.cancellationReason,
     this.createdByType,
     this.orderSource,
+    this.scheduledDeliveryDate,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -180,6 +182,7 @@ class OrderModel {
       cancellationReason: json['cancellationReason']?.toString(),
       createdByType: json['createdByType']?.toString(),
       orderSource: json['orderSource']?.toString(),
+      scheduledDeliveryDate: json['scheduledDeliveryDate']?.toString(),
     );
   }
 }

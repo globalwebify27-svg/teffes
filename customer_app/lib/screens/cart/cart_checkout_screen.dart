@@ -56,11 +56,20 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   bool _showStorePickerInDelivery = false;
   bool _isLoadingStores = false;
 
-  bool _isAfter8PM() {
+  bool _isNightAfter8PM() {
     final now = DateTime.now();
     final hour = now.hour;
     final minute = now.minute;
-    return hour >= 20 || (hour == 19 && minute >= 59) || hour < 8;
+    return hour >= 20 || (hour == 19 && minute >= 59);
+  }
+
+  bool _isEarlyMorningBefore8AM() {
+    final now = DateTime.now();
+    return now.hour < 8;
+  }
+
+  bool _isAfter8PM() {
+    return _isNightAfter8PM() || _isEarlyMorningBefore8AM();
   }
 
   List<Map<String, dynamic>> _getHourlySlots() {
@@ -137,7 +146,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     _initDefaultStores();
     _crossSellItems = [];
     final available = _getHourlySlots().where((s) => s['isPassed'] == false).toList();
-    _selectedCustomSlot = available.isNotEmpty ? (available.first['label'] as String) : 'Tomorrow: 08:00 AM - 09:00 AM';
+    _selectedCustomSlot = available.isNotEmpty
+        ? (available.first['label'] as String)
+        : (_isEarlyMorningBefore8AM()
+            ? 'Today: 08:00 AM - 09:00 AM'
+            : 'Tomorrow: 08:00 AM - 09:00 AM');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<CartProvider>().fetchCartFromServer();
@@ -760,11 +773,13 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
     final resolvedDeliverySlot = isPickup
         ? 'Store Pickup (Counter Takeaway)'
-        : isAfterHours
+        : _isNightAfter8PM()
             ? 'Next-Day Delivery: Tomorrow by 09:00 AM'
-            : _selectedSlot == 'Custom Delivery'
-                ? 'Custom Delivery: $_selectedCustomSlot'
-                : _selectedSlot;
+            : _isEarlyMorningBefore8AM()
+                ? 'Morning Delivery: Today by 09:00 AM'
+                : _selectedSlot == 'Custom Delivery'
+                    ? 'Custom Delivery: $_selectedCustomSlot'
+                    : _selectedSlot;
 
     final selStore = _selectedStore;
     if (selStore != null && !selStore.isAvailable) {
@@ -1915,25 +1930,33 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                     color: const Color(0xFFF59E0B).withOpacity(0.15),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: const Icon(Icons.nightlight_round, color: Color(0xFFD97706), size: 18),
+                                  child: Icon(
+                                    _isEarlyMorningBefore8AM() ? Icons.wb_twilight_rounded : Icons.nightlight_round,
+                                    color: const Color(0xFFD97706),
+                                    size: 18,
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      const Text(
-                                        'Teffes Store Hours: 8:00 AM – 8:00 PM',
-                                        style: TextStyle(
+                                      Text(
+                                        _isEarlyMorningBefore8AM()
+                                            ? 'Store Opens at 8:00 AM Today'
+                                            : 'Teffes Store Hours: 8:00 AM – 8:00 PM',
+                                        style: const TextStyle(
                                           fontWeight: FontWeight.w800,
                                           fontSize: 12.5,
                                           color: Color(0xFF78350F),
                                         ),
                                       ),
                                       const SizedBox(height: 3),
-                                      const Text(
-                                        'Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM.',
-                                        style: TextStyle(
+                                      Text(
+                                        _isEarlyMorningBefore8AM()
+                                            ? 'Store timing is 8:00 AM to 8:00 PM. As you are placing your order early morning before opening, it will be delivered today by 9:00 AM.'
+                                            : 'Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM.',
+                                        style: const TextStyle(
                                           fontSize: 11.5,
                                           height: 1.35,
                                           color: Color(0xFF92400E),
@@ -1947,14 +1970,16 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                           borderRadius: BorderRadius.circular(6),
                                           border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
                                         ),
-                                        child: const Row(
+                                        child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
-                                            Icon(Icons.wb_sunny_rounded, size: 13, color: Color(0xFF047857)),
-                                            SizedBox(width: 5),
+                                            const Icon(Icons.wb_sunny_rounded, size: 13, color: Color(0xFF047857)),
+                                            const SizedBox(width: 5),
                                             Text(
-                                              'Scheduled: Tomorrow by 09:00 AM',
-                                              style: TextStyle(
+                                              _isEarlyMorningBefore8AM()
+                                                  ? 'Scheduled: Today by 09:00 AM'
+                                                  : 'Scheduled: Tomorrow by 09:00 AM',
+                                              style: const TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w800,
                                                 color: Color(0xFF047857),

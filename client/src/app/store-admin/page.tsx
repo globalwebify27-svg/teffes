@@ -47,12 +47,27 @@ const TABS = [
 ];
 
 // Helper to extract specific hour slot (e.g., '07:00 AM – 09:00 AM') while omitting generic on-demand labels
-const getSpecificDeliverySlot = (slot?: string) => {
+const getSpecificDeliverySlot = (slot?: string, scheduledDeliveryDate?: string, targetDeliveryTime?: string) => {
   if (!slot || typeof slot !== "string") return null;
-  const s = slot.trim();
+  let s = slot.trim();
   const isGeneric = /^\s*(60\s*min|90\s*min|express|standard|home\s*delivery|store\s*pickup|pickup)\b/i.test(s) && !/(am|pm|\d{1,2}:\d{2})/i.test(s);
   if (isGeneric) return null;
   if (/(am|pm|\d{1,2}:\d{2}|\d{1,2}\s*(am|pm)?\s*[-–—to]\s*\d{1,2}\s*(am|pm))/i.test(s)) {
+    // If slot says "Tomorrow" but delivery is scheduled for today in IST:
+    const now = new Date();
+    const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+    const todayIST = `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${String(ist.getUTCDate()).padStart(2, '0')}`;
+    let targetIST = scheduledDeliveryDate || "";
+    if (!targetIST && targetDeliveryTime) {
+      const dt = new Date(targetDeliveryTime);
+      if (!isNaN(dt.getTime())) {
+        const dtIST = new Date(dt.getTime() + (5.5 * 60 * 60 * 1000));
+        targetIST = `${dtIST.getUTCFullYear()}-${String(dtIST.getUTCMonth() + 1).padStart(2, '0')}-${String(dtIST.getUTCDate()).padStart(2, '0')}`;
+      }
+    }
+    if ((!targetIST || targetIST <= todayIST) && /tomorrow/i.test(s)) {
+      s = s.replace(/Next-Day Delivery:\s*Tomorrow/i, "Morning Delivery: Today").replace(/Tomorrow/i, "Today");
+    }
     return s;
   }
   return null;
@@ -1603,24 +1618,61 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                           Created by Self
                         </span>
                       )}
-                      {(o.isNextDayOrder || (o.deliverySlot && (o.deliverySlot.toLowerCase().includes('tomorrow') || o.deliverySlot.toLowerCase().includes('next-day') || o.deliverySlot.toLowerCase().includes('09:00 am')))) && (
-                        <span style={{
-                          background: "#fef3c7",
-                          color: "#92400e",
-                          border: "1px solid #fde68a",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}>
-                          <span className="material-symbols-outlined text-[14px]">wb_sunny</span>
-                          DELIVER TOMORROW BY 9:00 AM
-                        </span>
-                      )}
+                      {(() => {
+                        const isMorningSlot = Boolean(
+                          o.isNextDayOrder ||
+                          (o.deliverySlot && (
+                            o.deliverySlot.toLowerCase().includes('tomorrow') ||
+                            o.deliverySlot.toLowerCase().includes('next-day') ||
+                            o.deliverySlot.toLowerCase().includes('09:00 am') ||
+                            o.deliverySlot.toLowerCase().includes('today by 09:00 am')
+                          ))
+                        );
+                        if (!isMorningSlot) return null;
+
+                        const now = new Date();
+                        const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+                        const todayIST = `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${String(ist.getUTCDate()).padStart(2, '0')}`;
+                        let targetIST = o.scheduledDeliveryDate || "";
+                        if (!targetIST && o.targetDeliveryTime) {
+                          const dt = new Date(o.targetDeliveryTime);
+                          if (!isNaN(dt.getTime())) {
+                            const dtIST = new Date(dt.getTime() + (5.5 * 60 * 60 * 1000));
+                            targetIST = `${dtIST.getUTCFullYear()}-${String(dtIST.getUTCMonth() + 1).padStart(2, '0')}-${String(dtIST.getUTCDate()).padStart(2, '0')}`;
+                          }
+                        }
+                        if (!targetIST && o.createdAt) {
+                          const placedD = new Date(o.createdAt);
+                          const placedIST = new Date(placedD.getTime() + (5.5 * 60 * 60 * 1000));
+                          const hour = placedIST.getUTCHours();
+                          const minute = placedIST.getUTCMinutes();
+                          if (hour >= 20 || (hour === 19 && minute >= 59)) {
+                            const nextDay = new Date(placedD.getTime() + 24 * 60 * 60 * 1000 + 5.5 * 60 * 60 * 1000);
+                            targetIST = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, '0')}-${String(nextDay.getUTCDate()).padStart(2, '0')}`;
+                          } else {
+                            targetIST = `${placedIST.getUTCFullYear()}-${String(placedIST.getUTCMonth() + 1).padStart(2, '0')}-${String(placedIST.getUTCDate()).padStart(2, '0')}`;
+                          }
+                        }
+                        const isToday = !targetIST || targetIST <= todayIST;
+                        return (
+                          <span style={{
+                            background: isToday ? "#ecfdf5" : "#fef3c7",
+                            color: isToday ? "#065f46" : "#92400e",
+                            border: isToday ? "1px solid #a7f3d0" : "1px solid #fde68a",
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            fontSize: "0.72rem",
+                            fontWeight: 800,
+                            letterSpacing: "0.2px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}>
+                            <span className="material-symbols-outlined text-[14px]">{isToday ? "wb_twilight" : "wb_sunny"}</span>
+                            DELIVER {isToday ? "TODAY" : "TOMORROW"} BY 9:00 AM
+                          </span>
+                        );
+                      })()}
                       {o.isModified && (
                         <span style={{
                           background: "#fef3c7",
@@ -1786,7 +1838,7 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
                       Prep Time: <strong>{o.prepTimeMinutes || 25} mins</strong>
                     </span>
                     {(() => {
-                      const specificSlot = getSpecificDeliverySlot(o.slot || o.timeSlot || o.scheduledSlot || o.deliverySlot);
+                      const specificSlot = getSpecificDeliverySlot(o.slot || o.timeSlot || o.scheduledSlot || o.deliverySlot, o.scheduledDeliveryDate, o.targetDeliveryTime);
                       if (!specificSlot) return null;
                       return (
                         <>

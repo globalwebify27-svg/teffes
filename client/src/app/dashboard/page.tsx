@@ -894,6 +894,38 @@ export default function DashboardPage() {
 
 
 
+  const getScheduledDayLabel = (order: any): "Today" | "Tomorrow" => {
+    const getISTDateStr = (dateVal: any) => {
+      if (!dateVal) return "";
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return "";
+      const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+      const y = ist.getUTCFullYear();
+      const m = String(ist.getUTCMonth() + 1).padStart(2, "0");
+      const day = String(ist.getUTCDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    };
+
+    const todayIST = getISTDateStr(Date.now());
+    let targetDateIST = order.scheduledDeliveryDate || order.rawOrder?.scheduledDeliveryDate || "";
+    if (!targetDateIST && order.targetDeliveryTime) {
+      targetDateIST = getISTDateStr(order.targetDeliveryTime);
+    }
+    if (!targetDateIST && order.createdAt) {
+      const placedD = new Date(order.createdAt);
+      const placedIST = new Date(placedD.getTime() + (5.5 * 60 * 60 * 1000));
+      const hour = placedIST.getUTCHours();
+      const minute = placedIST.getUTCMinutes();
+      if (hour >= 20 || (hour === 19 && minute >= 59)) {
+        targetDateIST = getISTDateStr(placedD.getTime() + 24 * 60 * 60 * 1000);
+      } else {
+        targetDateIST = getISTDateStr(placedD);
+      }
+    }
+
+    return (!targetDateIST || targetDateIST <= todayIST) ? "Today" : "Tomorrow";
+  };
+
   const mappedLiveOrders = liveOrders.map((o) => {
     const isOutForDelivery = o.status === "Out for Delivery";
     const isDelivered = o.status === "Delivered";
@@ -903,6 +935,18 @@ export default function DashboardPage() {
     const transitMins = o.remainingTransitMinutes != null ? o.remainingTransitMinutes : 14;
     const isNearDoorstep = isOutForDelivery && (transitMins <= 5 || o.etaStage === "NEAR_DOORSTEP");
 
+    const slotLower = String(o.deliverySlot || "").toLowerCase();
+    const isScheduledMorningOrder = Boolean(
+      o.isNextDayOrder === true ||
+      o.etaStage === "SCHEDULED_NEXT_DAY" ||
+      o.etaStage === "SCHEDULED_SAME_DAY" ||
+      slotLower.includes("tomorrow") ||
+      slotLower.includes("next-day") ||
+      slotLower.includes("09:00 am") ||
+      slotLower.includes("today by 09:00 am")
+    );
+    const dayLabel = getScheduledDayLabel(o);
+
     let etaText = "";
     if (isDelivered || isCancelled) {
       etaText = "";
@@ -910,6 +954,8 @@ export default function DashboardPage() {
       etaText = "Arriving in ~5 min";
     } else if (isOutForDelivery) {
       etaText = `Arriving in ${transitMins} min`;
+    } else if (isScheduledMorningOrder) {
+      etaText = `Scheduled: ${dayLabel} by 09:00 AM`;
     } else if (o.targetDeliveryTime) {
       try {
         const dt = new Date(o.targetDeliveryTime);
@@ -937,11 +983,13 @@ export default function DashboardPage() {
       orderId: o.orderId || o.id,
       status: o.status,
       statusText: o.status === "Pending"
-        ? (o.isNextDayOrder || (o.deliverySlot && (o.deliverySlot.toLowerCase().includes('tomorrow') || o.deliverySlot.toLowerCase().includes('next-day') || o.deliverySlot.toLowerCase().includes('09:00 am'))))
-          ? "Scheduled • Tomorrow by 9:00 AM"
-          : "Order Placed at Teffes"
+        ? (isScheduledMorningOrder
+          ? `Scheduled • ${dayLabel} by 9:00 AM`
+          : "Order Placed at Teffes")
         : o.status === "Cutting"
-          ? "Order Confirmed • Prepping Fresh Cuts"
+          ? (isScheduledMorningOrder
+            ? `Scheduled • ${dayLabel} by 9:00 AM`
+            : "Order Confirmed • Preparing Fresh Cuts")
           : o.status,
       statusColor: isDelivered ? "text-emerald-700" : isCancelled ? "text-slate-500" : "text-amber-700",
       badgeBg: isDelivered ? "bg-emerald-50" : isCancelled ? "bg-slate-100" : "bg-amber-50",
@@ -1000,13 +1048,13 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className="w-full min-h-screen bg-[#f4f6f8] py-4 sm:py-6 lg:py-8 font-body-md text-on-surface">
-      <div className="w-full max-w-container-max mx-auto px-gutter-desktop">
+    <div className="w-full min-h-screen bg-[#f4f6f8] py-3 sm:py-6 lg:py-8 font-body-md text-on-surface">
+      <div className="w-full max-w-container-max mx-auto px-2.5 sm:px-gutter-desktop">
         {/* Main Account Card (Zepto Style - Responsive full-width utilization) */}
-        <div className="bg-white rounded-3xl border border-gray-200/90 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[700px] w-full">
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-200/90 shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[700px] w-full">
 
           {/* ─── LEFT SIDEBAR ────────────────────────────────────────────── */}
-          <aside className="w-full md:w-80 lg:w-96 border-b md:border-b-0 md:border-r border-gray-200/80 p-5 sm:p-6 lg:p-7 flex flex-col justify-between shrink-0 bg-white" style={{ maxHeight: '75vh' }}>
+          <aside className="w-full md:w-80 lg:w-96 border-b md:border-b-0 md:border-r border-gray-200/80 p-4 sm:p-6 lg:p-7 flex flex-col justify-between shrink-0 bg-white md:max-h-[85vh] md:overflow-y-auto">
             <div className="space-y-6">
               {/* User Info Block with Nearby Logout Option */}
               <div className="flex items-center justify-between gap-2.5 pb-1">
@@ -1136,7 +1184,7 @@ export default function DashboardPage() {
                 <span>Logout</span>
               </button>
 
-              <div className="opacity-90 hover:opacity-100 transition-opacity">
+              <div className="hidden md:flex opacity-90 hover:opacity-100 transition-opacity">
                 <img
                   src="/teffes-logo-maroon.png"
                   alt="Teffes"
@@ -1147,7 +1195,7 @@ export default function DashboardPage() {
           </aside>
 
           {/* ─── RIGHT CONTENT AREA ───────────────────────────────────────── */}
-          <main className="flex-1 p-5 sm:p-8 lg:p-10 overflow-y-auto bg-white min-w-0 w-full">
+          <main className="flex-1 p-3.5 sm:p-6 lg:p-10 overflow-y-auto bg-white min-w-0 w-full">
             {/* 1. ORDERS TAB (Image 1 Style) */}
             {activeTab === "orders" && (
               <div className="space-y-4 w-full">
@@ -1287,7 +1335,7 @@ export default function DashboardPage() {
                                     ? `Rider Dispatched • ${order.rider.name}`
                                     : (order.status === "Pending" || order.rawOrder?.status === "Pending")
                                       ? "Order Placed at Teffes Store"
-                                      : "Order Confirmed • Prepping Fresh Cuts"}
+                                      : "Order Confirmed • Preparing Fresh Cuts"}
                               </span>
                             </div>
                             {order.deliveryOtp && (
@@ -1302,32 +1350,32 @@ export default function DashboardPage() {
                             <button
                               type="button"
                               onClick={() => setTrackingOrder(order)}
-                              className="flex-1 sm:flex-none py-2 px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer"
+                              className="flex-1 sm:flex-none py-2 px-3 sm:px-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-headline-sm font-bold text-[11.5px] sm:text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 border-none cursor-pointer whitespace-nowrap min-h-[36px]"
                             >
-                              <span className="material-symbols-outlined text-[17px]">
+                              <span className="material-symbols-outlined text-[15px] sm:text-[17px] shrink-0">
                                 {order.rider?.name && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) ? "two_wheeler" : "schedule"}
                               </span>
-                              <span>Track Order</span>
+                              <span className="whitespace-nowrap">Track Order</span>
                             </button>
 
                             {["Placed", "Pending", "Confirmed", "Cutting"].includes(order.status || order.rawOrder?.status || "Pending") && (
                               <button
                                 type="button"
                                 onClick={() => { setCancelModalOrderId(order.id || order.rawOrder?._id || order.orderId); setCancelFeedback(null); }}
-                                className="py-2 px-3 rounded-xl bg-white border border-red-200 text-red-700 hover:bg-red-50 font-headline-sm font-bold text-xs transition-all flex items-center gap-1 cursor-pointer shadow-2xs"
+                                className="flex-1 sm:flex-none py-2 px-2.5 sm:px-3 rounded-xl bg-white border border-red-200 text-red-700 hover:bg-red-50 font-headline-sm font-bold text-[11.5px] sm:text-xs transition-all flex items-center justify-center gap-1 cursor-pointer shadow-2xs whitespace-nowrap min-h-[36px]"
                               >
-                                <span className="material-symbols-outlined text-red-600 text-[16px]">cancel</span>
-                                <span>Cancel Order</span>
+                                <span className="material-symbols-outlined text-red-600 text-[15px] sm:text-[16px] shrink-0">cancel</span>
+                                <span className="whitespace-nowrap">Cancel Order</span>
                               </button>
                             )}
 
                             {order.rider?.phone && ["Ready", "Out for Delivery"].includes(order.status || order.rawOrder?.status) && (
                               <a
                                 href={`tel:${order.rider?.phone}`}
-                                className="py-2 px-3 rounded-xl bg-white border border-gray-200 text-gray-800 font-headline-sm font-bold text-xs hover:bg-gray-50 transition-all flex items-center gap-1 text-decoration-none shadow-2xs"
+                                className="py-2 px-2.5 sm:px-3 rounded-xl bg-white border border-gray-200 text-gray-800 font-headline-sm font-bold text-[11.5px] sm:text-xs hover:bg-gray-50 transition-all flex items-center gap-1 text-decoration-none shadow-2xs whitespace-nowrap min-h-[36px]"
                               >
-                                <span className="material-symbols-outlined text-emerald-600 text-[17px]">call</span>
-                                <span>Call</span>
+                                <span className="material-symbols-outlined text-emerald-600 text-[15px] sm:text-[17px] shrink-0">call</span>
+                                <span className="whitespace-nowrap">Call</span>
                               </a>
                             )}
                           </div>
@@ -2100,21 +2148,59 @@ export default function DashboardPage() {
                 const transitMins = trackingOrder.remainingTransitMinutes != null ? trackingOrder.remainingTransitMinutes : 15;
                 const isNearDoorstep = isOutForDelivery && (transitMins <= 5 || trackingOrder.etaStage === "NEAR_DOORSTEP");
 
-                const isNextDayOrder = Boolean(
-                  (trackingOrder.deliverySlot && (trackingOrder.deliverySlot.toLowerCase().includes("tomorrow") || trackingOrder.deliverySlot.toLowerCase().includes("next-day") || trackingOrder.deliverySlot.toLowerCase().includes("9:00 am"))) ||
-                  (trackingOrder.targetDeliveryTime && new Date(trackingOrder.targetDeliveryTime).getDate() !== new Date(trackingOrder.createdAt || Date.now()).getDate())
+                const slotLower = String(trackingOrder.deliverySlot || "").toLowerCase();
+                const isScheduledMorningOrder = Boolean(
+                  trackingOrder.isNextDayOrder === true ||
+                  trackingOrder.etaStage === "SCHEDULED_NEXT_DAY" ||
+                  trackingOrder.etaStage === "SCHEDULED_SAME_DAY" ||
+                  slotLower.includes("tomorrow") ||
+                  slotLower.includes("next-day") ||
+                  slotLower.includes("09:00 am") ||
+                  slotLower.includes("today by 09:00 am")
                 );
 
-                const formattedTargetTime = isNextDayOrder
-                  ? "Tomorrow by 09:00 AM"
+                // Helper to get IST date string (YYYY-MM-DD)
+                const getISTDateStr = (dateVal: any) => {
+                  if (!dateVal) return "";
+                  const d = new Date(dateVal);
+                  if (isNaN(d.getTime())) return "";
+                  const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+                  const y = ist.getUTCFullYear();
+                  const m = String(ist.getUTCMonth() + 1).padStart(2, "0");
+                  const day = String(ist.getUTCDate()).padStart(2, "0");
+                  return `${y}-${m}-${day}`;
+                };
+
+                const todayIST = getISTDateStr(Date.now());
+                let targetDateIST = trackingOrder.scheduledDeliveryDate || "";
+                if (!targetDateIST && trackingOrder.targetDeliveryTime) {
+                  targetDateIST = getISTDateStr(trackingOrder.targetDeliveryTime);
+                }
+                if (!targetDateIST && trackingOrder.createdAt) {
+                  const placedD = new Date(trackingOrder.createdAt);
+                  const placedIST = new Date(placedD.getTime() + (5.5 * 60 * 60 * 1000));
+                  const hour = placedIST.getUTCHours();
+                  const minute = placedIST.getUTCMinutes();
+                  if (hour >= 20 || (hour === 19 && minute >= 59)) {
+                    targetDateIST = getISTDateStr(placedD.getTime() + 24 * 60 * 60 * 1000);
+                  } else {
+                    targetDateIST = getISTDateStr(placedD);
+                  }
+                }
+
+                const isDeliveryToday = !targetDateIST || targetDateIST <= todayIST;
+                const scheduledDayLabel = isDeliveryToday ? "Today" : "Tomorrow";
+
+                const formattedTargetTime = isScheduledMorningOrder
+                  ? `${scheduledDayLabel} by 09:00 AM`
                   : trackingOrder.targetDeliveryTime
                     ? new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })
                     : "90 mins";
 
                 let badgeText = "Order in Preparation";
-                let mainHeading = isNextDayOrder ? "Scheduled Delivery" : "Preparing your cuts";
-                let subHeading = isNextDayOrder
-                  ? "Scheduled: Tomorrow by 09:00 AM"
+                let mainHeading = isScheduledMorningOrder ? `Scheduled for ${scheduledDayLabel}` : "Preparing your cuts";
+                let subHeading = isScheduledMorningOrder
+                  ? `Scheduled: ${scheduledDayLabel} by 09:00 AM`
                   : `Arriving by ${formattedTargetTime}`;
                 let iconName = "skillet";
                 let bannerColor = "bg-amber-50 border-amber-200/80 text-amber-950";
@@ -2143,13 +2229,15 @@ export default function DashboardPage() {
                   iconColor = "bg-sky-500/20 text-sky-800";
                 } else if (status === "Cutting") {
                   badgeText = "Live Cutting Station";
-                  mainHeading = isNextDayOrder ? "Scheduled for Tomorrow" : `Arriving by ${formattedTargetTime}`;
-                  subHeading = isNextDayOrder ? "Order confirmed • Fresh cuts prepared tomorrow morning" : "Store team slicing & packing your fresh cuts";
+                  mainHeading = isScheduledMorningOrder ? `Scheduled for ${scheduledDayLabel}` : `Arriving by ${formattedTargetTime}`;
+                  subHeading = isScheduledMorningOrder
+                    ? `Order confirmed • Fresh cuts prepared ${scheduledDayLabel === "Today" ? "today" : "tomorrow"} morning`
+                    : "Store team slicing & packing your fresh cuts";
                   iconName = "content_cut";
                 } else if (status === "Ready") {
                   badgeText = "Packed & Ready";
-                  mainHeading = isNextDayOrder ? "Scheduled for Tomorrow" : `Arriving by ${formattedTargetTime}`;
-                  subHeading = isNextDayOrder ? "Scheduled: Tomorrow by 09:00 AM" : "Insulated fresh pack assigned to delivery rider";
+                  mainHeading = isScheduledMorningOrder ? `Scheduled for ${scheduledDayLabel}` : `Arriving by ${formattedTargetTime}`;
+                  subHeading = isScheduledMorningOrder ? `Scheduled: ${scheduledDayLabel} by 09:00 AM` : "Insulated fresh pack assigned to delivery rider";
                   iconName = "inventory_2";
                 }
 
@@ -2463,10 +2551,47 @@ export default function DashboardPage() {
                   {/* Step 4: Delivered to Doorstep */}
                   {(() => {
                     const isDelivered = (trackingOrder.status === "Delivered" || trackingOrder.rawOrder?.status === "Delivered");
-                    const isNextDayOrder = Boolean(
-                      (trackingOrder.deliverySlot && (trackingOrder.deliverySlot.toLowerCase().includes("tomorrow") || trackingOrder.deliverySlot.toLowerCase().includes("next-day") || trackingOrder.deliverySlot.toLowerCase().includes("9:00 am"))) ||
-                      (trackingOrder.targetDeliveryTime && new Date(trackingOrder.targetDeliveryTime).getDate() !== new Date(trackingOrder.createdAt || Date.now()).getDate())
+                    const slotLower = String(trackingOrder.deliverySlot || "").toLowerCase();
+                    const isScheduledMorningOrder = Boolean(
+                      trackingOrder.isNextDayOrder === true ||
+                      trackingOrder.etaStage === "SCHEDULED_NEXT_DAY" ||
+                      trackingOrder.etaStage === "SCHEDULED_SAME_DAY" ||
+                      slotLower.includes("tomorrow") ||
+                      slotLower.includes("next-day") ||
+                      slotLower.includes("09:00 am") ||
+                      slotLower.includes("today by 09:00 am")
                     );
+
+                    const getISTDateStr = (dateVal: any) => {
+                      if (!dateVal) return "";
+                      const d = new Date(dateVal);
+                      if (isNaN(d.getTime())) return "";
+                      const ist = new Date(d.getTime() + (5.5 * 60 * 60 * 1000));
+                      const y = ist.getUTCFullYear();
+                      const m = String(ist.getUTCMonth() + 1).padStart(2, "0");
+                      const day = String(ist.getUTCDate()).padStart(2, "0");
+                      return `${y}-${m}-${day}`;
+                    };
+
+                    const todayIST = getISTDateStr(Date.now());
+                    let targetDateIST = trackingOrder.scheduledDeliveryDate || "";
+                    if (!targetDateIST && trackingOrder.targetDeliveryTime) {
+                      targetDateIST = getISTDateStr(trackingOrder.targetDeliveryTime);
+                    }
+                    if (!targetDateIST && trackingOrder.createdAt) {
+                      const placedD = new Date(trackingOrder.createdAt);
+                      const placedIST = new Date(placedD.getTime() + (5.5 * 60 * 60 * 1000));
+                      const hour = placedIST.getUTCHours();
+                      const minute = placedIST.getUTCMinutes();
+                      if (hour >= 20 || (hour === 19 && minute >= 59)) {
+                        targetDateIST = getISTDateStr(placedD.getTime() + 24 * 60 * 60 * 1000);
+                      } else {
+                        targetDateIST = getISTDateStr(placedD);
+                      }
+                    }
+
+                    const isDeliveryToday = !targetDateIST || targetDateIST <= todayIST;
+                    const scheduledDayLabel = isDeliveryToday ? "Today" : "Tomorrow";
                     return (
                       <div className={`flex items-start gap-2.5 ${!isDelivered ? "opacity-50" : ""}`}>
                         <span
@@ -2480,8 +2605,8 @@ export default function DashboardPage() {
                           <span className={`text-[11px] ${isDelivered ? "text-emerald-600 font-medium" : "text-slate-500"}`}>
                             {isDelivered
                               ? "Handed over fresh & verified"
-                              : isNextDayOrder
-                                ? "Scheduled: Tomorrow by 09:00 AM"
+                              : isScheduledMorningOrder
+                                ? `Scheduled: ${scheduledDayLabel} by 09:00 AM`
                                 : trackingOrder.targetDeliveryTime
                                   ? `Arriving by ${new Date(trackingOrder.targetDeliveryTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}`
                                   : "Temperature-controlled doorstep delivery"}

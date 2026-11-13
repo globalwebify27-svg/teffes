@@ -223,23 +223,45 @@ function getEtaDetails(order) {
 
   // Phase 1: In-Store Prep (Pending, Cutting, Ready)
   const slotStr = String(order.deliverySlot || '').toLowerCase();
-  const isNextDay = order.isNextDayOrder === true ||
+  const isMorningSlot = order.isNextDayOrder === true ||
     isAfter8PM(order.createdAt) ||
     slotStr.includes('tomorrow') ||
     slotStr.includes('next-day') ||
     slotStr.includes('9:00 am');
 
-  if (isNextDay && (status === 'Pending' || status === 'Cutting')) {
+  if (isMorningSlot && (status === 'Pending' || status === 'Cutting')) {
+    // Dynamically calculate whether the scheduled delivery is TODAY or TOMORROW
+    const todayIST = getTodayISTDateString(new Date());
+    let targetDateIST = order.scheduledDeliveryDate || '';
+    if (!targetDateIST && order.targetDeliveryTime) {
+      targetDateIST = getTodayISTDateString(order.targetDeliveryTime);
+    }
+    if (!targetDateIST && order.createdAt) {
+      const placedComp = getISTDateComponents(order.createdAt);
+      if (placedComp.hours >= 20 || (placedComp.hours === 19 && placedComp.minutes >= 59)) {
+        // Placed at night -> delivery tomorrow
+        const placedDate = new Date(order.createdAt);
+        const nextDay = new Date(placedDate.getTime() + 24 * 60 * 60 * 1000);
+        targetDateIST = getTodayISTDateString(nextDay);
+      } else {
+        // Placed early morning or during day -> delivery today
+        targetDateIST = getTodayISTDateString(order.createdAt);
+      }
+    }
+
+    const isToday = !targetDateIST || targetDateIST <= todayIST;
+    const dayLabel = isToday ? 'Today' : 'Tomorrow';
+
     const nextDaySub = status === 'Cutting'
       ? 'Teffes store team is preparing fresh cuts'
-      : 'Teffes store opens at 8:00 AM • Order will be prepared & delivered by 9:00 AM';
+      : `Teffes store opens at 8:00 AM • Order will be prepared & delivered ${isToday ? 'today' : 'tomorrow'} by 9:00 AM`;
 
     return {
-      stage: 'SCHEDULED_NEXT_DAY',
-      isNextDay: true,
-      displayText: 'Tomorrow by 9:00 AM',
+      stage: isToday ? 'SCHEDULED_SAME_DAY' : 'SCHEDULED_NEXT_DAY',
+      isNextDay: !isToday,
+      displayText: `${dayLabel} by 9:00 AM`,
       subText: nextDaySub,
-      targetClockTime: 'Tomorrow 09:00 AM',
+      targetClockTime: `${dayLabel} 09:00 AM`,
       minutesRemaining: 60,
     };
   }
@@ -275,6 +297,7 @@ module.exports = {
   calculateTargetDeliveryTime,
   calculateNextDay9AM,
   isAfter8PM,
+  getISTDateComponents,
   getEtaDetails,
   getTodayISTDateString,
   isPastSpecialCloseTime,

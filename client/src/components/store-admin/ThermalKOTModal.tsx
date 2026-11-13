@@ -51,6 +51,8 @@ interface ThermalOrder {
   additionalAmountDue?: number;
   modifiedAt?: string;
   modificationReason?: string;
+  scheduledDeliveryDate?: string;
+  targetDeliveryTime?: string;
 }
 
 interface ThermalKOTModalProps {
@@ -279,12 +281,42 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                   <span className="font-bold whitespace-nowrap">Order Number -</span>
                   <span className="font-black text-[16px]">{orderId}</span>
                 </div>
-                {order.deliverySlot && (
-                  <div className="flex items-baseline gap-1.5">
-                    <span className="font-bold whitespace-nowrap">Delivery Slot -</span>
-                    <span className="font-semibold">{order.deliverySlot}</span>
-                  </div>
-                )}
+                {order.deliverySlot && (() => {
+                  let slotDisplay = order.deliverySlot;
+                  const now = new Date();
+                  const ist = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+                  const todayIST = `${ist.getUTCFullYear()}-${String(ist.getUTCMonth() + 1).padStart(2, '0')}-${String(ist.getUTCDate()).padStart(2, '0')}`;
+                  let targetIST = order.scheduledDeliveryDate || "";
+                  if (!targetIST && order.targetDeliveryTime) {
+                    const dt = new Date(order.targetDeliveryTime);
+                    if (!isNaN(dt.getTime())) {
+                      const dtIST = new Date(dt.getTime() + (5.5 * 60 * 60 * 1000));
+                      targetIST = `${dtIST.getUTCFullYear()}-${String(dtIST.getUTCMonth() + 1).padStart(2, '0')}-${String(dtIST.getUTCDate()).padStart(2, '0')}`;
+                    }
+                  }
+                  if (!targetIST && order.createdAt) {
+                    const placedD = new Date(order.createdAt);
+                    const placedIST = new Date(placedD.getTime() + (5.5 * 60 * 60 * 1000));
+                    const hour = placedIST.getUTCHours();
+                    const minute = placedIST.getUTCMinutes();
+                    if (hour >= 20 || (hour === 19 && minute >= 59)) {
+                      const nextDay = new Date(placedD.getTime() + 24 * 60 * 60 * 1000 + 5.5 * 60 * 60 * 1000);
+                      targetIST = `${nextDay.getUTCFullYear()}-${String(nextDay.getUTCMonth() + 1).padStart(2, '0')}-${String(nextDay.getUTCDate()).padStart(2, '0')}`;
+                    } else {
+                      targetIST = `${placedIST.getUTCFullYear()}-${String(placedIST.getUTCMonth() + 1).padStart(2, '0')}-${String(placedIST.getUTCDate()).padStart(2, '0')}`;
+                    }
+                  }
+                  const isToday = !targetIST || targetIST <= todayIST;
+                  if (isToday && /tomorrow/i.test(slotDisplay)) {
+                    slotDisplay = slotDisplay.replace(/Next-Day Delivery:\s*Tomorrow/i, "Morning Delivery: Today").replace(/Tomorrow/i, "Today");
+                  }
+                  return (
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="font-bold whitespace-nowrap">Delivery Slot -</span>
+                      <span className="font-semibold">{slotDisplay}</span>
+                    </div>
+                  );
+                })()}
                 <div>
                   <span className="font-bold">Address - </span>
                   <span className="font-semibold break-words">

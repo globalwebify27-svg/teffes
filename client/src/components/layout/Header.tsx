@@ -239,13 +239,13 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
         }`}
       >
         {/* Main Nav Bar */}
-        <div className="h-20 w-full max-w-container-max mx-auto px-gutter-desktop flex items-center justify-between gap-space-md sm:gap-space-lg">
+        <div className="h-16 sm:h-20 w-full max-w-container-max mx-auto px-2.5 sm:px-4 lg:px-gutter-desktop flex items-center justify-between gap-1.5 sm:gap-space-md lg:gap-space-lg">
           {/* Left Section: Mobile Hamburger + Brand Logo + Deliver To Badge */}
-          <div className="flex items-center gap-space-sm sm:gap-space-md lg:gap-space-lg shrink-0">
+          <div className="flex items-center gap-1 sm:gap-space-sm md:gap-space-md lg:gap-space-lg shrink-0">
             {/* Mobile Menu Toggle Button */}
             <button
               type="button"
-              className={`lg:hidden p-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent ${
+              className={`lg:hidden p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
                   : "text-on-surface hover:text-primary hover:bg-surface-container-low"
@@ -253,7 +253,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               onClick={() => setMobileMenuOpen(true)}
               aria-label="Open Navigation Menu"
             >
-              <span className="material-symbols-outlined text-[26px]">menu</span>
+              <span className="material-symbols-outlined text-[22px] sm:text-[26px]">menu</span>
             </button>
 
             {/* Teffe's Logo (Switches to White on Maroon Header when Scrolled) */}
@@ -261,7 +261,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               <img
                 src={isScrolled ? "/teffes-logo-white.png" : "/teffes-logo-maroon.png"}
                 alt="TeFFe's — Where health matters most"
-                className="h-10 sm:h-12 w-auto object-contain transition-all group-hover:scale-105 duration-200"
+                className="h-8 sm:h-10 md:h-12 w-auto object-contain transition-all group-hover:scale-105 duration-200"
               />
             </Link>
 
@@ -315,11 +315,11 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
           </div>
 
           {/* Right Section: Nav Links + Wishlist + Cart + Profile */}
-          <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-2.5 shrink-0">
             {/* Mobile Search Toggle Icon */}
             <button
               type="button"
-              className={`md:hidden p-2 rounded-full transition-colors border-none bg-transparent ${
+              className={`md:hidden p-1.5 sm:p-2 rounded-full transition-colors border-none bg-transparent ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
                   : "text-on-surface hover:text-primary hover:bg-surface-container-low"
@@ -327,7 +327,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               onClick={() => setMobileSearchOpen((prev) => !prev)}
               aria-label="Search items"
             >
-              <span className="material-symbols-outlined text-[24px]">search</span>
+              <span className="material-symbols-outlined text-[20px] sm:text-[24px]">search</span>
             </button>
 
             {/* Desktop Navigation Links */}
@@ -377,7 +377,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Wishlist Icon Button with Notification Badge */}
             <Link
               href="/wishlist"
-              className={`relative p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer text-decoration-none ${
+              className={`relative p-1.5 sm:p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer text-decoration-none ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
                   : "text-on-surface hover:text-primary hover:bg-surface-container-low"
@@ -385,10 +385,10 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               aria-label={`Loved Cuts (${wishlistCount})`}
               title="View Wishlist"
             >
-              <span className="material-symbols-outlined text-[26px]">favorite</span>
+              <span className="material-symbols-outlined text-[21px] sm:text-[26px]">favorite</span>
               {wishlistCount > 0 && (
                 <span
-                  className={`absolute top-1 right-1 min-w-[18px] h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[10px] px-1 shadow-sm ${
+                  className={`absolute top-0.5 right-0.5 sm:top-1 sm:right-1 min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[9px] sm:text-[10px] px-1 shadow-sm ${
                     isScrolled
                       ? "bg-white text-[#91000a] border border-[#91000a]/20"
                       : "bg-primary text-on-primary border border-white"
@@ -403,7 +403,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             <button
               type="button"
               onClick={() => openCart()}
-              className={`relative p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer border-none bg-transparent ${
+              className={`relative p-1.5 sm:p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer border-none bg-transparent ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
                   : "text-on-surface hover:text-primary hover:bg-surface-container-low"
@@ -411,10 +411,10 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               aria-label={`Shopping Cart (${totalItemsCount} items)`}
               title="View Shopping Cart"
             >
-              <span className="material-symbols-outlined text-[27px]">shopping_bag</span>
+              <span className="material-symbols-outlined text-[22px] sm:text-[27px]">shopping_bag</span>
               {totalItemsCount > 0 && (
                 <span
-                  className={`absolute top-1 right-1 min-w-[18px] h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[10px] px-1 shadow-md ${
+                  className={`absolute top-0.5 right-0.5 sm:top-1 sm:right-1 min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[9px] sm:text-[10px] px-1 shadow-md ${
                     isScrolled
                       ? "bg-white text-[#91000a] border border-white"
                       : "bg-primary text-on-primary border-2 border-white"
@@ -426,14 +426,12 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             </button>
 
             {/* User Profile Avatar with Real-time Completion Progress Ring */}
-            <div className="flex items-center pl-1">
+            <div className="flex items-center pl-0.5 sm:pl-1">
               {user ? (
                 <div
-                  className="relative group flex items-center justify-center rounded-full transition-transform hover:scale-105 cursor-pointer"
+                  className="relative group flex items-center justify-center rounded-full transition-transform hover:scale-105 cursor-pointer w-[32px] h-[32px] sm:w-[38px] sm:h-[38px] shrink-0"
                   style={{
-                    width: "38px",
-                    height: "38px",
-                    padding: "2.5px",
+                    padding: "2px",
                     background:
                       profileProgress.percentage === 100
                         ? "#16a34a"
@@ -452,7 +450,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                     title={`Profile ${profileProgress.percentage}% Complete${profileProgress.missing.length > 0 ? ` • Missing: ${profileProgress.missing.join(', ')}` : ' • Fully Completed'}`}
                   >
                     <span
-                      className={`font-black text-xs tracking-tight ${
+                      className={`font-black text-[10px] sm:text-xs tracking-tight ${
                         isScrolled ? "text-[#91000a]" : "text-primary"
                       }`}
                     >
@@ -482,7 +480,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 <button
                   type="button"
                   onClick={handleUserClick}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center overflow-hidden transition-all cursor-pointer p-0 shadow-sm ${
+                  className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center overflow-hidden transition-all cursor-pointer p-0 shadow-sm shrink-0 ${
                     isScrolled
                       ? "bg-white border-2 border-white hover:scale-105"
                       : "bg-surface-container-high border-2 border-primary/20 hover:border-primary"
@@ -490,7 +488,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                   title="Sign In with OTP"
                 >
                   <span
-                    className={`material-symbols-outlined text-[20px] ${
+                    className={`material-symbols-outlined text-[18px] sm:text-[20px] ${
                       isScrolled ? "text-[#91000a]" : "text-on-surface-variant"
                     }`}
                   >

@@ -36,6 +36,7 @@ const {
   calculateTargetDeliveryTime,
   getEtaDetails,
   isAfter8PM,
+  getISTDateComponents,
   calculateNextDay9AM,
   getTodayISTDateString,
   isPastSpecialCloseTime,
@@ -234,17 +235,29 @@ const createOrder = async (req, res, next) => {
       isPastSpecialCloseTime(todaySchedule.closeTime, nowUtc)
     );
 
+    const nowComp = getISTDateComponents(nowUtc);
+    const isNightAfter8PM = nowComp.hours >= 20 || (nowComp.hours === 19 && nowComp.minutes >= 59);
+    const isEarlyMorningBefore8AM = nowComp.hours < 8;
+
     const isAfterHours = !isPickup && (
       isAfter8PM(nowUtc) ||
       isSpecialCutoffPassed ||
-      (deliverySlot && (deliverySlot.toLowerCase().includes('tomorrow') || deliverySlot.toLowerCase().includes('next-day') || deliverySlot.toLowerCase().includes('9:00 am')))
+      (deliverySlot && (deliverySlot.toLowerCase().includes('tomorrow') || deliverySlot.toLowerCase().includes('next-day') || deliverySlot.toLowerCase().includes('9:00 am') || deliverySlot.toLowerCase().includes('today by 09:00 am')))
     );
 
     let resolvedDeliverySlot;
     if (isPickup) {
       resolvedDeliverySlot = 'Store Pickup (Counter Takeaway)';
-    } else if (isAfterHours) {
+    } else if (isSpecialCutoffPassed || (todaySchedule && todaySchedule.mode === 'closed')) {
       resolvedDeliverySlot = 'Next-Day Delivery: Tomorrow by 09:00 AM';
+    } else if (isNightAfter8PM) {
+      resolvedDeliverySlot = 'Next-Day Delivery: Tomorrow by 09:00 AM';
+    } else if (isEarlyMorningBefore8AM) {
+      resolvedDeliverySlot = 'Morning Delivery: Today by 09:00 AM';
+    } else if (isAfterHours) {
+      resolvedDeliverySlot = deliverySlot && deliverySlot.toLowerCase().includes('today')
+        ? 'Morning Delivery: Today by 09:00 AM'
+        : 'Next-Day Delivery: Tomorrow by 09:00 AM';
     } else {
       resolvedDeliverySlot = deliverySlot || '90 Mins Express Delivery';
     }
@@ -373,7 +386,7 @@ const createOrder = async (req, res, next) => {
       coupon: verifiedCouponSnapshot,
       storeId: resolvedStoreId,
       storeName: resolvedStoreName,
-      isNextDayOrder: Boolean(isAfterHours),
+      isNextDayOrder: Boolean(isNightAfter8PM || isSpecialCutoffPassed || (todaySchedule && todaySchedule.mode === 'closed')),
       scheduledDeliveryDate,
       deliverySlot: resolvedDeliverySlot,
       fulfillmentType: resolvedFulfillmentType,
@@ -381,7 +394,7 @@ const createOrder = async (req, res, next) => {
       prepTimeMinutes: prepMinutes,
       targetDeliveryTime: targetDelivery,
       remainingTransitMinutes: isAfterHours ? 0 : initialTransit,
-      etaStage: isAfterHours ? 'SCHEDULED_NEXT_DAY' : 'PREPARING',
+      etaStage: isAfterHours ? (isEarlyMorningBefore8AM ? 'SCHEDULED_SAME_DAY' : 'SCHEDULED_NEXT_DAY') : 'PREPARING',
       paymentMethod: isWallet ? 'Teffes Cash (Wallet)' : (paymentMethod || (isPickup ? 'Pay at Store Counter' : 'Cash on Delivery')),
       paymentStatus: isWallet ? 'Paid' : (paymentStatus || (isOnline ? 'Paid' : 'Pending')),
       razorpayOrderId: razorpayOrderId || '',

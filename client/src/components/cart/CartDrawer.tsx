@@ -529,14 +529,30 @@ export default function CartDrawer() {
     isPastSpecialClose()
   );
 
-  // Check if current time in IST is after 7:59 PM (20:00 to 07:59)
-  const isAfter8PM = () => {
+  // Helper to get current IST time
+  const getISTNow = () => {
     const now = new Date();
     const istOffsetMs = 5.5 * 60 * 60 * 1000;
-    const ist = new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffsetMs);
+    return new Date(now.getTime() + (now.getTimezoneOffset() * 60000) + istOffsetMs);
+  };
+
+  // Night after 8:00 PM closing (20:00 to 23:59) -> Delivery TOMORROW by 9:00 AM
+  const isNightAfter8PM = () => {
+    const ist = getISTNow();
     const hour = ist.getHours();
     const minute = ist.getMinutes();
-    return hour >= 20 || (hour === 19 && minute >= 59) || hour < 8;
+    return hour >= 20 || (hour === 19 && minute >= 59);
+  };
+
+  // Early morning before 8:00 AM opening (00:00 to 07:59) -> Delivery TODAY by 9:00 AM
+  const isEarlyMorningBefore8AM = () => {
+    const ist = getISTNow();
+    return ist.getHours() < 8;
+  };
+
+  // Check if current time in IST is outside standard hours (after 7:59 PM or before 8:00 AM)
+  const isAfter8PM = () => {
+    return isNightAfter8PM() || isEarlyMorningBefore8AM();
   };
 
   const isAfterHours = !isPickup && (isAfter8PM() || isSpecialClosedToday || isSpecialCutoffPassed);
@@ -550,15 +566,19 @@ export default function CartDrawer() {
   const finalPayable = Math.max(0, subtotal + effectiveDeliveryFee + expressFee + rainSurgeFee + effectiveTip - discountAmount);
   const resolvedDeliverySlot = isPickup
     ? "Store Pickup"
-    : isAfterHours
+    : (isSpecialClosedToday || isSpecialCutoffPassed)
       ? "Next-Day Delivery: Tomorrow by 09:00 AM"
-      : (todaySpecial && (todaySpecial.mode === "late_opening" || todaySpecial.mode === "custom_hours") && isBeforeSpecialOpen())
-        ? `Delivering Today After ${formatTime12(todaySpecial.openTime)}`
-        : slot === "express60"
-          ? "Express Delivery (60 min)"
-          : slot === "custom"
-            ? `Custom Delivery: ${customSlotTime}`
-            : "90 Min Delivery";
+      : isNightAfter8PM()
+        ? "Next-Day Delivery: Tomorrow by 09:00 AM"
+        : isEarlyMorningBefore8AM()
+          ? "Morning Delivery: Today by 09:00 AM"
+          : (todaySpecial && (todaySpecial.mode === "late_opening" || todaySpecial.mode === "custom_hours") && isBeforeSpecialOpen())
+            ? `Delivering Today After ${formatTime12(todaySpecial.openTime)}`
+            : slot === "express60"
+              ? "Express Delivery (60 min)"
+              : slot === "custom"
+                ? `Custom Delivery: ${customSlotTime}`
+                : "90 Min Delivery";
 
   const amountForFreeDelivery = Math.max(0, storeFreeDeliveryThreshold - subtotal);
   const MIN_ORDER_AMOUNT = 200;
@@ -1228,7 +1248,13 @@ export default function CartDrawer() {
                             <div className="flex items-start gap-3">
                               <div className="w-9 h-9 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 shrink-0 mt-0.5">
                                 <span className="material-symbols-outlined text-[20px]">
-                                  {isSpecialClosedToday ? "store" : isSpecialCutoffPassed ? "hourglass_bottom" : "nightlight"}
+                                  {isSpecialClosedToday
+                                    ? "store"
+                                    : isSpecialCutoffPassed
+                                    ? "hourglass_bottom"
+                                    : isEarlyMorningBefore8AM()
+                                    ? "wb_twilight"
+                                    : "nightlight"}
                                 </span>
                               </div>
                               <div className="flex-1">
@@ -1237,6 +1263,8 @@ export default function CartDrawer() {
                                     ? "Store Closed Today for Operations"
                                     : isSpecialCutoffPassed
                                     ? `Today's Cutoff Passed (${formatTime12(todaySpecial?.closeTime)})`
+                                    : isEarlyMorningBefore8AM()
+                                    ? "Store Opens at 8:00 AM Today"
                                     : "Teffes Store Hours: 8:00 AM – 8:00 PM"}
                                 </h4>
                                 <p className="font-body-sm text-amber-900/90 text-[11.5px] leading-relaxed mt-1">
@@ -1246,11 +1274,17 @@ export default function CartDrawer() {
                                     ? (todaySpecial?.customerNote
                                       ? `${todaySpecial.customerNote}. Your order will be prepared fresh and delivered tomorrow morning by 9:00 AM.`
                                       : `Today's same-day delivery closed at ${formatTime12(todaySpecial?.closeTime)}. Orders placed now will be delivered tomorrow morning by 9:00 AM.`)
+                                    : isEarlyMorningBefore8AM()
+                                    ? "Store timing is 8:00 AM to 8:00 PM. As you are placing your order early morning before opening, it will be prepared fresh and delivered today by 9:00 AM."
                                     : "Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM."}
                                 </p>
                                 <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100/90 border border-emerald-200 rounded-lg text-emerald-900 text-[11px] font-bold">
                                   <span className="material-symbols-outlined text-[15px] text-emerald-700">wb_sunny</span>
-                                  <span>Scheduled: Tomorrow by 09:00 AM</span>
+                                  <span>
+                                    {isSpecialClosedToday || isSpecialCutoffPassed || isNightAfter8PM()
+                                      ? "Scheduled: Tomorrow by 09:00 AM"
+                                      : "Scheduled: Today by 09:00 AM"}
+                                  </span>
                                 </div>
                               </div>
                             </div>

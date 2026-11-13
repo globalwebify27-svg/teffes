@@ -703,6 +703,36 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     }
   }
 
+  bool _isScheduledDeliveryToday(OrderModel order) {
+    final now = DateTime.now();
+    final todayStr = "${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}";
+
+    if (order.scheduledDeliveryDate != null && order.scheduledDeliveryDate!.isNotEmpty) {
+      return order.scheduledDeliveryDate!.compareTo(todayStr) <= 0;
+    }
+    if (order.targetDeliveryTime != null) {
+      final dt = DateTime.tryParse(order.targetDeliveryTime!);
+      if (dt != null) {
+        final localDt = dt.toLocal();
+        final dtStr = "${localDt.year}-${localDt.month.toString().padLeft(2, '0')}-${localDt.day.toString().padLeft(2, '0')}";
+        return dtStr.compareTo(todayStr) <= 0;
+      }
+    }
+    final placed = DateTime.tryParse(order.placedAt);
+    if (placed != null) {
+      final localPlaced = placed.toLocal();
+      if (localPlaced.hour >= 20 || (localPlaced.hour == 19 && localPlaced.minute >= 59)) {
+        final nextDay = localPlaced.add(const Duration(days: 1));
+        final nextDayStr = "${nextDay.year}-${nextDay.month.toString().padLeft(2, '0')}-${nextDay.day.toString().padLeft(2, '0')}";
+        return nextDayStr.compareTo(todayStr) <= 0;
+      } else {
+        final placedStr = "${localPlaced.year}-${localPlaced.month.toString().padLeft(2, '0')}-${localPlaced.day.toString().padLeft(2, '0')}";
+        return placedStr.compareTo(todayStr) <= 0;
+      }
+    }
+    return true;
+  }
+
   Map<String, String> _getEtaDisplayInfo(OrderModel order) {
     final status = order.status;
     final isPickup = order.isPickup;
@@ -784,17 +814,21 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
     // Pending: Check if user booked a specific hour slot or next-day scheduled
     String slotInfo = '';
     final slot = order.deliverySlot;
-    final isNextDay = slot != null && (
+    final isMorningSlot = slot != null && (
       slot.toLowerCase().contains('tomorrow') ||
       slot.toLowerCase().contains('next-day') ||
       slot.toLowerCase().contains('09:00 am') ||
-      order.etaStage == 'SCHEDULED_NEXT_DAY'
+      slot.toLowerCase().contains('today by 09:00 am') ||
+      order.etaStage == 'SCHEDULED_NEXT_DAY' ||
+      order.etaStage == 'SCHEDULED_SAME_DAY'
     );
 
-    if (isNextDay) {
+    if (isMorningSlot) {
+      final isToday = _isScheduledDeliveryToday(order);
+      final dayLabel = isToday ? 'Today' : 'Tomorrow';
       return {
         'badge': 'SCHEDULED DELIVERY',
-        'title': 'Deliver Tomorrow by 9:00 AM',
+        'title': 'Deliver $dayLabel by 9:00 AM',
         'sub': 'Order Placed at Teffes • Fresh morning delivery scheduled',
       };
     }
@@ -804,6 +838,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       final isGeneric = (s.contains('min express') || s.contains('min delivery') || s == 'delivery' || s == 'pickup' || s == 'standard') && !s.contains('am') && !s.contains('pm');
       if (!isGeneric && (s.contains('am') || s.contains('pm') || RegExp(r'\d{1,2}:\d{2}').hasMatch(s))) {
         slotInfo = slot;
+        if (_isScheduledDeliveryToday(order)) {
+          slotInfo = slotInfo.replaceAll(RegExp(r'Next-Day Delivery:\s*Tomorrow', caseSensitive: false), 'Morning Delivery: Today')
+                             .replaceAll(RegExp(r'Tomorrow', caseSensitive: false), 'Today');
+        }
       }
     }
 
@@ -1368,8 +1406,11 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                               child: Text(
                                 status == 'Cutting'
                                     ? 'Fresh meat is being cut cleanly on a sanitized block. Once packed, a delivery partner will be assigned and live tracking will start.'
-                                    : (order.deliverySlot?.toLowerCase().contains('tomorrow') == true || order.etaStage == 'SCHEDULED_NEXT_DAY')
-                                        ? 'Your order is placed. Teffes store team will prepare fresh cuts tomorrow morning by 9:00 AM.'
+                                    : (order.deliverySlot?.toLowerCase().contains('tomorrow') == true ||
+                                       order.deliverySlot?.toLowerCase().contains('09:00 am') == true ||
+                                       order.etaStage == 'SCHEDULED_NEXT_DAY' ||
+                                       order.etaStage == 'SCHEDULED_SAME_DAY')
+                                        ? 'Your order is placed. Teffes store team will prepare fresh cuts ${_isScheduledDeliveryToday(order) ? "today" : "tomorrow"} morning by 9:00 AM.'
                                         : 'Your order is placed at the store. Teffes store team will review and confirm shortly before cutting begins.',
                                 style: const TextStyle(fontSize: 11.5, color: Color(0xFF475569), height: 1.35),
                               ),
