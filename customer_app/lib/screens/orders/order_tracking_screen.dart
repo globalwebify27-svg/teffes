@@ -1726,6 +1726,73 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
                         ),
                       );
                     }),
+                    if (order.discountAmount != null && order.discountAmount! > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.loyalty_rounded, size: 14, color: AppColors.hygieneEmerald),
+                              const SizedBox(width: 6),
+                              Text(
+                                order.manualDiscount != null && order.manualDiscount! > 0
+                                    ? 'Store Discount Applied:'
+                                    : 'Discount Applied:',
+                                style: const TextStyle(fontSize: 12, color: AppColors.hygieneEmerald, fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                          Text(
+                            '- ${CurrencyFormatter.format(order.discountAmount!)}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.hygieneEmerald, fontWeight: FontWeight.w800),
+                          ),
+                        ],
+                      ),
+                    ],
+                    if (order.isModified || (order.modificationReason != null && order.modificationReason!.trim().isNotEmpty)) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFEF3C7),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.edit_note_rounded, size: 16, color: Color(0xFF92400E)),
+                                SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    'Revised Order (Weight/Quantity Adjusted)',
+                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (order.modificationReason != null && order.modificationReason!.trim().isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Reason: ${order.modificationReason}',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF78350F), fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                            if (order.additionalAmountDue != null && order.additionalAmountDue! > 0) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Extra to collect: ${CurrencyFormatter.format(order.additionalAmountDue!)} on delivery',
+                                style: const TextStyle(fontSize: 11, color: Color(0xFF065F46), fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 8),
                     const Divider(height: 1, color: AppColors.borderHairline),
                     const SizedBox(height: 8),

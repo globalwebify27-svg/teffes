@@ -1848,6 +1848,11 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                   </div>
                   <div style={{ textAlign: "right" }}>
                     <div style={{ fontWeight: 900, color: "#941717", fontSize: "1.15rem", fontFamily: "Outfit, sans-serif" }}>₹{o.amount}</div>
+                    {Number(o.discountAmount || o.manualDiscount || 0) > 0 && (
+                      <div style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 700 }}>
+                        Discount: -₹{o.discountAmount || o.manualDiscount}
+                      </div>
+                    )}
                     <div style={{ color: "#73695b", fontSize: "0.75rem", fontWeight: 600 }}>{o.deliverySlot}</div>
                   </div>
                 </div>

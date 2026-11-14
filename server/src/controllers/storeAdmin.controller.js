@@ -676,12 +676,15 @@ const modifyOrderItems = async (req, res, next) => {
       const lineTotal = Math.round(unitPrice * qty);
       newSubtotal += lineTotal;
 
+      const resolvedWeight = item.netWeight || item.weight || '';
+
       return {
         productId: item.productId || item.id || '',
         name: item.name || 'Cut Item',
         price: unitPrice,
         quantity: qty,
-        netWeight: item.netWeight || item.weight || '',
+        netWeight: resolvedWeight,
+        weight: resolvedWeight,
         image: item.image || '',
         isModified: Boolean(item.isModified),
         notes: item.notes || '',
@@ -691,9 +694,17 @@ const modifyOrderItems = async (req, res, next) => {
     const deliveryFee = Number(order.deliveryFee) || 0;
     const expressFee = Number(order.expressFee) || 0;
     const tip = Number(order.tip || order.tipAmount) || 0;
-    const discountAmount = Number(order.discountAmount) || 0;
 
-    const newGrandTotal = Math.max(0, newSubtotal + deliveryFee + expressFee + tip - discountAmount);
+    let manualDiscount = Number(order.manualDiscount) || 0;
+    if (req.body.manualDiscount !== undefined && req.body.manualDiscount !== null && req.body.manualDiscount !== '') {
+      manualDiscount = Math.max(0, Number(req.body.manualDiscount) || 0);
+    }
+    const couponDiscount = Number(order.couponDiscount ?? (order.coupon ? order.discountAmount : 0)) || 0;
+    const finalDiscountAmount = req.body.discountAmount !== undefined && req.body.discountAmount !== null && req.body.discountAmount !== ''
+      ? Math.max(0, Number(req.body.discountAmount) || 0)
+      : (couponDiscount + manualDiscount);
+
+    const newGrandTotal = Math.max(0, newSubtotal + deliveryFee + expressFee + tip - finalDiscountAmount);
     // Preserve true initial amount even across multiple modifications
     const originalAmount = Number(order.originalAmount != null ? order.originalAmount : (order.amount ?? order.totalAmount ?? 0));
 
@@ -707,6 +718,11 @@ const modifyOrderItems = async (req, res, next) => {
       items: processedItems,
       itemSummary,
       subtotal: newSubtotal,
+      itemsSubtotal: newSubtotal,
+      deliveryFee,
+      discountAmount: finalDiscountAmount,
+      manualDiscount,
+      couponDiscount,
       amount: newGrandTotal,
       totalAmount: newGrandTotal,
       isModified: true,
@@ -1734,20 +1750,48 @@ const getStoreSchedules = async (req, res, next) => {
 
 /**
  * POST /api/store-admin/schedule
- * Create or edit a special operating schedule for a given date
+ * Create or edit a special operating schedule for a single date, multiple dates, or date range
  */
 const setStoreSchedule = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
-    const { date, mode, openTime, closeTime, customerNote } = req.body;
-
-    if (!date || typeof date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return res.status(400).json({ success: false, message: 'Valid date in YYYY-MM-DD format is required' });
-    }
+    const { date, dates, startDate, endDate, mode, openTime, closeTime, customerNote } = req.body;
 
     const todayIST = getTodayISTDateString(new Date());
-    if (date < todayIST) {
-      return res.status(400).json({ success: false, message: 'Cannot configure schedule for past dates' });
+
+    // Resolve list of target dates (supports single date, dates array, or startDate -> endDate range)
+    let targetDates = [];
+    if (Array.isArray(dates) && dates.length > 0) {
+      targetDates = dates.filter((d) => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(d));
+    } else if (startDate && endDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate) || !/^\d{4}-\d{2}-\d{2}$/.test(endDate)) {
+        return res.status(400).json({ success: false, message: 'Start date and end date must be in YYYY-MM-DD format.' });
+      }
+      if (startDate > endDate) {
+        return res.status(400).json({ success: false, message: 'Start date cannot be after end date.' });
+      }
+      const [sY, sM, sD] = startDate.split('-').map(Number);
+      const [eY, eM, eD] = endDate.split('-').map(Number);
+      const startUtc = new Date(Date.UTC(sY, sM - 1, sD));
+      const endUtc = new Date(Date.UTC(eY, eM - 1, eD));
+
+      const cur = new Date(startUtc);
+      while (cur <= endUtc) {
+        targetDates.push(cur.toISOString().slice(0, 10));
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+    } else if (date && typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      targetDates = [date];
+    }
+
+    if (targetDates.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one valid date in YYYY-MM-DD format is required.' });
+    }
+
+    // Filter out past dates
+    const validDates = targetDates.filter((d) => d >= todayIST);
+    if (validDates.length === 0) {
+      return res.status(400).json({ success: false, message: 'Cannot configure schedules for past dates.' });
     }
 
     const validModes = ['half_day', 'late_opening', 'custom_hours', 'closed'];
@@ -1760,24 +1804,33 @@ const setStoreSchedule = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Store not found' });
     }
 
-    // Save schedule in store.specialSchedules map (Existing orders continue normal fulfillment; new incoming orders will be scheduled for next day according to cutoff)
     const specialSchedules = { ...(store.specialSchedules || {}) };
-    specialSchedules[date] = {
-      date,
-      mode,
-      openTime: (mode === 'late_opening' || mode === 'custom_hours') ? (openTime || '12:00') : '08:00',
-      closeTime: (mode === 'half_day' || mode === 'custom_hours') ? (closeTime || '13:00') : '20:00',
-      customerNote: (customerNote || '').trim(),
-      updatedAt: new Date().toISOString(),
-      updatedBy: req.user?.email || req.user?.name || 'storeadmin',
-    };
+    const nowIso = new Date().toISOString();
+    const updatedBy = req.user?.email || req.user?.name || 'storeadmin';
+
+    for (const d of validDates) {
+      specialSchedules[d] = {
+        date: d,
+        mode,
+        openTime: (mode === 'late_opening' || mode === 'custom_hours') ? (openTime || '12:00') : '08:00',
+        closeTime: (mode === 'half_day' || mode === 'custom_hours') ? (closeTime || '11:00') : '20:00',
+        customerNote: (customerNote || '').trim(),
+        updatedAt: nowIso,
+        updatedBy,
+      };
+    }
 
     await updateStoreFS(storeId, { specialSchedules });
 
+    const message = validDates.length > 1
+      ? `Operating schedule successfully set for ${validDates.length} days (${validDates[0]} to ${validDates[validDates.length - 1]}).`
+      : `Operating schedule for ${validDates[0]} updated successfully.`;
+
     res.status(200).json({
       success: true,
-      message: `Operating schedule for ${date} updated successfully.`,
-      schedule: specialSchedules[date],
+      message,
+      targetDates: validDates,
+      schedule: specialSchedules[validDates[0]],
       specialSchedules,
     });
   } catch (error) {
@@ -1787,14 +1840,15 @@ const setStoreSchedule = async (req, res, next) => {
 
 /**
  * DELETE /api/store-admin/schedule/:date
- * Remove a special operating schedule for a given date
+ * Remove a special operating schedule for a given date or multiple dates
  */
 const removeStoreSchedule = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
     const { date } = req.params;
+    const datesToDelete = req.body?.dates || (date ? date.split(',') : []);
 
-    if (!date) {
+    if (datesToDelete.length === 0) {
       return res.status(400).json({ success: false, message: 'Date is required' });
     }
 
@@ -1804,13 +1858,17 @@ const removeStoreSchedule = async (req, res, next) => {
     }
 
     const specialSchedules = { ...(store.specialSchedules || {}) };
-    delete specialSchedules[date];
+    for (const d of datesToDelete) {
+      delete specialSchedules[d.trim()];
+    }
 
     await updateStoreFS(storeId, { specialSchedules });
 
     res.status(200).json({
       success: true,
-      message: `Special schedule for ${date} removed. Store will follow standard operating hours.`,
+      message: datesToDelete.length > 1
+        ? `Special schedules for ${datesToDelete.length} days removed. Store will follow standard operating hours.`
+        : `Special schedule for ${datesToDelete[0]} removed. Store will follow standard operating hours.`,
       specialSchedules,
     });
   } catch (error) {

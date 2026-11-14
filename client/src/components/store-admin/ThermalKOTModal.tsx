@@ -21,9 +21,11 @@ interface ThermalOrder {
   pickupMode?: boolean;
   status?: string;
   amount: number;
+  totalAmount?: number;
   deliveryFee?: number;
   tipAmount?: number;
   discountAmount?: number;
+  manualDiscount?: number;
   paymentMethod?: string;
   paymentStatus?: string;
   deliveryOtp?: string;
@@ -331,6 +333,12 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                     <span>{specialInstruction}</span>
                   </div>
                 )}
+                {order.modificationReason && (
+                  <div className="mt-2 p-2 bg-yellow-100 border border-black text-[13.5px] font-black text-black">
+                    <span>REVISION REASON: </span>
+                    <span className="font-semibold">{order.modificationReason}</span>
+                  </div>
+                )}
               </div>
 
               {/* Items & Cutting Specifications Table */}
@@ -385,8 +393,8 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between">
-                    <span>Discount:</span>
-                    <span className="font-bold">-₹{Number(discount).toFixed(2)}</span>
+                    <span>Discount {order.manualDiscount ? "(Store/Special)" : ""}:</span>
+                    <span className="font-bold text-black">-₹{Number(discount).toFixed(2)}</span>
                   </div>
                 )}
                 {!isPickup && (
@@ -403,7 +411,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                 )}
                 <div className="flex justify-between font-black text-[20px] pt-2 border-t-2 border-dashed border-black text-black">
                   <span>TOTAL AMOUNT:</span>
-                  <span>₹{Number(order.amount).toFixed(2)}</span>
+                  <span>₹{Number(order.amount ?? order.totalAmount ?? 0).toFixed(2)}</span>
                 </div>
               </div>
 
@@ -411,7 +419,12 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               <div className="py-3 border-b border-dashed border-black text-center text-black">
                 {order.isModified && (
                   <div className="mb-2 p-1.5 bg-yellow-100 border border-black font-black text-[13px] uppercase tracking-wider">
-                    REVISED ORDER (ITEMS / WEIGHT MODIFIED)
+                    <div>REVISED ORDER (ITEMS / WEIGHT / DISCOUNT MODIFIED)</div>
+                    {order.modificationReason && (
+                      <div className="text-[12px] font-bold normal-case mt-0.5 tracking-normal">
+                        Reason: {order.modificationReason}
+                      </div>
+                    )}
                   </div>
                 )}
                 <div className="font-black text-[16px]">

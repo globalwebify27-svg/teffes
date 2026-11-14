@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "@/lib/api";
 import { toast } from "@/lib/toast";
 
@@ -33,14 +33,37 @@ export default function StoreScheduleTab({
   const [todaySchedule, setTodaySchedule] = useState<SpecialSchedule | null>(null);
   const [upcomingSchedules, setUpcomingSchedules] = useState<SpecialSchedule[]>([]);
 
-  // Form State
+  // Form State: Single Day vs Multiple Days (Range)
+  const [dateSelectionType, setDateSelectionType] = useState<"single" | "range">("single");
   const [datePreset, setDatePreset] = useState<"today" | "tomorrow" | "custom">("today");
   const [targetDate, setTargetDate] = useState<string>("");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
+
   const [mode, setMode] = useState<"half_day" | "late_opening" | "custom_hours" | "closed">("half_day");
   const [openTime, setOpenTime] = useState<string>("08:00");
-  const [closeTime, setCloseTime] = useState<string>("13:00");
+  const [closeTime, setCloseTime] = useState<string>("11:00");
   const [customerNote, setCustomerNote] = useState<string>("");
   const [isEditing, setIsEditing] = useState<boolean>(false);
+
+  // Compute array of dates for range selection
+  const rangeDays = useMemo(() => {
+    if (!startDate || !endDate || startDate > endDate) return [];
+    try {
+      const [sY, sM, sD] = startDate.split("-").map(Number);
+      const [eY, eM, eD] = endDate.split("-").map(Number);
+      const cur = new Date(Date.UTC(sY, sM - 1, sD));
+      const end = new Date(Date.UTC(eY, eM - 1, eD));
+      const days: string[] = [];
+      while (cur <= end) {
+        days.push(cur.toISOString().slice(0, 10));
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+      return days;
+    } catch {
+      return [];
+    }
+  }, [startDate, endDate]);
 
   // Compute Tomorrow's date string
   const getTomorrowString = (todayStr: string) => {
@@ -66,6 +89,12 @@ export default function StoreScheduleTab({
 
         if (!targetDate) {
           setTargetDate(res.data.todayIST || "");
+        }
+        if (!startDate) {
+          setStartDate(res.data.todayIST || "");
+        }
+        if (!endDate) {
+          setEndDate(res.data.todayIST || "");
         }
       }
     } catch (err: unknown) {
@@ -94,10 +123,11 @@ export default function StoreScheduleTab({
   // Pre-fill form for editing
   const handleStartEdit = (sch: SpecialSchedule) => {
     setIsEditing(true);
+    setDateSelectionType("single");
     setTargetDate(sch.date);
     setMode(sch.mode);
     setOpenTime(sch.openTime || "08:00");
-    setCloseTime(sch.closeTime || "13:00");
+    setCloseTime(sch.closeTime || "11:00");
     setCustomerNote(sch.customerNote || "");
     setErrorMessage("");
 
@@ -119,11 +149,14 @@ export default function StoreScheduleTab({
   // Reset Form
   const handleResetForm = () => {
     setIsEditing(false);
+    setDateSelectionType("single");
     setDatePreset("today");
     setTargetDate(todayIST);
+    setStartDate(todayIST);
+    setEndDate(todayIST);
     setMode("half_day");
     setOpenTime("08:00");
-    setCloseTime("13:00");
+    setCloseTime("11:00");
     setCustomerNote("");
     setErrorMessage("");
   };
@@ -131,9 +164,23 @@ export default function StoreScheduleTab({
   // Save Schedule Handler
   const handleSaveSchedule = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!targetDate) {
+    if (dateSelectionType === "single" && !targetDate) {
       setErrorMessage("Please select a valid date");
       return;
+    }
+    if (dateSelectionType === "range") {
+      if (!startDate || !endDate) {
+        setErrorMessage("Please specify both Start Date and End Date");
+        return;
+      }
+      if (startDate > endDate) {
+        setErrorMessage("Start Date cannot be after End Date");
+        return;
+      }
+      if (rangeDays.length === 0) {
+        setErrorMessage("No valid dates found in the selected range");
+        return;
+      }
     }
 
     try {
@@ -142,7 +189,9 @@ export default function StoreScheduleTab({
 
       const payload = {
         storeId,
-        date: targetDate,
+        ...(dateSelectionType === "range"
+          ? { startDate, endDate, dates: rangeDays }
+          : { date: targetDate }),
         mode,
         openTime: mode === "late_opening" || mode === "custom_hours" ? openTime : "08:00",
         closeTime: mode === "half_day" || mode === "custom_hours" ? closeTime : "20:00",
@@ -152,7 +201,9 @@ export default function StoreScheduleTab({
       const res = await api.post("/store-admin/schedule", payload);
       if (res.data?.success) {
         toast.success(
-          `Operating schedule for ${targetDate} saved successfully!`,
+          res.data.message || (dateSelectionType === "range"
+            ? `Operating schedule saved for ${rangeDays.length} days!`
+            : `Operating schedule for ${targetDate} saved successfully!`),
           "Schedule Updated"
         );
         handleResetForm();
@@ -332,58 +383,139 @@ export default function StoreScheduleTab({
           )}
 
           <form onSubmit={handleSaveSchedule} className="space-y-4">
-            {/* Step 1: Select Target Date */}
+            {/* Step 1: Select Target Date or Range */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">
-                1. Select Target Date
-              </label>
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleDatePreset("today")}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                    datePreset === "today"
-                      ? "border-[#941717] bg-red-50/70 text-[#941717] ring-1 ring-[#941717]/25"
-                      : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
-                  }`}
-                >
-                  Today
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDatePreset("tomorrow")}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                    datePreset === "tomorrow"
-                      ? "border-[#941717] bg-red-50/70 text-[#941717] ring-1 ring-[#941717]/25"
-                      : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
-                  }`}
-                >
-                  Tomorrow
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDatePreset("custom")}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
-                    datePreset === "custom"
-                      ? "border-[#941717] bg-red-50/70 text-[#941717] ring-1 ring-[#941717]/25"
-                      : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
-                  }`}
-                >
-                  Pick Date
-                </button>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                  1. Select Date / Range
+                </label>
+                {/* Single Day vs Date Range Toggle */}
+                <div className="flex items-center bg-gray-100 p-0.5 rounded-lg border border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => setDateSelectionType("single")}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                      dateSelectionType === "single"
+                        ? "bg-white text-gray-900 shadow-2xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Single Day
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateSelectionType("range");
+                      if (!startDate) setStartDate(targetDate || todayIST);
+                      if (!endDate) setEndDate(targetDate || todayIST);
+                    }}
+                    className={`px-2.5 py-1 text-[11px] font-bold rounded-md transition-all cursor-pointer ${
+                      dateSelectionType === "range"
+                        ? "bg-white text-gray-900 shadow-2xs"
+                        : "text-gray-500 hover:text-gray-900"
+                    }`}
+                  >
+                    Multiple Days (Range)
+                  </button>
+                </div>
               </div>
 
-              {/* Custom Date Input */}
-              {datePreset === "custom" && (
-                <div className="mt-2.5">
-                  <input
-                    type="date"
-                    min={todayIST}
-                    value={targetDate}
-                    onChange={(e) => setTargetDate(e.target.value)}
-                    required
-                    className="w-full px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl focus:outline-none focus:border-primary text-gray-900 bg-white shadow-2xs"
-                  />
+              {dateSelectionType === "single" ? (
+                <>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleDatePreset("today")}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                        datePreset === "today"
+                          ? "border-[#941717] bg-red-50/70 text-[#941717] ring-1 ring-[#941717]/25"
+                          : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+                      }`}
+                    >
+                      Today
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDatePreset("tomorrow")}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                        datePreset === "tomorrow"
+                          ? "border-[#941717] bg-red-50/70 text-[#941717] ring-1 ring-[#941717]/25"
+                          : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+                      }`}
+                    >
+                      Tomorrow
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleDatePreset("custom")}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center cursor-pointer ${
+                        datePreset === "custom"
+                          ? "border-[#941717] bg-red-50/70 text-[#941717] ring-1 ring-[#941717]/25"
+                          : "border-gray-200 bg-white hover:bg-gray-50 text-gray-700"
+                      }`}
+                    >
+                      Pick Date
+                    </button>
+                  </div>
+
+                  {/* Custom Single Date Input */}
+                  {datePreset === "custom" && (
+                    <div className="mt-2.5">
+                      <input
+                        type="date"
+                        min={todayIST}
+                        value={targetDate}
+                        onChange={(e) => setTargetDate(e.target.value)}
+                        required
+                        className="w-full px-3 py-2 text-xs font-bold border border-gray-200 rounded-xl focus:outline-none focus:border-primary text-gray-900 bg-white shadow-2xs"
+                      />
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* Date Range Picker */
+                <div className="space-y-2.5">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-500 block mb-1">From Date:</span>
+                      <input
+                        type="date"
+                        min={todayIST}
+                        value={startDate}
+                        onChange={(e) => {
+                          setStartDate(e.target.value);
+                          if (endDate && e.target.value > endDate) {
+                            setEndDate(e.target.value);
+                          }
+                        }}
+                        required
+                        className="w-full px-2.5 py-1.5 text-xs font-bold border border-gray-200 rounded-xl focus:outline-none focus:border-primary text-gray-900 bg-white shadow-2xs"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[11px] font-bold text-gray-500 block mb-1">To Date:</span>
+                      <input
+                        type="date"
+                        min={startDate || todayIST}
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        required
+                        className="w-full px-2.5 py-1.5 text-xs font-bold border border-gray-200 rounded-xl focus:outline-none focus:border-primary text-gray-900 bg-white shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {rangeDays.length > 0 && (
+                    <div className="p-2.5 bg-amber-50/90 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center justify-between flex-wrap gap-1">
+                      <span className="font-extrabold flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-amber-700">date_range</span>
+                        <span>{rangeDays.length} Days Selected:</span>
+                      </span>
+                      <span className="font-bold text-[11px] text-amber-800">
+                        {formatDateDisplay(rangeDays[0])} &mdash; {formatDateDisplay(rangeDays[rangeDays.length - 1])}
+                      </span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -524,7 +656,9 @@ export default function StoreScheduleTab({
                           : "bg-white text-gray-900 border-gray-200 cursor-pointer"
                       }`}
                     >
-                      <option value="12:00">12:00 PM</option>
+                      <option value="10:00">10:00 AM</option>
+                      <option value="11:00">11:00 AM</option>
+                      <option value="12:00">12:00 PM (Noon)</option>
                       <option value="13:00">01:00 PM</option>
                       <option value="14:00">02:00 PM</option>
                       <option value="15:00">03:00 PM</option>
@@ -593,9 +727,31 @@ export default function StoreScheduleTab({
                   Active &amp; Upcoming Special Schedules
                 </h3>
               </div>
-              <span className="text-[11px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
-                {upcomingSchedules.length} Scheduled
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full">
+                  {upcomingSchedules.length} Scheduled
+                </span>
+                {upcomingSchedules.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!confirm(`Are you sure you want to remove all ${upcomingSchedules.length} special schedules? Store will return to normal operating hours.`)) return;
+                      try {
+                        const allDates = upcomingSchedules.map((s) => s.date).join(",");
+                        await api.delete(`/store-admin/schedule/${allDates}`, { params: { storeId } });
+                        toast.success("All special schedules removed. Normal operating hours restored.");
+                        await fetchSchedules();
+                      } catch (err: unknown) {
+                        const error = err as { response?: { data?: { message?: string } } };
+                        toast.error(error.response?.data?.message || "Failed to remove schedules");
+                      }
+                    }}
+                    className="text-[11px] font-bold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 px-2.5 py-0.5 rounded-lg border border-rose-200 transition-colors cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                )}
+              </div>
             </div>
 
             {isLoading ? (

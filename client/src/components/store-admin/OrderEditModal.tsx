@@ -82,12 +82,18 @@ export default function OrderEditModal({
         pricePerGram: initialGrams > 0 ? originalPrice / initialGrams : 0,
         pricePerPiece: (initialPieces && initialPieces > 0) ? originalPrice / initialPieces : 0,
         notes: it.notes || "",
+        customAdjustVal: "",
+        customAdjustUnit: "g",
         isModified: false,
       };
     });
   });
 
   const [modificationReason, setModificationReason] = useState("");
+  const [reasonError, setReasonError] = useState(false);
+  const [manualDiscount, setManualDiscount] = useState<number>(() => {
+    return Number(order.manualDiscount) || 0;
+  });
   const [isSavingItems, setIsSavingItems] = useState(false);
 
   // New item addition from catalog
@@ -106,21 +112,35 @@ export default function OrderEditModal({
     return groups;
   }, [catalogProducts]);
 
-  // Handle adding grams to a weight item
-  const handleAddGrams = (index: number, gramsToAdd: number) => {
+
+
+  // Handle adding or subtracting custom grams / kg
+  const handleCustomWeightAdjust = (index: number, isSubtract: boolean) => {
     setItems((prev) => {
       const copy = [...prev];
       const it = { ...copy[index] };
-      const newGrams = Math.max(50, (it.currentGrams || 1000) + gramsToAdd);
+      const rawVal = parseFloat(it.customAdjustVal);
+      if (isNaN(rawVal) || rawVal <= 0) {
+        toast.warning("Please enter a valid weight amount (e.g. 200 or 0.5)");
+        return prev;
+      }
+      const grams = it.customAdjustUnit === "kg" ? Math.round(rawVal * 1000) : Math.round(rawVal);
+      const deltaGrams = isSubtract ? -grams : grams;
+      const current = it.currentGrams || parseGrams(it.netWeight) || 1000;
+      const newGrams = Math.max(50, current + deltaGrams);
+
       it.currentGrams = newGrams;
       it.netWeight = formatGrams(newGrams);
-
-      // Recalculate price: base price per gram * new grams
       if (it.pricePerGram > 0) {
         it.price = Math.round(newGrams * it.pricePerGram);
       }
+      it.customAdjustVal = "";
       it.isModified = true;
       copy[index] = it;
+      toast.success(
+        `${isSubtract ? "Subtracted" : "Added"} ${grams >= 1000 ? `${(grams/1000).toFixed(2)} kg` : `${grams}g`}. New weight: ${it.netWeight} (₹${it.price})`,
+        "Weight Adjusted"
+      );
       return copy;
     });
   };
@@ -223,6 +243,8 @@ export default function OrderEditModal({
       pricePerGram: grams > 0 ? defaultPrice / grams : 0,
       pricePerPiece: (pcs && pcs > 0) ? defaultPrice / pcs : 0,
       notes: "Added by store admin on call",
+      customAdjustVal: "",
+      customAdjustUnit: "g",
       isModified: true,
     };
 
@@ -245,11 +267,12 @@ export default function OrderEditModal({
 
   const deliveryFee = Number(order.deliveryFee) || 0;
   const expressFee = Number(order.expressFee) || 0;
-  const tip = Number(order.tip) || 0;
-  const discountAmount = Number(order.discountAmount) || 0;
+  const tip = Number(order.tip || order.tipAmount) || 0;
+  const existingCouponDiscount = Number(order.couponDiscount ?? (order.coupon ? order.discountAmount : 0)) || 0;
+  const totalDiscount = existingCouponDiscount + manualDiscount;
 
   const originalGrandTotal = Number(order.amount ?? order.totalAmount ?? originalSubtotal);
-  const newGrandTotal = Math.max(0, newSubtotal + deliveryFee + expressFee + tip - discountAmount);
+  const newGrandTotal = Math.max(0, newSubtotal + deliveryFee + expressFee + tip - totalDiscount);
   const differenceAmount = newGrandTotal - originalGrandTotal;
 
   const isOnlinePrepaid =
@@ -310,12 +333,20 @@ export default function OrderEditModal({
       toast.error("Order cannot have zero items.", "Error");
       return;
     }
+    if (!modificationReason.trim()) {
+      setReasonError(true);
+      toast.warning("Reason for adjustment is mandatory.", "Reason Required");
+      return;
+    }
+    setReasonError(false);
     setIsSavingItems(true);
     try {
       const orderId = order.orderId || order.id;
       const res = await api.patch(`/store-admin/orders/${orderId}/modify-items`, {
         items,
-        reason: modificationReason.trim() || "Customer requested weight/item adjustment on call",
+        manualDiscount,
+        discountAmount: totalDiscount,
+        reason: modificationReason.trim(),
       });
       if (res.data?.success) {
         toast.success("Order items and price successfully revised! KOT updated.", "Order Revised");
@@ -486,7 +517,7 @@ export default function OrderEditModal({
               >
                 <span className="material-symbols-outlined text-[17px] text-amber-700 shrink-0">info</span>
                 <div>
-                  <strong>Customer On-Call Revision:</strong> Click quick chips like <strong>+100g</strong>, <strong>+200g</strong> or adjust pieces. The price automatically recalculates based on the base rate.
+                  <strong>Customer On-Call Revision:</strong> Click quick chips like <strong>−200g</strong>, <strong>−100g</strong>, <strong>+100g</strong>, <strong>+200g</strong> or type exact weight (e.g. 800g). Price and KOT billing recalculates instantly!
                 </div>
               </div>
 
@@ -566,56 +597,129 @@ export default function OrderEditModal({
                             />
                           </div>
 
-                          {/* Quick Gram Adder Chips */}
-                          <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                            <button
-                              type="button"
-                              onClick={() => handleAddGrams(idx, 100)}
-                              style={{
-                                background: "#f3f4f6",
-                                border: "1px solid #d1d5db",
-                                borderRadius: "6px",
-                                padding: "3px 8px",
-                                fontSize: "0.74rem",
-                                fontWeight: 700,
-                                cursor: "pointer",
-                                color: "#1f2937",
-                              }}
-                            >
-                              +100g
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAddGrams(idx, 200)}
-                              style={{
-                                background: "#fef3c7",
-                                border: "1px solid #fde68a",
-                                borderRadius: "6px",
-                                padding: "3px 8px",
-                                fontSize: "0.74rem",
-                                fontWeight: 800,
-                                cursor: "pointer",
-                                color: "#92400e",
-                              }}
-                            >
-                              +200g
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleAddGrams(idx, 500)}
-                              style={{
-                                background: "#f3f4f6",
-                                border: "1px solid #d1d5db",
-                                borderRadius: "6px",
-                                padding: "3px 8px",
-                                fontSize: "0.74rem",
-                                fontWeight: 700,
-                                cursor: "pointer",
-                                color: "#1f2937",
-                              }}
-                            >
-                              +500g
-                            </button>
+                          {/* Dynamic Custom Weight Adjuster Input (Grams or KG) */}
+                          <div
+                            style={{
+                              background: "#f9fafb",
+                              border: "1px solid #e5e7eb",
+                              borderRadius: "10px",
+                              padding: "8px 10px",
+                              width: "100%",
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "6px",
+                              marginTop: "4px",
+                            }}
+                          >
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "4px" }}>
+                              <span style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "flex", alignItems: "center", gap: "4px" }}>
+                                <span className="material-symbols-outlined text-[15px] text-gray-500">tune</span>
+                                <span>Adjust Weight by Custom Amount:</span>
+                              </span>
+                              <span style={{ fontSize: "0.7rem", color: "#6b7280" }}>
+                                (e.g. reduce 200g or add 0.5kg)
+                              </span>
+                            </div>
+
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                              {/* Custom Numeric Value Input */}
+                              <input
+                                type="number"
+                                min="0.1"
+                                step="any"
+                                placeholder="Qty (e.g. 200)"
+                                value={it.customAdjustVal ?? ""}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setItems((prev) => {
+                                    const copy = [...prev];
+                                    copy[idx] = { ...copy[idx], customAdjustVal: val };
+                                    return copy;
+                                  });
+                                }}
+                                style={{
+                                  width: "105px",
+                                  padding: "5px 8px",
+                                  borderRadius: "6px",
+                                  border: "1.5px solid #d1d5db",
+                                  fontSize: "0.78rem",
+                                  fontWeight: 700,
+                                  background: "#fff",
+                                }}
+                              />
+
+                              {/* Unit Selector (Grams vs Kilograms) */}
+                              <select
+                                value={it.customAdjustUnit || "g"}
+                                onChange={(e) => {
+                                  const u = e.target.value;
+                                  setItems((prev) => {
+                                    const copy = [...prev];
+                                    copy[idx] = { ...copy[idx], customAdjustUnit: u };
+                                    return copy;
+                                  });
+                                }}
+                                style={{
+                                  padding: "5px 6px",
+                                  borderRadius: "6px",
+                                  border: "1.5px solid #d1d5db",
+                                  fontSize: "0.78rem",
+                                  fontWeight: 700,
+                                  background: "#fff",
+                                  color: "#374151",
+                                  cursor: "pointer",
+                                }}
+                              >
+                                <option value="g">Grams (g)</option>
+                                <option value="kg">Kilos (kg)</option>
+                              </select>
+
+                              {/* Subtract Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleCustomWeightAdjust(idx, true)}
+                                title="Subtract entered amount from weight"
+                                style={{
+                                  background: "#fff1f2",
+                                  border: "1.5px solid #fecdd3",
+                                  color: "#be123c",
+                                  padding: "5px 10px",
+                                  borderRadius: "6px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[14px]">remove</span>
+                                <span>Subtract</span>
+                              </button>
+
+                              {/* Add Button */}
+                              <button
+                                type="button"
+                                onClick={() => handleCustomWeightAdjust(idx, false)}
+                                title="Add entered amount to weight"
+                                style={{
+                                  background: "#ecfdf5",
+                                  border: "1.5px solid #a7f3d0",
+                                  color: "#065f46",
+                                  padding: "5px 10px",
+                                  borderRadius: "6px",
+                                  fontSize: "0.75rem",
+                                  fontWeight: 800,
+                                  cursor: "pointer",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "3px",
+                                }}
+                              >
+                                <span className="material-symbols-outlined text-[14px]">add</span>
+                                <span>Add</span>
+                              </button>
+                            </div>
                           </div>
                         </>
                       ) : (
@@ -802,24 +906,140 @@ export default function OrderEditModal({
                 </div>
               )}
 
+              {/* Store Admin Special Discount Field */}
+              <div
+                style={{
+                  background: "#f0fdf4",
+                  border: "1.5px solid #86efac",
+                  borderRadius: "12px",
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "8px",
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "6px" }}>
+                  <label style={{ fontSize: "0.78rem", fontWeight: 800, color: "#166534", display: "flex", alignItems: "center", gap: "5px" }}>
+                    <span className="material-symbols-outlined text-[17px] text-emerald-700">loyalty</span>
+                    <span>Store Admin Special Discount (₹)</span>
+                  </label>
+                  {manualDiscount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setManualDiscount(0)}
+                      style={{ background: "none", border: "none", color: "#dc2626", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "2px" }}
+                    >
+                      <span className="material-symbols-outlined text-[13px]">close</span>
+                      <span>Clear Discount</span>
+                    </button>
+                  )}
+                </div>
+
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                  <div style={{ position: "relative", width: "130px" }}>
+                    <span style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", fontWeight: 800, color: "#166534", fontSize: "0.85rem" }}>₹</span>
+                    <input
+                      type="number"
+                      min="0"
+                      max={newSubtotal + deliveryFee}
+                      placeholder="0"
+                      value={manualDiscount || ""}
+                      onChange={(e) => setManualDiscount(Math.max(0, Number(e.target.value) || 0))}
+                      style={{
+                        width: "100%",
+                        padding: "7px 10px 7px 24px",
+                        borderRadius: "8px",
+                        border: "1.5px solid #86efac",
+                        fontSize: "0.88rem",
+                        fontWeight: 800,
+                        color: "#166534",
+                        background: "#fff",
+                      }}
+                    />
+                  </div>
+
+                  {/* Quick Discount Amount Chips */}
+                  <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                    {[20, 50, 100, 150].map((amt) => (
+                      <button
+                        key={amt}
+                        type="button"
+                        onClick={() => setManualDiscount(amt)}
+                        style={{
+                          background: manualDiscount === amt ? "#15803d" : "#dcfce7",
+                          color: manualDiscount === amt ? "#fff" : "#166534",
+                          border: "1px solid #86efac",
+                          borderRadius: "6px",
+                          padding: "5px 10px",
+                          fontSize: "0.74rem",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          transition: "all 120ms ease",
+                        }}
+                      >
+                        ₹{amt} OFF
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ fontSize: "0.72rem", color: "#15803d", fontWeight: 600 }}>
+                  ✨ Deducts instantly from bill total. Updated in real-time on KOT thermal print, store dashboard, and customer app/web.
+                </div>
+              </div>
+
               {/* Note / Customer Request Reason */}
               <div>
-                <label style={{ display: "block", fontSize: "0.76rem", fontWeight: 700, color: "#374151", marginBottom: "4px" }}>
-                  Reason for Adjustment (Optional):
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px",
+                    fontSize: "0.76rem",
+                    fontWeight: 700,
+                    color: reasonError ? "#dc2626" : "#374151",
+                    marginBottom: "4px",
+                  }}
+                >
+                  <span>Reason for Adjustment</span>
+                  <span style={{ color: "#dc2626", fontWeight: 900 }}>*</span>
                 </label>
                 <input
                   type="text"
-                  placeholder="e.g. Customer called and asked for +200g extra chicken"
+                  placeholder="e.g. Customer called and asked for 800g instead of 1kg + ₹50 discount"
                   value={modificationReason}
-                  onChange={(e) => setModificationReason(e.target.value)}
+                  onChange={(e) => {
+                    setModificationReason(e.target.value);
+                    if (reasonError && e.target.value.trim()) {
+                      setReasonError(false);
+                    }
+                  }}
                   style={{
                     width: "100%",
                     padding: "7px 10px",
                     borderRadius: "8px",
-                    border: "1px solid #d1d5db",
+                    border: reasonError ? "1.5px solid #dc2626" : "1px solid #d1d5db",
+                    background: reasonError ? "#fef2f2" : "#fff",
                     fontSize: "0.8rem",
+                    outline: reasonError ? "none" : undefined,
+                    transition: "border-color 150ms ease, background 150ms ease",
                   }}
                 />
+                {reasonError && (
+                  <div
+                    style={{
+                      color: "#dc2626",
+                      fontSize: "0.72rem",
+                      fontWeight: 700,
+                      marginTop: "4px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "3px",
+                    }}
+                  >
+                    <span className="material-symbols-outlined text-[14px]">error</span>
+                    <span>Reason is mandatory</span>
+                  </div>
+                )}
               </div>
 
               {/* Bill Comparison Box */}
@@ -839,7 +1059,34 @@ export default function OrderEditModal({
                   <span>Original Bill Total:</span>
                   <span style={{ fontWeight: 700 }}>₹{originalGrandTotal}</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "space-between", color: "#111827", fontWeight: 900, fontSize: "0.95rem" }}>
+
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563" }}>
+                  <span>Revised Items Subtotal:</span>
+                  <span style={{ fontWeight: 700 }}>₹{newSubtotal}</span>
+                </div>
+
+                {deliveryFee > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "#4b5563" }}>
+                    <span>Delivery Fee:</span>
+                    <span style={{ fontWeight: 700 }}>₹{deliveryFee}</span>
+                  </div>
+                )}
+
+                {manualDiscount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "#15803d", fontWeight: 700 }}>
+                    <span>Store Special Discount:</span>
+                    <span>-₹{manualDiscount}</span>
+                  </div>
+                )}
+
+                {existingCouponDiscount > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "#15803d", fontWeight: 700 }}>
+                    <span>Coupon Discount ({order.couponCode || "Coupon"}):</span>
+                    <span>-₹{existingCouponDiscount}</span>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#111827", fontWeight: 900, fontSize: "0.98rem", paddingTop: "6px", borderTop: "1px solid #e5e7eb" }}>
                   <span>New Revised Total:</span>
                   <span style={{ color: "#941717" }}>₹{newGrandTotal}</span>
                 </div>

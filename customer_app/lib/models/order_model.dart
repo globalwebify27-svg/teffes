@@ -66,6 +66,11 @@ class OrderModel {
   final String? createdByType;
   final String? orderSource;
   final String? scheduledDeliveryDate;
+  final double? discountAmount;
+  final double? manualDiscount;
+  final bool isModified;
+  final String? modificationReason;
+  final double? additionalAmountDue;
 
   bool get isStoreDirect =>
       createdByType == 'self_store_admin' || orderSource == 'store_direct';
@@ -116,6 +121,11 @@ class OrderModel {
     this.createdByType,
     this.orderSource,
     this.scheduledDeliveryDate,
+    this.discountAmount,
+    this.manualDiscount,
+    this.isModified = false,
+    this.modificationReason,
+    this.additionalAmountDue,
   });
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
@@ -183,6 +193,11 @@ class OrderModel {
       createdByType: json['createdByType']?.toString(),
       orderSource: json['orderSource']?.toString(),
       scheduledDeliveryDate: json['scheduledDeliveryDate']?.toString(),
+      discountAmount: (json['discountAmount'] as num?)?.toDouble() ?? (json['discount'] as num?)?.toDouble(),
+      manualDiscount: (json['manualDiscount'] as num?)?.toDouble(),
+      isModified: json['isModified'] == true,
+      modificationReason: json['modificationReason']?.toString(),
+      additionalAmountDue: (json['additionalAmountDue'] as num?)?.toDouble(),
     );
   }
 }

@@ -1065,7 +1065,10 @@ export default function DashboardPage() {
         quantity: it.quantity || 1,
         netWeight: it.netWeight || it.weight || "1 unit",
       })),
+      discountAmount: Number(o.discountAmount || o.rawOrder?.discountAmount || 0),
+      manualDiscount: Number(o.manualDiscount || o.rawOrder?.manualDiscount || 0),
       isModified: Boolean(o.isModified || o.rawOrder?.isModified),
+      modificationReason: o.modificationReason || o.rawOrder?.modificationReason || null,
       additionalAmountDue: Number(o.additionalAmountDue || o.rawOrder?.additionalAmountDue || 0),
       rawOrder: o,
     };
@@ -1320,13 +1323,25 @@ export default function DashboardPage() {
                           </p>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                          <span className="font-headline-sm font-black text-gray-900 text-sm">
-                            ₹{order.amount}
-                          </span>
-                          <span className="material-symbols-outlined text-gray-400 text-[18px]">
-                            chevron_right
-                          </span>
+                        <div className="flex flex-col items-end">
+                          <div className="flex items-center gap-2">
+                            <span className="font-headline-sm font-black text-gray-900 text-sm">
+                              ₹{order.amount}
+                            </span>
+                            <span className="material-symbols-outlined text-gray-400 text-[18px]">
+                              chevron_right
+                            </span>
+                          </div>
+                          {order.discountAmount > 0 && (
+                            <span className="text-[11px] text-emerald-700 font-extrabold">
+                              Discount: -₹{order.discountAmount}
+                            </span>
+                          )}
+                          {(order.isModified || order.modificationReason) && (
+                            <span className="text-[10.5px] text-amber-800 font-bold bg-amber-50 border border-amber-200/70 px-1.5 py-0.5 rounded mt-0.5 max-w-[220px] truncate text-right" title={order.modificationReason ? `Revised: ${order.modificationReason}` : 'Revised Order'}>
+                              Revised{order.modificationReason ? `: ${order.modificationReason}` : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -2414,16 +2429,34 @@ export default function DashboardPage() {
                     ))}
                   </div>
 
-                  {(trackingOrder.isModified || trackingOrder.rawOrder?.isModified) && (
-                    <div className="pt-2 border-t border-gray-200/60 flex items-center justify-between text-[11px] font-bold text-amber-900">
+                  {Number(trackingOrder.discountAmount || trackingOrder.rawOrder?.discountAmount || 0) > 0 && (
+                    <div className="py-1.5 flex items-center justify-between text-xs text-emerald-700 font-bold border-t border-gray-100">
                       <span className="inline-flex items-center gap-1">
-                        <span className="material-symbols-outlined text-[14px] text-amber-700">edit_note</span>
-                        <span>Revised Order (Items/Weight adjusted on call)</span>
+                        <span className="material-symbols-outlined text-[14px]">loyalty</span>
+                        <span>Discount Applied:</span>
                       </span>
-                      {Number(trackingOrder.additionalAmountDue || trackingOrder.rawOrder?.additionalAmountDue || 0) > 0 && (
-                        <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10.5px] font-extrabold">
-                          Pay ₹{trackingOrder.additionalAmountDue || trackingOrder.rawOrder?.additionalAmountDue} Extra on Delivery
+                      <span>-₹{trackingOrder.discountAmount || trackingOrder.rawOrder?.discountAmount}</span>
+                    </div>
+                  )}
+
+                  {(trackingOrder.isModified || trackingOrder.rawOrder?.isModified || trackingOrder.modificationReason || trackingOrder.rawOrder?.modificationReason) && (
+                    <div className="pt-2 border-t border-gray-200/60 space-y-1.5">
+                      <div className="flex items-center justify-between text-[11px] font-bold text-amber-900">
+                        <span className="inline-flex items-center gap-1">
+                          <span className="material-symbols-outlined text-[14px] text-amber-700">edit_note</span>
+                          <span>Revised Order (Items/Weight adjusted on call)</span>
                         </span>
+                        {Number(trackingOrder.additionalAmountDue || trackingOrder.rawOrder?.additionalAmountDue || 0) > 0 && (
+                          <span className="bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded text-[10.5px] font-extrabold">
+                            Pay ₹{trackingOrder.additionalAmountDue || trackingOrder.rawOrder?.additionalAmountDue} Extra on Delivery
+                          </span>
+                        )}
+                      </div>
+                      {(trackingOrder.modificationReason || trackingOrder.rawOrder?.modificationReason) && (
+                        <div className="p-2 bg-amber-50/90 border border-amber-200/80 rounded-xl text-xs text-amber-950 font-medium">
+                          <span className="font-extrabold text-amber-900">Reason for adjustment: </span>
+                          <span>{trackingOrder.modificationReason || trackingOrder.rawOrder?.modificationReason}</span>
+                        </div>
                       )}
                     </div>
                   )}

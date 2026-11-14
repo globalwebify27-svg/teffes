@@ -902,6 +902,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
               ),
+              if (ord.isModified || (ord.modificationReason != null && ord.modificationReason!.trim().isNotEmpty)) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFEF3C7),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Order Adjusted / Revised',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Color(0xFF92400E)),
+                      ),
+                      if (ord.modificationReason != null && ord.modificationReason!.trim().isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Reason: ${ord.modificationReason}',
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF78350F), fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 8),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1495,6 +1523,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     child: Text(
                                       ord.paymentMethod!,
                                       style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                if (ord.isModified || (ord.modificationReason != null && ord.modificationReason!.trim().isNotEmpty))
+                                  Container(
+                                    margin: const EdgeInsets.only(left: 6),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFFEF3C7),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      ord.modificationReason != null && ord.modificationReason!.trim().isNotEmpty
+                                          ? 'Revised: ${ord.modificationReason}'
+                                          : 'Revised',
+                                      style: const TextStyle(fontSize: 10, color: Color(0xFF92400E), fontWeight: FontWeight.bold),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                     ),
                                   ),
                               ],

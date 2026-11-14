@@ -69,13 +69,14 @@ function isAfter8PM(date = new Date()) {
  * Calculates next-day (or next available morning) 9:00 AM IST delivery time.
  * Pure UTC: 9:00 AM IST is 03:30 AM UTC.
  */
-function calculateNextDay9AM(date = new Date()) {
+function calculateNextDay9AM(date = new Date(), forceNextDay = false) {
   const comp = getISTDateComponents(date);
   let targetYear = comp.year;
   let targetMonth = comp.month;
   let targetDate = comp.date;
 
-  if (comp.hours >= 20 || (comp.hours === 19 && comp.minutes >= 59)) {
+  // After 8:00 AM IST or when forceNextDay is true, 9:00 AM is tomorrow morning
+  if (forceNextDay || comp.hours >= 8 || (comp.hours === 7 && comp.minutes >= 59)) {
     targetDate += 1;
   }
 
