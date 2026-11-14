@@ -227,9 +227,10 @@ const getDashboardOverview = async (req, res, next) => {
     const timeRange = (req.query?.timeRange || req.query?.filter || 'all').toLowerCase();
     const customStart = req.query?.startDate || '';
     const customEnd = req.query?.endDate || '';
+    const includeMigrated = req.query?.includeMigrated === 'true' || req.query?.includeMigrated === true;
 
     const [orders, allRiders] = await Promise.all([
-      getStoreOrders(storeId),
+      getStoreOrders(storeId, null, { includeMigrated }),
       queryDocs('users', (ref) => ref.where('role', '==', 'rider')),
     ]);
 
@@ -270,7 +271,7 @@ const getDashboardOverview = async (req, res, next) => {
         icon: 'receipt_long',
         label: 'Total orders',
         value: `${totalOrdersCount}`,
-        sub: timeRange === 'today' ? "Today's placed orders" : 'In selected period',
+        sub: timeRange === 'today' ? "Today's placed orders" : timeRange === 'all' ? "All time placed orders" : 'In selected period',
         color: '#1e3a8a',
         tab: 'orders',
         hasInfo: true,

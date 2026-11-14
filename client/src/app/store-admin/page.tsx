@@ -332,29 +332,8 @@ const formatOrderDateTime = (dateStr: any) => {
 };
 
 const OrderStatusPipeline = ({ status }: { status: string }) => {
-  if (status === "Cancelled" || status === "Rejected") {
-    return (
-      <div style={{
-        display: "inline-flex",
-        alignItems: "center",
-        gap: "5px",
-        background: "#fef2f2",
-        color: "#dc2626",
-        border: "1.5px solid #fecaca",
-        padding: "3px 10px",
-        borderRadius: "8px",
-        fontWeight: 800,
-        fontSize: "0.75rem",
-      }}>
-        <span className="material-symbols-outlined text-[15px]">cancel</span>
-        <span>Cancelled</span>
-      </div>
-    );
-  }
-
   const stages = ["Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"];
   const idx = stages.indexOf(status);
-  const isDelivered = status === "Delivered" || status === "Completed";
 
   return (
     <div
@@ -373,8 +352,6 @@ const OrderStatusPipeline = ({ status }: { status: string }) => {
     >
       {stages.map((s, i) => {
         const isPassed = i <= idx;
-        const bgColor = isDelivered && isPassed ? "#059669" : isPassed ? "#941717" : "#ede8e0";
-        const textColor = isPassed ? "#fff" : "#73695b";
         return (
           <React.Fragment key={s}>
             <div style={{
@@ -382,8 +359,8 @@ const OrderStatusPipeline = ({ status }: { status: string }) => {
               fontWeight: 700,
               padding: "3px 8px",
               borderRadius: "99px",
-              background: bgColor,
-              color: textColor,
+              background: isPassed ? "#941717" : "#ede8e0",
+              color: isPassed ? "#fff" : "#73695b",
               whiteSpace: "nowrap",
               flexShrink: 0,
             }}>{s}</div>
@@ -391,24 +368,6 @@ const OrderStatusPipeline = ({ status }: { status: string }) => {
           </React.Fragment>
         );
       })}
-      {isDelivered && (
-        <span style={{
-          marginLeft: "6px",
-          background: "#ecfdf5",
-          color: "#059669",
-          border: "1px solid #a7f3d0",
-          padding: "2px 8px",
-          borderRadius: "6px",
-          fontWeight: 800,
-          fontSize: "0.72rem",
-          display: "inline-flex",
-          alignItems: "center",
-          gap: "4px",
-        }}>
-          <span className="material-symbols-outlined text-[14px]">check_circle</span>
-          Delivered
-        </span>
-      )}
     </div>
   );
 };
@@ -544,14 +503,14 @@ const FileUploadButton = ({
 let cachedStoreDashboardData: { range: string; page: number; kpis: any[]; latestOrders: any[]; totalItems: number } | null = null;
 
 function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
-  const [timeRange, setTimeRange] = useState("today");
+  const [timeRange, setTimeRange] = useState("all");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
   const [dashboardPage, setDashboardPage] = useState(1);
-  const [totalOrdersCount, setTotalOrdersCount] = useState(cachedStoreDashboardData?.range === "today" ? (cachedStoreDashboardData.totalItems || 0) : 0);
-  const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.range === "today" ? cachedStoreDashboardData.kpis : []);
-  const [latestOrders, setLatestOrders] = useState<any[]>(cachedStoreDashboardData?.range === "today" ? cachedStoreDashboardData.latestOrders : []);
-  const [loading, setLoading] = useState(!cachedStoreDashboardData || cachedStoreDashboardData?.range !== "today");
+  const [totalOrdersCount, setTotalOrdersCount] = useState(cachedStoreDashboardData?.range === "all" ? (cachedStoreDashboardData.totalItems || 0) : 0);
+  const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.range === "all" ? cachedStoreDashboardData.kpis : []);
+  const [latestOrders, setLatestOrders] = useState<any[]>(cachedStoreDashboardData?.range === "all" ? cachedStoreDashboardData.latestOrders : []);
+  const [loading, setLoading] = useState(!cachedStoreDashboardData || cachedStoreDashboardData?.range !== "all");
 
   const loadData = (range = timeRange, start = customStartDate, end = customEndDate, p = dashboardPage) => {
     if (!cachedStoreDashboardData || cachedStoreDashboardData.range !== range || cachedStoreDashboardData.page !== p) {
@@ -1780,19 +1739,22 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         </span>
                       )}
                       {(o.status === "Cancelled" || o.status === "Rejected") && (
-                        <span style={{
-                          background: "#fef2f2",
-                          color: "#dc2626",
-                          border: "1px solid #fecaca",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                        }}>
+                        <span
+                          title={o.cancellationReason ? `Reason: ${o.cancellationReason}` : undefined}
+                          style={{
+                            background: "#fef2f2",
+                            color: "#dc2626",
+                            border: "1px solid #fecaca",
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            fontSize: "0.72rem",
+                            fontWeight: 800,
+                            letterSpacing: "0.2px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                          }}
+                        >
                           <span className="material-symbols-outlined text-[13px]">cancel</span>
                           Cancelled
                         </span>
@@ -1813,6 +1775,26 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         }}>
                           <span className="material-symbols-outlined text-[13px]">check_circle</span>
                           Delivered
+                        </span>
+                      )}
+                      {(o.status === "Delivered" || o.status === "Completed") && (o.deliveredAt || o.timeline?.find((t: any) => t.status === "Delivered")?.timestamp || o.updatedAt) && (
+                        <span
+                          title="Delivered Time"
+                          style={{
+                            fontSize: "0.72rem",
+                            color: "#059669",
+                            background: "#ecfdf5",
+                            border: "1px solid #a7f3d0",
+                            padding: "2px 7px",
+                            borderRadius: "6px",
+                            fontWeight: 600,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "3px",
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[13px]">task_alt</span>
+                          Delivered: {formatOrderDateTime(o.deliveredAt || o.timeline?.find((t: any) => t.status === "Delivered")?.timestamp || o.updatedAt)}
                         </span>
                       )}
                       {(() => {
@@ -2147,40 +2129,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         })()}
                       </div>
                     )}
-                    {(o.status === "Delivered" || o.status === "Completed") && (
-                      <div style={{
-                        fontSize: "0.75rem",
-                        color: "#065f46",
-                        background: "#ecfdf5",
-                        border: "1px solid #a7f3d0",
-                        borderRadius: "8px",
-                        padding: "6px 10px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        fontWeight: 700,
-                      }}>
-                        <span className="material-symbols-outlined text-[15px] text-emerald-600">task_alt</span>
-                        <span>Delivered: {formatOrderDateTime(o.deliveredAt || o.timeline?.find((t: any) => t.status === "Delivered")?.timestamp || o.updatedAt)}</span>
-                      </div>
-                    )}
-                    {(o.status === "Cancelled" || o.status === "Rejected") && (
-                      <div style={{
-                        fontSize: "0.75rem",
-                        color: "#991b1b",
-                        background: "#fef2f2",
-                        border: "1px solid #fecaca",
-                        borderRadius: "8px",
-                        padding: "6px 10px",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        fontWeight: 700,
-                      }}>
-                        <span className="material-symbols-outlined text-[15px] text-red-600">cancel</span>
-                        <span>Cancelled{o.cancellationReason ? ` • Reason: ${o.cancellationReason}` : ""}</span>
-                      </div>
-                    )}
+
                     {nextLabel && (
                       <button
                         onClick={() => advanceStatus(o.orderId || o.id, o.status, isPickup)}
