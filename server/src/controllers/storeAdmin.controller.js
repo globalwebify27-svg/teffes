@@ -17,6 +17,7 @@ const {
   getPaginatedOrders: getPaginatedOrdersFS,
   getOrderById: getOrderByIdFS,
   updateOrderStatus: updateOrderStatusFS,
+  invalidateStoreOrdersCache,
 } = require('../services/firestore/order.firestore.service');
 
 const {
@@ -257,6 +258,13 @@ const getDashboardOverview = async (req, res, next) => {
       minimumFractionDigits: 0,
     }).format(totalRevenue);
 
+    // Backend-side pagination for Latest Incoming Orders (50 items per page by default)
+    const page = Math.max(1, parseInt(req.query?.page, 10) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query?.limit, 10) || 50));
+    const offset = (page - 1) * limit;
+    const totalPages = Math.ceil(totalOrdersCount / limit) || 1;
+    const pagedOrders = filteredOrders.slice(offset, offset + limit);
+
     const kpis = [
       {
         icon: 'receipt_long',
@@ -324,7 +332,13 @@ const getDashboardOverview = async (req, res, next) => {
         completed: completedOrdersCount,
         others: filteredOrders.filter((o) => o.status === 'Cancelled' || o.status === 'Rejected').length,
       },
-      latestOrders: filteredOrders.slice(0, 15),
+      latestOrders: pagedOrders,
+      pagination: {
+        page,
+        pageSize: limit,
+        totalItems: totalOrdersCount,
+        totalPages,
+      },
     });
   } catch (error) {
     next(error);
@@ -333,42 +347,112 @@ const getDashboardOverview = async (req, res, next) => {
 
 /**
  * GET /api/store-admin/orders
- * Retrieve orders for store admin (with server-side pagination & live queue protection)
+ * Retrieve orders for store admin (with server-side pagination, status, area, and date filtering)
  */
 const getOrders = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
-    const { status, page, limit } = req.query;
+    const { status, area, date, page, limit } = req.query || {};
 
-    if (page !== undefined || limit !== undefined) {
-      const result = await getPaginatedOrdersFS({
-        storeId,
-        status,
-        page: parseInt(page, 10) || 1,
-        limit: parseInt(limit, 10) || 50,
+    const pageNum = page !== undefined ? Math.max(1, parseInt(page, 10) || 1) : null;
+    const limitNum = limit !== undefined ? Math.min(100, Math.max(1, parseInt(limit, 10) || 50)) : null;
+
+    // Retrieve store orders using the cache and only non-migrated live orders (TEF- prefix)
+    let allStoreOrders = await getStoreOrders(storeId);
+    allStoreOrders = allStoreOrders.filter((o) => !o.isMigrated);
+
+    // Extract available areas from all store orders for dropdown filter
+    const set = new Set();
+    allStoreOrders.forEach((o) => {
+      const addr = o.shippingAddress?.address || o.customer?.address || '';
+      const pincode = o.shippingAddress?.pincode || o.customer?.pincode;
+      if (pincode) set.add(String(pincode));
+      const knownLocalities = ["Kishore Ganj", "Doranda", "Harmu", "Lalpur", "Argora", "Booty More", "Kantatoli", "Ratu Road", "Bariatu", "Morabadi", "Hinoo"];
+      knownLocalities.forEach((loc) => {
+        if (addr.toLowerCase().includes(loc.toLowerCase())) {
+          set.add(loc);
+        }
       });
+    });
+    const availableAreas = Array.from(set).sort();
 
-      return res.status(200).json({
-        success: true,
-        count: result.orders.length,
-        totalCount: result.totalCount,
-        page: result.page,
-        pageSize: result.pageSize,
-        totalPages: result.totalPages,
-        orders: result.orders,
+    // Filter by status
+    let filtered = allStoreOrders;
+    if (status && status !== 'All' && status !== 'all') {
+      filtered = filtered.filter((o) => o.status === status);
+    }
+
+    // Filter by area
+    if (area && area !== 'All' && area !== 'all') {
+      const target = area.trim().toLowerCase();
+      filtered = filtered.filter((o) => {
+        const addr = (o.shippingAddress?.address || o.customer?.address || '').toLowerCase();
+        const pin = String(o.shippingAddress?.pincode || o.customer?.pincode || '');
+        return addr.includes(target) || pin.includes(target);
       });
     }
 
-    let orders = await getStoreOrders(storeId, status);
-    // For live store operations queue without pagination, protect from loading 11,000 legacy records
-    if (!status || status === 'all') {
-      orders = orders.filter((o) => !o.isMigrated);
+    // Filter by date
+    if (date && date.trim()) {
+      const targetDate = date.trim();
+      filtered = filtered.filter((o) => {
+        let deliveryDate = o.scheduledDeliveryDate;
+        if (!deliveryDate && o.targetDeliveryTime) {
+          try {
+            const dt = new Date(o.targetDeliveryTime);
+            if (!isNaN(dt.getTime())) {
+              const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000);
+              deliveryDate = new Date(istMs).toISOString().slice(0, 10);
+            }
+          } catch (_) {}
+        }
+        if (!deliveryDate && o.createdAt) {
+          try {
+            const dt = new Date(o.createdAt);
+            if (!isNaN(dt.getTime())) {
+              const slot = String(o.deliverySlot || '').toLowerCase();
+              const isNextDay = Boolean(
+                o.isNextDayOrder ||
+                slot.includes('tomorrow') ||
+                slot.includes('next-day') ||
+                slot.includes('9:00 am')
+              );
+              const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000) + (isNextDay ? 24 * 60 * 60 * 1000 : 0);
+              deliveryDate = new Date(istMs).toISOString().slice(0, 10);
+            }
+          } catch (_) {}
+        }
+        return deliveryDate === targetDate;
+      });
+    }
+
+    const totalCount = filtered.length;
+
+    if (pageNum !== null || limitNum !== null) {
+      const actualPage = pageNum || 1;
+      const actualLimit = limitNum || 50;
+      const totalPages = Math.ceil(totalCount / actualLimit) || 1;
+      const offset = (actualPage - 1) * actualLimit;
+      const pagedOrders = filtered.slice(offset, offset + actualLimit);
+
+      return res.status(200).json({
+        success: true,
+        count: pagedOrders.length,
+        totalCount,
+        page: actualPage,
+        pageSize: actualLimit,
+        totalPages,
+        availableAreas,
+        orders: pagedOrders,
+      });
     }
 
     res.status(200).json({
       success: true,
-      count: orders.length,
-      orders,
+      count: filtered.length,
+      totalCount,
+      availableAreas,
+      orders: filtered,
     });
   } catch (error) {
     next(error);
@@ -594,6 +678,7 @@ const delayPrepTime = async (req, res, next) => {
       targetDeliveryTime: newTarget,
       updatedAt: now,
     });
+    invalidateStoreOrdersCache(order.storeId || storeId);
 
     order.prepTimeMinutes = newPrepTime;
     order.targetDeliveryTime = newTarget;
@@ -748,6 +833,7 @@ const modifyOrderItems = async (req, res, next) => {
     }
 
     await updateDoc('orders', docId, updatePayload);
+    invalidateStoreOrdersCache(order.storeId || storeId);
 
     const updatedOrder = {
       ...order,
@@ -1631,6 +1717,7 @@ const assignRiderToOrder = async (req, res, next) => {
         role: req.user?.role || 'store_admin',
       },
     });
+    invalidateStoreOrdersCache(storeId);
 
     const docId = order.id || order._id || id;
     const updatedOrder = await getOrderByIdFS(id);

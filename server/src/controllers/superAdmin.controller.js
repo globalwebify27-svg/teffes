@@ -1042,7 +1042,7 @@ const setSuperOffer = async (req, res, next) => {
  */
 const getAllOrders = async (req, res, next) => {
   try {
-    const { page, limit, status, area, date, storeId } = req.query;
+    const { page, limit, status, area, date, storeId } = req.query || {};
 
     if (page !== undefined || limit !== undefined) {
       const result = await getPaginatedOrdersFS({

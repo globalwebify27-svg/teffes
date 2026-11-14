@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import axios from "axios";
 import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
@@ -320,9 +320,42 @@ const Badge = ({ label, color }: { label: string; color: string }) => (
   }}>{label}</span>
 );
 
+const formatOrderDateTime = (dateStr: any) => {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return String(dateStr);
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: true });
+  return `${day}/${month}/${year}, ${time}`;
+};
+
 const OrderStatusPipeline = ({ status }: { status: string }) => {
+  if (status === "Cancelled" || status === "Rejected") {
+    return (
+      <div style={{
+        display: "inline-flex",
+        alignItems: "center",
+        gap: "5px",
+        background: "#fef2f2",
+        color: "#dc2626",
+        border: "1.5px solid #fecaca",
+        padding: "3px 10px",
+        borderRadius: "8px",
+        fontWeight: 800,
+        fontSize: "0.75rem",
+      }}>
+        <span className="material-symbols-outlined text-[15px]">cancel</span>
+        <span>Cancelled</span>
+      </div>
+    );
+  }
+
   const stages = ["Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"];
   const idx = stages.indexOf(status);
+  const isDelivered = status === "Delivered" || status === "Completed";
+
   return (
     <div
       className="no-scrollbar"
@@ -338,21 +371,44 @@ const OrderStatusPipeline = ({ status }: { status: string }) => {
         padding: "2px 0",
       }}
     >
-      {stages.map((s, i) => (
-        <React.Fragment key={s}>
-          <div style={{
-            fontSize: "0.68rem",
-            fontWeight: 700,
-            padding: "3px 8px",
-            borderRadius: "99px",
-            background: i <= idx ? "#941717" : "#ede8e0",
-            color: i <= idx ? "#fff" : "#73695b",
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-          }}>{s}</div>
-          {i < stages.length - 1 && <span style={{ color: "#d6cec5", fontSize: "0.7rem", flexShrink: 0 }}>→</span>}
-        </React.Fragment>
-      ))}
+      {stages.map((s, i) => {
+        const isPassed = i <= idx;
+        const bgColor = isDelivered && isPassed ? "#059669" : isPassed ? "#941717" : "#ede8e0";
+        const textColor = isPassed ? "#fff" : "#73695b";
+        return (
+          <React.Fragment key={s}>
+            <div style={{
+              fontSize: "0.68rem",
+              fontWeight: 700,
+              padding: "3px 8px",
+              borderRadius: "99px",
+              background: bgColor,
+              color: textColor,
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}>{s}</div>
+            {i < stages.length - 1 && <span style={{ color: "#d6cec5", fontSize: "0.7rem", flexShrink: 0 }}>→</span>}
+          </React.Fragment>
+        );
+      })}
+      {isDelivered && (
+        <span style={{
+          marginLeft: "6px",
+          background: "#ecfdf5",
+          color: "#059669",
+          border: "1px solid #a7f3d0",
+          padding: "2px 8px",
+          borderRadius: "6px",
+          fontWeight: 800,
+          fontSize: "0.72rem",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "4px",
+        }}>
+          <span className="material-symbols-outlined text-[14px]">check_circle</span>
+          Delivered
+        </span>
+      )}
     </div>
   );
 };
@@ -485,27 +541,36 @@ const FileUploadButton = ({
 
 // ─── Tab Panels ───────────────────────────────────────────────────────────────
 
-let cachedStoreDashboardData: { range: string; kpis: any[]; latestOrders: any[] } | null = null;
+let cachedStoreDashboardData: { range: string; page: number; kpis: any[]; latestOrders: any[]; totalItems: number } | null = null;
 
 function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   const [timeRange, setTimeRange] = useState("today");
   const [customStartDate, setCustomStartDate] = useState("");
   const [customEndDate, setCustomEndDate] = useState("");
+  const [dashboardPage, setDashboardPage] = useState(1);
+  const [totalOrdersCount, setTotalOrdersCount] = useState(cachedStoreDashboardData?.range === "today" ? (cachedStoreDashboardData.totalItems || 0) : 0);
   const [kpis, setKpis] = useState<any[]>(cachedStoreDashboardData?.range === "today" ? cachedStoreDashboardData.kpis : []);
   const [latestOrders, setLatestOrders] = useState<any[]>(cachedStoreDashboardData?.range === "today" ? cachedStoreDashboardData.latestOrders : []);
   const [loading, setLoading] = useState(!cachedStoreDashboardData || cachedStoreDashboardData?.range !== "today");
 
-  const loadData = (range = timeRange, start = customStartDate, end = customEndDate) => {
-    if (!cachedStoreDashboardData || cachedStoreDashboardData.range !== range) {
+  const loadData = (range = timeRange, start = customStartDate, end = customEndDate, p = dashboardPage) => {
+    if (!cachedStoreDashboardData || cachedStoreDashboardData.range !== range || cachedStoreDashboardData.page !== p) {
       setLoading(true);
     }
-    api.get<{ success: boolean; kpis: any[]; latestOrders: any[] }>(
+    api.get<{
+      success: boolean;
+      kpis: any[];
+      latestOrders: any[];
+      pagination?: { page: number; pageSize: number; totalItems: number; totalPages: number };
+    }>(
       "/store-admin/dashboard",
       {
         params: {
           timeRange: range,
           startDate: start || undefined,
           endDate: end || undefined,
+          page: p,
+          limit: 50,
         },
       }
     )
@@ -513,14 +578,18 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
         if (res.data.success) {
           const freshKpis = res.data.kpis || [];
           const freshOrders = res.data.latestOrders || [];
+          const total = res.data.pagination?.totalItems ?? freshOrders.length;
 
           cachedStoreDashboardData = {
             range,
+            page: p,
             kpis: freshKpis,
             latestOrders: freshOrders,
+            totalItems: total,
           };
           setKpis(freshKpis);
           setLatestOrders(freshOrders);
+          setTotalOrdersCount(total);
         }
       })
       .catch(err => console.warn("Failed to load store-admin dashboard:", err))
@@ -528,10 +597,10 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   };
 
   useEffect(() => {
-    loadData(timeRange, customStartDate, customEndDate);
+    loadData(timeRange, customStartDate, customEndDate, dashboardPage);
     const socket = getSocket();
     const handleUpdate = () => {
-      loadData(timeRange, customStartDate, customEndDate);
+      loadData(timeRange, customStartDate, customEndDate, dashboardPage);
     };
     socket.on("orders:refreshed", handleUpdate);
     socket.on("order:created", handleUpdate);
@@ -541,7 +610,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
 
     // 60-second backup polling
     const pollTimer = setInterval(() => {
-      loadData(timeRange, customStartDate, customEndDate);
+      loadData(timeRange, customStartDate, customEndDate, dashboardPage);
     }, 60000);
 
     return () => {
@@ -552,7 +621,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
       socket.off("order:status_changed", handleUpdate);
       socket.off("inventory:updated", handleUpdate);
     };
-  }, [timeRange, customStartDate, customEndDate]);
+  }, [timeRange, customStartDate, customEndDate, dashboardPage]);
 
   const placeholderKpis = [
     { icon: "receipt_long", label: "Total orders", value: "—", sub: "All placed orders", color: "#1e3a8a", tab: "orders", hasInfo: true, infoText: "Total orders scheduled for delivery in selected date range" },
@@ -597,7 +666,8 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
               setTimeRange(range);
               setCustomStartDate(start || "");
               setCustomEndDate(end || "");
-              loadData(range, start || "", end || "");
+              setDashboardPage(1);
+              loadData(range, start || "", end || "", 1);
             }}
           />
         </div>
@@ -673,7 +743,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
                       gap: "3px"
                     }}>
                       <span className="material-symbols-outlined text-[12px]">schedule</span>
-                      {new Date(o.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      {formatOrderDateTime(o.createdAt)}
                     </span>
                   )}
                 </div>
@@ -703,29 +773,82 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
                 <div style={{ fontWeight: 900, color: "#941717", fontSize: "1rem", fontFamily: "Outfit, sans-serif" }}>₹{o.amount}</div>
                 <div style={{ color: "#73695b", fontSize: "0.75rem", fontWeight: 600 }}>{o.deliverySlot}</div>
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                <Badge label={o.status} color={
-                  o.status === "Pending" ? "#941717" : o.status === "Cutting" ? "#d97706" : o.status === "Delivered" ? "#059669" : "#7c3aed"
-                } />
-                <span className="material-symbols-outlined text-[18px] text-gray-400">chevron_right</span>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Badge label={o.status} color={
+                    o.status === "Cancelled" || o.status === "Rejected"
+                      ? "#dc2626"
+                      : o.status === "Delivered" || o.status === "Completed"
+                      ? "#059669"
+                      : o.status === "Pending"
+                      ? "#941717"
+                      : o.status === "Cutting"
+                      ? "#d97706"
+                      : o.status === "Ready"
+                      ? "#2563eb"
+                      : o.status === "Out for Delivery"
+                      ? "#0284c7"
+                      : "#7c3aed"
+                  } />
+                  <span className="material-symbols-outlined text-[18px] text-gray-400">chevron_right</span>
+                </div>
+                {(o.status === "Delivered" || o.status === "Completed") && (o.deliveredAt || o.timeline?.find((t: any) => t.status === "Delivered")?.timestamp || o.updatedAt) && (
+                  <span style={{
+                    fontSize: "0.7rem",
+                    color: "#059669",
+                    fontWeight: 600,
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "3px"
+                  }}>
+                    <span className="material-symbols-outlined text-[12px]">task_alt</span>
+                    Delivered: {formatOrderDateTime(o.deliveredAt || o.timeline?.find((t: any) => t.status === "Delivered")?.timestamp || o.updatedAt)}
+                  </span>
+                )}
               </div>
             </div>
           ))
         )}
       </div>
+
+      {totalOrdersCount > 0 && (
+        <div style={{ marginTop: "16px" }}>
+          <Pagination
+            currentPage={dashboardPage}
+            totalItems={totalOrdersCount}
+            pageSize={50}
+            onPageChange={(newPage) => {
+              setDashboardPage(newPage);
+              loadData(timeRange, customStartDate, customEndDate, newPage);
+            }}
+            itemLabel="orders"
+          />
+        </div>
+      )}
     </div>
   );
 }
 
 function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orderId: string) => void; storeData?: any } = {}) {
   const [orders, setOrders] = useState<any[]>([]);
+  const [totalOrders, setTotalOrders] = useState(0);
   const [filter, setFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
   const [dateFilter, setDateFilter] = useState("");
   const [page, setPage] = useState(1);
   const pageSize = 50;
   const [loading, setLoading] = useState(true);
+  const [backendAreas, setBackendAreas] = useState<string[]>([]);
   const [printModalOrder, setPrintModalOrder] = useState<any>(null);
+
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
+  const areaFilterRef = useRef(areaFilter);
+  areaFilterRef.current = areaFilter;
+  const dateFilterRef = useRef(dateFilter);
+  dateFilterRef.current = dateFilter;
 
   // Store delivery settings (standard fee & free delivery threshold)
   const [storeSettings, setStoreSettings] = useState<{ standardDeliveryFee: number; freeDeliveryThreshold: number } | null>(() => {
@@ -1020,26 +1143,57 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
     }
   };
 
-  const fetchOrders = () => {
+  const fetchOrders = useCallback((
+    targetPage = pageRef.current,
+    targetFilter = filterRef.current,
+    targetArea = areaFilterRef.current,
+    targetDate = dateFilterRef.current
+  ) => {
     setLoading(true);
-    const q = filter === "All" ? "" : `?status=${filter}`;
-    api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders${q}`)
+    api.get<{
+      success: boolean;
+      orders: any[];
+      totalCount?: number;
+      totalPages?: number;
+      page?: number;
+      pageSize?: number;
+      availableAreas?: string[];
+    }>("/store-admin/orders", {
+      params: {
+        status: targetFilter === "All" ? undefined : targetFilter,
+        area: targetArea === "All" ? undefined : targetArea,
+        date: targetDate || undefined,
+        page: targetPage,
+        limit: pageSize,
+      },
+    })
       .then(res => {
         if (res.data.success) {
           setOrders(res.data.orders || []);
+          setTotalOrders(res.data.totalCount ?? (res.data.orders?.length || 0));
+          if (Array.isArray(res.data.availableAreas) && res.data.availableAreas.length > 0) {
+            setBackendAreas(res.data.availableAreas);
+          }
         }
       })
       .catch(err => console.warn("Failed to fetch store orders:", err))
       .finally(() => setLoading(false));
-  };
+  }, [pageSize]);
 
-  // Reset pagination to page 1 whenever filters change
+  // Reset pagination to page 1 whenever filters change and fetch from backend
   useEffect(() => {
     setPage(1);
-  }, [filter, areaFilter, dateFilter]);
+    fetchOrders(1, filter, areaFilter, dateFilter);
+  }, [filter, areaFilter, dateFilter, fetchOrders]);
+
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+    fetchOrders(newPage, filter, areaFilter, dateFilter);
+  };
 
   // Detected areas / pincodes from orders
   const availableAreas = useMemo(() => {
+    if (backendAreas.length > 0) return backendAreas;
     const set = new Set<string>();
     orders.forEach(o => {
       const addr = o.shippingAddress?.address || o.customer?.address || "";
@@ -1054,55 +1208,10 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
       });
     });
     return Array.from(set).sort();
-  }, [orders]);
+  }, [orders, backendAreas]);
 
-  // Filtered orders applying Area/Pincode and Date filters
-  const filteredOrders = useMemo(() => {
-    return orders.filter(o => {
-      if (areaFilter !== "All") {
-        const addr = (o.shippingAddress?.address || o.customer?.address || "").toLowerCase();
-        const pin = String(o.shippingAddress?.pincode || o.customer?.pincode || "");
-        const target = areaFilter.toLowerCase();
-        const matchesArea = addr.includes(target) || pin.includes(target);
-        if (!matchesArea) return false;
-      }
-      if (dateFilter) {
-        let deliveryDate = o.scheduledDeliveryDate;
-        if (!deliveryDate && o.targetDeliveryTime) {
-          try {
-            const dt = new Date(o.targetDeliveryTime);
-            if (!isNaN(dt.getTime())) {
-              const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000);
-              deliveryDate = new Date(istMs).toISOString().slice(0, 10);
-            }
-          } catch (_) {}
-        }
-        if (!deliveryDate && o.createdAt) {
-          try {
-            const dt = new Date(o.createdAt);
-            if (!isNaN(dt.getTime())) {
-              const slot = String(o.deliverySlot || '').toLowerCase();
-              const isNextDay = Boolean(
-                o.isNextDayOrder ||
-                slot.includes('tomorrow') ||
-                slot.includes('next-day') ||
-                slot.includes('9:00 am')
-              );
-              const istMs = dt.getTime() + (5.5 * 60 * 60 * 1000) + (isNextDay ? 24 * 60 * 60 * 1000 : 0);
-              deliveryDate = new Date(istMs).toISOString().slice(0, 10);
-            }
-          } catch (_) {}
-        }
-        if (deliveryDate !== dateFilter) return false;
-      }
-      return true;
-    });
-  }, [orders, areaFilter, dateFilter]);
-
-  const paginatedOrders = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredOrders.slice(start, start + pageSize);
-  }, [filteredOrders, page, pageSize]);
+  // Backend already filters and paginates orders
+  const paginatedOrders = orders;
 
   const openAssignRiderModal = (order: any) => {
     setAssignModalOrder(order);
@@ -1232,10 +1341,6 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
   };
 
   useEffect(() => {
-    fetchOrders();
-  }, [filter]);
-
-  useEffect(() => {
     const socket = getSocket();
     const storedUser = getStoredUser();
     const currentStoreId = storedUser?.storeId || "S001";
@@ -1301,7 +1406,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
       socket.off("store:order:declined", handleOrderDeclined);
       socket.off("order:declined", handleOrderDeclined);
     };
-  }, [filter]);
+  }, [fetchOrders]);
 
   const advanceStatus = async (orderId: string, currentStatus: string, isPickup: boolean = false) => {
     let next = "";
@@ -1409,7 +1514,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
             paddingBottom: "4px",
           }}
         >
-          {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered"].map(s => (
+          {["All", "Pending", "Cutting", "Ready", "Out for Delivery", "Delivered", "Cancelled"].map(s => (
             <button
               key={s}
               onClick={() => setFilter(s)}
@@ -1531,7 +1636,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
 
       {loading ? (
         <div style={{ padding: "40px", textAlign: "center", color: "#73695b" }}>Fetching live orders from database…</div>
-      ) : filteredOrders.length === 0 ? (
+      ) : orders.length === 0 ? (
         <div style={{ background: "#fff", padding: "40px", textAlign: "center", borderRadius: "14px", border: "1px solid #ede8e0" }}>
           No orders found matching the selected filters.
         </div>
@@ -1655,6 +1760,59 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         }}>
                           <span className="material-symbols-outlined text-[14px]">person_check</span>
                           Created by Self
+                        </span>
+                      )}
+                      {o.createdAt && (
+                        <span style={{
+                          fontSize: "0.72rem",
+                          color: "#78716c",
+                          background: "#f5f5f4",
+                          border: "1px solid #e7e5e4",
+                          padding: "2px 7px",
+                          borderRadius: "6px",
+                          fontWeight: 600,
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "3px",
+                        }}>
+                          <span className="material-symbols-outlined text-[13px]">schedule</span>
+                          {formatOrderDateTime(o.createdAt)}
+                        </span>
+                      )}
+                      {(o.status === "Cancelled" || o.status === "Rejected") && (
+                        <span style={{
+                          background: "#fef2f2",
+                          color: "#dc2626",
+                          border: "1px solid #fecaca",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}>
+                          <span className="material-symbols-outlined text-[13px]">cancel</span>
+                          Cancelled
+                        </span>
+                      )}
+                      {(o.status === "Delivered" || o.status === "Completed") && (
+                        <span style={{
+                          background: "#ecfdf5",
+                          color: "#059669",
+                          border: "1px solid #a7f3d0",
+                          padding: "2px 8px",
+                          borderRadius: "6px",
+                          fontSize: "0.72rem",
+                          fontWeight: 800,
+                          letterSpacing: "0.2px",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                        }}>
+                          <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                          Delivered
                         </span>
                       )}
                       {(() => {
@@ -1989,6 +2147,40 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         })()}
                       </div>
                     )}
+                    {(o.status === "Delivered" || o.status === "Completed") && (
+                      <div style={{
+                        fontSize: "0.75rem",
+                        color: "#065f46",
+                        background: "#ecfdf5",
+                        border: "1px solid #a7f3d0",
+                        borderRadius: "8px",
+                        padding: "6px 10px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontWeight: 700,
+                      }}>
+                        <span className="material-symbols-outlined text-[15px] text-emerald-600">task_alt</span>
+                        <span>Delivered: {formatOrderDateTime(o.deliveredAt || o.timeline?.find((t: any) => t.status === "Delivered")?.timestamp || o.updatedAt)}</span>
+                      </div>
+                    )}
+                    {(o.status === "Cancelled" || o.status === "Rejected") && (
+                      <div style={{
+                        fontSize: "0.75rem",
+                        color: "#991b1b",
+                        background: "#fef2f2",
+                        border: "1px solid #fecaca",
+                        borderRadius: "8px",
+                        padding: "6px 10px",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontWeight: 700,
+                      }}>
+                        <span className="material-symbols-outlined text-[15px] text-red-600">cancel</span>
+                        <span>Cancelled{o.cancellationReason ? ` • Reason: ${o.cancellationReason}` : ""}</span>
+                      </div>
+                    )}
                     {nextLabel && (
                       <button
                         onClick={() => advanceStatus(o.orderId || o.id, o.status, isPickup)}
@@ -2131,9 +2323,9 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
 
       <Pagination
         currentPage={page}
-        totalItems={filteredOrders.length}
+        totalItems={totalOrders}
         pageSize={pageSize}
-        onPageChange={setPage}
+        onPageChange={handlePageChange}
         itemLabel="orders"
       />
 
