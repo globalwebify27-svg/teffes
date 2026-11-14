@@ -717,7 +717,7 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
   );
 }
 
-function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string) => void } = {}) {
+function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orderId: string) => void; storeData?: any } = {}) {
   const [orders, setOrders] = useState<any[]>([]);
   const [filter, setFilter] = useState("All");
   const [areaFilter, setAreaFilter] = useState("All");
@@ -726,6 +726,26 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
   const pageSize = 50;
   const [loading, setLoading] = useState(true);
   const [printModalOrder, setPrintModalOrder] = useState<any>(null);
+
+  // Store delivery settings (standard fee & free delivery threshold)
+  const [storeSettings, setStoreSettings] = useState<{ standardDeliveryFee: number; freeDeliveryThreshold: number } | null>(() => {
+    if (storeData) {
+      return {
+        standardDeliveryFee: typeof storeData.standardDeliveryFee === "number" ? storeData.standardDeliveryFee : 40,
+        freeDeliveryThreshold: typeof storeData.freeDeliveryThreshold === "number" ? storeData.freeDeliveryThreshold : 399,
+      };
+    }
+    return null;
+  });
+
+  useEffect(() => {
+    if (storeData) {
+      setStoreSettings({
+        standardDeliveryFee: typeof storeData.standardDeliveryFee === "number" ? storeData.standardDeliveryFee : 40,
+        freeDeliveryThreshold: typeof storeData.freeDeliveryThreshold === "number" ? storeData.freeDeliveryThreshold : 399,
+      });
+    }
+  }, [storeData]);
 
   // In-Place Assign Rider & Dispatch Modal state
   const [assignModalOrder, setAssignModalOrder] = useState<any>(null);
@@ -848,6 +868,19 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
         .catch(() => {})
         .finally(() => setLoadingSuggestions(false));
     }
+
+    if (!storeSettings) {
+      api.get<{ success: boolean; store: any }>("/store-admin/store-status")
+        .then(res => {
+          if (res.data?.success && res.data.store) {
+            setStoreSettings({
+              standardDeliveryFee: typeof res.data.store.standardDeliveryFee === "number" ? res.data.store.standardDeliveryFee : 40,
+              freeDeliveryThreshold: typeof res.data.store.freeDeliveryThreshold === "number" ? res.data.store.freeDeliveryThreshold : 399,
+            });
+          }
+        })
+        .catch(() => {});
+    }
   };
 
   const handleSelectProduct = (prodId: string) => {
@@ -942,6 +975,11 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
 
     setSubmittingManualOrder(true);
     try {
+      const subtotal = manualItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+      const configuredFee = typeof storeSettings?.standardDeliveryFee === "number" ? storeSettings.standardDeliveryFee : 40;
+      const freeThreshold = typeof storeSettings?.freeDeliveryThreshold === "number" ? storeSettings.freeDeliveryThreshold : 399;
+      const deliveryFee = manualIsPickup ? 0 : (subtotal >= freeThreshold ? 0 : configuredFee);
+
       const res = await api.post<{ success: boolean; message: string; order: any }>(
         "/store-admin/orders/create-manual",
         {
@@ -951,6 +989,7 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
           pickupMode: manualIsPickup,
           fulfillmentType: manualIsPickup ? "pickup" : "delivery",
           items: manualItems,
+          deliveryFee,
           paymentMethod: manualIsPickup ? (manualPaymentStatus === "Paid" ? "Paid at Store Counter" : "Pay at Store Counter") : manualPaymentMethod,
           paymentStatus: manualPaymentStatus,
           deliverySlot: manualIsPickup ? "Store Pickup (Counter Takeaway)" : "60-90 Mins Express Delivery",
@@ -3198,7 +3237,9 @@ function LiveOrdersTab({ onOrderAdvanced }: { onOrderAdvanced?: (orderId: string
               {/* Total Calculation Summary */}
               {manualItems.length > 0 && (() => {
                 const subtotal = manualItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
-                const deliveryFee = manualIsPickup ? 0 : (subtotal >= 399 ? 0 : 40);
+                const configuredFee = typeof storeSettings?.standardDeliveryFee === "number" ? storeSettings.standardDeliveryFee : 40;
+                const freeThreshold = typeof storeSettings?.freeDeliveryThreshold === "number" ? storeSettings.freeDeliveryThreshold : 399;
+                const deliveryFee = manualIsPickup ? 0 : (subtotal >= freeThreshold ? 0 : configuredFee);
                 const total = subtotal + deliveryFee;
 
                 return (
@@ -8469,7 +8510,7 @@ export default function StoreAdminPage() {
 
   const tabComponents: Record<string, React.ReactNode> = {
     dashboard: <DashboardTab setActiveTab={setActiveTab} />,
-    orders: <LiveOrdersTab onOrderAdvanced={handleOrderAdvanced} />,
+    orders: <LiveOrdersTab onOrderAdvanced={handleOrderAdvanced} storeData={storeData} />,
     schedule: <StoreScheduleTab storeId={effectiveStoreId} storeName={storeDisplayName} />,
     products: <ProductsStockTab />,
     cross_sell: <CrossSellTab />,

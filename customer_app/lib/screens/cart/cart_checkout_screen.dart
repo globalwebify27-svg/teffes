@@ -717,7 +717,30 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       );
     },
   );
-}
+  void _showOrderSuccessToast(String orderId) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Order #$orderId Placed Successfully!\nYour order has been placed and is waiting for store confirmation.',
+                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white, height: 1.3),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF065F46),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
 
   Future<void> _handlePlaceOrder(CartProvider cart, LocationProvider location, AuthProvider auth) async {
     // 0. Enforce user authentication: must be logged in to proceed with checkout or payment
@@ -929,6 +952,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
           auth.addOrder(serverOrder);
           cart.clearCart();
           if (mounted) {
+            _showOrderSuccessToast(serverOrder.orderId);
             Navigator.of(context).pushReplacement(
               SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
             );
@@ -981,6 +1005,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       cart.clearCart();
 
       if (mounted) {
+        _showOrderSuccessToast(orderId);
         Navigator.of(context).pushReplacement(
           SmoothPageRoute(page: OrderTrackingScreen(orderId: orderId)),
         );
@@ -1176,6 +1201,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         cart.clearCart();
         if (mounted) {
           setState(() => _isPlacingOrder = false);
+          _showOrderSuccessToast(serverOrder.orderId);
           Navigator.of(context).pushReplacement(
             SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
           );
@@ -1209,6 +1235,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     cart.clearCart();
     if (mounted) {
       setState(() => _isPlacingOrder = false);
+      _showOrderSuccessToast(newOrderId);
       Navigator.of(context).pushReplacement(
         SmoothPageRoute(page: OrderTrackingScreen(orderId: newOrderId)),
       );

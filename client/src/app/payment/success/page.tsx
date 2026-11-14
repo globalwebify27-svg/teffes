@@ -16,10 +16,14 @@ export default function PaymentSuccessPage() {
         if (!raw) { router.replace("/dashboard"); return; }
         const orderPayload = JSON.parse(raw);
         sessionStorage.removeItem("pendingOrderPayload");
-        await api.post("/orders", orderPayload);
+        const res = await api.post<{ success: boolean; order?: { orderId?: string } }>("/orders", orderPayload);
+        const placedOrderId = res.data?.order?.orderId || "";
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("justPlacedOrderId", placedOrderId);
+        }
         clearCart();
         setStatus("success");
-        setTimeout(() => router.replace("/dashboard"), 2000);
+        setTimeout(() => router.replace(`/dashboard?orderPlaced=true&orderId=${placedOrderId}`), 1500);
       } catch (e) {
         setStatus("error");
         setTimeout(() => router.replace("/dashboard"), 3000);

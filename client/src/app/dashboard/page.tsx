@@ -399,6 +399,44 @@ export default function DashboardPage() {
     fetchAddresses();
   }, [router]);
 
+  // Handle order placed confirmation toast and mobile auto-scroll into view
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const orderPlaced = params.get("orderPlaced");
+    const orderIdParam = params.get("orderId") || sessionStorage.getItem("justPlacedOrderId");
+
+    if (orderPlaced === "true" || orderIdParam) {
+      setActiveTab("orders");
+
+      const successMsg = orderIdParam
+        ? `Order #${orderIdParam} has been placed successfully and is waiting for store confirmation.`
+        : "Your order has been placed successfully and is waiting for store confirmation.";
+
+      toast.success(successMsg, "Order Placed Successfully");
+
+      sessionStorage.removeItem("justPlacedOrderId");
+
+      // Mobile view: scroll smoothly down so the order list is immediately visible
+      const scrollToOrders = () => {
+        const el = document.getElementById("orders-content-area") || document.querySelector("main");
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      };
+
+      // Trigger scroll quickly and once more after order list renders
+      setTimeout(scrollToOrders, 150);
+      setTimeout(scrollToOrders, 600);
+
+      // Clean up URL query parameters without reloading
+      const url = new URL(window.location.href);
+      url.searchParams.delete("orderPlaced");
+      url.searchParams.delete("orderId");
+      window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+    }
+  }, []);
+
   // Real-time socket sync for active customer orders
   useEffect(() => {
     const socket = getSocket();
@@ -1149,7 +1187,15 @@ export default function DashboardPage() {
                     <button
                       key={item.key}
                       type="button"
-                      onClick={() => setActiveTab(item.key as TabKey)}
+                      onClick={() => {
+                        setActiveTab(item.key as TabKey);
+                        if (typeof window !== "undefined" && window.innerWidth < 768) {
+                          setTimeout(() => {
+                            const target = document.getElementById("orders-content-area") || document.querySelector("main");
+                            target?.scrollIntoView({ behavior: "smooth", block: "start" });
+                          }, 100);
+                        }
+                      }}
                       className={`w-full flex items-center gap-3.5 px-4 py-3 rounded-2xl text-left transition-all border-none cursor-pointer text-[13.5px] ${isActive
                         ? "bg-slate-100/90 text-gray-900 font-extrabold shadow-2xs"
                         : "bg-transparent text-slate-600 hover:bg-slate-50 hover:text-gray-900 font-medium"
@@ -1198,7 +1244,7 @@ export default function DashboardPage() {
           <main className="flex-1 p-3.5 sm:p-6 lg:p-10 overflow-y-auto bg-white min-w-0 w-full">
             {/* 1. ORDERS TAB (Image 1 Style) */}
             {activeTab === "orders" && (
-              <div className="space-y-4 w-full">
+              <div id="orders-content-area" className="space-y-4 w-full">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="material-symbols-outlined text-gray-700 text-[20px]">
                     chevron_left

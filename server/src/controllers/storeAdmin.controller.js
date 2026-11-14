@@ -855,12 +855,25 @@ const createManualOrder = async (req, res, next) => {
       await createDoc('users', customerUserId, newUserDoc).catch(() => {});
     }
 
-    // 2. Calculate Pricing
+    // 2. Calculate Pricing with Dynamic Store Delivery Fee
     const itemsSubtotal = items.reduce(
       (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
       0
     );
-    const deliveryFee = isPickup ? 0 : (itemsSubtotal >= 399 ? 0 : 40);
+
+    // Load store configuration to respect Super Admin delivery fee settings
+    const storeDoc = await getStoreById(storeId).catch(() => null) || await getDoc('stores', storeId).catch(() => null);
+    const freeThreshold = typeof storeDoc?.freeDeliveryThreshold === 'number' ? storeDoc.freeDeliveryThreshold : 399;
+    const storeDeliveryFee = typeof storeDoc?.standardDeliveryFee === 'number' ? storeDoc.standardDeliveryFee : 40;
+
+    let deliveryFee;
+    if (isPickup) {
+      deliveryFee = 0;
+    } else if (req.body.deliveryFee !== undefined && req.body.deliveryFee !== null && req.body.deliveryFee !== '') {
+      deliveryFee = Math.max(0, Number(req.body.deliveryFee) || 0);
+    } else {
+      deliveryFee = itemsSubtotal >= freeThreshold ? 0 : storeDeliveryFee;
+    }
     const finalAmount = Math.max(0, itemsSubtotal + deliveryFee);
 
     // 3. Deduct Store Inventory

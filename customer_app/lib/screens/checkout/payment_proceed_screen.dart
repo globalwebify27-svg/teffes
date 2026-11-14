@@ -221,6 +221,27 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
           auth.addOrder(serverOrder);
           cart.clearCart();
           if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'Order #${serverOrder.orderId} Placed Successfully!\nYour order has been placed and is waiting for store confirmation.',
+                        style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white, height: 1.3),
+                      ),
+                    ),
+                  ],
+                ),
+                backgroundColor: const Color(0xFF065F46),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                duration: const Duration(seconds: 4),
+              ),
+            );
             Navigator.of(context).pushAndRemoveUntil(
               SmoothPageRoute(page: OrderTrackingScreen(orderId: serverOrder.orderId)),
               (route) => route.isFirst,
@@ -257,6 +278,27 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
       auth.addOrder(createdOrder);
       cart.clearCart();
       if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 22),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Order #$newOrderId Placed Successfully!\nYour order has been placed and is waiting for store confirmation.',
+                    style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600, color: Colors.white, height: 1.3),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF065F46),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+            duration: const Duration(seconds: 4),
+          ),
+        );
         Navigator.of(context).pushAndRemoveUntil(
           SmoothPageRoute(page: OrderTrackingScreen(orderId: createdOrder.orderId)),
           (route) => route.isFirst,

@@ -812,7 +812,11 @@ export default function CartDrawer() {
       if (res.data.success) {
         clearCart();
         closeCart();
-        window.location.href = "/dashboard";
+        const placedOrderId = res.data.order?.orderId || "";
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("justPlacedOrderId", placedOrderId);
+        }
+        window.location.href = `/dashboard?orderPlaced=true&orderId=${placedOrderId}`;
       }
     } catch (err: any) {
       console.error("Failed to place order:", err);
@@ -3030,18 +3034,22 @@ export default function CartDrawer() {
                       setIsPlacingOrder(true);
                       try {
                         const randomSuffix = Math.floor(100000 + Math.random() * 900000);
-                        await api.post("/orders", {
+                        const res = await api.post<{ success: boolean; order?: { orderId?: string } }>("/orders", {
                           ...simulatedOrderData.orderPayload,
                           paymentMethod: "Online Payment (Razorpay)",
                           paymentStatus: "Paid",
                           razorpayOrderId: simulatedOrderData.rzpOrder?.id || `order_sim_${Date.now()}`,
                           razorpayPaymentId: `pay_sim_${randomSuffix}`,
                         });
+                        const placedOrderId = res.data?.order?.orderId || "";
+                        if (typeof window !== "undefined") {
+                          sessionStorage.setItem("justPlacedOrderId", placedOrderId);
+                        }
                         toast.success("Payment verified! Order placed successfully.", "Order Confirmed");
                         setShowSimulatedPaymentModal(false);
                         clearCart();
                         closeCart();
-                        window.location.href = "/dashboard";
+                        window.location.href = `/dashboard?orderPlaced=true&orderId=${placedOrderId}`;
                       } catch (err: any) {
                         toast.error(err.response?.data?.message || "Failed to confirm simulated order", "Order Error");
                       } finally {
