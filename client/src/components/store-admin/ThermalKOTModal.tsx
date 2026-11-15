@@ -127,30 +127,229 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
     order.paymentMethod?.toLowerCase().includes("upi");
 
   const handlePrint = () => {
-    window.print();
+    const printContent = receiptRef.current;
+    if (!printContent) return;
+
+    const printWidth = paperWidth === "80mm" ? "76mm" : "54mm";
+    const pageSize = paperWidth === "80mm" ? "80mm" : "58mm";
+
+    // Clone the receipt content and inline all computed styles
+    const clone = printContent.cloneNode(true) as HTMLElement;
+    const sourceElements = printContent.querySelectorAll("*");
+    const cloneElements = clone.querySelectorAll("*");
+
+    const STYLE_PROPS = [
+      "display", "position", "width", "maxWidth", "minWidth",
+      "height", "maxHeight", "minHeight", "margin", "padding",
+      "border", "borderTop", "borderBottom", "borderLeft", "borderRight",
+      "borderWidth", "borderStyle", "borderColor", "borderRadius",
+      "fontSize", "fontWeight", "fontFamily", "fontStyle",
+      "lineHeight", "letterSpacing", "textAlign", "textTransform", "textDecoration",
+      "color", "backgroundColor", "background",
+      "flexDirection", "flexWrap", "justifyContent", "alignItems", "gap", "flex",
+      "whiteSpace", "wordBreak", "overflowWrap",
+      "boxSizing", "verticalAlign", "opacity",
+      "paddingTop", "paddingBottom", "paddingLeft", "paddingRight",
+      "marginTop", "marginBottom", "marginLeft", "marginRight",
+    ];
+
+    for (let i = 0; i < sourceElements.length && i < cloneElements.length; i++) {
+      const srcEl = sourceElements[i] as HTMLElement;
+      const clnEl = cloneElements[i] as HTMLElement;
+      const computed = window.getComputedStyle(srcEl);
+      for (const prop of STYLE_PROPS) {
+        try {
+          const val = computed.getPropertyValue(
+            prop.replace(/([A-Z])/g, "-$1").toLowerCase()
+          );
+          if (val) {
+            clnEl.style.setProperty(
+              prop.replace(/([A-Z])/g, "-$1").toLowerCase(),
+              val,
+              "important"
+            );
+          }
+        } catch (_) {}
+      }
+      clnEl.style.setProperty("color", "#000000", "important");
+      clnEl.style.setProperty("-webkit-print-color-adjust", "exact", "important");
+      clnEl.style.setProperty("print-color-adjust", "exact", "important");
+    }
+
+    // Inline root styles
+    const rootComputed = window.getComputedStyle(printContent);
+    for (const prop of STYLE_PROPS) {
+      try {
+        const val = rootComputed.getPropertyValue(
+          prop.replace(/([A-Z])/g, "-$1").toLowerCase()
+        );
+        if (val) {
+          clone.style.setProperty(
+            prop.replace(/([A-Z])/g, "-$1").toLowerCase(),
+            val,
+            "important"
+          );
+        }
+      } catch (_) {}
+    }
+
+    clone.style.setProperty("width", printWidth, "important");
+    clone.style.setProperty("max-width", "100%", "important");
+    clone.style.setProperty("margin", "0 auto", "important");
+    clone.style.setProperty("padding", "2mm 3mm", "important");
+    clone.style.setProperty("background", "#ffffff", "important");
+    clone.style.setProperty("color", "#000000", "important");
+    clone.style.setProperty("box-shadow", "none", "important");
+    clone.style.setProperty("border", "none", "important");
+    clone.style.setProperty("box-sizing", "border-box", "important");
+
+    // Convert relative image URLs to absolute
+    clone.querySelectorAll("img").forEach((img) => {
+      if (img.src && !img.src.startsWith("data:")) {
+        img.src = new URL(img.src, window.location.href).href;
+      }
+    });
+
+    // Remove any previous print iframe
+    const oldFrame = document.getElementById("thermal-kot-print-frame");
+    if (oldFrame) {
+      try { oldFrame.remove(); } catch (_) {}
+    }
+
+    // Create an offscreen, rendered iframe (NOT visibility:hidden, NOT display:none)
+    // Chrome requires an active rendering context to print an iframe directly without
+    // falling back to printing the top window.
+    const printFrame = document.createElement("iframe");
+    printFrame.id = "thermal-kot-print-frame";
+    printFrame.style.cssText = `
+      position: fixed !important;
+      left: -9999px !important;
+      top: 0 !important;
+      width: 400px !important;
+      height: 600px !important;
+      border: none !important;
+      z-index: -9999 !important;
+    `;
+    document.body.appendChild(printFrame);
+
+    const frameDoc = printFrame.contentWindow?.document || printFrame.contentDocument;
+    if (!frameDoc) return;
+
+    frameDoc.open();
+    frameDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>KOT_${orderId}</title>
+  <style>
+    @page {
+      size: ${pageSize} auto;
+      margin: 0mm;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+      width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
+      font-family: monospace, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    #kot-print-root {
+      width: ${printWidth} !important;
+      max-width: 100% !important;
+      margin: 0 auto !important;
+      padding: 2mm 3mm !important;
+      box-sizing: border-box !important;
+      background: #ffffff !important;
+      color: #000000 !important;
+    }
+    #kot-print-root * {
+      color: #000000 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="kot-print-root">
+    ${clone.innerHTML}
+  </div>
+</body>
+</html>`);
+    frameDoc.close();
+
+    // Trigger printing once the iframe has rendered
+    let hasPrinted = false;
+    const doPrint = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
+      try {
+        const win = printFrame.contentWindow;
+        if (win) {
+          win.focus();
+          win.print();
+        }
+      } catch (err) {
+        console.error("Iframe print error:", err);
+      }
+    };
+
+    // Check if images are present in the iframe and wait for them to load
+    const frameImages = frameDoc.querySelectorAll("img");
+    if (frameImages.length === 0) {
+      setTimeout(doPrint, 200);
+    } else {
+      let loadedCount = 0;
+      const onImgDone = () => {
+        loadedCount++;
+        if (loadedCount >= frameImages.length) {
+          setTimeout(doPrint, 100);
+        }
+      };
+      frameImages.forEach((img) => {
+        if (img.complete) {
+          onImgDone();
+        } else {
+          img.onload = onImgDone;
+          img.onerror = onImgDone;
+        }
+      });
+      // Safety timeout so it always prints even if an image stalls
+      setTimeout(doPrint, 800);
+    }
   };
 
   const receiptWidthPx = paperWidth === "80mm" ? "420px" : "330px";
 
   return (
     <>
-      {/* Print-specific style isolation */}
+      {/* Print-specific style isolation for fallback Ctrl+P */}
       <style jsx global>{`
         @media print {
+          @page {
+            size: ${paperWidth === "80mm" ? "80mm" : "58mm"} auto;
+            margin: 0mm;
+          }
           html, body {
             margin: 0 !important;
             padding: 0 !important;
             background: #ffffff !important;
             width: 100% !important;
-            height: auto !important;
-          }
-          @page {
-            size: auto;
-            margin: 0mm;
+            height: 100vh !important;
+            max-height: 100vh !important;
+            overflow: hidden !important;
           }
           /* Hide all surrounding page content */
           body * {
             visibility: hidden !important;
+          }
+          /* Neutralize fixed positioning so elements cannot repeat across multiple pages */
+          .fixed, [class*="fixed"] {
+            position: static !important;
           }
           #thermal-print-area, #thermal-print-area * {
             visibility: visible !important;
@@ -160,16 +359,16 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
           }
           #thermal-print-area {
             position: absolute !important;
-            left: 50% !important;
+            left: 0 !important;
             top: 0 !important;
-            transform: translateX(-50%) !important;
-            width: ${paperWidth === "80mm" ? "105mm" : "75mm"} !important;
-            max-width: 98% !important;
+            transform: none !important;
+            width: ${paperWidth === "80mm" ? "76mm" : "54mm"} !important;
+            max-width: 100% !important;
             height: auto !important;
             min-height: fit-content !important;
             overflow: visible !important;
-            margin: 0 !important;
-            padding: 3mm 4mm !important;
+            margin: 0 auto !important;
+            padding: 2mm 3mm !important;
             background: #ffffff !important;
             color: #000000 !important;
             box-shadow: none !important;
