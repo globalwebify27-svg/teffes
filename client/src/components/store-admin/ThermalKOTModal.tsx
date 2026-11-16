@@ -130,7 +130,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
     const printContent = receiptRef.current;
     if (!printContent) return;
 
-    const printWidth = paperWidth === "80mm" ? "76mm" : "54mm";
+    const printWidth = paperWidth === "80mm" ? "72mm" : "48mm";
     const pageSize = paperWidth === "80mm" ? "80mm" : "58mm";
 
     // Clone the receipt content and inline all computed styles
@@ -193,10 +193,11 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
       } catch (_) {}
     }
 
+    // Explicitly LEFT-ALIGNED (margin: 0, NO margin auto) so it hugs the left edge of the thermal paper
     clone.style.setProperty("width", printWidth, "important");
     clone.style.setProperty("max-width", "100%", "important");
-    clone.style.setProperty("margin", "0 auto", "important");
-    clone.style.setProperty("padding", "2mm 3mm", "important");
+    clone.style.setProperty("margin", "0", "important");
+    clone.style.setProperty("padding", "0 1mm", "important");
     clone.style.setProperty("background", "#ffffff", "important");
     clone.style.setProperty("color", "#000000", "important");
     clone.style.setProperty("box-shadow", "none", "important");
@@ -216,9 +217,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
       try { oldFrame.remove(); } catch (_) {}
     }
 
-    // Create an offscreen, rendered iframe (NOT visibility:hidden, NOT display:none)
-    // Chrome requires an active rendering context to print an iframe directly without
-    // falling back to printing the top window.
+    // Create an offscreen, rendered iframe
     const printFrame = document.createElement("iframe");
     printFrame.id = "thermal-kot-print-frame";
     printFrame.style.cssText = `
@@ -244,7 +243,7 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
   <style>
     @page {
       size: ${pageSize} auto;
-      margin: 0mm;
+      margin: 0mm !important;
     }
     html, body {
       margin: 0 !important;
@@ -261,11 +260,12 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
     #kot-print-root {
       width: ${printWidth} !important;
       max-width: 100% !important;
-      margin: 0 auto !important;
-      padding: 2mm 3mm !important;
+      margin: 0 !important;
+      padding: 0 1mm !important;
       box-sizing: border-box !important;
       background: #ffffff !important;
       color: #000000 !important;
+      text-align: left !important;
     }
     #kot-print-root * {
       color: #000000 !important;
@@ -362,13 +362,13 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
             left: 0 !important;
             top: 0 !important;
             transform: none !important;
-            width: ${paperWidth === "80mm" ? "76mm" : "54mm"} !important;
+            width: ${paperWidth === "80mm" ? "72mm" : "48mm"} !important;
             max-width: 100% !important;
             height: auto !important;
             min-height: fit-content !important;
             overflow: visible !important;
-            margin: 0 auto !important;
-            padding: 2mm 3mm !important;
+            margin: 0 !important;
+            padding: 0 1mm !important;
             background: #ffffff !important;
             color: #000000 !important;
             box-shadow: none !important;
@@ -434,40 +434,38 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               style={{ width: receiptWidthPx, boxSizing: "border-box", overflowX: "hidden" }}
               className="mx-auto bg-white shadow-xl text-black font-mono leading-tight select-none border border-gray-300 rounded-sm mb-8 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full"
             >
-              {/* Inner container with padding — keeps content within bounds */}
-              <div style={{ padding: "10px 10px", width: "100%", boxSizing: "border-box" }}>
+              {/* Inner container — flush left, no padding eating printable width */}
+              <div style={{ padding: "8px 6px", width: "100%", boxSizing: "border-box", textAlign: "left" }}>
 
               {/* Top KOT Header Row */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10px", fontWeight: "700", paddingBottom: "6px", borderBottom: "1px solid #000", marginBottom: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", fontWeight: "700", paddingBottom: "5px", borderBottom: "1px solid #000", marginBottom: "8px" }}>
                 <span>{formattedPrintDate}, {formattedPrintTime}</span>
-                <span>KOT / Invoice</span>
+                <span>KOT / INVOICE</span>
               </div>
 
-              {/* Logo & Store Info */}
+              {/* Logo & Store Info — centered */}
               <div style={{ textAlign: "center", paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px" }}>
-                <div style={{ width: "48px", height: "48px", background: "#000", padding: "6px", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "2px" }}>
+                <div style={{ width: "50px", height: "50px", background: "#000", padding: "6px", margin: "0 auto 6px", display: "inline-flex", alignItems: "center", justifyContent: "center", borderRadius: "2px" }}>
                   <img src="/teffes-logo-white.png" alt="TeFFe's" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                 </div>
-                <div style={{ fontWeight: "900", fontSize: "16px", letterSpacing: "2px", textTransform: "uppercase" }}>TEFFES</div>
-                <div style={{ fontSize: "10px", fontWeight: "600", lineHeight: "1.4", marginTop: "3px" }}>
-                  teffes.com, near Kishore Ganj chowk,<br />harmu road, Ranchi, Jharkhand - 834001
+                <div style={{ fontWeight: "900", fontSize: "18px", letterSpacing: "2px", textTransform: "uppercase" }}>TEFFES</div>
+                <div style={{ fontSize: "12px", fontWeight: "600", lineHeight: "1.4", marginTop: "2px" }}>
+                  teffes.com, near Kishore Ganj chowk,<br />harmu road, Ranchi, JH - 834001
                 </div>
-                <div style={{ fontSize: "10px", fontWeight: "700", marginTop: "3px" }}>
+                <div style={{ fontSize: "12px", fontWeight: "700", marginTop: "3px" }}>
                   Order: {formattedOrderDate} {formattedOrderTime}
                 </div>
-                <div style={{ fontSize: "10px", fontWeight: "900", marginTop: "2px" }}>
-                  Ph: 9279682955
-                </div>
-                <div style={{ marginTop: "6px", display: "inline-block", border: "1.5px solid #000", padding: "3px 10px", fontWeight: "900", fontSize: "10px", letterSpacing: "1px", textTransform: "uppercase" }}>
+                <div style={{ fontSize: "12.5px", fontWeight: "900", marginTop: "2px" }}>Ph: 9279682955</div>
+                <div style={{ marginTop: "6px", display: "inline-block", border: "1.5px solid #000", padding: "3px 10px", fontWeight: "900", fontSize: "12px", letterSpacing: "1px", textTransform: "uppercase" }}>
                   {isPickup ? "STORE TAKEAWAY KOT" : "HOME DELIVERY KOT"}
                 </div>
               </div>
 
-              {/* Customer Info */}
-              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", fontSize: "11px", lineHeight: "1.6" }}>
-                <div><span style={{ fontWeight: "700" }}>Name:</span> {customerName}</div>
-                <div><span style={{ fontWeight: "700" }}>Phone:</span> {customerPhone}</div>
-                <div><span style={{ fontWeight: "700" }}>Order No:</span> <strong>{orderId}</strong></div>
+              {/* Customer Info — clear, large readable text */}
+              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", fontSize: "13.5px", lineHeight: "1.5" }}>
+                <div><span style={{ fontWeight: "800" }}>Name:</span> {customerName}</div>
+                <div><span style={{ fontWeight: "800" }}>Phone:</span> {customerPhone}</div>
+                <div><span style={{ fontWeight: "800" }}>Order No:</span> <strong style={{ fontSize: "14.5px" }}>{orderId}</strong></div>
                 {order.deliverySlot && (() => {
                   let slotDisplay = order.deliverySlot;
                   const now = new Date();
@@ -497,134 +495,131 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                   if (isToday && /tomorrow/i.test(slotDisplay)) {
                     slotDisplay = slotDisplay.replace(/Next-Day Delivery:\s*Tomorrow/i, "Morning Delivery: Today").replace(/Tomorrow/i, "Today");
                   }
-                  return <div><span style={{ fontWeight: "700" }}>Slot:</span> {slotDisplay}</div>;
+                  return <div><span style={{ fontWeight: "800" }}>Slot:</span> {slotDisplay}</div>;
                 })()}
-                <div style={{ marginTop: "2px" }}>
-                  <span style={{ fontWeight: "700" }}>Address:</span>{" "}
-                  <span style={{ wordBreak: "break-word" }}>
-                    {isPickup ? `Pickup at Store (${order.storeName || "Teffes Ranchi"})` : customerAddress}
-                  </span>
+                <div style={{ wordBreak: "break-word" }}>
+                  <span style={{ fontWeight: "800" }}>Address:</span>{" "}
+                  {isPickup ? `Pickup at Store (${order.storeName || "Teffes Ranchi"})` : customerAddress}
                 </div>
                 {specialInstruction && (
-                  <div style={{ marginTop: "4px", padding: "4px 6px", background: "#f3f4f6", border: "1px solid #000", fontSize: "10px", fontWeight: "700" }}>
+                  <div style={{ marginTop: "4px", padding: "4px 6px", background: "#f3f4f6", border: "1px solid #000", fontSize: "12px", fontWeight: "800" }}>
                     INSTRUCTION: {specialInstruction}
                   </div>
                 )}
                 {order.modificationReason && (
-                  <div style={{ marginTop: "4px", padding: "4px 6px", background: "#fefce8", border: "1px solid #000", fontSize: "10px", fontWeight: "900" }}>
+                  <div style={{ marginTop: "4px", padding: "4px 6px", background: "#fefce8", border: "1px solid #000", fontSize: "12px", fontWeight: "900" }}>
                     REVISION: {order.modificationReason}
                   </div>
                 )}
               </div>
 
-              {/* Items Table */}
+              {/* Items Table — large text, full width, right-edge protected */}
               <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px" }}>
-                {/* Table Header */}
-                <div style={{ display: "flex", borderBottom: "1px solid #000", paddingBottom: "4px", marginBottom: "6px", fontWeight: "900", fontSize: "11px", textTransform: "uppercase" }}>
+                {/* Header row */}
+                <div style={{ display: "flex", borderBottom: "1.5px solid #000", paddingBottom: "4px", marginBottom: "6px", fontWeight: "900", fontSize: "13.5px", textTransform: "uppercase" }}>
                   <span style={{ flex: 1 }}>Items</span>
-                  <span style={{ width: "30px", textAlign: "center" }}>Qty</span>
-                  <span style={{ width: "60px", textAlign: "right" }}>Total</span>
+                  <span style={{ width: "34px", textAlign: "center" }}>Qty</span>
+                  <span style={{ width: "68px", textAlign: "right" }}>Total</span>
                 </div>
-
-                {/* Item Rows */}
+                {/* Rows */}
                 {items.length > 0 ? items.map((item, idx) => (
-                  <div key={idx} style={{ borderBottom: "1px dotted #aaa", paddingBottom: "6px", marginBottom: "6px" }}>
+                  <div key={idx} style={{ borderBottom: "1px dotted #bbb", paddingBottom: "6px", marginBottom: "6px" }}>
                     <div style={{ display: "flex", alignItems: "flex-start" }}>
                       <div style={{ flex: 1, paddingRight: "4px" }}>
-                        <div style={{ fontWeight: "900", fontSize: "12px", lineHeight: "1.3" }}>{item.name}</div>
-                        <div style={{ fontWeight: "700", fontSize: "10px", marginTop: "2px" }}>
+                        <div style={{ fontWeight: "900", fontSize: "14.5px", lineHeight: "1.3", wordBreak: "break-word" }}>{item.name}</div>
+                        <div style={{ fontWeight: "700", fontSize: "12.5px", marginTop: "2px" }}>
                           Wt: <strong>{item.netWeight || "500g"}</strong>
                           {item.cutType && <span> · Cut: <strong>{item.cutType}</strong></span>}
                         </div>
                       </div>
-                      <div style={{ width: "30px", textAlign: "center", fontWeight: "900", fontSize: "12px" }}>
+                      <div style={{ width: "34px", textAlign: "center", fontWeight: "900", fontSize: "14.5px" }}>
                         {item.quantity || 1}
                       </div>
-                      <div style={{ width: "60px", textAlign: "right", fontWeight: "900", fontSize: "12px", whiteSpace: "nowrap" }}>
-                        ₹{(item.price * (item.quantity || 1)).toFixed(0)}
+                      <div style={{ width: "68px", textAlign: "right", fontWeight: "900", fontSize: "14.5px", whiteSpace: "nowrap" }}>
+                        Rs.{(item.price * (item.quantity || 1)).toFixed(0)}
                       </div>
                     </div>
                     {(item.cuttingInstructions || item.notes) && (
-                      <div style={{ marginTop: "3px", padding: "3px 5px", background: "#f3f4f6", border: "1px solid #000", fontSize: "10px", fontWeight: "700" }}>
+                      <div style={{ marginTop: "3px", padding: "3px 5px", background: "#f3f4f6", border: "1px solid #000", fontSize: "12px", fontWeight: "700" }}>
                         Note: {item.cuttingInstructions || item.notes}
                       </div>
                     )}
                   </div>
                 )) : (
-                  <div style={{ fontSize: "11px", fontStyle: "italic" }}>{order.itemSummary || "Fresh Meat Items"}</div>
+                  <div style={{ fontSize: "13px", fontStyle: "italic" }}>{order.itemSummary || "Fresh Meat Items"}</div>
                 )}
               </div>
 
               {/* Bill Summary */}
-              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", fontSize: "11px", fontWeight: "600" }}>
+              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", fontSize: "13.5px", fontWeight: "700" }}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span>Subtotal:</span>
-                  <span style={{ fontWeight: "700" }}>₹{Number(subtotal).toFixed(2)}</span>
+                  <span style={{ whiteSpace: "nowrap" }}>Rs.{Number(subtotal).toFixed(2)}</span>
                 </div>
                 {discount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Discount{order.manualDiscount ? " (Store)" : ""}:</span>
-                    <span style={{ fontWeight: "700" }}>-₹{Number(discount).toFixed(2)}</span>
+                    <span style={{ whiteSpace: "nowrap" }}>-Rs.{Number(discount).toFixed(2)}</span>
                   </div>
                 )}
                 {!isPickup && (
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Delivery:</span>
-                    <span style={{ fontWeight: "700" }}>₹{Number(deliveryFee).toFixed(2)}</span>
+                    <span style={{ whiteSpace: "nowrap" }}>Rs.{Number(deliveryFee).toFixed(2)}</span>
                   </div>
                 )}
                 {order.tipAmount != null && order.tipAmount > 0 && (
                   <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Rider Tip:</span>
-                    <span style={{ fontWeight: "700" }}>₹{Number(order.tipAmount).toFixed(2)}</span>
+                    <span style={{ whiteSpace: "nowrap" }}>Rs.{Number(order.tipAmount).toFixed(2)}</span>
                   </div>
                 )}
-                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "900", fontSize: "14px", paddingTop: "5px", borderTop: "2px dashed #000", marginTop: "4px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "900", fontSize: "17px", paddingTop: "5px", borderTop: "2px dashed #000", marginTop: "5px" }}>
                   <span>TOTAL AMOUNT:</span>
-                  <span>₹{Number(order.amount ?? order.totalAmount ?? 0).toFixed(2)}</span>
+                  <span style={{ whiteSpace: "nowrap" }}>Rs.{Number(order.amount ?? order.totalAmount ?? 0).toFixed(2)}</span>
                 </div>
               </div>
 
               {/* Payment Info */}
-              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", textAlign: "center", fontSize: "11px" }}>
+              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", textAlign: "center", fontSize: "13px" }}>
                 {order.isModified && (
-                  <div style={{ marginBottom: "5px", padding: "4px 6px", background: "#fefce8", border: "1px solid #000", fontWeight: "900", fontSize: "10px", textTransform: "uppercase" }}>
-                    REVISED ORDER (ITEMS / WEIGHT / DISCOUNT MODIFIED)
-                    {order.modificationReason && <div style={{ fontSize: "9px", fontWeight: "700", textTransform: "none", marginTop: "2px" }}>Reason: {order.modificationReason}</div>}
+                  <div style={{ marginBottom: "5px", padding: "4px 6px", background: "#fefce8", border: "1px solid #000", fontWeight: "900", fontSize: "12px", textTransform: "uppercase" }}>
+                    REVISED ORDER (MODIFIED)
+                    {order.modificationReason && <div style={{ fontSize: "11px", fontWeight: "700", textTransform: "none", marginTop: "2px" }}>Reason: {order.modificationReason}</div>}
                   </div>
                 )}
-                <div style={{ fontWeight: "900", fontSize: "12px" }}>
+                <div style={{ fontWeight: "900", fontSize: "14.5px" }}>
                   PAYMENT: {isPaid ? "PAID ONLINE" : "CASH ON DELIVERY (COD)"}
                 </div>
-                <div style={{ fontWeight: "700", fontSize: "11px", marginTop: "2px", wordBreak: "break-word" }}>
+                <div style={{ fontWeight: "700", fontSize: "13px", marginTop: "2px", wordBreak: "break-word" }}>
                   {isPaid
                     ? ((order.additionalAmountDue ?? 0) > 0
-                        ? `Online Paid: ₹${order.originalAmount || (order.amount - (order.additionalAmountDue || 0))} · COLLECT ₹${order.additionalAmountDue} EXTRA`
-                        : `Paid via ${order.paymentMethod || "Online"} · Collect ₹0`)
-                    : `Collect ₹${order.amount} in cash from customer`}
+                        ? `Online Paid: Rs.${order.originalAmount || (order.amount - (order.additionalAmountDue || 0))} · COLLECT Rs.${order.additionalAmountDue} EXTRA`
+                        : `Paid via ${order.paymentMethod || "Online"} · Collect Rs.0`)
+                    : `Collect Rs.${order.amount} in cash from customer`}
                 </div>
               </div>
 
               {/* OTP */}
               {order.deliveryOtp && (
                 <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", textAlign: "center" }}>
-                  <div style={{ fontWeight: "900", fontSize: "11px", textTransform: "uppercase", marginBottom: "4px" }}>
+                  <div style={{ fontWeight: "900", fontSize: "13px", textTransform: "uppercase", marginBottom: "3px" }}>
                     CUSTOMER DELIVERY OTP:
                   </div>
-                  <div style={{ display: "inline-block", border: "2px solid #000", padding: "4px 16px", fontWeight: "900", fontSize: "20px", letterSpacing: "6px", background: "#fff" }}>
+                  <div style={{ display: "inline-block", border: "2px solid #000", padding: "4px 16px", fontWeight: "900", fontSize: "22px", letterSpacing: "6px", background: "#fff" }}>
                     {order.deliveryOtp.split("").join(" ")}
                   </div>
-                  <div style={{ fontSize: "10px", fontWeight: "700", marginTop: "3px" }}>
+                  <div style={{ fontSize: "11.5px", fontWeight: "700", marginTop: "3px" }}>
                     Rider must verify this code at doorstep
                   </div>
                 </div>
               )}
 
               {/* Footer */}
-              <div style={{ textAlign: "center", fontSize: "10px", fontWeight: "600", lineHeight: "1.5", paddingTop: "4px" }}>
+              <div style={{ textAlign: "center", fontSize: "12px", fontWeight: "600", lineHeight: "1.5", paddingTop: "4px" }}>
                 <div>Freshly cut &amp; packed hygienically.</div>
                 <div>Store chilled at 0°C to 4°C.</div>
-                <div style={{ fontWeight: "900", fontSize: "11px", marginTop: "4px" }}>
+                <div style={{ fontWeight: "900", fontSize: "13px", marginTop: "4px" }}>
                   *** THANK YOU FOR YOUR ORDER ***
                 </div>
               </div>
