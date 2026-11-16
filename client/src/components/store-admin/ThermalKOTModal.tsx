@@ -431,57 +431,43 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
             <div
               id="thermal-print-area"
               ref={receiptRef}
-              style={{ width: receiptWidthPx }}
-              className="mx-auto bg-white p-5 shadow-xl text-black font-mono leading-normal select-none border border-gray-300 rounded-sm mb-8 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full min-h-fit"
+              style={{ width: receiptWidthPx, boxSizing: "border-box", overflowX: "hidden" }}
+              className="mx-auto bg-white shadow-xl text-black font-mono leading-tight select-none border border-gray-300 rounded-sm mb-8 print:border-none print:shadow-none print:p-0 print:m-0 print:w-full"
             >
-              {/* Top KOT Download / Print Date-Time Header */}
-              <div className="flex justify-between items-center text-[13px] font-bold pb-1.5 border-b border-black text-black">
+              {/* Inner container with padding — keeps content within bounds */}
+              <div style={{ padding: "10px 10px", width: "100%", boxSizing: "border-box" }}>
+
+              {/* Top KOT Header Row */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "10px", fontWeight: "700", paddingBottom: "6px", borderBottom: "1px solid #000", marginBottom: "8px" }}>
                 <span>{formattedPrintDate}, {formattedPrintTime}</span>
-                <span>KOT / Digital Invoice</span>
+                <span>KOT / Invoice</span>
               </div>
 
-              {/* Receipt Header with Teffe's Logo & Details */}
-              <div className="text-center pt-3 pb-3 border-b border-dashed border-black">
-                {/* Black square logo container matching Teffe's original bill */}
-                <div className="w-16 h-16 bg-black p-2 mx-auto flex items-center justify-center mb-1.5 rounded-sm">
-                  <img
-                    src="/teffes-logo-white.png"
-                    alt="TeFFe's"
-                    className="max-h-full max-w-full object-contain filter invert-0"
-                  />
+              {/* Logo & Store Info */}
+              <div style={{ textAlign: "center", paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px" }}>
+                <div style={{ width: "48px", height: "48px", background: "#000", padding: "6px", margin: "0 auto 6px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "2px" }}>
+                  <img src="/teffes-logo-white.png" alt="TeFFe's" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
                 </div>
-                <div className="font-black text-2xl tracking-wider uppercase text-black">
-                  Teffes
+                <div style={{ fontWeight: "900", fontSize: "16px", letterSpacing: "2px", textTransform: "uppercase" }}>TEFFES</div>
+                <div style={{ fontSize: "10px", fontWeight: "600", lineHeight: "1.4", marginTop: "3px" }}>
+                  teffes.com, near Kishore Ganj chowk,<br />harmu road, Ranchi, Jharkhand - 834001
                 </div>
-                <div className="text-[14px] font-semibold leading-normal text-black mt-1">
-                  teffes.com , near Kishore Ganj chowk, harmu road, ranchi , Jharkhand - 834001
+                <div style={{ fontSize: "10px", fontWeight: "700", marginTop: "3px" }}>
+                  Order: {formattedOrderDate} {formattedOrderTime}
                 </div>
-                <div className="text-[14px] font-bold text-black mt-1">
-                  Order Placed On: {formattedOrderDate} {formattedOrderTime}
+                <div style={{ fontSize: "10px", fontWeight: "900", marginTop: "2px" }}>
+                  Ph: 9279682955
                 </div>
-                <div className="text-[15.5px] font-black text-black mt-0.5">
-                  Phone Number - 9279682955
-                </div>
-
-                <div className="mt-2.5 inline-block border-2 border-black px-4 py-1.5 font-black text-[13.5px] tracking-wider uppercase">
-                  {isPickup ? "STORE COUNTER TAKEAWAY KOT" : "HOME DELIVERY KOT"}
+                <div style={{ marginTop: "6px", display: "inline-block", border: "1.5px solid #000", padding: "3px 10px", fontWeight: "900", fontSize: "10px", letterSpacing: "1px", textTransform: "uppercase" }}>
+                  {isPickup ? "STORE TAKEAWAY KOT" : "HOME DELIVERY KOT"}
                 </div>
               </div>
 
-              {/* Customer Information Section */}
-              <div className="py-3 border-b border-dashed border-black space-y-1.5 text-[15px] text-black">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-bold whitespace-nowrap">Customer Name -</span>
-                  <span className="font-semibold">{customerName}</span>
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-bold whitespace-nowrap">Customer Number -</span>
-                  <span className="font-semibold">{customerPhone}</span>
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="font-bold whitespace-nowrap">Order Number -</span>
-                  <span className="font-black text-[16px]">{orderId}</span>
-                </div>
+              {/* Customer Info */}
+              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", fontSize: "11px", lineHeight: "1.6" }}>
+                <div><span style={{ fontWeight: "700" }}>Name:</span> {customerName}</div>
+                <div><span style={{ fontWeight: "700" }}>Phone:</span> {customerPhone}</div>
+                <div><span style={{ fontWeight: "700" }}>Order No:</span> <strong>{orderId}</strong></div>
                 {order.deliverySlot && (() => {
                   let slotDisplay = order.deliverySlot;
                   const now = new Date();
@@ -511,156 +497,139 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
                   if (isToday && /tomorrow/i.test(slotDisplay)) {
                     slotDisplay = slotDisplay.replace(/Next-Day Delivery:\s*Tomorrow/i, "Morning Delivery: Today").replace(/Tomorrow/i, "Today");
                   }
-                  return (
-                    <div className="flex items-baseline gap-1.5">
-                      <span className="font-bold whitespace-nowrap">Delivery Slot -</span>
-                      <span className="font-semibold">{slotDisplay}</span>
-                    </div>
-                  );
+                  return <div><span style={{ fontWeight: "700" }}>Slot:</span> {slotDisplay}</div>;
                 })()}
-                <div>
-                  <span className="font-bold">Address - </span>
-                  <span className="font-semibold break-words">
-                    {isPickup
-                      ? `Collection at Store Counter (${order.storeName || "Teffes Ranchi Flagship"})`
-                      : customerAddress}
+                <div style={{ marginTop: "2px" }}>
+                  <span style={{ fontWeight: "700" }}>Address:</span>{" "}
+                  <span style={{ wordBreak: "break-word" }}>
+                    {isPickup ? `Pickup at Store (${order.storeName || "Teffes Ranchi"})` : customerAddress}
                   </span>
                 </div>
                 {specialInstruction && (
-                  <div className="mt-2 p-2 bg-gray-100 border border-black text-[14px] font-bold">
-                    <span>INSTRUCTION: </span>
-                    <span>{specialInstruction}</span>
+                  <div style={{ marginTop: "4px", padding: "4px 6px", background: "#f3f4f6", border: "1px solid #000", fontSize: "10px", fontWeight: "700" }}>
+                    INSTRUCTION: {specialInstruction}
                   </div>
                 )}
                 {order.modificationReason && (
-                  <div className="mt-2 p-2 bg-yellow-100 border border-black text-[13.5px] font-black text-black">
-                    <span>REVISION REASON: </span>
-                    <span className="font-semibold">{order.modificationReason}</span>
+                  <div style={{ marginTop: "4px", padding: "4px 6px", background: "#fefce8", border: "1px solid #000", fontSize: "10px", fontWeight: "900" }}>
+                    REVISION: {order.modificationReason}
                   </div>
                 )}
               </div>
 
-              {/* Items & Cutting Specifications Table */}
-              <div className="py-3 border-b border-dashed border-black">
-                <div className="border-b border-black pb-1.5 mb-2.5 flex justify-between font-black text-[15px] text-black uppercase">
-                  <span className="flex-1">Items</span>
-                  <span className="w-14 text-center">Qty.</span>
-                  <span className="w-24 text-right">Total(₹)</span>
+              {/* Items Table */}
+              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px" }}>
+                {/* Table Header */}
+                <div style={{ display: "flex", borderBottom: "1px solid #000", paddingBottom: "4px", marginBottom: "6px", fontWeight: "900", fontSize: "11px", textTransform: "uppercase" }}>
+                  <span style={{ flex: 1 }}>Items</span>
+                  <span style={{ width: "30px", textAlign: "center" }}>Qty</span>
+                  <span style={{ width: "60px", textAlign: "right" }}>Total</span>
                 </div>
 
-                <div className="space-y-3">
-                  {items.length > 0 ? (
-                    items.map((item, idx) => (
-                      <div key={idx} className="border-b border-dotted border-gray-400 pb-2.5">
-                        <div className="flex justify-between items-start text-black">
-                          <div className="flex-1 pr-2">
-                            <div className="font-black text-[16px] leading-snug">
-                              {item.name}
-                            </div>
-                            <div className="text-[14.5px] font-bold text-black mt-0.5">
-                              <span>Weight: <strong>{item.netWeight || "500g"}</strong></span>
-                              {item.cutType && <span> · Cut: <strong>{item.cutType}</strong></span>}
-                            </div>
-                          </div>
-                          <div className="w-14 text-center font-black text-[16.5px] text-black">
-                            {item.quantity || 1}
-                          </div>
-                          <div className="w-24 text-right font-black text-[16px] text-black">
-                            ₹{(item.price * (item.quantity || 1)).toFixed(2)}
-                          </div>
+                {/* Item Rows */}
+                {items.length > 0 ? items.map((item, idx) => (
+                  <div key={idx} style={{ borderBottom: "1px dotted #aaa", paddingBottom: "6px", marginBottom: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "flex-start" }}>
+                      <div style={{ flex: 1, paddingRight: "4px" }}>
+                        <div style={{ fontWeight: "900", fontSize: "12px", lineHeight: "1.3" }}>{item.name}</div>
+                        <div style={{ fontWeight: "700", fontSize: "10px", marginTop: "2px" }}>
+                          Wt: <strong>{item.netWeight || "500g"}</strong>
+                          {item.cutType && <span> · Cut: <strong>{item.cutType}</strong></span>}
                         </div>
-                        {(item.cuttingInstructions || item.notes) && (
-                          <div className="mt-1.5 p-1.5 bg-gray-100 border border-black text-[14px] font-bold text-black font-sans">
-                            <strong>Note:</strong> {item.cuttingInstructions || item.notes}
-                          </div>
-                        )}
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-[15px] font-semibold italic text-black">
-                      {order.itemSummary || "Fresh Meat Items"}
+                      <div style={{ width: "30px", textAlign: "center", fontWeight: "900", fontSize: "12px" }}>
+                        {item.quantity || 1}
+                      </div>
+                      <div style={{ width: "60px", textAlign: "right", fontWeight: "900", fontSize: "12px", whiteSpace: "nowrap" }}>
+                        ₹{(item.price * (item.quantity || 1)).toFixed(0)}
+                      </div>
                     </div>
-                  )}
-                </div>
+                    {(item.cuttingInstructions || item.notes) && (
+                      <div style={{ marginTop: "3px", padding: "3px 5px", background: "#f3f4f6", border: "1px solid #000", fontSize: "10px", fontWeight: "700" }}>
+                        Note: {item.cuttingInstructions || item.notes}
+                      </div>
+                    )}
+                  </div>
+                )) : (
+                  <div style={{ fontSize: "11px", fontStyle: "italic" }}>{order.itemSummary || "Fresh Meat Items"}</div>
+                )}
               </div>
 
-              {/* Financial Bill Summary */}
-              <div className="py-3 border-b border-dashed border-black space-y-1.5 text-[15px] text-black font-semibold">
-                <div className="flex justify-between">
+              {/* Bill Summary */}
+              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", fontSize: "11px", fontWeight: "600" }}>
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
                   <span>Subtotal:</span>
-                  <span className="font-bold">₹{Number(subtotal).toFixed(2)}</span>
+                  <span style={{ fontWeight: "700" }}>₹{Number(subtotal).toFixed(2)}</span>
                 </div>
                 {discount > 0 && (
-                  <div className="flex justify-between">
-                    <span>Discount {order.manualDiscount ? "(Store/Special)" : ""}:</span>
-                    <span className="font-bold text-black">-₹{Number(discount).toFixed(2)}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>Discount{order.manualDiscount ? " (Store)" : ""}:</span>
+                    <span style={{ fontWeight: "700" }}>-₹{Number(discount).toFixed(2)}</span>
                   </div>
                 )}
                 {!isPickup && (
-                  <div className="flex justify-between">
-                    <span>Delivery Charge:</span>
-                    <span className="font-bold">₹{Number(deliveryFee).toFixed(2)}</span>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
+                    <span>Delivery:</span>
+                    <span style={{ fontWeight: "700" }}>₹{Number(deliveryFee).toFixed(2)}</span>
                   </div>
                 )}
                 {order.tipAmount != null && order.tipAmount > 0 && (
-                  <div className="flex justify-between">
+                  <div style={{ display: "flex", justifyContent: "space-between" }}>
                     <span>Rider Tip:</span>
-                    <span className="font-bold">₹{Number(order.tipAmount).toFixed(2)}</span>
+                    <span style={{ fontWeight: "700" }}>₹{Number(order.tipAmount).toFixed(2)}</span>
                   </div>
                 )}
-                <div className="flex justify-between font-black text-[20px] pt-2 border-t-2 border-dashed border-black text-black">
+                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: "900", fontSize: "14px", paddingTop: "5px", borderTop: "2px dashed #000", marginTop: "4px" }}>
                   <span>TOTAL AMOUNT:</span>
                   <span>₹{Number(order.amount ?? order.totalAmount ?? 0).toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* Payment Status Strip */}
-              <div className="py-3 border-b border-dashed border-black text-center text-black">
+              {/* Payment Info */}
+              <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", textAlign: "center", fontSize: "11px" }}>
                 {order.isModified && (
-                  <div className="mb-2 p-1.5 bg-yellow-100 border border-black font-black text-[13px] uppercase tracking-wider">
-                    <div>REVISED ORDER (ITEMS / WEIGHT / DISCOUNT MODIFIED)</div>
-                    {order.modificationReason && (
-                      <div className="text-[12px] font-bold normal-case mt-0.5 tracking-normal">
-                        Reason: {order.modificationReason}
-                      </div>
-                    )}
+                  <div style={{ marginBottom: "5px", padding: "4px 6px", background: "#fefce8", border: "1px solid #000", fontWeight: "900", fontSize: "10px", textTransform: "uppercase" }}>
+                    REVISED ORDER (ITEMS / WEIGHT / DISCOUNT MODIFIED)
+                    {order.modificationReason && <div style={{ fontSize: "9px", fontWeight: "700", textTransform: "none", marginTop: "2px" }}>Reason: {order.modificationReason}</div>}
                   </div>
                 )}
-                <div className="font-black text-[16px]">
+                <div style={{ fontWeight: "900", fontSize: "12px" }}>
                   PAYMENT: {isPaid ? "PAID ONLINE" : "CASH ON DELIVERY (COD)"}
                 </div>
-                <div className="text-[14px] font-bold mt-0.5">
+                <div style={{ fontWeight: "700", fontSize: "11px", marginTop: "2px", wordBreak: "break-word" }}>
                   {isPaid
                     ? ((order.additionalAmountDue ?? 0) > 0
-                        ? `Online Paid: ₹${order.originalAmount || (order.amount - (order.additionalAmountDue || 0))} · COLLECT ₹${order.additionalAmountDue} EXTRA IN CASH/UPI`
-                        : `Paid via ${order.paymentMethod || "Online Gateway"} · Collect ₹0`)
-                    : `Please collect ₹${order.amount} in cash from customer`}
+                        ? `Online Paid: ₹${order.originalAmount || (order.amount - (order.additionalAmountDue || 0))} · COLLECT ₹${order.additionalAmountDue} EXTRA`
+                        : `Paid via ${order.paymentMethod || "Online"} · Collect ₹0`)
+                    : `Collect ₹${order.amount} in cash from customer`}
                 </div>
               </div>
 
-              {/* Customer Delivery OTP Verification */}
+              {/* OTP */}
               {order.deliveryOtp && (
-                <div className="py-3 border-b border-dashed border-black text-center text-black">
-                  <div className="text-[14px] font-black uppercase">
+                <div style={{ paddingBottom: "8px", borderBottom: "1px dashed #000", marginBottom: "8px", textAlign: "center" }}>
+                  <div style={{ fontWeight: "900", fontSize: "11px", textTransform: "uppercase", marginBottom: "4px" }}>
                     CUSTOMER DELIVERY OTP:
                   </div>
-                  <div className="inline-block border-2 border-black px-5 py-1.5 font-black text-2xl tracking-[0.3em] my-1 text-black bg-white">
+                  <div style={{ display: "inline-block", border: "2px solid #000", padding: "4px 16px", fontWeight: "900", fontSize: "20px", letterSpacing: "6px", background: "#fff" }}>
                     {order.deliveryOtp.split("").join(" ")}
                   </div>
-                  <div className="text-[12.5px] font-bold">
+                  <div style={{ fontSize: "10px", fontWeight: "700", marginTop: "3px" }}>
                     Rider must verify this code at doorstep
                   </div>
                 </div>
               )}
 
-              {/* Thermal Receipt Footer */}
-              <div className="pt-3 pb-2 text-center text-[13.5px] text-black font-semibold space-y-0.5">
-                <div>Freshly cut & packed hygienically.</div>
+              {/* Footer */}
+              <div style={{ textAlign: "center", fontSize: "10px", fontWeight: "600", lineHeight: "1.5", paddingTop: "4px" }}>
+                <div>Freshly cut &amp; packed hygienically.</div>
                 <div>Store chilled at 0°C to 4°C.</div>
-                <div className="font-black text-[15px] mt-1.5 text-black">
+                <div style={{ fontWeight: "900", fontSize: "11px", marginTop: "4px" }}>
                   *** THANK YOU FOR YOUR ORDER ***
                 </div>
               </div>
+
+              </div>{/* end inner padding wrapper */}
             </div>
           </div>
 
