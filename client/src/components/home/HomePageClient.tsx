@@ -1036,37 +1036,37 @@ export default function HomePageClient() {
               );
             })}
 
-            {/* Fish Hygiene & Delivery Card */}
-            <div className="bg-surface-card rounded-2xl p-5 sm:p-6 flex flex-col justify-between shadow-sm border border-gray-100">
+            {/* Fish Hygiene & Delivery Card: Spans 2 columns on mobile so no blank space is left, 1 column on desktop */}
+            <div className="col-span-2 lg:col-span-1 bg-surface-card rounded-2xl p-4 sm:p-6 flex flex-col justify-between shadow-sm border border-gray-100">
               <div>
-                <div className="w-12 h-12 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary mb-space-md">
-                  <span className="material-symbols-outlined text-[28px]">set_meal</span>
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-tertiary/10 flex items-center justify-center text-tertiary mb-3 sm:mb-space-md">
+                  <span className="material-symbols-outlined text-[24px] sm:text-[28px]">set_meal</span>
                 </div>
-                <h3 className="font-headline-md text-headline-md text-on-surface font-bold text-[1.25rem]">
+                <h3 className="font-headline-md text-headline-md text-on-surface font-bold text-[1.1rem] sm:text-[1.25rem]">
                   Pristine Catch Guarantee
                 </h3>
-                <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[13px]">
+                <p className="font-body-sm text-body-sm text-slate-body mt-1.5 sm:mt-2 leading-relaxed text-[12px] sm:text-[13px]">
                   All fish is procured fresh each sunrise from sweet-water sources. Knife masters descale, clean
                   cavities, and rinse with pure filtered water so your kitchen remains odor-free.
                 </p>
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[12.5px]">
-                    <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
+                <div className="mt-3 sm:mt-4 space-y-1.5 sm:space-y-2">
+                  <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[11.5px] sm:text-[12.5px]">
+                    <span className="material-symbols-outlined text-tertiary text-[17px] sm:text-[18px]">verified</span>
                     <span>Zero formalin, zero artificial colorants</span>
                   </div>
-                  <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[12.5px]">
-                    <span className="material-symbols-outlined text-tertiary text-[18px]">verified</span>
+                  <div className="flex items-center gap-2 font-body-sm text-body-sm text-slate-body text-[11.5px] sm:text-[12.5px]">
+                    <span className="material-symbols-outlined text-tertiary text-[17px] sm:text-[18px]">verified</span>
                     <span>Packed in food-grade fresh-seal trays</span>
                   </div>
                 </div>
               </div>
-              <div className="pt-5">
-                <a
-                  className="inline-flex items-center gap-1.5 text-primary font-label-md text-label-md hover:underline font-bold text-decoration-none cursor-pointer"
-                  href="#about-us"
+              <div className="pt-4 sm:pt-5">
+                <Link
+                  className="inline-flex items-center gap-1.5 text-primary font-label-md text-label-md hover:underline font-bold text-decoration-none cursor-pointer text-xs sm:text-sm"
+                  href="/about"
                 >
                   Learn About Our Daily Catch Source <span className="material-symbols-outlined text-[16px]">east</span>
-                </a>
+                </Link>
               </div>
             </div>
           </div>
