@@ -69,6 +69,7 @@ class ApiEndpoints {
   // Location & Google Geocoding
   static const String reverseGeocode = '/location/reverse-geocode';
   static const String placesAutocomplete = '/location/places-autocomplete';
+  static const String geocode = '/location/geocode';
 
   // Addresses
   static const String addresses = '/user/addresses';

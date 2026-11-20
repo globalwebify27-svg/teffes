@@ -12,6 +12,9 @@ class StoreModel {
   final bool isAvailable;
   final List<String> outOfStockItems;
   final double? distanceKm;
+  final double? deliveryRadiusKm;
+  final bool isWithinRadius;
+  final bool isDeliverable;
 
   const StoreModel({
     required this.storeId,
@@ -27,6 +30,9 @@ class StoreModel {
     this.isAvailable = true,
     this.outOfStockItems = const [],
     this.distanceKm,
+    this.deliveryRadiusKm = 10.0,
+    this.isWithinRadius = true,
+    this.isDeliverable = true,
   });
 
   factory StoreModel.fromJson(Map<String, dynamic> json, [int index = 0]) {
@@ -38,6 +44,12 @@ class StoreModel {
     final outOfStockList = (json['outOfStockItems'] is List)
         ? (json['outOfStockItems'] as List).map((e) => e.toString()).toList()
         : <String>[];
+    final radius = json['deliveryRadiusKm'] != null ? (json['deliveryRadiusKm'] as num).toDouble() : 10.0;
+    final distKm = json['distanceKm'] != null ? (json['distanceKm'] as num).toDouble() : null;
+    final withinRadius = json['isWithinRadius'] != null
+        ? (json['isWithinRadius'] == true)
+        : (distKm != null ? (distKm <= radius) : true);
+    final deliverable = json['isDeliverable'] == null ? withinRadius : (json['isDeliverable'] == true);
 
     return StoreModel(
       storeId: (json['storeId'] ?? json['id'] ?? 'S00${index + 1}').toString(),
@@ -52,7 +64,10 @@ class StoreModel {
       distance: dist,
       isAvailable: isAvail,
       outOfStockItems: outOfStockList,
-      distanceKm: json['distanceKm'] != null ? (json['distanceKm'] as num).toDouble() : null,
+      distanceKm: distKm,
+      deliveryRadiusKm: radius,
+      isWithinRadius: withinRadius,
+      isDeliverable: deliverable,
     );
   }
 

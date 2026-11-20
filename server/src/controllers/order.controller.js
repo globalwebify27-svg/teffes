@@ -47,6 +47,21 @@ const generateOrderId = () => {
   return 'TEF-' + Date.now().toString().slice(-6) + Math.floor(Math.random() * 1000).toString().padStart(3, '0');
 };
 
+const calculateDistanceKm = (lat1, lon1, lat2, lon2) => {
+  if (lat1 === undefined || lon1 === undefined || lat2 === undefined || lon2 === undefined || lat1 === null || lon1 === null || lat2 === null || lon2 === null) return null;
+  const R = 6371;
+  const dLat = ((Number(lat2) - Number(lat1)) * Math.PI) / 180;
+  const dLon = ((Number(lon2) - Number(lon1)) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((Number(lat1) * Math.PI) / 180) *
+      Math.cos((Number(lat2) * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(R * c * 10) / 10;
+};
+
 /**
  * POST /api/orders
  * Create a new order (Pure Firestore Implementation)
@@ -188,6 +203,60 @@ const createOrder = async (req, res, next) => {
     );
 
     const resolvedFulfillmentType = isPickup ? 'pickup' : 'delivery';
+
+    // ─── Delivery Radius Restriction Check (Pure Geolocation & Store Policy) ───
+    if (!isPickup) {
+      const maxRadius = typeof storeDoc?.deliveryRadiusKm === 'number' ? storeDoc.deliveryRadiusKm : 10;
+
+      let custLat = req.body.customerLat !== undefined ? Number(req.body.customerLat) : (req.body.lat !== undefined ? Number(req.body.lat) : null);
+      let custLng = req.body.customerLng !== undefined ? Number(req.body.customerLng) : (req.body.lng !== undefined ? Number(req.body.lng) : null);
+
+      if ((!custLat || !custLng) && addressId) {
+        const addrDoc = await getDoc('addresses', String(addressId)).catch(() => null);
+        if (addrDoc) {
+          custLat = addrDoc.lat !== undefined ? Number(addrDoc.lat) : (addrDoc.latitude !== undefined ? Number(addrDoc.latitude) : null);
+          custLng = addrDoc.lng !== undefined ? Number(addrDoc.lng) : (addrDoc.longitude !== undefined ? Number(addrDoc.longitude) : null);
+        }
+      }
+
+      if (!custLat || !custLng) {
+        const addrText = String(shippingAddress || req.body.address || '').trim();
+        const pinMatch = addrText.match(/\b\d{6}\b/);
+        const pin = pinMatch ? pinMatch[0] : (req.body.pincode || '');
+        if (pin || addrText) {
+          try {
+            const { geocodePincodeOrAddress } = require('../services/googleMapsService');
+            const geo = await geocodePincodeOrAddress({ pincode: pin, address: addrText });
+            if (geo && geo.latitude && geo.longitude) {
+              custLat = geo.latitude;
+              custLng = geo.longitude;
+            }
+          } catch (_) {}
+        }
+      }
+
+      let storeLat = 23.3441;
+      let storeLng = 85.3096;
+      if (storeDoc?.location && Array.isArray(storeDoc.location.coordinates) && storeDoc.location.coordinates.length >= 2) {
+        storeLng = storeDoc.location.coordinates[0];
+        storeLat = storeDoc.location.coordinates[1];
+      } else if (resolvedStoreId === 'S004') {
+        storeLat = 23.332;
+        storeLng = 85.321;
+      }
+
+      if (custLat && custLng) {
+        const distKm = calculateDistanceKm(custLat, custLng, storeLat, storeLng);
+        if (distKm !== null && distKm > maxRadius) {
+          return res.status(400).json({
+            success: false,
+            message: `We only accept delivery orders within ${maxRadius} km of our store. Your delivery address is ${distKm.toFixed(1)} km away. You can choose Store Pickup instead.`,
+            distanceKm: Number(distKm.toFixed(1)),
+            maxRadiusKm: maxRadius,
+          });
+        }
+      }
+    }
 
     // ─── Authoritative Coupon Revalidation ───
     let verifiedDiscount = 0;
@@ -350,15 +419,35 @@ const createOrder = async (req, res, next) => {
     const rawInstruction = req.body.deliveryInstruction || req.body.instruction || req.body.deliveryInstructions || req.body.deliveryNote || req.body.notes || '';
     const deliveryInstruction = typeof rawInstruction === 'string' ? rawInstruction.trim() : '';
 
+    const rawReceiverPhone = req.body.receiverPhone || req.body.alternatePhone || req.body.customer?.receiverPhone || req.body.customer?.alternatePhone || '';
+    const cleanReceiverPhone = typeof rawReceiverPhone === 'string' ? rawReceiverPhone.replace(/\D/g, '').slice(-10) : '';
+    const rawReceiverName = req.body.receiverName || req.body.alternateName || req.body.customer?.receiverName || req.body.customer?.alternateName || '';
+    const cleanReceiverName = typeof rawReceiverName === 'string' ? rawReceiverName.trim() : '';
+
+    if (cleanReceiverPhone && !cleanReceiverName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Receiver name is required when an alternate contact number is provided.',
+      });
+    }
+
     const orderPayload = {
       id: orderId,
       _id: orderId,
       orderId,
       deliveryOtp,
       deliveryInstruction: deliveryInstruction || null,
+      receiverPhone: cleanReceiverPhone || null,
+      alternatePhone: cleanReceiverPhone || null,
+      receiverName: cleanReceiverName || null,
+      alternateName: cleanReceiverName || null,
       customer: {
         name: user.name || req.body.customerName || 'Valued Customer',
         phone: user.phone || req.body.customerPhone || '9999999999',
+        receiverPhone: cleanReceiverPhone || null,
+        alternatePhone: cleanReceiverPhone || null,
+        receiverName: cleanReceiverName || null,
+        alternateName: cleanReceiverName || null,
         email: user.email || '',
         userId: user.id,
         address: orderAddress,

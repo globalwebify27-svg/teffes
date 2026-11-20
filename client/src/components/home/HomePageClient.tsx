@@ -373,19 +373,19 @@ export default function HomePageClient() {
         </div>
 
         {isLoadingCategories && displayCategories.length === 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {Array.from({ length: 4 }).map((_, idx) => (
               <div key={idx} className="rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm flex flex-col">
                 <div className="w-full aspect-[4/3] skeleton-shimmer" />
-                <div className="p-3.5 flex items-center justify-between">
-                  <div className="h-4 w-28 bg-gray-200 rounded skeleton-shimmer" />
+                <div className="p-2.5 sm:p-3.5 flex items-center justify-between">
+                  <div className="h-4 w-20 sm:w-28 bg-gray-200 rounded skeleton-shimmer" />
                   <div className="h-4 w-4 bg-gray-200 rounded-full skeleton-shimmer" />
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {displayCategories.map((cat) => {
               return (
                 <Link
@@ -399,21 +399,21 @@ export default function HomePageClient() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       src={cat.image || "/teffes-logo-maroon.png"}
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-transparent to-transparent"></div>
-                    <div className="absolute bottom-3 left-4 text-white pr-2">
-                      <span className="font-headline-md text-headline-md block leading-tight font-bold text-white text-[1.15rem]">
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent"></div>
+                    <div className="absolute bottom-2 left-2.5 right-2 sm:bottom-3 sm:left-4 sm:right-auto text-white">
+                      <span className="block leading-tight font-bold text-white text-[13px] sm:text-[1.15rem]">
                         {cat.name}
                       </span>
-                      <span className="font-body-sm text-body-sm text-white/90 text-[12px] line-clamp-1">
+                      <span className="block text-white/85 text-[10px] sm:text-[12px] line-clamp-1 mt-0.5 font-medium">
                         {cat.tagline || "Fresh Daily Cuts"}
                       </span>
                     </div>
                   </div>
-                  <div className="p-3.5 flex items-center justify-between bg-surface-card">
-                    <span className="font-label-md text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-1">
-                      Shop {cat.name} <span className="material-symbols-outlined text-[16px]">chevron_right</span>
+                  <div className="p-2 sm:p-3.5 flex items-center justify-between bg-surface-card">
+                    <span className="text-[11px] sm:text-label-md text-primary font-bold group-hover:translate-x-1 transition-transform inline-flex items-center gap-0.5 sm:gap-1">
+                      Shop {cat.name} <span className="material-symbols-outlined text-[13px] sm:text-[16px]">chevron_right</span>
                     </span>
-                    <span className="font-label-badge text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
+                    <span className="hidden xs:inline-block font-label-badge text-[9.5px] sm:text-label-badge text-tertiary bg-tertiary-fixed-dim/20 px-2 sm:px-2.5 py-0.5 rounded-full font-bold whitespace-nowrap">
                       Fresh Stock
                     </span>
                   </div>
@@ -446,9 +446,9 @@ export default function HomePageClient() {
 
         {/* 5 Best Seller Items */}
         {isLoadingProducts && liveProducts.length === 0 ? (
-          <ProductGridSkeleton count={5} columns="grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" />
+          <ProductGridSkeleton count={5} columns="grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5" />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
             {trendingProducts.map((item) => {
               const qty = getItemQuantity(item.id);
               const isJustAdded = addedItem === item.id;
@@ -476,8 +476,8 @@ export default function HomePageClient() {
 
                       {/* Top Left: Out of Stock Badge */}
                       {isOutOfStock && (
-                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px]">block</span>
+                        <span className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 bg-[#dc2626] text-white font-extrabold text-[9px] sm:text-[10.5px] uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-0.5 sm:gap-1">
+                          <span className="material-symbols-outlined text-[11px] sm:text-[13px]">block</span>
                           Out of Stock
                         </span>
                       )}
@@ -490,64 +490,72 @@ export default function HomePageClient() {
                           e.stopPropagation();
                           toggleWishlist(item.id);
                         }}
-                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                        className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
                           }`}
                         aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                         title={wishlisted ? "Loved" : "Add to wishlist"}
                       >
                         <span
-                          className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                          className={`material-symbols-outlined text-[16px] sm:text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
                         >
                           favorite
                         </span>
                       </button>
                     </div>
 
-                    <div className="p-3.5 sm:p-4">
-                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                    <div className="p-2.5 sm:p-4">
+                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1 text-[10.5px] sm:text-body-sm">
                         <span>Net: {item.netWeight}</span>
                         <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.badge || "Standard Cut"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold line-clamp-1 group-hover:text-primary transition-colors text-[14.5px]">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold line-clamp-1 group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px]">
                         {item.name}
                       </h3>
-                      <p className="font-body-sm text-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">{item.description}</p>
+                      <p className="font-body-sm text-body-sm text-slate-body mt-0.5 line-clamp-1 text-[11px] sm:text-[12px]">{item.description}</p>
                     </div>
                   </div>
 
-                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                      <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
-                        ₹{item.price}
-                      </span>
-                      {origPrice > item.price && (
-                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
-                          ₹{origPrice}
+                  <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
+                    <div className="flex flex-col min-w-0 pr-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[13px] sm:text-[1.15rem] leading-tight">
+                          ₹{item.price}
+                        </span>
+                        {origPrice > item.price && (
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11.5px] leading-none">
+                            ₹{origPrice}
+                          </span>
+                        )}
+                      </div>
+                      {discount && (
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                          {discount}
                         </span>
                       )}
                     </div>
 
-                    {isOutOfStock ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
-                        title="This item is currently out of stock"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
-                        <span>Out of Stock</span>
-                      </button>
-                    ) : (
-                      <ProductQuantityStepper
-                        quantity={qty}
-                        isJustAdded={isJustAdded}
-                        addLabel="+ ADD"
-                        compact
-                        onAdd={() => handleAdd(item)}
-                        onIncrease={() => updateQuantity(item.id, qty + 1)}
-                        onDecrease={() => updateQuantity(item.id, qty - 1)}
-                      />
-                    )}
+                    <div className="shrink-0">
+                      {isOutOfStock ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="h-[24px] sm:h-[28px] px-2 sm:px-3 rounded-full bg-gray-100 text-gray-400 font-bold text-[9px] sm:text-[11px] border border-gray-200 cursor-not-allowed select-none shadow-2xs whitespace-nowrap flex items-center justify-center"
+                          title="This item is currently out of stock"
+                        >
+                          Out of Stock
+                        </button>
+                      ) : (
+                        <ProductQuantityStepper
+                          quantity={qty}
+                          isJustAdded={isJustAdded}
+                          addLabel="+ ADD"
+                          compact
+                          onAdd={() => handleAdd(item)}
+                          onIncrease={() => updateQuantity(item.id, qty + 1)}
+                          onDecrease={() => updateQuantity(item.id, qty - 1)}
+                        />
+                      )}
+                    </div>
                   </div>
                 </article>
               );
@@ -602,9 +610,9 @@ export default function HomePageClient() {
 
         {/* 7 Chicken Items + 1 Custom Cuts Showcase */}
         {isLoadingProducts && liveProducts.length === 0 ? (
-          <ProductGridSkeleton count={4} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" />
+          <ProductGridSkeleton count={4} columns="grid-cols-2 sm:grid-cols-2 lg:grid-cols-4" />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {chickenProducts.map((item) => {
               const qty = getItemQuantity(item.id);
               const isJustAdded = addedItem === item.id;
@@ -632,8 +640,8 @@ export default function HomePageClient() {
 
                       {/* Top Left: Out of Stock Badge */}
                       {isOutOfStock && (
-                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px]">block</span>
+                        <span className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 bg-[#dc2626] text-white font-extrabold text-[9px] sm:text-[10.5px] uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-0.5 sm:gap-1">
+                          <span className="material-symbols-outlined text-[11px] sm:text-[13px]">block</span>
                           Out of Stock
                         </span>
                       )}
@@ -646,91 +654,99 @@ export default function HomePageClient() {
                           e.stopPropagation();
                           toggleWishlist(item.id);
                         }}
-                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                        className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
                           }`}
                         aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                         title={wishlisted ? "Loved" : "Add to wishlist"}
                       >
                         <span
-                          className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                          className={`material-symbols-outlined text-[16px] sm:text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
                         >
                           favorite
                         </span>
                       </button>
                     </div>
 
-                    <div className="p-4">
-                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                    <div className="p-2.5 sm:p-4">
+                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1 text-[10.5px] sm:text-body-sm">
                         <span>Net: {item.netWeight}</span>
                         <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || "Standard Cut"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1">
                         {item.name}
                       </h3>
-                      <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">{item.description}</p>
+                      <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">{item.description}</p>
                     </div>
                   </div>
 
-                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                      <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[1.15rem]">
-                        ₹{item.price}
-                      </span>
-                      {origPrice > item.price && (
-                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11.5px]">
-                          ₹{origPrice}
+                  <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
+                    <div className="flex flex-col min-w-0 pr-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[13px] sm:text-[1.15rem] leading-tight">
+                          ₹{item.price}
+                        </span>
+                        {origPrice > item.price && (
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11.5px] leading-none">
+                            ₹{origPrice}
+                          </span>
+                        )}
+                      </div>
+                      {discount && (
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                          {discount}
                         </span>
                       )}
                     </div>
 
-                    {isOutOfStock ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
-                        title="This cut is currently out of stock"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
-                        <span>Out of Stock</span>
-                      </button>
-                    ) : (
-                      <ProductQuantityStepper
-                        quantity={qty}
-                        isJustAdded={isJustAdded}
-                        addLabel="+ ADD"
-                        compact
-                        onAdd={() => handleAdd(item)}
-                        onIncrease={() => updateQuantity(item.id, qty + 1)}
-                        onDecrease={() => updateQuantity(item.id, qty - 1)}
-                      />
-                    )}
+                    <div className="shrink-0">
+                      {isOutOfStock ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="h-[24px] sm:h-[28px] px-2 sm:px-3 rounded-full bg-gray-100 text-gray-400 font-bold text-[9px] sm:text-[11px] border border-gray-200 cursor-not-allowed select-none shadow-2xs whitespace-nowrap flex items-center justify-center"
+                          title="This cut is currently out of stock"
+                        >
+                          Out of Stock
+                        </button>
+                      ) : (
+                        <ProductQuantityStepper
+                          quantity={qty}
+                          isJustAdded={isJustAdded}
+                          addLabel="+ ADD"
+                          compact
+                          onAdd={() => handleAdd(item)}
+                          onIncrease={() => updateQuantity(item.id, qty + 1)}
+                          onDecrease={() => updateQuantity(item.id, qty - 1)}
+                        />
+                      )}
+                    </div>
                   </div>
                 </article>
               );
             })}
 
             {/* Chicken Category Showcase Card */}
-            <div className="bg-surface-container-low rounded-2xl p-5 flex flex-col justify-between border border-gray-200/50">
+            <div className="bg-surface-container-low rounded-2xl p-3.5 sm:p-5 flex flex-col justify-between border border-gray-200/50">
               <div>
-                <span className="material-symbols-outlined text-primary text-[36px]">inventory_2</span>
-                <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-2 text-[1.2rem]">
+                <span className="material-symbols-outlined text-primary text-[28px] sm:text-[36px]">inventory_2</span>
+                <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-1 sm:mt-2 text-[1rem] sm:text-[1.2rem]">
                   Custom Cuts Available
                 </h3>
-                <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
+                <p className="font-body-sm text-body-sm text-slate-body mt-1 sm:mt-2 leading-relaxed text-[11px] sm:text-[12.5px] line-clamp-2 sm:line-clamp-none">
                   Need special thin slices, kathi roll juliennes, or biryani 4-piece cuts? Add instructions on checkout
                   and our team will hand-cut to your exact spec.
                 </p>
               </div>
 
-              <div className="pt-4">
-                <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
-                  <span className="w-2 h-2 rounded-full bg-tertiary"></span> RO-Water Washed Before Packing
+              <div className="pt-2.5 sm:pt-4">
+                <div className="p-2 sm:p-3 bg-surface-card rounded-xl text-on-surface mb-2 sm:mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 border border-gray-100 font-bold shadow-xs text-[9.5px] sm:text-[10.5px]">
+                  <span className="w-2 h-2 rounded-full bg-tertiary shrink-0"></span> RO-Water Washed Before Packing
                 </div>
                 <Link
-                  className="w-full py-2.5 rounded-full bg-primary text-on-primary font-label-md text-label-md text-center block hover:bg-primary-container transition-colors shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
+                  className="w-full py-2 sm:py-2.5 rounded-full bg-primary text-on-primary font-label-md text-xs sm:text-label-md text-center block hover:bg-primary-container transition-colors shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
                   href="/category?type=chicken"
                 >
-                  View All Chicken Cuts ({liveProducts.filter(p => p.category === 'chicken').length})
+                  View All ({liveProducts.filter(p => p.category === 'chicken').length})
                 </Link>
               </div>
             </div>
@@ -759,9 +775,9 @@ export default function HomePageClient() {
           </div>
 
           {isLoadingProducts && liveProducts.length === 0 ? (
-            <ProductGridSkeleton count={3} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
+            <ProductGridSkeleton count={3} columns="grid-cols-2 sm:grid-cols-2 lg:grid-cols-3" />
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {muttonProducts.map((product) => {
                 const qty = getItemQuantity(product.id);
                 const isJustAdded = addedItem === product.id;
@@ -790,8 +806,8 @@ export default function HomePageClient() {
 
                         {/* Top Left: Out of Stock Badge */}
                         {isOutOfStock && (
-                          <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
-                            <span className="material-symbols-outlined text-[13px]">block</span>
+                          <span className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 bg-[#dc2626] text-white font-extrabold text-[9px] sm:text-[10.5px] uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-0.5 sm:gap-1">
+                            <span className="material-symbols-outlined text-[11px] sm:text-[13px]">block</span>
                             Out of Stock
                           </span>
                         )}
@@ -804,66 +820,74 @@ export default function HomePageClient() {
                             e.stopPropagation();
                             toggleWishlist(product.id);
                           }}
-                          className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                          className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
                             }`}
                           aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                           title={wishlisted ? "Loved" : "Add to wishlist"}
                         >
                           <span
-                            className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                            className={`material-symbols-outlined text-[16px] sm:text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
                           >
                             favorite
                           </span>
                         </button>
                       </div>
 
-                      <div className="p-4">
-                        <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                      <div className="p-2.5 sm:p-4">
+                        <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1 text-[10.5px] sm:text-body-sm">
                           <span>{product.netWeight || "Net Wt: Fresh Cut"}</span>
                           <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Serves 3-4"}</span>
                         </div>
-                        <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[15px]">
+                        <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[15px] line-clamp-1">
                           {product.name}
                         </h3>
-                        <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
+                        <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">
                           {product.description || "Fresh country mutton cut fresh after your order."}
                         </p>
                       </div>
                     </div>
 
-                    <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                      <div className="flex items-baseline gap-1.5 flex-wrap">
-                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
-                          ₹{product.price}
-                        </span>
-                        {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
-                            ₹{product.originalPrice}
+                    <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
+                      <div className="flex flex-col min-w-0 pr-1">
+                        <div className="flex items-baseline gap-1">
+                          <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight">
+                            ₹{product.price}
+                          </span>
+                          {product.originalPrice && product.originalPrice > product.price && (
+                            <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none">
+                              ₹{product.originalPrice}
+                            </span>
+                          )}
+                        </div>
+                        {discountText && (
+                          <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                            {discountText}
                           </span>
                         )}
                       </div>
 
-                      {isOutOfStock ? (
-                        <button
-                          type="button"
-                          disabled
-                          className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
-                          title="This cut is currently out of stock"
-                        >
-                          <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
-                          <span>Out of Stock</span>
-                        </button>
-                      ) : (
-                        <ProductQuantityStepper
-                          quantity={qty}
-                          isJustAdded={isJustAdded}
-                          addLabel="+ ADD"
-                          compact
-                          onAdd={() => handleAdd(product)}
-                          onIncrease={() => updateQuantity(product.id, qty + 1)}
-                          onDecrease={() => updateQuantity(product.id, qty - 1)}
-                        />
-                      )}
+                      <div className="shrink-0">
+                        {isOutOfStock ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="h-[24px] sm:h-[28px] px-2 sm:px-3 rounded-full bg-gray-100 text-gray-400 font-bold text-[9px] sm:text-[11px] border border-gray-200 cursor-not-allowed select-none shadow-2xs whitespace-nowrap flex items-center justify-center"
+                            title="This cut is currently out of stock"
+                          >
+                            Out of Stock
+                          </button>
+                        ) : (
+                          <ProductQuantityStepper
+                            quantity={qty}
+                            isJustAdded={isJustAdded}
+                            addLabel="+ ADD"
+                            compact
+                            onAdd={() => handleAdd(product)}
+                            onIncrease={() => updateQuantity(product.id, qty + 1)}
+                            onDecrease={() => updateQuantity(product.id, qty - 1)}
+                          />
+                        )}
+                      </div>
                     </div>
                   </article>
                 );
@@ -894,9 +918,9 @@ export default function HomePageClient() {
         </div>
 
         {isLoadingProducts && liveProducts.length === 0 ? (
-          <ProductGridSkeleton count={3} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" />
+          <ProductGridSkeleton count={3} columns="grid-cols-2 sm:grid-cols-2 lg:grid-cols-3" />
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {fishProducts.map((product) => {
               const qty = getItemQuantity(product.id);
               const isJustAdded = addedItem === product.id;
@@ -925,8 +949,8 @@ export default function HomePageClient() {
 
                       {/* Top Left: Out of Stock Badge */}
                       {isOutOfStock && (
-                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px]">block</span>
+                        <span className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 bg-[#dc2626] text-white font-extrabold text-[9px] sm:text-[10.5px] uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-0.5 sm:gap-1">
+                          <span className="material-symbols-outlined text-[11px] sm:text-[13px]">block</span>
                           Out of Stock
                         </span>
                       )}
@@ -939,66 +963,74 @@ export default function HomePageClient() {
                           e.stopPropagation();
                           toggleWishlist(product.id);
                         }}
-                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                        className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
                           }`}
                         aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                         title={wishlisted ? "Loved" : "Add to wishlist"}
                       >
                         <span
-                          className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                          className={`material-symbols-outlined text-[16px] sm:text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
                         >
                           favorite
                         </span>
                       </button>
                     </div>
 
-                    <div className="p-4">
-                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                    <div className="p-2.5 sm:p-4">
+                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1 text-[10.5px] sm:text-body-sm">
                         <span>{product.netWeight || "Net Wt: 1000g"}</span>
                         <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Bengali Cut"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1">
                         {product.name}
                       </h3>
-                      <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
+                      <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">
                         {product.description || "Fresh water fish locally sourced and procured."}
                       </p>
                     </div>
                   </div>
 
-                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
-                        ₹{product.price}
-                      </span>
-                      {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
-                          ₹{product.originalPrice}
+                  <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
+                    <div className="flex flex-col min-w-0 pr-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight">
+                          ₹{product.price}
+                        </span>
+                        {product.originalPrice && product.originalPrice > product.price && (
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none">
+                            ₹{product.originalPrice}
+                          </span>
+                        )}
+                      </div>
+                      {discountText && (
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                          {discountText}
                         </span>
                       )}
                     </div>
 
-                    {isOutOfStock ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
-                        title="This fish cut is currently out of stock"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
-                        <span>Out of Stock</span>
-                      </button>
-                    ) : (
-                      <ProductQuantityStepper
-                        quantity={qty}
-                        isJustAdded={isJustAdded}
-                        addLabel="+ ADD"
-                        compact
-                        onAdd={() => handleAdd(product)}
-                        onIncrease={() => updateQuantity(product.id, qty + 1)}
-                        onDecrease={() => updateQuantity(product.id, qty - 1)}
-                      />
-                    )}
+                    <div className="shrink-0">
+                      {isOutOfStock ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="h-[24px] sm:h-[28px] px-2 sm:px-3 rounded-full bg-gray-100 text-gray-400 font-bold text-[9px] sm:text-[11px] border border-gray-200 cursor-not-allowed select-none shadow-2xs whitespace-nowrap flex items-center justify-center"
+                          title="This fish cut is currently out of stock"
+                        >
+                          Out of Stock
+                        </button>
+                      ) : (
+                        <ProductQuantityStepper
+                          quantity={qty}
+                          isJustAdded={isJustAdded}
+                          addLabel="+ ADD"
+                          compact
+                          onAdd={() => handleAdd(product)}
+                          onIncrease={() => updateQuantity(product.id, qty + 1)}
+                          onDecrease={() => updateQuantity(product.id, qty - 1)}
+                        />
+                      )}
+                    </div>
                   </div>
                 </article>
               );
@@ -1062,9 +1094,9 @@ export default function HomePageClient() {
         </div>
 
         {isLoadingProducts && liveProducts.length === 0 ? (
-          <ProductGridSkeleton count={4} columns="grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" />
+          <ProductGridSkeleton count={4} columns="grid-cols-2 sm:grid-cols-2 lg:grid-cols-4" />
         ) : marinatedProducts.length > 0 ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {marinatedProducts.map((product) => {
               const qty = getItemQuantity(product.id);
               const isJustAdded = addedItem === product.id;
@@ -1093,8 +1125,8 @@ export default function HomePageClient() {
 
                       {/* Top Left: Out of Stock Badge */}
                       {isOutOfStock && (
-                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px]">block</span>
+                        <span className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 bg-[#dc2626] text-white font-extrabold text-[9px] sm:text-[10.5px] uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-0.5 sm:gap-1">
+                          <span className="material-symbols-outlined text-[11px] sm:text-[13px]">block</span>
                           Out of Stock
                         </span>
                       )}
@@ -1107,89 +1139,97 @@ export default function HomePageClient() {
                           e.stopPropagation();
                           toggleWishlist(product.id);
                         }}
-                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
+                        className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-xs cursor-pointer transition-all z-10 border border-gray-100 hover:scale-110 active:scale-95 ${wishlisted ? "bg-white text-crimson-bright shadow-sm" : "bg-white/90 text-slate-subtle hover:text-primary"
                           }`}
                         aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
                         title={wishlisted ? "Loved" : "Add to wishlist"}
                       >
                         <span
-                          className={`material-symbols-outlined text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
+                          className={`material-symbols-outlined text-[16px] sm:text-[19px] ${wishlisted ? "filled text-crimson-bright" : ""}`}
                         >
                           favorite
                         </span>
                       </button>
                     </div>
 
-                    <div className="p-4">
-                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                    <div className="p-2.5 sm:p-4">
+                      <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1 text-[10.5px] sm:text-body-sm">
                         <span>{product.netWeight || "Daily Prep"}</span>
                         <span className="text-tag-amber font-label-badge font-bold">{product.pieces || "Chef Crafted"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[14.5px]">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1">
                         {product.name}
                       </h3>
-                      <p className="font-body-sm text-body-sm text-slate-body mt-1 leading-snug text-[12px] line-clamp-2">
+                      <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">
                         {product.description || "Perfectly marinated and ready to cook."}
                       </p>
                     </div>
                   </div>
 
-                  <div className="p-3.5 sm:p-4 pt-0 flex items-center justify-between gap-2 mt-auto">
-                    <div className="flex items-baseline gap-1.5 flex-wrap">
-                      <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[1.15rem]">
-                        ₹{product.price}
-                      </span>
-                      {product.originalPrice && product.originalPrice > product.price && (
-                        <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[12px]">
-                          ₹{product.originalPrice}
+                  <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
+                    <div className="flex flex-col min-w-0 pr-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight">
+                          ₹{product.price}
+                        </span>
+                        {product.originalPrice && product.originalPrice > product.price && (
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none">
+                            ₹{product.originalPrice}
+                          </span>
+                        )}
+                      </div>
+                      {discountText && (
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                          {discountText}
                         </span>
                       )}
                     </div>
 
-                    {isOutOfStock ? (
-                      <button
-                        type="button"
-                        disabled
-                        className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
-                        title="This item is currently out of stock"
-                      >
-                        <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
-                        <span>Out of Stock</span>
-                      </button>
-                    ) : (
-                      <ProductQuantityStepper
-                        quantity={qty}
-                        isJustAdded={isJustAdded}
-                        addLabel="+ ADD"
-                        compact
-                        onAdd={() => handleAdd(product)}
-                        onIncrease={() => updateQuantity(product.id, qty + 1)}
-                        onDecrease={() => updateQuantity(product.id, qty - 1)}
-                      />
-                    )}
+                    <div className="shrink-0">
+                      {isOutOfStock ? (
+                        <button
+                          type="button"
+                          disabled
+                          className="h-[24px] sm:h-[28px] px-2 sm:px-3 rounded-full bg-gray-100 text-gray-400 font-bold text-[9px] sm:text-[11px] border border-gray-200 cursor-not-allowed select-none shadow-2xs whitespace-nowrap flex items-center justify-center"
+                          title="This item is currently out of stock"
+                        >
+                          Out of Stock
+                        </button>
+                      ) : (
+                        <ProductQuantityStepper
+                          quantity={qty}
+                          isJustAdded={isJustAdded}
+                          addLabel="+ ADD"
+                          compact
+                          onAdd={() => handleAdd(product)}
+                          onIncrease={() => updateQuantity(product.id, qty + 1)}
+                          onDecrease={() => updateQuantity(product.id, qty - 1)}
+                        />
+                      )}
+                    </div>
                   </div>
                 </article>
               );
             })}
 
             {/* Marinated Promise Showcase */}
-            <div className="bg-surface-container-low rounded-2xl p-5 flex flex-col justify-between border border-gray-200/50">
+            <div className="bg-surface-container-low rounded-2xl p-3.5 sm:p-5 flex flex-col justify-between border border-gray-200/50">
               <div>
-                <span className="material-symbols-outlined text-tag-amber text-[36px]">restaurant_menu</span>
-                <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-2 text-[1.2rem]">
+                <span className="material-symbols-outlined text-tag-amber text-[28px] sm:text-[36px]">restaurant_menu</span>
+                <h3 className="font-headline-md text-headline-md text-on-surface font-bold mt-1 sm:mt-2 text-[1rem] sm:text-[1.2rem]">
                   Chef Crafted Marinades
                 </h3>
-                <p className="font-body-sm text-body-sm text-slate-body mt-2 leading-relaxed text-[12.5px]">
+                <p className="font-body-sm text-body-sm text-slate-body mt-1 sm:mt-2 leading-relaxed text-[11px] sm:text-[12.5px] line-clamp-2 sm:line-clamp-none">
                   Expertly marinated cuts using authentic spices and fresh herbs. Save time on prep while enjoying restaurant-quality flavors at home.
                 </p>
               </div>
 
-              <div className="pt-4">
-                <div className="p-3 bg-surface-card rounded-xl text-on-surface mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-2 border border-gray-100 font-bold shadow-xs text-[10.5px]">
-                  <span className="w-2 h-2 rounded-full bg-tag-amber"></span> Zero Prep, 100% Taste
+              <div className="pt-2.5 sm:pt-4">
+                <div className="p-2 sm:p-3 bg-surface-card rounded-xl text-on-surface mb-2 sm:mb-3 text-label-badge font-label-badge uppercase tracking-wider flex items-center gap-1.5 sm:gap-2 border border-gray-100 font-bold shadow-xs text-[9.5px] sm:text-[10.5px]">
+                  <span className="w-2 h-2 rounded-full bg-tag-amber shrink-0"></span> Zero Prep, 100% Taste
                 </div>
                 <Link
-                  className="w-full py-2.5 rounded-full bg-tag-amber text-white font-label-md text-label-md text-center block hover:opacity-90 transition-opacity shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
+                  className="w-full py-2 sm:py-2.5 rounded-full bg-tag-amber text-white font-label-md text-xs sm:text-label-md text-center block hover:opacity-90 transition-opacity shadow-sm font-bold text-decoration-none cursor-pointer whitespace-nowrap"
                   href="/category?type=marinated"
                 >
                   Explore Marinated Cuts

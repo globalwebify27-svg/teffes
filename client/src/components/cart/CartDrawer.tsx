@@ -76,6 +76,8 @@ interface StoreOption {
   freeGiftThreshold?: number;
   freeGiftName?: string;
   deliveryRadiusKm?: number;
+  isWithinRadius?: boolean;
+  isDeliverable?: boolean;
   todaySpecialSchedule?: {
     date: string;
     mode: "half_day" | "late_opening" | "custom_hours" | "closed";
@@ -330,6 +332,11 @@ export default function CartDrawer() {
   const [tipTab, setTipTab] = useState<"tip" | "instructions">("tip");
   const [deliveryNote, setDeliveryNote] = useState<string>("");
 
+  // Alternate / Receiver Phone state ("Ordering for someone else?")
+  const [isOrderingForSomeoneElse, setIsOrderingForSomeoneElse] = useState<boolean>(false);
+  const [receiverPhone, setReceiverPhone] = useState<string>("");
+  const [receiverName, setReceiverName] = useState<string>("");
+
   // Payment method state ("cod" | "razorpay" | "wallet")
   const [selectedPayment, setSelectedPayment] = useState<string>("cod");
   const [walletBalance, setWalletBalance] = useState<number>(0);
@@ -484,7 +491,15 @@ export default function CartDrawer() {
   const storeExpressEnabled = isStoreOperational && selectedStore?.expressDeliveryEnabled !== false;
   const storeRainSurgeEnabled = isStoreOperational && selectedStore?.rainSurgeEnabled === true;
   const storeRainSurgeFee = storeRainSurgeEnabled ? (selectedStore?.rainSurgeFee ?? 15) : 0;
-  const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 5;
+  const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 10;
+  const isOutOfDeliveryRadius = Boolean(
+    fulfillmentType === "delivery" &&
+    selectedStore &&
+    (
+      (selectedStore as any).isWithinRadius === false ||
+      (typeof selectedStore.distanceKm === "number" && selectedStore.distanceKm > storeDeliveryRadiusKm)
+    )
+  );
 
   // Format 24-hr time string (HH:MM) to 12-hr
   const formatTime12 = (t?: string) => {
@@ -716,6 +731,23 @@ export default function CartDrawer() {
       return;
     }
 
+    if (isOutOfDeliveryRadius) {
+      toast.warning(`We accept delivery orders within ${storeDeliveryRadiusKm} km of our shop. Your location is ${selectedStore?.distanceKm ? `${selectedStore.distanceKm.toFixed(1)} km` : "beyond range"} away. You can switch to Store Pickup!`, "Outside Delivery Range");
+      return;
+    }
+
+    if (isOrderingForSomeoneElse) {
+      const cleanReceiver = receiverPhone.replace(/\D/g, "");
+      if (cleanReceiver.length !== 10) {
+        toast.warning("Please enter a valid 10-digit mobile number for the receiver.", "Receiver Phone Required");
+        return;
+      }
+      if (!receiverName.trim()) {
+        toast.warning("Please enter the receiver's name.", "Receiver Name Required");
+        return;
+      }
+    }
+
     if (!isStoreOperational) {
       toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
       return;
@@ -768,6 +800,23 @@ export default function CartDrawer() {
       toast.warning(`Minimum cart order value is ₹${MIN_ORDER_AMOUNT}. Please add ₹${amountForMinOrder} more to proceed.`, "Minimum Order Amount");
       return;
     }
+    if (isOutOfDeliveryRadius) {
+      toast.warning(`We accept delivery orders within ${storeDeliveryRadiusKm} km of our shop. Your location is ${selectedStore?.distanceKm ? `${selectedStore.distanceKm.toFixed(1)} km` : "beyond range"} away. You can switch to Store Pickup!`, "Outside Delivery Range");
+      return;
+    }
+
+    if (isOrderingForSomeoneElse) {
+      const cleanReceiver = receiverPhone.replace(/\D/g, "");
+      if (cleanReceiver.length !== 10) {
+        toast.warning("Please enter a valid 10-digit mobile number for the receiver.", "Receiver Phone Required");
+        return;
+      }
+      if (!receiverName.trim()) {
+        toast.warning("Please enter the receiver's name.", "Receiver Name Required");
+        return;
+      }
+    }
+
     if (!isStoreOperational) {
       toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
       return;
@@ -803,6 +852,9 @@ export default function CartDrawer() {
         expressFee: expressFee,
         tip: effectiveTip,
         deliveryInstruction: (fulfillmentType === "pickup" ? pickupNote : deliveryNote).trim() || undefined,
+        receiverPhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        alternatePhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        receiverName: isOrderingForSomeoneElse && receiverName ? receiverName.trim() : undefined,
         paymentMethod: selectedPayment === "wallet" ? "wallet" : fulfillmentType === "pickup" ? "Pay at Store Counter" : "Cash on Delivery",
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
@@ -833,6 +885,23 @@ export default function CartDrawer() {
       toast.warning(`Minimum cart order value is ₹${MIN_ORDER_AMOUNT}. Please add ₹${amountForMinOrder} more to proceed.`, "Minimum Order Amount");
       return;
     }
+    if (isOutOfDeliveryRadius) {
+      toast.warning(`We accept delivery orders within ${storeDeliveryRadiusKm} km of our shop. Your location is ${selectedStore?.distanceKm ? `${selectedStore.distanceKm.toFixed(1)} km` : "beyond range"} away. You can switch to Store Pickup!`, "Outside Delivery Range");
+      return;
+    }
+
+    if (isOrderingForSomeoneElse) {
+      const cleanReceiver = receiverPhone.replace(/\D/g, "");
+      if (cleanReceiver.length !== 10) {
+        toast.warning("Please enter a valid 10-digit mobile number for the receiver.", "Receiver Phone Required");
+        return;
+      }
+      if (!receiverName.trim()) {
+        toast.warning("Please enter the receiver's name.", "Receiver Name Required");
+        return;
+      }
+    }
+
     if (!isStoreOperational) {
       toast.error("Our fulfilling store is currently paused and not accepting new orders. Please check back shortly.", "Store Paused");
       return;
@@ -869,6 +938,9 @@ export default function CartDrawer() {
         expressFee: expressFee,
         tip: effectiveTip,
         deliveryInstruction: (fulfillmentType === "pickup" ? pickupNote : deliveryNote).trim() || undefined,
+        receiverPhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        alternatePhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        receiverName: isOrderingForSomeoneElse && receiverName ? receiverName.trim() : undefined,
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
       };
@@ -1832,6 +1904,62 @@ export default function CartDrawer() {
                     </div>
                   )}
 
+                  {/* ─── ORDERING FOR SOMEONE ELSE / ALTERNATE PHONE ─── */}
+                  <div className="bg-white rounded-2xl border border-gray-200 p-3.5 space-y-2.5 shadow-2xs">
+                    <label className="flex items-center justify-between cursor-pointer select-none">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary text-[19px]">contact_phone</span>
+                        <div>
+                          <span className="font-label-md font-bold text-on-surface text-[13px] block">
+                            Ordering for someone else?
+                          </span>
+                          <span className="text-[11px] text-gray-500 block">
+                            Add alternate contact / receiver number
+                          </span>
+                        </div>
+                      </div>
+                      <input
+                        type="checkbox"
+                        checked={isOrderingForSomeoneElse}
+                        onChange={(e) => setIsOrderingForSomeoneElse(e.target.checked)}
+                        className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 cursor-pointer accent-[#91000a]"
+                      />
+                    </label>
+
+                    {isOrderingForSomeoneElse && (
+                      <div className="pt-2 border-t border-gray-100 space-y-2">
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                            Receiver Mobile Number <span className="text-red-500">*</span>
+                          </label>
+                          <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 px-3 focus-within:border-primary focus-within:bg-white transition-all">
+                            <span className="text-xs font-bold text-gray-500 mr-2">+91</span>
+                            <input
+                              type="tel"
+                              maxLength={10}
+                              value={receiverPhone}
+                              onChange={(e) => setReceiverPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                              placeholder="10-digit mobile number"
+                              className="w-full py-2 bg-transparent text-xs text-on-surface outline-none font-medium"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                            Receiver Name <span className="text-red-500">*</span>
+                          </label>
+                          <input
+                            type="text"
+                            value={receiverName}
+                            onChange={(e) => setReceiverName(e.target.value)}
+                            placeholder="Family member / friend's name"
+                            className="w-full p-2 bg-gray-50 rounded-xl border border-gray-200 text-xs text-on-surface outline-none focus:border-primary focus:bg-white transition-all"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   {/* ─── COLLAPSIBLE COUPON / PROMO SECTION (Below instructions, inside scrollable area) ─── */}
                   <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden transition-all">
                     {/* Collapsible Header Button */}
@@ -2122,6 +2250,21 @@ export default function CartDrawer() {
                     )}
                   </div>
 
+                  {/* Delivery Radius Restriction Warning Banner */}
+                  {isOutOfDeliveryRadius && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 mb-2 flex items-start gap-2.5 text-left">
+                      <span className="material-symbols-outlined text-amber-700 text-[20px] shrink-0 mt-0.5">location_off</span>
+                      <div className="text-xs text-amber-900 leading-snug flex-1">
+                        <p className="font-bold">
+                          Outside Delivery Range ({selectedStore?.distanceKm ? `${selectedStore.distanceKm.toFixed(1)} km away` : "Beyond limit"})
+                        </p>
+                        <p className="mt-0.5 text-amber-800 text-[11.5px]">
+                          We deliver orders within {storeDeliveryRadiusKm} km of our shop. Switch to <strong>Store Pickup</strong> or select a closer address.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Checkout CTA Button */}
                   {items.some((i) => i.product.inStock === false) ? (
                     <button
@@ -2131,6 +2274,15 @@ export default function CartDrawer() {
                     >
                       <span className="material-symbols-outlined text-[18px] text-amber-700">remove_shopping_cart</span>
                       <span>Remove Out-of-Stock Item to Checkout</span>
+                    </button>
+                  ) : isOutOfDeliveryRadius ? (
+                    <button
+                      type="button"
+                      disabled
+                      className="w-full py-3 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-label-lg font-extrabold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
+                    >
+                      <span className="material-symbols-outlined text-[18px] text-amber-700">near_me_disabled</span>
+                      <span>Outside {storeDeliveryRadiusKm} KM Delivery Range</span>
                     </button>
                   ) : !isStoreOperational ? (
                     <button
@@ -2510,6 +2662,12 @@ export default function CartDrawer() {
 
               {/* Action Button */}
               <div className="pt-2">
+                {isOutOfDeliveryRadius && (
+                  <div className="mb-2.5 flex items-start gap-2 text-xs font-semibold text-amber-900 bg-amber-50 p-3 rounded-xl border border-amber-300">
+                    <span className="material-symbols-outlined text-[18px] text-amber-700 shrink-0">location_off</span>
+                    <span>Cannot place delivery order: Your address is {selectedStore?.distanceKm ? `${selectedStore.distanceKm.toFixed(1)} km away` : "outside radius"} (Store delivery range: max {storeDeliveryRadiusKm} km). Please switch to Store Pickup.</span>
+                  </div>
+                )}
                 {isUnderMinOrder && (
                   <div className="mb-2.5 flex items-center justify-center gap-1.5 text-[11.5px] font-bold text-amber-900 bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200 text-center">
                     <span className="material-symbols-outlined text-[15px] text-amber-700">info</span>
@@ -2519,7 +2677,7 @@ export default function CartDrawer() {
                 {selectedPayment === "cod" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || isUnderMinOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={handleConfirmOrder}
                     className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -2532,7 +2690,7 @@ export default function CartDrawer() {
                 ) : selectedPayment === "wallet" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || isUnderMinOrder || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={async () => {
                       // Let's use the handleConfirmOrder but set the paymentMethod to Wallet on backend
                       await handleConfirmOrder();
@@ -2551,7 +2709,7 @@ export default function CartDrawer() {
                 ) : (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || isUnderMinOrder || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || (!isPickup && !selectedAddressId && addresses.length > 0)}
                     onClick={handleRazorpayPayment}
                     className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

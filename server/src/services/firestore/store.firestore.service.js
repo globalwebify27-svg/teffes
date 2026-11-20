@@ -86,7 +86,7 @@ const findNearestStore = async (latitude, longitude) => {
     const storeLat = coords[1];
 
     const dist = calculateHaversineDistanceKm(lat, lon, storeLat, storeLon);
-    const radius = Number(store.deliveryRadiusKm) || 12;
+    const radius = Number(store.deliveryRadiusKm) || 10;
 
     if (dist <= radius && dist < minDistance) {
       minDistance = dist;
@@ -143,7 +143,7 @@ const createStore = async (data = {}) => {
     rainSurgeFee: Number(data.rainSurgeFee) || 15,
     freeGiftThreshold: Number(data.freeGiftThreshold) || 0,
     freeGiftName: (data.freeGiftName || '').trim(),
-    deliveryRadiusKm: Math.max(1, Number(data.deliveryRadiusKm) || 5),
+    deliveryRadiusKm: Math.max(1, Number(data.deliveryRadiusKm) || 10),
     defaultRiderDailyTarget: Math.max(1, Number(data.defaultRiderDailyTarget) || 16),
     location: {
       type: 'Point',

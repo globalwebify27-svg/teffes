@@ -41,6 +41,7 @@ interface HeaderProps {
 export default function Header({ searchQuery = "", onSearchChange }: HeaderProps) {
   const pathname = usePathname();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
   const [user, setUser] = useState<User | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
@@ -87,6 +88,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
     };
 
     syncUser();
+    setMounted(true);
     setMobileMenuOpen(false);
     setActiveCategory("all");
 
@@ -377,16 +379,17 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Wishlist Icon Button with Notification Badge */}
             <Link
               href="/wishlist"
+              suppressHydrationWarning
               className={`relative p-1.5 sm:p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer text-decoration-none ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
                   : "text-on-surface hover:text-primary hover:bg-surface-container-low"
               }`}
-              aria-label={`Loved Cuts (${wishlistCount})`}
+              aria-label={mounted ? `Loved Cuts (${wishlistCount})` : "View Wishlist"}
               title="View Wishlist"
             >
               <span className="material-symbols-outlined text-[21px] sm:text-[26px]">favorite</span>
-              {wishlistCount > 0 && (
+              {mounted && wishlistCount > 0 && (
                 <span
                   className={`absolute top-0.5 right-0.5 sm:top-1 sm:right-1 min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[9px] sm:text-[10px] px-1 shadow-sm ${
                     isScrolled
@@ -402,17 +405,18 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Cart Icon Button with Notification Badge */}
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => openCart()}
               className={`relative p-1.5 sm:p-2.5 rounded-full transition-colors flex items-center justify-center cursor-pointer border-none bg-transparent ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
                   : "text-on-surface hover:text-primary hover:bg-surface-container-low"
               }`}
-              aria-label={`Shopping Cart (${totalItemsCount} items)`}
+              aria-label={mounted ? `Shopping Cart (${totalItemsCount} items)` : "Shopping Cart"}
               title="View Shopping Cart"
             >
               <span className="material-symbols-outlined text-[22px] sm:text-[27px]">shopping_bag</span>
-              {totalItemsCount > 0 && (
+              {mounted && totalItemsCount > 0 && (
                 <span
                   className={`absolute top-0.5 right-0.5 sm:top-1 sm:right-1 min-w-[16px] h-[16px] sm:min-w-[18px] sm:h-[18px] font-label-badge text-label-badge rounded-full flex items-center justify-center font-black text-[9px] sm:text-[10px] px-1 shadow-md ${
                     isScrolled
@@ -526,14 +530,14 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 : "bg-surface-card shadow-[0_1px_4px_rgba(0,0,0,0.03)] border-t border-gray-100"
             }`}
           >
-            <div className="w-full max-w-container-max mx-auto px-gutter-desktop flex items-center justify-between gap-space-md overflow-x-auto py-2.5">
-              <nav className="flex items-center gap-2 font-label-md text-label-md whitespace-nowrap">
+            <div className="w-full max-w-container-max mx-auto px-3 sm:px-gutter-desktop flex items-center justify-between gap-2 sm:gap-space-md overflow-x-auto py-1.5 sm:py-2.5 scrollbar-none">
+              <nav className="flex items-center gap-1.5 sm:gap-2 font-label-md text-label-md whitespace-nowrap">
                 {navCategories.map((cat) => {
                   return (
                     <Link
                       key={cat.key}
                       href={cat.href}
-                      className={`px-4 py-1.5 rounded-full transition-all flex items-center gap-2 text-decoration-none cursor-pointer text-[13px] font-semibold group ${
+                      className={`px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full transition-all flex items-center gap-1.5 sm:gap-2 text-decoration-none cursor-pointer text-[11px] sm:text-[13px] font-semibold group ${
                         isScrolled
                           ? "bg-white/15 text-white hover:bg-white hover:text-[#91000a] hover:shadow-xs"
                           : "text-on-surface-variant bg-surface-container-low hover:bg-primary hover:text-white hover:shadow-xs"
@@ -541,7 +545,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                     >
                       <FontAwesomeIcon
                         icon={getCategoryFontAwesomeIcon(cat.key)}
-                        className={`text-[13px] transition-colors ${
+                        className={`text-[11px] sm:text-[13px] transition-colors ${
                           isScrolled
                             ? "text-amber-300 group-hover:text-[#91000a]"
                             : "text-primary group-hover:text-white"

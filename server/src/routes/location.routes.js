@@ -4,6 +4,7 @@ const {
   placesAutocomplete,
   placeDetails,
   roadDistance,
+  geocodeAddress,
 } = require('../controllers/location.controller');
 
 const router = Router();
@@ -13,5 +14,7 @@ router.get('/reverse-geocode', reverseGeocode);
 router.get('/places-autocomplete', placesAutocomplete);
 router.get('/place-details/:placeId', placeDetails);
 router.get('/road-distance', roadDistance);
+router.get('/geocode', geocodeAddress);
+router.post('/geocode', geocodeAddress);
 
 module.exports = router;

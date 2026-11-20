@@ -601,11 +601,18 @@ void showAddAddressSheet(BuildContext context, LocationProvider location) {
                               final line1 = line1Controller.text.trim();
                               final line2 = line2Controller.text.trim();
                               final landmark = landmarkController.text.trim();
-                              final pincode = pincodeController.text.trim();
+                              final pincode = pincodeController.text.replaceAll(RegExp(r'\D'), '').trim();
 
                               if (line1.isEmpty) {
                                 ScaffoldMessenger.of(ctx).showSnackBar(
                                   const SnackBar(content: Text('Please enter Flat / House number')),
+                                );
+                                return;
+                              }
+
+                              if (pincode.length != 6) {
+                                ScaffoldMessenger.of(ctx).showSnackBar(
+                                  const SnackBar(content: Text('Please enter a valid 6-digit delivery pincode')),
                                 );
                                 return;
                               }
@@ -618,7 +625,7 @@ void showAddAddressSheet(BuildContext context, LocationProvider location) {
                                 line2: line2.isNotEmpty ? line2 : null,
                                 landmark: landmark.isNotEmpty ? landmark : null,
                                 city: 'Ranchi',
-                                pincode: pincode.isNotEmpty ? pincode : '834001',
+                                pincode: pincode,
                                 isDefault: isDefault,
                               );
 

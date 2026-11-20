@@ -58,20 +58,23 @@ const getAvailableStoresHandler = async (req, res, next) => {
     let customerLat = req.body?.lat !== undefined ? Number(req.body.lat) : (req.body?.customerLat !== undefined ? Number(req.body.customerLat) : (req.query?.lat !== undefined ? Number(req.query.lat) : (req.query?.customerLat !== undefined ? Number(req.query.customerLat) : null)));
     let customerLng = req.body?.lng !== undefined ? Number(req.body.lng) : (req.body?.customerLng !== undefined ? Number(req.body.customerLng) : (req.query?.lng !== undefined ? Number(req.query.lng) : (req.query?.customerLng !== undefined ? Number(req.query.customerLng) : null)));
 
-    // Address text geocoding fallback: inspect shippingAddress or address string
-    const addressHint = (req.body?.shippingAddress || req.body?.address || req.query?.shippingAddress || req.query?.address || '').toLowerCase();
-    if (addressHint) {
-      if (addressHint.includes('doranda') || addressHint.includes('834002') || addressHint.includes('hinoo')) {
-        customerLat = 23.332;
-        customerLng = 85.321;
-      } else if (addressHint.includes('harmu') || addressHint.includes('kishore') || addressHint.includes('834001')) {
-        customerLat = 23.3441;
-        customerLng = 85.3096;
-      }
+    // Address text / Pincode geocoding
+    const addressHint = (req.body?.shippingAddress || req.body?.address || req.query?.shippingAddress || req.query?.address || '').trim();
+    const pincodeMatch = addressHint.match(/\b\d{6}\b/);
+    const pincodeHint = pincodeMatch ? pincodeMatch[0] : (req.body?.pincode || req.query?.pincode || '');
+
+    if ((customerLat === null || customerLng === null || isNaN(customerLat) || isNaN(customerLng)) && (pincodeHint || addressHint)) {
+      try {
+        const { geocodePincodeOrAddress } = require('../services/googleMapsService');
+        const geo = await geocodePincodeOrAddress({ pincode: pincodeHint, address: addressHint });
+        if (geo && geo.latitude && geo.longitude) {
+          customerLat = geo.latitude;
+          customerLng = geo.longitude;
+        }
+      } catch (_) {}
     }
 
-    if (!customerLat || isNaN(customerLat)) customerLat = 23.3441;
-    if (!customerLng || isNaN(customerLng)) customerLng = 85.3096;
+    const hasValidCoords = customerLat !== null && customerLng !== null && !isNaN(customerLat) && !isNaN(customerLng);
 
     const activeStores = await getActiveStores();
     const evaluatedStores = [];
@@ -87,7 +90,9 @@ const getAvailableStoresHandler = async (req, res, next) => {
         storeLat = store.location.coordinates[1];
       }
 
-      const distKm = calculateDistanceKm(customerLat, customerLng, storeLat, storeLng) ?? 1.5;
+      const distKm = hasValidCoords ? (calculateDistanceKm(customerLat, customerLng, storeLat, storeLng) ?? 1.5) : 9999;
+      const maxDeliveryRadius = typeof store.deliveryRadiusKm === 'number' ? store.deliveryRadiusKm : 10;
+      const isWithinRadius = type === 'pickup' ? true : (distKm <= maxDeliveryRadius);
 
       // Verify inventory in this specific store
       let isAvailable = true;
@@ -125,6 +130,13 @@ const getAvailableStoresHandler = async (req, res, next) => {
         }
       }
 
+      if (!isWithinRadius && type === 'delivery') {
+        outOfStockItems.push(`Address is outside delivery radius (${distKm.toFixed(1)} km > ${maxDeliveryRadius} km)`);
+      }
+
+      const isDeliverable = type === 'pickup' ? true : isWithinRadius;
+      const isStoreFullyEligible = isAvailable && isDeliverable;
+
       const nowUtc = new Date();
       const istMs = nowUtc.getTime() + (5.5 * 60 * 60 * 1000);
       const todayIST = new Date(istMs).toISOString().slice(0, 10);
@@ -140,27 +152,36 @@ const getAvailableStoresHandler = async (req, res, next) => {
         rainSurgeFee: store.rainSurgeFee ?? 15,
         freeGiftThreshold: store.freeGiftThreshold ?? 0,
         freeGiftName: store.freeGiftName || '',
-        deliveryRadiusKm: store.deliveryRadiusKm ?? 5,
+        deliveryRadiusKm: maxDeliveryRadius,
         defaultRiderDailyTarget: store.defaultRiderDailyTarget ?? 16,
         distanceKm: distKm,
-        distance: `${distKm} km away`,
-        isAvailable,
+        distance: `${distKm.toFixed(1)} km away`,
+        isWithinRadius,
+        isDeliverable,
+        isInventoryAvailable: isAvailable,
+        isAvailable: isStoreFullyEligible,
         outOfStockItems,
-        stockStatus: isAvailable ? 'In Stock' : 'Out of Stock',
+        stockStatus: !isAvailable ? 'Out of Stock' : (!isWithinRadius ? 'Out of Delivery Range' : 'In Stock'),
         todaySpecialSchedule: todaySchedule,
         specialSchedules: store.specialSchedules || {},
       });
     }
 
     evaluatedStores.sort((a, b) => {
+      // 1. Fully eligible stores (in-stock AND within radius) come first
       if (a.isAvailable !== b.isAvailable) {
         return a.isAvailable ? -1 : 1;
       }
+      // 2. Then stores that are at least deliverable (within radius) come next
+      if (a.isDeliverable !== b.isDeliverable) {
+        return a.isDeliverable ? -1 : 1;
+      }
+      // 3. Then sorted by nearest distance
       return a.distanceKm - b.distanceKm;
     });
 
     const eligibleStores = evaluatedStores.filter((s) => s.isAvailable);
-    const suggestedStore = eligibleStores.length > 0 ? eligibleStores[0] : (evaluatedStores[0] || null);
+    const suggestedStore = eligibleStores.length > 0 ? eligibleStores[0] : null;
 
     return res.status(200).json({
       success: true,

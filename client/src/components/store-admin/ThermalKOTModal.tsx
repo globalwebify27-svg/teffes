@@ -35,11 +35,19 @@ interface ThermalOrder {
   customer?: {
     name?: string;
     phone?: string;
+    receiverPhone?: string;
+    alternatePhone?: string;
+    receiverName?: string;
+    alternateName?: string;
     address?: string;
     deliveryInstruction?: string;
   };
   customerName?: string;
   customerPhone?: string;
+  receiverPhone?: string;
+  alternatePhone?: string;
+  receiverName?: string;
+  alternateName?: string;
   phone?: string;
   shippingAddress?: string;
   deliveryAddress?: string;
@@ -128,6 +136,8 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
 
   const customerName = order.customer?.name || order.customerName || "Valued Customer";
   const customerPhone = order.customer?.phone || order.customerPhone || order.phone || "—";
+  const altPhone = order.receiverPhone || order.alternatePhone || order.customer?.receiverPhone || order.customer?.alternatePhone || "";
+  const altName = order.receiverName || order.alternateName || order.customer?.receiverName || order.customer?.alternateName || "";
   const customerAddress =
     order.customer?.address || order.shippingAddress || order.deliveryAddress || order.address || "Ranchi, Jharkhand";
   const specialInstruction =
@@ -299,6 +309,9 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
               <div style={{ ...section, fontSize: `${F.info}px`, lineHeight: 1.35, fontWeight: 700 }}>
                 <div style={{ wordBreak: "break-word" }}><b style={{ fontWeight: 900 }}>Name:</b> {customerName}</div>
                 <div><b style={{ fontWeight: 900 }}>Phone:</b> {customerPhone}</div>
+                {altPhone && (
+                  <div><b style={{ fontWeight: 900 }}>Alt/Receiver:</b> {altName ? `${altName} (${altPhone})` : altPhone}</div>
+                )}
                 <div style={{ wordBreak: "break-all" }}><b style={{ fontWeight: 900 }}>Order:</b> {orderId}</div>
                 {slotDisplay && (
                   <div style={{ wordBreak: "break-word" }}><b style={{ fontWeight: 900 }}>Slot:</b> {slotDisplay}</div>

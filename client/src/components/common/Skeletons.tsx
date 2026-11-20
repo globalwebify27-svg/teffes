@@ -86,13 +86,13 @@ export function ProductCardSkeleton() {
  */
 export function ProductGridSkeleton({
   count = 5,
-  columns = "grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
+  columns = "grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5",
 }: {
   count?: number;
   columns?: string;
 }) {
   return (
-    <div className={`grid ${columns} gap-4`}>
+    <div className={`grid ${columns} gap-3 sm:gap-4`}>
       {Array.from({ length: count }).map((_, idx) => (
         <ProductCardSkeleton key={idx} />
       ))}

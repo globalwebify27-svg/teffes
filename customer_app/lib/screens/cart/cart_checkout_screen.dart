@@ -19,6 +19,8 @@ import '../../providers/auth_provider.dart';
 import '../../models/order_model.dart';
 import '../../models/store_model.dart';
 import '../../models/product_model.dart';
+import '../../models/user_model.dart';
+import 'dart:math' as math;
 
 class CartCheckoutScreen extends StatefulWidget {
   const CartCheckoutScreen({super.key});
@@ -31,6 +33,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   final TextEditingController _couponController = TextEditingController();
   final TextEditingController _customTipController = TextEditingController();
   final TextEditingController _pickupInstructionController = TextEditingController();
+  final TextEditingController _receiverPhoneController = TextEditingController();
+  final TextEditingController _receiverNameController = TextEditingController();
+  bool _isOrderingForSomeoneElse = false;
   String _fulfillmentType = 'delivery'; // 'delivery' or 'pickup'
   String _selectedPaymentMethod = 'cod'; // 'cod', 'payu', 'wallet'
   bool _codEnabled = true;
@@ -158,6 +163,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         _fetchStores();
         _fetchCrossSellItems();
         _fetchPaymentSettings();
+        _checkAndPromptPincodeIfNeeded();
       }
     });
   }
@@ -241,18 +247,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       final location = context.read<LocationProvider>();
       final cart = context.read<CartProvider>();
 
-      double lat = location.latitude ?? 23.3441;
-      double lng = location.longitude ?? 85.3096;
-
-      // Smart locality geocoding fallback for Ranchi Teffes stores
-      final addrStr = '${location.activeAddressString} ${location.selectedAddress?.pincode ?? ""}'.toLowerCase();
-      if (addrStr.contains('doranda') || addrStr.contains('834002') || addrStr.contains('hinoo')) {
-        lat = 23.332;
-        lng = 85.321;
-      } else if (addrStr.contains('harmu') || addrStr.contains('kishore') || addrStr.contains('834001')) {
-        lat = 23.3441;
-        lng = 85.3096;
-      }
+      final selAddr = location.selectedAddress;
+      final double? addrLat = selAddr?.latitude ?? location.latitude;
+      final double? addrLng = selAddr?.longitude ?? location.longitude;
 
       final itemsPayload = cart.items.values.map((it) => {
         'productId': it.product.id,
@@ -263,10 +260,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       final payload = {
         'type': _fulfillmentType,
         'fulfillmentType': _fulfillmentType,
-        'lat': lat,
-        'lng': lng,
-        'customerLat': lat,
-        'customerLng': lng,
+        if (addrLat != null) 'lat': addrLat,
+        if (addrLng != null) 'lng': addrLng,
+        if (addrLat != null) 'customerLat': addrLat,
+        if (addrLng != null) 'customerLng': addrLng,
+        'pincode': selAddr?.pincode ?? '',
         'shippingAddress': location.activeAddressString,
         'address': location.activeAddressString,
         'items': itemsPayload,
@@ -345,7 +343,200 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     _couponController.dispose();
     _customTipController.dispose();
     _pickupInstructionController.dispose();
+    _receiverPhoneController.dispose();
+    _receiverNameController.dispose();
     super.dispose();
+  }
+
+  void _checkAndPromptPincodeIfNeeded() {
+    if (!mounted || _fulfillmentType == 'pickup') return;
+    final location = context.read<LocationProvider>();
+    final addr = location.selectedAddress;
+    if (addr != null && (addr.latitude == null || addr.longitude == null)) {
+      _showPincodeVerificationModal(context, addr);
+    }
+  }
+
+  void _showPincodeVerificationModal(BuildContext context, AddressModel address) {
+    final pincodeController = TextEditingController(text: address.pincode.isNotEmpty ? address.pincode : '');
+    bool isVerifying = false;
+    String? errorMessage;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+                ? MediaQuery.of(ctx).viewInsets.bottom
+                : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceMd;
+
+            return SafeArea(
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: AppDimensions.spaceMd,
+                  right: AppDimensions.spaceMd,
+                  top: AppDimensions.spaceMd,
+                  bottom: bottomPadding,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.primaryLight,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.pin_drop_rounded, color: AppColors.primaryMaroon, size: 20),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Verify Delivery Pincode',
+                              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.home_outlined, size: 16, color: AppColors.textSecondary),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              address.fullAddress,
+                              style: const TextStyle(fontSize: 12, color: AppColors.textPrimary, fontWeight: FontWeight.w500),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Enter your 6-digit delivery pincode to confirm store availability:',
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: pincodeController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: 'Enter 6-digit Pincode (e.g. 834001 or 411038)',
+                        filled: true,
+                        fillColor: AppColors.surfaceSubtle,
+                        border: OutlineInputBorder(
+                          borderRadius: AppDimensions.roundedMd,
+                          borderSide: BorderSide.none,
+                        ),
+                        prefixIcon: const Icon(Icons.location_on_outlined, color: AppColors.textMuted),
+                      ),
+                    ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        errorMessage!,
+                        style: const TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryMaroon,
+                          shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                        ),
+                        onPressed: isVerifying
+                            ? null
+                            : () async {
+                                final cleanPin = pincodeController.text.replaceAll(RegExp(r'\D'), '').trim();
+                                if (cleanPin.length != 6) {
+                                  setModalState(() => errorMessage = 'Please enter a valid 6-digit pincode');
+                                  return;
+                                }
+
+                                setModalState(() {
+                                  isVerifying = true;
+                                  errorMessage = null;
+                                });
+
+                                final locProvider = context.read<LocationProvider>();
+                                final success = await locProvider.verifyAndSaveAddressCoordinates(
+                                  addressId: address.id,
+                                  pincode: cleanPin,
+                                );
+
+                                if (ctx.mounted) Navigator.pop(ctx);
+
+                                if (mounted) {
+                                  await _fetchStores();
+                                  if (success) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Delivery address pincode verified & updated!'),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  } else {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Could not resolve coordinates for this pincode. Please try again.'),
+                                        backgroundColor: Colors.red,
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                }
+                              },
+                        child: isVerifying
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Text(
+                                'Verify & Continue',
+                                style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white, fontSize: 15),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   void _showAddAddressDialog(BuildContext context, LocationProvider location) {
@@ -462,6 +653,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           city: 'Ranchi',
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
+                        _fetchStores();
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Address saved & selected for delivery!')),
@@ -706,6 +898,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           location.selectAddress(addr);
                           Navigator.pop(ctx);
                           _fetchStores();
+                          if (_fulfillmentType != 'pickup' && (addr.latitude == null || addr.longitude == null)) {
+                            WidgetsBinding.instance.addPostFrameCallback((_) {
+                              if (mounted) _showPincodeVerificationModal(context, addr);
+                            });
+                          }
                         },
                       );
                     },
@@ -717,6 +914,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       );
     },
   );
+  }
+
   void _showOrderSuccessToast(String orderId) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -804,7 +1003,51 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     ? 'Custom Delivery: $_selectedCustomSlot'
                     : _selectedSlot;
 
+    final selAddr = location.selectedAddress;
+    if (!isPickup && selAddr != null && (selAddr.latitude == null || selAddr.longitude == null)) {
+      _showPincodeVerificationModal(context, selAddr);
+      return;
+    }
+
     final selStore = _selectedStore;
+    final isOutOfRadius = !isPickup && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
+    if (isOutOfRadius) {
+      final distStr = selStore?.distanceKm != null ? '${selStore!.distanceKm!.toStringAsFixed(1)} km' : 'beyond delivery limit';
+      final radiusLimit = selStore?.deliveryRadiusKm?.toInt() ?? 10;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Delivery is only available within $radiusLimit km of our store (Your address is $distStr away). Please switch to Store Pickup.'),
+          backgroundColor: Colors.amber.shade900,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    if (_isOrderingForSomeoneElse) {
+      final clean = _receiverPhoneController.text.replaceAll(RegExp(r'\D'), '');
+      if (clean.length != 10) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please enter a valid 10-digit mobile number for the receiver.'),
+            backgroundColor: AppColors.primaryMaroon,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+      if (_receiverNameController.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please enter the receiver's name."),
+            backgroundColor: AppColors.primaryMaroon,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+    }
+
     if (selStore != null && !selStore.isAvailable) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -931,6 +1174,12 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         'pickupMode': isPickup,
         'tip': effectiveTip,
         'deliveryInstruction': activeInstruction,
+        if (_isOrderingForSomeoneElse && _receiverPhoneController.text.trim().isNotEmpty) ...{
+          'receiverPhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
+          'alternatePhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
+          if (_receiverNameController.text.trim().isNotEmpty)
+            'receiverName': _receiverNameController.text.trim(),
+        },
         'paymentMethod': _selectedPaymentMethod == 'wallet'
             ? "Teffe's Cash Wallet"
             : isPickup
@@ -1190,6 +1439,12 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       'storeId': storeId,
       'storeName': storeName,
       'deliveryInstruction': activeInstruction,
+      if (_isOrderingForSomeoneElse && _receiverPhoneController.text.trim().isNotEmpty) ...{
+        'receiverPhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
+        'alternatePhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
+        if (_receiverNameController.text.trim().isNotEmpty)
+          'receiverName': _receiverNameController.text.trim(),
+      },
     };
 
     try {
@@ -2537,6 +2792,125 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     const SizedBox(height: AppDimensions.spaceMd),
                   ],
 
+                  // Alternate / Receiver Phone Number ("Ordering for someone else?")
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
+                    padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: AppDimensions.roundedLg,
+                      border: Border.all(color: AppColors.borderHairline),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _isOrderingForSomeoneElse = !_isOrderingForSomeoneElse;
+                            });
+                          },
+                          child: Row(
+                            children: [
+                              const Icon(Icons.contact_phone_outlined, color: AppColors.primaryMaroon, size: 20),
+                              const SizedBox(width: 8),
+                              const Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Ordering for someone else?',
+                                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                                    ),
+                                    Text(
+                                      'Add alternate / receiver phone number',
+                                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Checkbox(
+                                value: _isOrderingForSomeoneElse,
+                                activeColor: AppColors.primaryMaroon,
+                                onChanged: (val) {
+                                  setState(() {
+                                    _isOrderingForSomeoneElse = val ?? false;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_isOrderingForSomeoneElse) ...[
+                          const SizedBox(height: 10),
+                          const Divider(height: 1, color: AppColors.borderHairline),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Receiver Mobile Number *',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _receiverPhoneController,
+                            keyboardType: TextInputType.phone,
+                            maxLength: 10,
+                            decoration: InputDecoration(
+                              counterText: '',
+                              prefixText: '+91 ',
+                              prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                              hintText: '10-digit mobile number',
+                              hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                              fillColor: AppColors.surfaceSubtle,
+                              filled: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.borderHairline),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.borderHairline),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.primaryMaroon),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
+                          const Text(
+                            'Receiver Name *',
+                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(height: 6),
+                          TextField(
+                            controller: _receiverNameController,
+                            decoration: InputDecoration(
+                              hintText: "Family member / friend's name",
+                              hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                              fillColor: AppColors.surfaceSubtle,
+                              filled: true,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.borderHairline),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.borderHairline),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: AppColors.primaryMaroon),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: AppDimensions.spaceMd),
+
                   // 4. Collapsible Offers & Coupon Section
                   _buildCouponSection(cart),
                   const SizedBox(height: AppDimensions.spaceMd),
@@ -2657,71 +3031,141 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 top: 12,
                 bottom: 12 + bottomInset,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (cart.subtotal < 200)
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFEF3C7),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFFFDE68A)),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF92400E)),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              'Minimum order value is ₹200. Add ₹${(200 - cart.subtotal).ceil()} more to proceed.',
-                              style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
-                              textAlign: TextAlign.center,
+              child: Builder(
+                builder: (context) {
+                  final selAddr = location.selectedAddress;
+                  final bool needsPincodeVerification = !isPickup && selAddr != null && (selAddr.latitude == null || selAddr.longitude == null);
+                  final selStore = _selectedStore;
+                  final bool isOutOfRadius = !isPickup && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
+                  final bool isCheckoutBlocked = cart.subtotal < 200 || isOutOfRadius || needsPincodeVerification;
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (needsPincodeVerification)
+                        GestureDetector(
+                          onTap: () => _showPincodeVerificationModal(context, selAddr!),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEFF6FF),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF3B82F6)),
                             ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.pin_drop_rounded, size: 16, color: Color(0xFF1D4ED8)),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Text(
+                                    'Pincode verification required for delivery address.',
+                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF1E40AF)),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF1D4ED8),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'Verify Pincode',
+                                    style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Colors.white),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      if (isOutOfRadius)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFF59E0B)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.location_off_rounded, size: 16, color: Color(0xFFB45309)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Outside ${selStore?.deliveryRadiusKm?.toInt() ?? 10} KM delivery range (${selStore?.distanceKm?.toStringAsFixed(1) ?? "?"} km away). Switch to Store Pickup.',
+                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (cart.subtotal < 200)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFFDE68A)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.info_outline_rounded, size: 15, color: Color(0xFF92400E)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Minimum order value is ₹200. Add ₹${(200 - cart.subtotal).ceil()} more to proceed.',
+                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text('TOTAL AMOUNT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
+                              Text(CurrencyFormatter.format(effectiveGrandTotal), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+                            ],
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: isCheckoutBlocked ? Colors.grey.shade400 : AppColors.primaryMaroon,
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                              elevation: isCheckoutBlocked ? 0 : 2,
+                            ),
+                            onPressed: (_isPlacingOrder || isCheckoutBlocked)
+                                ? (needsPincodeVerification ? () => _showPincodeVerificationModal(context, selAddr!) : null)
+                                : () => _handlePlaceOrder(cart, location, auth),
+                            child: _isPlacingOrder
+                                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : Text(
+                                    cart.subtotal < 200
+                                        ? 'Add ₹${(200 - cart.subtotal).ceil()} More'
+                                        : !auth.isAuthenticated
+                                            ? 'Login to proceed'
+                                            : (_selectedPaymentMethod == 'payu'
+                                                ? 'Proceed to Pay →'
+                                                : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      color: isCheckoutBlocked ? Colors.grey.shade800 : Colors.white,
+                                    ),
+                                  ),
                           ),
                         ],
                       ),
-                    ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('TOTAL AMOUNT', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.textMuted)),
-                          Text(CurrencyFormatter.format(effectiveGrandTotal), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
-                        ],
-                      ),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: cart.subtotal < 200 ? Colors.grey.shade400 : AppColors.primaryMaroon,
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
-                          elevation: cart.subtotal < 200 ? 0 : 2,
-                        ),
-                        onPressed: (_isPlacingOrder || cart.subtotal < 200) ? null : () => _handlePlaceOrder(cart, location, auth),
-                        child: _isPlacingOrder
-                            ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                            : Text(
-                                cart.subtotal < 200
-                                    ? 'Add ₹${(200 - cart.subtotal).ceil()} More'
-                                    : !auth.isAuthenticated
-                                        ? 'Login to proceed'
-                                        : (_selectedPaymentMethod == 'payu'
-                                            ? 'Proceed to Pay →'
-                                            : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                  color: cart.subtotal < 200 ? Colors.grey.shade800 : Colors.white,
-                                ),
-                              ),
-                      ),
                     ],
-                  ),
-                ],
+                  );
+                },
               ),
             )
           : null,

@@ -73,6 +73,85 @@ const getSpecificDeliverySlot = (slot?: string, scheduledDeliveryDate?: string, 
   return null;
 };
 
+// ─── Visual Order Product Image & Cuts Resolver ────────────────────────────────
+export const resolveOrderItemImage = (it: any): string => {
+  if (it?.image && typeof it.image === "string" && it.image.trim()) return it.image.trim();
+  if (it?.img && typeof it.img === "string" && it.img.trim()) return it.img.trim();
+  if (it?.imageUrl && typeof it.imageUrl === "string" && it.imageUrl.trim()) return it.imageUrl.trim();
+
+  const nameLower = String(it?.name || it?.itemName || it?.title || "").toLowerCase();
+
+  // Mutton & Goat
+  if (nameLower.includes("mutton") || nameLower.includes("goat") || nameLower.includes("lamb") || nameLower.includes("khasi")) {
+    return "https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&w=300&q=80";
+  }
+  // Prawns & Seafood
+  if (nameLower.includes("prawn") || nameLower.includes("shrimp") || nameLower.includes("crab") || nameLower.includes("lobster")) {
+    return "https://images.unsplash.com/photo-1565680018434-b513d5e5fd47?auto=format&fit=crop&w=300&q=80";
+  }
+  // Fish
+  if (nameLower.includes("fish") || nameLower.includes("rohu") || nameLower.includes("katla") || nameLower.includes("pomfret") || nameLower.includes("salmon") || nameLower.includes("basa") || nameLower.includes("surmai") || nameLower.includes("hilsa")) {
+    return "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=300&q=80";
+  }
+  // Eggs
+  if (nameLower.includes("egg") || nameLower.includes("anda")) {
+    return "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=300&q=80";
+  }
+  // Chicken Wings & Lollipop
+  if (nameLower.includes("wing") || nameLower.includes("lollipop")) {
+    return "https://images.unsplash.com/photo-1567620832903-9fc6debc209f?auto=format&fit=crop&w=300&q=80";
+  }
+  // Chicken Drumstick, Leg, Tangdi, Ran
+  if (nameLower.includes("drumstick") || nameLower.includes("leg") || nameLower.includes("ran") || nameLower.includes("tangdi") || nameLower.includes("thigh")) {
+    return "https://images.unsplash.com/photo-1588767763784-48667a421685?auto=format&fit=crop&w=300&q=80";
+  }
+  // Chicken Boneless, Breast, Tikka Cut, Keema
+  if (nameLower.includes("boneless") || nameLower.includes("breast") || nameLower.includes("tikka") || nameLower.includes("keema") || nameLower.includes("cube") || nameLower.includes("fillet")) {
+    return "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=300&q=80";
+  }
+
+  // General fresh chicken / fresh meat cut
+  return "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=300&q=80";
+};
+
+export interface OrderDisplayItem {
+  name: string;
+  quantity: number | string;
+  image: string;
+  netWeight?: string;
+}
+
+export const getOrderDisplayItems = (order: any): OrderDisplayItem[] => {
+  if (Array.isArray(order?.items) && order.items.length > 0) {
+    return order.items.map((it: any) => ({
+      name: it.name || it.itemName || it.title || "Fresh Meat Cut",
+      quantity: it.quantity || it.qty || 1,
+      image: resolveOrderItemImage(it),
+      netWeight: it.netWeight || it.weight || "",
+    }));
+  }
+
+  const summary = String(order?.itemSummary || "").trim();
+  if (summary) {
+    const parts = summary.split(",").map((s: string) => s.trim()).filter(Boolean);
+    if (parts.length > 0) {
+      return parts.map((part: string) => {
+        const match = part.match(/^(.*?)(?:\s*[×xX]\s*(\d+))?$/);
+        const name = match && match[1] ? match[1].trim() : part;
+        const qty = match && match[2] ? parseInt(match[2], 10) : 1;
+        return {
+          name,
+          quantity: qty,
+          image: resolveOrderItemImage({ name }),
+          netWeight: "",
+        };
+      });
+    }
+  }
+
+  return [];
+};
+
 // ─── Reusable UI pieces ────────────────────────────────────────────────────────
 const KPICard = ({
   icon,
@@ -406,49 +485,47 @@ const FileUploadButton = ({
           headers: { "Content-Type": "multipart/form-data" },
         });
         if (res.data?.success && res.data.url) {
-          finalUrl = res.data.url;
+          if (!res.data.url.includes("localhost") && !res.data.url.includes("127.0.0.1")) {
+            finalUrl = res.data.url;
+          }
         }
       } catch (primaryErr: any) {
-        // Fallback 1: Local backend fallback if remote is not reachable
-        if (
-          primaryErr.response?.status === 404 ||
-          primaryErr.response?.data?.message?.includes("not found") ||
-          primaryErr.code === "ERR_NETWORK"
-        ) {
-          try {
-            const localRes = await axios.post<{ success: boolean; url: string }>("http://localhost:5000/api/upload", formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-            });
-            if (localRes.data?.success && localRes.data.url) {
-              finalUrl = localRes.data.url;
-            }
-          } catch (localErr: any) {
-            console.warn("[Upload] Local backend fallback failed, attempting direct Firebase Storage...", localErr);
-          }
-        }
+        console.warn("[Upload] Primary backend upload skipped/failed:", primaryErr.message);
+      }
 
-        // Fallback 2: Direct browser upload to Firebase Storage
-        if (!finalUrl) {
-          try {
-            const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
-            const { firebaseApp } = await import("@/lib/firebase");
-            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-            const storageRef = ref(getStorage(firebaseApp), `${folder}/${Date.now()}-${safeName}`);
-            const snapshot = await uploadBytes(storageRef, file);
-            finalUrl = await getDownloadURL(snapshot.ref);
-          } catch (fbErr: any) {
-            console.warn("[Upload] Direct Firebase Storage upload failed:", fbErr);
-          }
+      // 2. If backend returned localhost or failed, upload directly to Firebase Cloud Storage
+      if (!finalUrl || finalUrl.includes("localhost") || finalUrl.includes("127.0.0.1")) {
+        try {
+          const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+          const { firebaseApp } = await import("@/lib/firebase");
+          const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+          const storageRef = ref(getStorage(firebaseApp), `${folder}/${Date.now()}-${safeName}`);
+          const snapshot = await uploadBytes(storageRef, file);
+          finalUrl = await getDownloadURL(snapshot.ref);
+        } catch (fbErr: any) {
+          console.warn("[Upload] Direct Firebase Storage failed, trying fallback...", fbErr);
         }
+      }
 
-        if (!finalUrl) {
-          throw primaryErr;
+      // 3. Fallback: if Firebase Storage direct failed too, use local endpoint if available
+      if (!finalUrl) {
+        try {
+          const localRes = await axios.post<{ success: boolean; url: string }>("http://localhost:5000/api/upload", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          if (localRes.data?.success && localRes.data.url) {
+            finalUrl = localRes.data.url;
+          }
+        } catch (localErr: any) {
+          console.warn("[Upload] Local backend fallback failed:", localErr);
         }
       }
 
       if (finalUrl) {
         onUploadSuccess(finalUrl);
         toast.success("Image uploaded to Firebase Storage successfully!", "Upload Complete");
+      } else {
+        throw new Error("Could not upload file. Please check network connection.");
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || "Upload failed. Please try again.", "Upload Error");
@@ -689,6 +766,29 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
                       · <span className="material-symbols-outlined text-[14px]">call</span> {o.customer.phone}
                     </span>
                   )}
+                  {(o.receiverPhone || o.alternatePhone || o.customer?.receiverPhone || o.customer?.alternatePhone) && (() => {
+                    const altPhone = o.receiverPhone || o.alternatePhone || o.customer?.receiverPhone || o.customer?.alternatePhone;
+                    const altName = o.receiverName || o.alternateName || o.customer?.receiverName || o.customer?.alternateName;
+                    return (
+                      <span style={{
+                        color: "#059669",
+                        background: "#ecfdf5",
+                        border: "1px solid #a7f3d0",
+                        padding: "2px 7px",
+                        borderRadius: "6px",
+                        fontSize: "0.75rem",
+                        fontWeight: 700,
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "3px",
+                        maxWidth: "100%",
+                        wordBreak: "break-word",
+                      }}>
+                        <span className="material-symbols-outlined text-[13px]">contact_phone</span>
+                        Alt: {altName ? `${altName} (${altPhone})` : altPhone}
+                      </span>
+                    );
+                  })()}
                   {o.createdAt && (
                     <span style={{
                       fontSize: "0.72rem",
@@ -706,9 +806,76 @@ function DashboardTab({ setActiveTab }: { setActiveTab: (t: string) => void }) {
                     </span>
                   )}
                 </div>
-                <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "3px" }}>
-                  {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
-                </div>
+                {(() => {
+                  const displayItems = getOrderDisplayItems(o);
+                  if (displayItems.length === 0) {
+                    return (
+                      <div style={{ color: "#73695b", fontSize: "0.8rem", marginTop: "3px" }}>
+                        {o.itemSummary || "Fresh Meat Items"}
+                      </div>
+                    );
+                  }
+                  return (
+                    <div style={{
+                      display: "flex",
+                      alignItems: "center",
+                      flexWrap: "wrap",
+                      gap: "6px",
+                      marginTop: "6px",
+                      marginBottom: "2px"
+                    }}>
+                      {displayItems.map((item, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "6px",
+                            background: "#faf7f2",
+                            border: "1px solid #ebd9c8",
+                            borderRadius: "8px",
+                            padding: "3px 8px 3px 3px",
+                            maxWidth: "100%",
+                            boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
+                          }}
+                        >
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            style={{
+                              width: "34px",
+                              height: "34px",
+                              borderRadius: "6px",
+                              objectFit: "cover",
+                              flexShrink: 0,
+                              border: "1px solid #e2dcd4",
+                              background: "#f5f5f4"
+                            }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80";
+                            }}
+                          />
+                          <div style={{ display: "flex", flexDirection: "column", minWidth: 0, lineHeight: 1.2 }}>
+                            <span style={{
+                              fontWeight: 700,
+                              fontSize: "0.8rem",
+                              color: "#292524",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                              maxWidth: "200px",
+                            }}>
+                              {item.name}
+                            </span>
+                            <span style={{ fontSize: "0.72rem", color: "#941717", fontWeight: 800 }}>
+                              Qty: {item.quantity}{item.netWeight ? ` (${item.netWeight})` : ""}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
                 {(o.deliveryInstruction || o.customer?.deliveryInstruction) && (
                   <div style={{
                     marginTop: "4px",
@@ -889,6 +1056,8 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
   const [quickItemPrice, setQuickItemPrice] = useState("");
   const [quickItemQty, setQuickItemQty] = useState(1);
   const [quickItemWeight, setQuickItemWeight] = useState("500g");
+  const [quickItemImage, setQuickItemImage] = useState("");
+  const [quickItemProductId, setQuickItemProductId] = useState("");
   const [inventorySuggestions, setInventorySuggestions] = useState<any[]>([]);
   const [loadingSuggestions, setLoadingSuggestions] = useState(false);
   const [catalogProducts, setCatalogProducts] = useState<any[]>([]);
@@ -926,6 +1095,8 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
     setShowCreateOrderModal(true);
     setSelectedProductId("");
     setIsCustomItem(false);
+    setQuickItemProductId("");
+    setQuickItemImage("");
 
     if (catalogProducts.length === 0) {
       setLoadingCatalog(true);
@@ -969,24 +1140,30 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
     setSelectedProductId(prodId);
     if (!prodId) {
       setIsCustomItem(false);
+      setQuickItemProductId("");
       setQuickItemName("");
       setQuickItemPrice("");
       setQuickItemWeight("500g");
+      setQuickItemImage("");
       return;
     }
     if (prodId === "custom") {
       setIsCustomItem(true);
+      setQuickItemProductId("");
       setQuickItemName("");
       setQuickItemPrice("");
       setQuickItemWeight("500g");
+      setQuickItemImage("");
       return;
     }
     setIsCustomItem(false);
     const prod = catalogProducts.find((p: any) => String(p.id) === String(prodId));
     if (prod) {
+      setQuickItemProductId(prod.id || prodId);
       setQuickItemName(prod.name || "");
       setQuickItemPrice(prod.price != null ? String(prod.price) : "");
       setQuickItemWeight(prod.netWeight || prod.grossWeight || "500g");
+      setQuickItemImage(prod.image || prod.imageUrl || prod.img || "");
     }
   };
 
@@ -1000,15 +1177,19 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
     if (matched) {
       setSelectedProductId(matched.id);
       setIsCustomItem(false);
+      setQuickItemProductId(matched.id);
       setQuickItemName(matched.name || itemName);
       setQuickItemPrice(matched.price != null ? String(matched.price) : (invItem.price ? String(invItem.price) : "220"));
       setQuickItemWeight(matched.netWeight || matched.grossWeight || (invItem.unit === "piece" ? "1 piece" : "500g"));
+      setQuickItemImage(matched.image || matched.imageUrl || matched.img || "");
     } else {
       setSelectedProductId("custom");
       setIsCustomItem(true);
+      setQuickItemProductId("");
       setQuickItemName(itemName);
       setQuickItemPrice(invItem.price ? String(invItem.price) : "220");
       setQuickItemWeight(invItem.unit === "piece" ? "1 piece" : "500g");
+      setQuickItemImage(invItem.image || invItem.imageUrl || "");
     }
   };
 
@@ -1026,24 +1207,37 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
       ...prev,
       {
         id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+        productId: quickItemProductId || undefined,
         name: quickItemName.trim(),
         price: priceNum,
         quantity: quickItemQty,
         netWeight: quickItemWeight,
+        image: quickItemImage || undefined,
       }
     ]);
     setSelectedProductId("");
     setIsCustomItem(false);
+    setQuickItemProductId("");
     setQuickItemName("");
     setQuickItemPrice("");
     setQuickItemQty(1);
     setQuickItemWeight("500g");
+    setQuickItemImage("");
   };
 
   const handleSaveManualOrder = async () => {
     const cleanPhone = manualCustPhone.replace(/\D/g, "");
     if (cleanPhone.length < 10) {
       toast.error("Please enter a valid 10-digit customer phone number", "Invalid Phone");
+      return;
+    }
+    const cleanName = manualCustName.trim();
+    if (!cleanName) {
+      toast.error("Please enter the customer's name", "Customer Name Required");
+      return;
+    }
+    if (cleanName.length < 2) {
+      toast.error("Customer name must be at least 2 characters", "Invalid Name");
       return;
     }
     if (manualItems.length === 0) {
@@ -1065,7 +1259,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
       const res = await api.post<{ success: boolean; message: string; order: any }>(
         "/store-admin/orders/create-manual",
         {
-          customerName: manualCustName.trim() || "Valued Customer",
+          customerName: cleanName,
           customerPhone: cleanPhone,
           shippingAddress: manualIsPickup ? "Store Takeaway Counter, Ranchi" : manualCustAddress.trim(),
           pickupMode: manualIsPickup,
@@ -1618,6 +1812,15 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
               : "";
             const callUrl = cleanPhone ? `tel:${cleanPhone}` : "";
 
+            const rawAltPhone = o.receiverPhone || o.alternatePhone || o.customer?.receiverPhone || o.customer?.alternatePhone || "";
+            const cleanAltPhone = String(rawAltPhone).replace(/\D/g, "");
+            const rawAltName = o.receiverName || o.alternateName || o.customer?.receiverName || o.customer?.alternateName || "";
+            const altPhoneForWa = cleanAltPhone.length === 10 ? `91${cleanAltPhone}` : cleanAltPhone;
+            const altWaUrl = cleanAltPhone
+              ? `https://wa.me/${altPhoneForWa}?text=${encodeURIComponent(`Hello${rawAltName ? ` ${rawAltName}` : ""}, this is TeFFe's regarding order #${orderKey}.`)}`
+              : "";
+            const altCallUrl = cleanAltPhone ? `tel:${cleanAltPhone}` : "";
+
             return (
               <div
                 key={orderKey}
@@ -1629,7 +1832,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                     ? "2px solid #941717"
                     : "1px solid #ede8e0",
                   borderRadius: "14px",
-                  padding: "18px 20px",
+                  padding: "14px",
                   boxShadow: isPickup
                     ? "0 2px 10px rgba(245, 158, 11, 0.08)"
                     : selectedBatchOrderIds.includes(orderKey)
@@ -1638,33 +1841,34 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                   transition: "border 150ms ease",
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px", flexWrap: "wrap", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px", flexWrap: "wrap", gap: "6px" }}>
                   <div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                       {canBatch && (
                         <input
                           type="checkbox"
                           checked={selectedBatchOrderIds.includes(orderKey)}
                           onChange={() => toggleSelectOrderForBatch(orderKey)}
-                          style={{ width: "16px", height: "16px", accentColor: "#941717", cursor: "pointer" }}
+                          style={{ width: "15px", height: "15px", accentColor: "#941717", cursor: "pointer" }}
                           title="Select order for multi-delivery batch dispatch"
                         />
                       )}
-                      <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.95rem" }}>#{orderKey}</div>
+                      <div style={{ fontWeight: 800, color: "#171410", fontSize: "0.88rem" }}>#{orderKey}</div>
                       {o.batchId && (
                         <span style={{
                           background: "#fdf4ff",
                           color: "#86198f",
                           border: "1px solid #f0abfc",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[13px]">local_shipping</span>
+                          <span className="material-symbols-outlined text-[12px]">local_shipping</span>
                           Batch #{String(o.batchId).slice(-6)} • Stop {o.deliverySequence || 1}
                         </span>
                       )}
@@ -1673,34 +1877,34 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                           background: "#fef3c7",
                           color: "#92400e",
                           border: "1px solid #fde68a",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[14px]">storefront</span>
-                          STORE PICKUP (Customer Takeaway)
+                          <span className="material-symbols-outlined text-[12px]">storefront</span>
+                          Store Pickup
                         </span>
                       ) : (
                         <span style={{
                           background: "#e0f2fe",
                           color: "#0369a1",
                           border: "1px solid #bae6fd",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[14px]">delivery_dining</span>
-                          HOME EXPRESS DELIVERY
+                          <span className="material-symbols-outlined text-[12px]">delivery_dining</span>
+                          Home Delivery
                         </span>
                       )}
                       {(o.createdByType === "self_store_admin" || o.orderSource === "store_direct") && (
@@ -1708,33 +1912,34 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                           background: "#ecfdf5",
                           color: "#065f46",
                           border: "1px solid #a7f3d0",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[14px]">person_check</span>
+                          <span className="material-symbols-outlined text-[12px]">person_check</span>
                           Created by Self
                         </span>
                       )}
                       {o.createdAt && (
                         <span style={{
-                          fontSize: "0.72rem",
+                          fontSize: "0.68rem",
                           color: "#78716c",
                           background: "#f5f5f4",
                           border: "1px solid #e7e5e4",
-                          padding: "2px 7px",
-                          borderRadius: "6px",
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
                           fontWeight: 600,
                           display: "inline-flex",
                           alignItems: "center",
                           gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[13px]">schedule</span>
+                          <span className="material-symbols-outlined text-[12px]">schedule</span>
                           {formatOrderDateTime(o.createdAt)}
                         </span>
                       )}
@@ -1745,17 +1950,17 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                             background: "#fef2f2",
                             color: "#dc2626",
                             border: "1px solid #fecaca",
-                            padding: "2px 8px",
-                            borderRadius: "6px",
-                            fontSize: "0.72rem",
-                            fontWeight: 800,
-                            letterSpacing: "0.2px",
+                            padding: "1.5px 6px",
+                            borderRadius: "5px",
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: "4px",
+                            gap: "3px",
+                            whiteSpace: "nowrap",
                           }}
                         >
-                          <span className="material-symbols-outlined text-[13px]">cancel</span>
+                          <span className="material-symbols-outlined text-[12px]">cancel</span>
                           Cancelled
                         </span>
                       )}
@@ -1764,16 +1969,16 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                           background: "#ecfdf5",
                           color: "#059669",
                           border: "1px solid #a7f3d0",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                          <span className="material-symbols-outlined text-[12px]">check_circle</span>
                           Delivered
                         </span>
                       )}
@@ -1781,19 +1986,20 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         <span
                           title="Delivered Time"
                           style={{
-                            fontSize: "0.72rem",
+                            fontSize: "0.68rem",
                             color: "#059669",
                             background: "#ecfdf5",
                             border: "1px solid #a7f3d0",
-                            padding: "2px 7px",
-                            borderRadius: "6px",
+                            padding: "1.5px 6px",
+                            borderRadius: "5px",
                             fontWeight: 600,
                             display: "inline-flex",
                             alignItems: "center",
                             gap: "3px",
+                            whiteSpace: "nowrap",
                           }}
                         >
-                          <span className="material-symbols-outlined text-[13px]">task_alt</span>
+                          <span className="material-symbols-outlined text-[12px]">task_alt</span>
                           Delivered: {formatOrderDateTime(o.deliveredAt || o.timeline?.find((t: any) => t.status === "Delivered")?.timestamp || o.updatedAt)}
                         </span>
                       )}
@@ -1838,17 +2044,17 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                             background: isToday ? "#ecfdf5" : "#fef3c7",
                             color: isToday ? "#065f46" : "#92400e",
                             border: isToday ? "1px solid #a7f3d0" : "1px solid #fde68a",
-                            padding: "2px 8px",
-                            borderRadius: "6px",
-                            fontSize: "0.72rem",
-                            fontWeight: 800,
-                            letterSpacing: "0.2px",
+                            padding: "1.5px 6px",
+                            borderRadius: "5px",
+                            fontSize: "0.68rem",
+                            fontWeight: 700,
                             display: "inline-flex",
                             alignItems: "center",
-                            gap: "4px",
+                            gap: "3px",
+                            whiteSpace: "nowrap",
                           }}>
-                            <span className="material-symbols-outlined text-[14px]">{isToday ? "wb_twilight" : "wb_sunny"}</span>
-                            DELIVER {isToday ? "TODAY" : "TOMORROW"} BY 9:00 AM
+                            <span className="material-symbols-outlined text-[12px]">{isToday ? "wb_twilight" : "wb_sunny"}</span>
+                            Deliver {isToday ? "Today" : "Tomorrow"} by 9:00 AM
                           </span>
                         );
                       })()}
@@ -1857,17 +2063,17 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                           background: "#fef3c7",
                           color: "#92400e",
                           border: "1px solid #fde68a",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[13px]">edit_note</span>
-                          REVISED ORDER
+                          <span className="material-symbols-outlined text-[12px]">edit_note</span>
+                          Revised Order
                         </span>
                       )}
                       {o.additionalAmountDue > 0 && (
@@ -1875,16 +2081,16 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                           background: "#ecfdf5",
                           color: "#065f46",
                           border: "1px solid #a7f3d0",
-                          padding: "2px 8px",
-                          borderRadius: "6px",
-                          fontSize: "0.72rem",
-                          fontWeight: 800,
-                          letterSpacing: "0.2px",
+                          padding: "1.5px 6px",
+                          borderRadius: "5px",
+                          fontSize: "0.68rem",
+                          fontWeight: 700,
                           display: "inline-flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "3px",
+                          whiteSpace: "nowrap",
                         }}>
-                          <span className="material-symbols-outlined text-[13px]">payments</span>
+                          <span className="material-symbols-outlined text-[12px]">payments</span>
                           Collect ₹{o.additionalAmountDue} Extra
                         </span>
                       )}
@@ -1948,6 +2154,56 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                           </div>
                         </>
                       )}
+                      {rawAltPhone && (
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "5px", background: "#ecfdf5", border: "1px solid #a7f3d0", padding: "2px 7px", borderRadius: "6px", maxWidth: "100%", flexWrap: "wrap" }}>
+                          <span className="material-symbols-outlined text-[13px]" style={{ color: "#059669" }}>contact_phone</span>
+                          <span style={{ color: "#059669", fontSize: "0.75rem", fontWeight: 700 }}>
+                            Alt: {rawAltName ? `${rawAltName} (${rawAltPhone})` : rawAltPhone}
+                          </span>
+                          <a
+                            href={altCallUrl}
+                            title={rawAltName ? `Call Receiver ${rawAltName} (${rawAltPhone})` : `Call Receiver (${rawAltPhone})`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "22px",
+                              height: "22px",
+                              background: "#eff6ff",
+                              color: "#0284c7",
+                              border: "1px solid #bae6fd",
+                              borderRadius: "5px",
+                              textDecoration: "none",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <span className="material-symbols-outlined text-[13px]">call</span>
+                          </a>
+                          <a
+                            href={altWaUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={rawAltName ? `Message Receiver ${rawAltName} on WhatsApp (${rawAltPhone})` : `Message Receiver on WhatsApp (${rawAltPhone})`}
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              width: "22px",
+                              height: "22px",
+                              background: "#ffffff",
+                              color: "#16a34a",
+                              border: "1px solid #a7f3d0",
+                              borderRadius: "5px",
+                              textDecoration: "none",
+                              cursor: "pointer",
+                            }}
+                          >
+                            <svg style={{ width: "12px", height: "12px", fill: "currentColor", flexShrink: 0 }} viewBox="0 0 24 24">
+                              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                            </svg>
+                          </a>
+                        </div>
+                      )}
                     </div>
                     <div style={{
                       color: isPickup ? "#b45309" : "#73695b",
@@ -1997,9 +2253,116 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                   </div>
                 </div>
 
-                <div style={{ color: "#423b32", fontSize: "0.875rem", fontWeight: 600, marginBottom: "12px", display: "flex", alignItems: "center", gap: "6px" }}>
-                  <span className="material-symbols-outlined text-[16px] text-gray-500">shopping_cart</span>
-                  <span>{o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}</span>
+                {/* Ordered Items with Cuts & Accurate Images */}
+                <div style={{ marginBottom: "14px" }}>
+                  {(() => {
+                    const displayItems = getOrderDisplayItems(o);
+                    if (displayItems.length === 0) {
+                      return (
+                        <div style={{ color: "#423b32", fontSize: "0.875rem", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span className="material-symbols-outlined text-[16px] text-gray-500">shopping_cart</span>
+                          <span>{o.itemSummary || "Fresh Meat Cuts"}</span>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          color: "#78716c",
+                          fontSize: "0.74rem",
+                          fontWeight: 700,
+                          textTransform: "uppercase",
+                          letterSpacing: "0.5px"
+                        }}>
+                          <span className="material-symbols-outlined text-[15px] text-[#941717]">lunch_dining</span>
+                          <span>Ordered Items ({displayItems.length})</span>
+                        </div>
+
+                        <div style={{
+                          display: "flex",
+                          flexWrap: "wrap",
+                          gap: "10px",
+                          alignItems: "stretch"
+                        }}>
+                          {displayItems.map((item, idx) => (
+                            <div
+                              key={idx}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "10px",
+                                background: "#ffffff",
+                                border: "1.5px solid #ebd9c8",
+                                borderRadius: "12px",
+                                padding: "6px 12px 6px 6px",
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                                minWidth: "180px",
+                                maxWidth: "100%",
+                                flex: "0 1 auto",
+                              }}
+                            >
+                              <div style={{
+                                position: "relative",
+                                width: "52px",
+                                height: "52px",
+                                borderRadius: "9px",
+                                overflow: "hidden",
+                                border: "1px solid #e7ded5",
+                                background: "#f7f5f2",
+                                flexShrink: 0
+                              }}>
+                                <img
+                                  src={item.image}
+                                  alt={item.name}
+                                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80";
+                                  }}
+                                />
+                              </div>
+
+                              <div style={{ display: "flex", flexDirection: "column", gap: "2px", minWidth: 0 }}>
+                                <span style={{
+                                  fontWeight: 800,
+                                  fontSize: "0.92rem",
+                                  color: "#1c1917",
+                                  lineHeight: 1.25,
+                                  wordBreak: "break-word"
+                                }}>
+                                  {item.name}
+                                </span>
+                                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                  <span style={{
+                                    background: "#fef2f2",
+                                    color: "#941717",
+                                    border: "1px solid #fecaca",
+                                    fontSize: "0.78rem",
+                                    fontWeight: 800,
+                                    padding: "1px 7px",
+                                    borderRadius: "6px",
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    gap: "2px"
+                                  }}>
+                                    Qty: {item.quantity}
+                                  </span>
+                                  {item.netWeight && (
+                                    <span style={{ fontSize: "0.74rem", color: "#78716c", fontWeight: 600 }}>
+                                      {item.netWeight}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Dynamic Operational Prep & ETA Strip */}
@@ -2372,8 +2735,34 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                 <div style={{ fontSize: "0.75rem", color: "#73695b", marginBottom: "4px" }}>
                   📍 {assignModalOrder.customer?.address || "Ranchi Delivery"}
                 </div>
-                <div style={{ fontSize: "0.75rem", color: "#423b32", fontWeight: 600 }}>
-                  Items: {assignModalOrder.itemSummary || assignModalOrder.items?.map((it: any) => `${it.name} ×${it.quantity}`).join(", ") || "Fresh Meat Cuts"}
+                <div style={{ marginTop: "6px" }}>
+                  <div style={{ fontSize: "0.74rem", color: "#78716c", fontWeight: 700, marginBottom: "4px" }}>
+                    Items to dispatch:
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                    {getOrderDisplayItems(assignModalOrder).map((it, idx) => (
+                      <div key={idx} style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#fff",
+                        border: "1px solid #ebd9c8",
+                        borderRadius: "6px",
+                        padding: "2px 6px 2px 2px",
+                      }}>
+                        <img
+                          src={it.image}
+                          alt={it.name}
+                          style={{ width: "26px", height: "26px", borderRadius: "4px", objectFit: "cover" }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80";
+                          }}
+                        />
+                        <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "#1c1917" }}>{it.name}</span>
+                        <span style={{ fontSize: "0.7rem", color: "#941717", fontWeight: 800 }}>×{it.quantity}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               </div>
 
@@ -2898,13 +3287,14 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                   </div>
                   <div>
                     <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
-                      Customer Name
+                      Customer Name <span style={{ color: "#dc2626" }}>*</span>
                     </label>
                     <input
                       type="text"
                       placeholder="e.g. Rahul Sharma"
                       value={manualCustName}
                       onChange={(e) => setManualCustName(e.target.value)}
+                      required
                       style={{
                         width: "100%",
                         padding: "8px 12px",
@@ -3313,9 +3703,18 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                             fontSize: "0.8rem",
                           }}
                         >
-                          <div>
-                            <span style={{ fontWeight: 700, color: "#111827" }}>{item.name}</span>
-                            <span style={{ color: "#6b7280", marginLeft: "6px" }}>({item.netWeight} ×{item.quantity})</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {item.image && (
+                              <img
+                                src={item.image}
+                                alt={item.name}
+                                style={{ width: "28px", height: "28px", borderRadius: "5px", objectFit: "cover" }}
+                              />
+                            )}
+                            <div>
+                              <span style={{ fontWeight: 700, color: "#111827" }}>{item.name}</span>
+                              <span style={{ color: "#6b7280", marginLeft: "6px" }}>({item.netWeight} ×{item.quantity})</span>
+                            </div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                             <span style={{ fontWeight: 800, color: "#065f46" }}>₹{(item.price || 0) * (item.quantity || 1)}</span>
@@ -7114,7 +7513,34 @@ function RidersTab({ storeId }: { storeId?: string }) {
                 </div>
               </div>
               <div style={{ fontSize: "0.85rem", color: "#423b32", background: "#faf8f5", padding: "10px 12px", borderRadius: "8px" }}>
-                <strong>Items:</strong> {o.itemSummary || o.items?.map((item: any) => `${item.name} ×${item.quantity}`).join(", ")}
+                <div style={{ fontWeight: 700, marginBottom: "6px" }}>Ordered Meat Cuts:</div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                  {getOrderDisplayItems(o).map((item, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        background: "#fff",
+                        border: "1px solid #ebd9c8",
+                        borderRadius: "8px",
+                        padding: "3px 8px 3px 3px",
+                      }}
+                    >
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        style={{ width: "32px", height: "32px", borderRadius: "6px", objectFit: "cover" }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80";
+                        }}
+                      />
+                      <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "#1c1917" }}>{item.name}</span>
+                      <span style={{ fontSize: "0.72rem", color: "#941717", fontWeight: 800 }}>×{item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ))}
@@ -8860,21 +9286,21 @@ export default function StoreAdminPage() {
               background: "linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%)",
               color: "#fff",
               borderRadius: "14px",
-              padding: "16px 20px",
-              marginBottom: "24px",
+              padding: "12px 14px",
+              marginBottom: "20px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               flexWrap: "wrap",
-              gap: "16px",
+              gap: "10px",
               border: "2px solid #ef4444",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: "1 1 240px" }}>
               <div
                 style={{
-                  width: "48px",
-                  height: "48px",
+                  width: "38px",
+                  height: "38px",
                   borderRadius: "50%",
                   background: "rgba(255,255,255,0.2)",
                   display: "flex",
@@ -8883,52 +9309,50 @@ export default function StoreAdminPage() {
                   flexShrink: 0,
                 }}
               >
-                <span className="material-symbols-outlined text-[28px] animate-bell-ring" style={{ color: "#fef08a" }}>
+                <span className="material-symbols-outlined text-[22px] animate-bell-ring" style={{ color: "#fef08a" }}>
                   notifications_active
                 </span>
               </div>
-              <div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>NEW ORDER RECEIVED!</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", lineHeight: 1.25 }}>
+                  <span style={{ fontSize: "0.95rem", fontWeight: 900, letterSpacing: "-0.2px" }}>
+                    NEW ORDER RECEIVED!
+                  </span>
                   <span
                     style={{
-                      fontSize: "0.75rem",
+                      fontSize: "0.68rem",
                       background: "#fef08a",
                       color: "#854d0e",
-                      padding: "2px 8px",
+                      padding: "1.5px 7px",
                       borderRadius: "99px",
                       fontWeight: 800,
+                      whiteSpace: "nowrap",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      flexShrink: 0,
                     }}
                   >
                     {incomingOrders.length} PENDING
                   </span>
                 </div>
-                <div style={{ fontSize: "0.85rem", opacity: 0.95, marginTop: "3px" }}>
+                <div style={{ fontSize: "0.78rem", opacity: 0.95, marginTop: "2px", wordBreak: "break-word", lineHeight: 1.3 }}>
                   Order #{incomingOrders[0]?.orderId} · ₹{incomingOrders[0]?.amount} · {incomingOrders[0]?.items?.length || 1} item(s) · {incomingOrders[0]?.customer?.name || "Customer"} ({incomingOrders[0]?.fulfillmentType === "pickup" ? "Store Pickup" : "Delivery"})
                 </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <button
                 type="button"
                 onClick={toggleMute}
+                className="w-full sm:w-auto py-1.5 px-3.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-bold text-white transition-colors cursor-pointer whitespace-nowrap"
                 style={{
                   background: isMuted ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)",
                   border: "1px solid rgba(255,255,255,0.3)",
-                  borderRadius: "10px",
-                  padding: "8px 14px",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  transition: "background 150ms ease",
+                  minHeight: "34px",
                 }}
               >
-                <span className="material-symbols-outlined text-[18px]">
+                <span className="material-symbols-outlined text-[16px]">
                   {isMuted ? "volume_off" : "volume_up"}
                 </span>
                 <span>{isMuted ? "Unmute Alarm" : "Mute Sound"}</span>
@@ -8942,22 +9366,12 @@ export default function StoreAdminPage() {
                     orderAlarm.stopAlarm();
                   }
                 }}
+                className="w-full sm:w-auto py-1.5 px-3.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-extrabold bg-white text-[#991b1b] shadow-xs transition-all cursor-pointer whitespace-nowrap"
                 style={{
-                  background: "#fff",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "8px 16px",
-                  color: "#991b1b",
-                  fontWeight: 800,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                  minHeight: "34px",
                 }}
               >
-                <span className="material-symbols-outlined text-[18px]">local_shipping</span>
+                <span className="material-symbols-outlined text-[16px]">local_shipping</span>
                 <span>View in Live Orders</span>
               </button>
             </div>
@@ -8972,21 +9386,21 @@ export default function StoreAdminPage() {
               background: "linear-gradient(135deg, #c2410c 0%, #9a3412 100%)",
               color: "#fff",
               borderRadius: "14px",
-              padding: "16px 20px",
-              marginBottom: "24px",
+              padding: "12px 14px",
+              marginBottom: "20px",
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               flexWrap: "wrap",
-              gap: "16px",
+              gap: "10px",
               border: "2px solid #ea580c",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", gap: "14px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0, flex: "1 1 240px" }}>
               <div
                 style={{
-                  width: "48px",
-                  height: "48px",
+                  width: "38px",
+                  height: "38px",
                   borderRadius: "50%",
                   background: "rgba(255,255,255,0.2)",
                   display: "flex",
@@ -8995,52 +9409,50 @@ export default function StoreAdminPage() {
                   flexShrink: 0,
                 }}
               >
-                <span className="material-symbols-outlined text-[28px] animate-bell-ring" style={{ color: "#fef08a" }}>
+                <span className="material-symbols-outlined text-[22px] animate-bell-ring" style={{ color: "#fef08a" }}>
                   assignment_return
                 </span>
               </div>
-              <div>
-                <div style={{ fontSize: "1.1rem", fontWeight: 900, display: "flex", alignItems: "center", gap: "8px" }}>
-                  <span>CUSTOMER RETURN REQUEST RECEIVED!</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", lineHeight: 1.25 }}>
+                  <span style={{ fontSize: "0.95rem", fontWeight: 900, letterSpacing: "-0.2px" }}>
+                    CUSTOMER RETURN REQUEST RECEIVED!
+                  </span>
                   <span
                     style={{
-                      fontSize: "0.75rem",
+                      fontSize: "0.68rem",
                       background: "#fef08a",
                       color: "#854d0e",
-                      padding: "2px 8px",
+                      padding: "1.5px 7px",
                       borderRadius: "99px",
                       fontWeight: 800,
+                      whiteSpace: "nowrap",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      flexShrink: 0,
                     }}
                   >
                     {incomingReturns.length} PENDING REVIEW
                   </span>
                 </div>
-                <div style={{ fontSize: "0.85rem", opacity: 0.95, marginTop: "3px" }}>
+                <div style={{ fontSize: "0.78rem", opacity: 0.95, marginTop: "2px", wordBreak: "break-word", lineHeight: 1.3 }}>
                   Return #{incomingReturns[0]?.requestId} · Order #{incomingReturns[0]?.orderId} · {incomingReturns[0]?.reason || "Return Requested"}
                 </div>
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
+            <div className="w-full sm:w-auto flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <button
                 type="button"
                 onClick={toggleMute}
+                className="w-full sm:w-auto py-1.5 px-3.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-bold text-white transition-colors cursor-pointer whitespace-nowrap"
                 style={{
                   background: isMuted ? "rgba(255,255,255,0.25)" : "rgba(0,0,0,0.3)",
                   border: "1px solid rgba(255,255,255,0.3)",
-                  borderRadius: "10px",
-                  padding: "8px 14px",
-                  color: "#fff",
-                  fontWeight: 700,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  transition: "background 150ms ease",
+                  minHeight: "34px",
                 }}
               >
-                <span className="material-symbols-outlined text-[18px]">
+                <span className="material-symbols-outlined text-[16px]">
                   {isMuted ? "volume_off" : "volume_up"}
                 </span>
                 <span>{isMuted ? "Unmute Alarm" : "Mute Sound"}</span>
@@ -9065,22 +9477,12 @@ export default function StoreAdminPage() {
                     orderAlarm.stopAlarm();
                   }
                 }}
+                className="w-full sm:w-auto py-1.5 px-3.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-extrabold bg-white text-[#c2410c] shadow-xs transition-all cursor-pointer whitespace-nowrap"
                 style={{
-                  background: "#fff",
-                  border: "none",
-                  borderRadius: "10px",
-                  padding: "8px 16px",
-                  color: "#c2410c",
-                  fontWeight: 800,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  boxShadow: "0 2px 6px rgba(0,0,0,0.15)",
+                  minHeight: "34px",
                 }}
               >
-                <span className="material-symbols-outlined text-[18px]">assignment_return</span>
+                <span className="material-symbols-outlined text-[16px]">assignment_return</span>
                 <span>Review Returns</span>
               </button>
             </div>

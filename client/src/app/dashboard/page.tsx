@@ -1058,13 +1058,29 @@ export default function DashboardPage() {
         bagTemp: o.rider?.bagTemp || "Fresh-Lock Box",
         eta: etaText,
       },
-      items: (o.items || []).map((it: any) => ({
-        name: `${it.name}${it.netWeight ? ` (${it.netWeight})` : ""}`,
-        img: it.image || "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80",
-        price: it.price || 0,
-        quantity: it.quantity || 1,
-        netWeight: it.netWeight || it.weight || "1 unit",
-      })),
+      items: (o.items || []).map((it: any) => {
+        const itemImg = (it.image && typeof it.image === "string" && it.image.trim()) ? it.image.trim() : "";
+        const nameLower = String(it.name || "").toLowerCase();
+        const fallbackImg = nameLower.includes("mutton")
+          ? "https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&w=200&q=80"
+          : (nameLower.includes("fish") || nameLower.includes("prawn"))
+          ? "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=200&q=80"
+          : nameLower.includes("egg")
+          ? "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=200&q=80"
+          : (nameLower.includes("boneless") || nameLower.includes("breast"))
+          ? "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=200&q=80"
+          : (nameLower.includes("drumstick") || nameLower.includes("leg"))
+          ? "https://images.unsplash.com/photo-1588767763784-48667a421685?auto=format&fit=crop&w=200&q=80"
+          : "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80";
+
+        return {
+          name: `${it.name}${it.netWeight ? ` (${it.netWeight})` : ""}`,
+          img: itemImg || fallbackImg,
+          price: it.price || 0,
+          quantity: it.quantity || 1,
+          netWeight: it.netWeight || it.weight || "1 unit",
+        };
+      }),
       discountAmount: Number(o.discountAmount || o.rawOrder?.discountAmount || 0),
       manualDiscount: Number(o.manualDiscount || o.rawOrder?.manualDiscount || 0),
       isModified: Boolean(o.isModified || o.rawOrder?.isModified),

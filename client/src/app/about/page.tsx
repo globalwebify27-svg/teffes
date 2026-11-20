@@ -65,13 +65,20 @@ export default function AboutPage() {
               </div>
             </div>
 
-            {/* Graphic */}
+            {/* Graphic: Full image preserved with ambient backdrop */}
             <div className="w-full lg:w-1/2 flex justify-center">
-              <div className="relative w-full max-w-md aspect-4/3 rounded-3xl overflow-hidden shadow-md border border-gray-200">
+              <div className="relative w-full max-w-md aspect-4/3 rounded-3xl overflow-hidden shadow-md border border-gray-200 bg-neutral-950 flex items-center justify-center">
+                <img
+                  src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80"
+                  alt=""
+                  aria-hidden="true"
+                  className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none select-none"
+                />
+                <div className="absolute inset-0 bg-black/30 pointer-events-none" />
                 <img
                   src="https://images.unsplash.com/photo-1544025162-d76694265947?auto=format&fit=crop&w=800&q=80"
                   alt="Teffes Fresh Meat Store"
-                  className="w-full h-full object-cover"
+                  className="relative z-10 max-h-full max-w-full w-auto h-full object-contain drop-shadow-md"
                 />
               </div>
             </div>

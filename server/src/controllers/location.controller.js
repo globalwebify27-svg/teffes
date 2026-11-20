@@ -77,9 +77,40 @@ const roadDistance = async (req, res, next) => {
   }
 };
 
+/**
+ * GET/POST /api/location/geocode?pincode=...&address=...&city=...
+ */
+const geocodeAddress = async (req, res, next) => {
+  try {
+    const pincode = req.query?.pincode || req.body?.pincode || '';
+    const address = req.query?.address || req.body?.address || '';
+    const city = req.query?.city || req.body?.city || '';
+
+    if (!pincode && !address) {
+      return res.status(400).json({
+        success: false,
+        message: 'A 6-digit pincode or address is required for geocoding',
+      });
+    }
+
+    const data = await googleMapsService.geocodePincodeOrAddress({ pincode, address, city });
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: 'Could not resolve coordinates for the provided address or pincode',
+      });
+    }
+
+    res.status(200).json(data);
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   reverseGeocode,
   placesAutocomplete,
   placeDetails,
   roadDistance,
+  geocodeAddress,
 };

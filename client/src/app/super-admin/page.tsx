@@ -374,49 +374,48 @@ const FileUploadButton = ({
           headers: { "Content-Type": "multipart/form-data" },
         });
         if (res.data?.success && res.data.url) {
-          finalUrl = res.data.url;
+          // If backend gave a permanent cloud URL (not localhost), use it!
+          if (!res.data.url.includes("localhost") && !res.data.url.includes("127.0.0.1")) {
+            finalUrl = res.data.url;
+          }
         }
       } catch (primaryErr: any) {
-        // Fallback 1: If remote backend (e.g. Render) returns 404 (not deployed yet), try local backend
-        if (
-          primaryErr.response?.status === 404 ||
-          primaryErr.response?.data?.message?.includes("not found") ||
-          primaryErr.code === "ERR_NETWORK"
-        ) {
-          try {
-            const localRes = await axios.post<{ success: boolean; url: string }>("http://localhost:5000/api/upload", formData, {
-              headers: { "Content-Type": "multipart/form-data" },
-            });
-            if (localRes.data?.success && localRes.data.url) {
-              finalUrl = localRes.data.url;
-            }
-          } catch (localErr: any) {
-            console.warn("[Upload] Local backend fallback failed, attempting Firebase Storage...", localErr);
-          }
-        }
+        console.warn("[Upload] Primary backend upload skipped/failed:", primaryErr.message);
+      }
 
-        // Fallback 2: Direct browser upload to Firebase Storage
-        if (!finalUrl) {
-          try {
-            const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
-            const { firebaseApp } = await import("@/lib/firebase");
-            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-            const storageRef = ref(getStorage(firebaseApp), `${folder}/${Date.now()}-${safeName}`);
-            const snapshot = await uploadBytes(storageRef, file);
-            finalUrl = await getDownloadURL(snapshot.ref);
-          } catch (fbErr: any) {
-            console.warn("[Upload] Firebase Storage fallback failed:", fbErr);
-          }
+      // 2. If backend returned localhost or failed, upload directly to Firebase Cloud Storage
+      if (!finalUrl || finalUrl.includes("localhost") || finalUrl.includes("127.0.0.1")) {
+        try {
+          const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+          const { firebaseApp } = await import("@/lib/firebase");
+          const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+          const storageRef = ref(getStorage(firebaseApp), `${folder}/${Date.now()}-${safeName}`);
+          const snapshot = await uploadBytes(storageRef, file);
+          finalUrl = await getDownloadURL(snapshot.ref);
+        } catch (fbErr: any) {
+          console.warn("[Upload] Direct Firebase Storage failed, trying fallback...", fbErr);
         }
+      }
 
-        if (!finalUrl) {
-          throw primaryErr;
+      // 3. Fallback: if Firebase Storage direct failed too, use local endpoint if available
+      if (!finalUrl) {
+        try {
+          const localRes = await axios.post<{ success: boolean; url: string }>("http://localhost:5000/api/upload", formData, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+          if (localRes.data?.success && localRes.data.url) {
+            finalUrl = localRes.data.url;
+          }
+        } catch (localErr: any) {
+          console.warn("[Upload] Local backend fallback failed:", localErr);
         }
       }
 
       if (finalUrl) {
         onUploadSuccess(finalUrl);
         toast.success("File uploaded successfully!", "Upload Complete");
+      } else {
+        throw new Error("Could not upload file. Please check network connection.");
       }
     } catch (err: any) {
       toast.error(err.response?.data?.message || err.message || "Upload failed. Please try again.", "Upload Error");
@@ -875,8 +874,15 @@ function StoresTab() {
                   />
                 </div>
                 {newStore.image && newStore.image.trim() !== "" && (
-                  <div style={{ marginTop: "8px", width: "100%", height: "100px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
-                    <img src={newStore.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <div style={{ marginTop: "8px", width: "100%", height: "140px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0", background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <img
+                      src={newStore.image}
+                      alt="Store Preview"
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
+                      }}
+                    />
                   </div>
                 )}
               </div>
@@ -1013,8 +1019,15 @@ function StoresTab() {
                   />
                 </div>
                 {editingStore.image && editingStore.image.trim() !== "" && (
-                  <div style={{ marginTop: "8px", width: "100%", height: "100px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0" }}>
-                    <img src={editingStore.image} alt="Preview" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  <div style={{ marginTop: "8px", width: "100%", height: "140px", borderRadius: "8px", overflow: "hidden", border: "1px solid #e2e8f0", background: "#0f172a", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                    <img
+                      src={editingStore.image}
+                      alt="Store Preview"
+                      style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/teffes-logo-maroon.png";
+                      }}
+                    />
                   </div>
                 )}
               </div>

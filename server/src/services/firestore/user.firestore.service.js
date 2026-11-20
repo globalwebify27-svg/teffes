@@ -8,6 +8,7 @@ const {
   runTransaction,
 } = require('../../lib/firestore');
 const { getAuthInstance } = require('../../config/firebase');
+const { geocodePincodeOrAddress } = require('../googleMapsService');
 
 const COLLECTION = 'users';
 
@@ -307,17 +308,38 @@ const addAddress = async (userId, addressData = {}) => {
     addresses.forEach((a) => (a.isDefault = false));
   }
 
+  let latitude = addressData.latitude ? Number(addressData.latitude) : null;
+  let longitude = addressData.longitude ? Number(addressData.longitude) : null;
+  let city = (addressData.city || 'Ranchi').trim();
+
+  if ((!latitude || !longitude) && (addressData.pincode || addressData.line1)) {
+    try {
+      const geo = await geocodePincodeOrAddress({
+        pincode: addressData.pincode,
+        address: addressData.line1,
+        city: addressData.city,
+      });
+      if (geo && geo.latitude && geo.longitude) {
+        latitude = geo.latitude;
+        longitude = geo.longitude;
+        if (geo.city && (!addressData.city || addressData.city.toLowerCase() === 'ranchi')) {
+          city = geo.city;
+        }
+      }
+    } catch (_) {}
+  }
+
   const newAddress = {
     _id: addressId,
     id: addressId,
     tag: (addressData.tag || 'Home').trim(),
     line1: (addressData.line1 || '').trim(),
     line2: (addressData.line2 || '').trim(),
-    city: (addressData.city || 'Ranchi').trim(),
+    city,
     pincode: (addressData.pincode || '').trim(),
     landmark: (addressData.landmark || '').trim(),
-    latitude: addressData.latitude ? Number(addressData.latitude) : null,
-    longitude: addressData.longitude ? Number(addressData.longitude) : null,
+    latitude,
+    longitude,
     isDefault,
   };
 
@@ -340,9 +362,34 @@ const updateAddress = async (userId, addressId, addressData = {}) => {
     addresses.forEach((a) => (a.isDefault = false));
   }
 
+  let latitude = addressData.latitude !== undefined ? (addressData.latitude ? Number(addressData.latitude) : null) : addresses[targetIndex].latitude;
+  let longitude = addressData.longitude !== undefined ? (addressData.longitude ? Number(addressData.longitude) : null) : addresses[targetIndex].longitude;
+  let city = addressData.city || addresses[targetIndex].city || 'Ranchi';
+
+  const effectivePincode = addressData.pincode || addresses[targetIndex].pincode;
+  if ((!latitude || !longitude) && effectivePincode) {
+    try {
+      const geo = await geocodePincodeOrAddress({
+        pincode: effectivePincode,
+        address: addressData.line1 || addresses[targetIndex].line1,
+        city: addressData.city || addresses[targetIndex].city,
+      });
+      if (geo && geo.latitude && geo.longitude) {
+        latitude = geo.latitude;
+        longitude = geo.longitude;
+        if (geo.city && (!addressData.city || addressData.city.toLowerCase() === 'ranchi')) {
+          city = geo.city;
+        }
+      }
+    } catch (_) {}
+  }
+
   addresses[targetIndex] = {
     ...addresses[targetIndex],
     ...addressData,
+    city,
+    latitude,
+    longitude,
     _id: addresses[targetIndex]._id || addresses[targetIndex].id || addressId,
     id: addresses[targetIndex].id || addresses[targetIndex]._id || addressId,
   };

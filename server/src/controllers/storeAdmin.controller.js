@@ -763,6 +763,9 @@ const modifyOrderItems = async (req, res, next) => {
       newSubtotal += lineTotal;
 
       const resolvedWeight = item.netWeight || item.weight || '';
+      const prevItem = Array.isArray(order.items)
+        ? order.items.find((oi) => oi.name === item.name || (oi.productId && oi.productId === (item.productId || item.id)))
+        : null;
 
       return {
         productId: item.productId || item.id || '',
@@ -771,7 +774,7 @@ const modifyOrderItems = async (req, res, next) => {
         quantity: qty,
         netWeight: resolvedWeight,
         weight: resolvedWeight,
-        image: item.image || '',
+        image: item.image || prevItem?.image || '',
         isModified: Boolean(item.isModified),
         notes: item.notes || '',
       };
@@ -912,7 +915,20 @@ const createManualOrder = async (req, res, next) => {
     }
 
     const cleanPhone = customerPhone.replace(/\D/g, '').slice(-10);
-    const finalCustomerName = (customerName || '').trim() || 'Valued Customer';
+    const rawCustomerName = typeof customerName === 'string' ? customerName.trim() : '';
+    if (!rawCustomerName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer name is mandatory to place an order',
+      });
+    }
+    if (rawCustomerName.length < 2) {
+      return res.status(400).json({
+        success: false,
+        message: 'Customer name must be at least 2 characters',
+      });
+    }
+    const finalCustomerName = rawCustomerName;
     const isPickup = Boolean(
       pickupMode === true ||
       fulfillmentType === 'pickup' ||
@@ -956,6 +972,11 @@ const createManualOrder = async (req, res, next) => {
         createdAt: new Date().toISOString(),
       };
       await createDoc('users', customerUserId, newUserDoc).catch(() => {});
+    } else if (existingUser && (!existingUser.name || existingUser.name.toLowerCase() === 'valued customer' || existingUser.name.toLowerCase() === 'customer')) {
+      await updateDoc('users', customerUserId, {
+        name: finalCustomerName,
+        updatedAt: new Date().toISOString(),
+      }).catch(() => {});
     }
 
     // 2. Calculate Pricing with Dynamic Store Delivery Fee
@@ -1011,6 +1032,42 @@ const createManualOrder = async (req, res, next) => {
     const deliveryOtp = isPickup ? null : Math.floor(1000 + Math.random() * 9000).toString();
 
     const manualInstruction = String(notes || req.body.deliveryInstruction || req.body.instruction || '').trim();
+    const rawAltPhone = req.body.receiverPhone || req.body.alternatePhone || req.body.customer?.receiverPhone || req.body.customer?.alternatePhone || '';
+    const cleanAltPhone = typeof rawAltPhone === 'string' ? rawAltPhone.replace(/\D/g, '').slice(-10) : '';
+    const rawAltName = req.body.receiverName || req.body.alternateName || req.body.customer?.receiverName || req.body.customer?.alternateName || '';
+    const cleanAltName = typeof rawAltName === 'string' ? rawAltName.trim() : '';
+
+    // Resolve Product Images for items (if not already attached, auto-lookup from catalog)
+    const enrichedItems = await Promise.all(
+      items.map(async (i) => {
+        let itemImage = (typeof i.image === 'string' && i.image.trim()) ? i.image.trim() : '';
+        const prodId = i.productId || i.id;
+        if (!itemImage && prodId && !String(prodId).startsWith('item-')) {
+          try {
+            const pDoc = await getDoc('products', String(prodId)).catch(() => null);
+            if (pDoc && (pDoc.image || pDoc.imageUrl)) {
+              itemImage = pDoc.image || pDoc.imageUrl || '';
+            }
+          } catch (_) {}
+        }
+        if (!itemImage && i.name) {
+          try {
+            const matches = await queryDocs('products', (ref) => ref.where('name', '==', i.name.trim()).limit(1)).catch(() => []);
+            if (matches && matches[0] && (matches[0].image || matches[0].imageUrl)) {
+              itemImage = matches[0].image || matches[0].imageUrl || '';
+            }
+          } catch (_) {}
+        }
+        return {
+          productId: prodId || '',
+          name: i.name || 'Fresh Meat Cut',
+          price: Number(i.price) || 0,
+          quantity: Number(i.quantity) || 1,
+          netWeight: i.netWeight || i.selectedWeight || i.weight || '500g',
+          image: itemImage,
+        };
+      })
+    );
 
     const orderPayload = {
       id: orderId,
@@ -1018,9 +1075,17 @@ const createManualOrder = async (req, res, next) => {
       orderId,
       deliveryOtp,
       deliveryInstruction: manualInstruction || null,
+      receiverPhone: cleanAltPhone || null,
+      alternatePhone: cleanAltPhone || null,
+      receiverName: cleanAltName || null,
+      alternateName: cleanAltName || null,
       customer: {
         name: finalCustomerName,
         phone: cleanPhone,
+        receiverPhone: cleanAltPhone || null,
+        alternatePhone: cleanAltPhone || null,
+        receiverName: cleanAltName || null,
+        alternateName: cleanAltName || null,
         email: customerEmail || existingUser?.email || '',
         userId: customerUserId,
         address: isPickup ? 'Store Takeaway Counter, Ranchi' : (shippingAddress || 'Ranchi Delivery'),
@@ -1028,15 +1093,8 @@ const createManualOrder = async (req, res, next) => {
         lat: 23.3512,
         lng: 85.3154,
       },
-      items: items.map((i) => ({
-        productId: i.productId || i.id || '',
-        name: i.name || 'Fresh Meat Cut',
-        price: Number(i.price) || 0,
-        quantity: Number(i.quantity) || 1,
-        netWeight: i.netWeight || i.selectedWeight || i.weight || '500g',
-        image: i.image || '',
-      })),
-      itemSummary: items.map((i) => `${i.name || 'Cut'} ×${i.quantity || 1}`).join(', '),
+      items: enrichedItems,
+      itemSummary: enrichedItems.map((i) => `${i.name || 'Cut'} ×${i.quantity || 1}`).join(', '),
       amount: finalAmount,
       totalAmount: finalAmount,
       itemsSubtotal,

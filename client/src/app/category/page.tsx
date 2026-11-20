@@ -140,31 +140,33 @@ function CategoryContent() {
         </nav>
 
         {/* ─── Hero Title & 4 Category Tabs ─────────────────────────────────── */}
-        <div className="bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xs mb-6 sm:mb-8">
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-4 sm:p-8 border border-gray-200/80 shadow-xs mb-4 sm:mb-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-crimson-soft text-primary font-label-badge text-label-badge uppercase font-bold text-[11px] mb-2">
-                <span className="material-symbols-outlined text-[15px]">verified</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-0.5 sm:py-1 rounded-full bg-crimson-soft text-primary font-label-badge text-label-badge uppercase font-bold text-[10px] sm:text-[11px] mb-2">
+                <span className="material-symbols-outlined text-[13px] sm:text-[15px]">verified</span>
                 <span>Ranchi's Fresh Counter</span>
               </div>
-              <h1 className="font-headline-xl text-2xl sm:text-3xl md:text-4xl font-black text-on-surface tracking-tight">
-                Fresh {activeTabMeta.label} Cuts
+              <h1 className="font-headline-xl text-xl sm:text-3xl md:text-4xl font-black text-on-surface tracking-tight">
+                {activeTabMeta.label.toLowerCase().startsWith("fresh")
+                  ? `${activeTabMeta.label} Cuts`
+                  : `Fresh ${activeTabMeta.label} Cuts`}
               </h1>
-              <p className="text-xs sm:text-sm text-slate-body mt-1 max-w-xl leading-relaxed">
+              <p className="text-[11px] sm:text-sm text-slate-body mt-1 max-w-xl leading-relaxed">
                 {activeTabMeta.desc}. Cut fresh upon order with 90-min delivery across Ranchi.
               </p>
             </div>
 
             {/* Guarantee Badge */}
-            <div className="flex items-center gap-3 p-3 bg-surface-container-low rounded-2xl border border-gray-200/60 shrink-0">
-              <div className="w-10 h-10 rounded-xl bg-tertiary/15 flex items-center justify-center text-tertiary">
-                <span className="material-symbols-outlined text-[24px]">timer</span>
+            <div className="flex items-center gap-2.5 sm:gap-3 p-2.5 sm:p-3 bg-surface-container-low rounded-xl sm:rounded-2xl border border-gray-200/60 shrink-0">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl bg-tertiary/15 flex items-center justify-center text-tertiary shrink-0">
+                <span className="material-symbols-outlined text-[20px] sm:text-[24px]">timer</span>
               </div>
               <div className="text-left">
-                <span className="font-headline-sm font-extrabold text-gray-900 text-xs block">
+                <span className="font-headline-sm font-extrabold text-gray-900 text-[11px] sm:text-xs block">
                   90-Min Express Delivery
                 </span>
-                <span className="text-[11px] text-slate-500 font-medium">
+                <span className="text-[10px] sm:text-[11px] text-slate-500 font-medium">
                   Dispatched from Nearest Store
                 </span>
               </div>
@@ -172,22 +174,23 @@ function CategoryContent() {
           </div>
 
           {/* ─── 4 CATEGORY TABS (Chicken auto-selected by default) ─────────── */}
-          <div className="mt-6 pt-5 border-t border-gray-100 flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+          <div className="mt-4 sm:mt-6 pt-3 sm:pt-5 border-t border-gray-100 flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 sm:pb-0 scrollbar-none">
             {tabs.map((tab) => {
               const isSelected = selectedCategory === tab.key;
               return (
                 <button
                   key={tab.key}
                   type="button"
+                  suppressHydrationWarning
                   onClick={() => handleTabChange(tab.key)}
-                  className={`px-5 py-2.5 rounded-full flex items-center gap-2 font-headline-sm font-bold text-xs sm:text-sm cursor-pointer transition-all border-none whitespace-nowrap ${isSelected
-                      ? "bg-primary text-white shadow-sm ring-2 ring-primary/20 scale-105"
+                  className={`px-3 py-1.5 sm:px-5 sm:py-2.5 rounded-full flex items-center gap-1.5 sm:gap-2 font-bold text-[11px] sm:text-sm cursor-pointer transition-all border-none whitespace-nowrap shrink-0 ${isSelected
+                      ? "bg-primary text-white shadow-xs ring-1.5 ring-primary/20"
                       : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container hover:text-on-surface"
                     }`}
                 >
                   <FontAwesomeIcon
                     icon={getCategoryFontAwesomeIcon(tab.key)}
-                    className={`text-[15px] ${isSelected ? "text-white" : "text-primary"}`}
+                    className={`text-[11px] sm:text-[15px] ${isSelected ? "text-white" : "text-primary"}`}
                   />
                   <span>{tab.label}</span>
                 </button>
@@ -227,7 +230,7 @@ function CategoryContent() {
         {/* ─── Product Grid ─────────────────────────────────────────────────── */}
         {loading ? (
           <div className="mb-16">
-            <ProductGridSkeleton count={8} columns="grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4" />
+            <ProductGridSkeleton count={8} columns="grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4" />
           </div>
         ) : sortedProducts.length === 0 ? (
           <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-gray-200 shadow-xs my-8 max-w-lg mx-auto">
@@ -263,7 +266,7 @@ function CategoryContent() {
             )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 mb-16">
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-6 mb-16">
             {sortedProducts.map((item: Product) => {
               const qty = getItemQuantity(item.id);
               const isLiked = isInWishlist(item.id);
@@ -276,11 +279,11 @@ function CategoryContent() {
                 <div
                   key={item.id}
                   onClick={() => router.push(`/product/${item.id}`)}
-                  className="bg-white rounded-2xl overflow-hidden border border-gray-200/80 p-3.5 shadow-2xs hover:shadow-md hover:border-gray-300 transition-all cursor-pointer flex flex-col justify-between group"
+                  className="bg-white rounded-2xl overflow-hidden border border-gray-200/80 p-2 sm:p-3.5 shadow-2xs hover:shadow-md hover:border-gray-300 transition-all cursor-pointer flex flex-col justify-between group"
                 >
                   <div>
                     {/* Image Box */}
-                    <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-3 border border-gray-100">
+                    <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-2 sm:mb-3 border border-gray-100">
                       <img
                         src={item.image || (item.images && item.images[0]) || "/images/chicken.png"}
                         alt={item.name}
@@ -292,8 +295,8 @@ function CategoryContent() {
 
                       {/* Out of Stock Badge */}
                       {isOutOfStock && (
-                        <span className="absolute top-2.5 left-2.5 bg-[#dc2626] text-white font-extrabold text-[10.5px] uppercase tracking-wider px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[13px]">block</span>
+                        <span className="absolute top-2 left-2 sm:top-2.5 sm:left-2.5 bg-[#dc2626] text-white font-extrabold text-[9px] sm:text-[10.5px] uppercase tracking-wider px-1.5 sm:px-2 py-0.5 rounded-md shadow-sm z-10 flex items-center gap-0.5 sm:gap-1">
+                          <span className="material-symbols-outlined text-[11px] sm:text-[13px]">block</span>
                           Out of Stock
                         </span>
                       )}
@@ -305,60 +308,59 @@ function CategoryContent() {
                           e.stopPropagation();
                           toggleWishlist(item.id);
                         }}
-                        className={`absolute top-2.5 right-2.5 w-8 h-8 rounded-full flex items-center justify-center shadow-sm cursor-pointer transition-all border border-gray-100 hover:scale-110 active:scale-95 ${isLiked ? "bg-white text-crimson-bright" : "bg-white/90 text-slate-body hover:text-primary"
+                        className={`absolute top-2 right-2 sm:top-2.5 sm:right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center shadow-sm cursor-pointer transition-all border border-gray-100 hover:scale-110 active:scale-95 ${isLiked ? "bg-white text-crimson-bright" : "bg-white/90 text-slate-body hover:text-primary"
                           }`}
                         aria-label="Toggle Wishlist"
                       >
-                        <span className={`material-symbols-outlined text-[18px] ${isLiked ? "filled text-crimson-bright" : ""}`}>
+                        <span className={`material-symbols-outlined text-[16px] sm:text-[18px] ${isLiked ? "filled text-crimson-bright" : ""}`}>
                           favorite
                         </span>
                       </button>
                     </div>
 
                     {/* Meta */}
-                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1">
+                    <div className="flex items-center justify-between text-slate-body font-body-sm text-body-sm mb-1 text-[10.5px] sm:text-body-sm">
                       <span>Net: {item.netWeight}</span>
                       <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.cutType || "Standard Cut"}</span>
                     </div>
-                    <h3 className="font-headline-sm font-bold text-[14px] text-gray-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
+                    <h3 className="font-headline-sm font-bold text-[13px] sm:text-[14px] text-gray-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
                       {item.name}
                     </h3>
-                    <p className="font-body-sm text-slate-body mt-0.5 line-clamp-1 text-[12px]">
+                    <p className="font-body-sm text-slate-body mt-0.5 line-clamp-1 text-[11px] sm:text-[12px]">
                       {item.description || (item.cutType ? `Artisanal ${item.cutType}` : "Fresh cut to order")}
                     </p>
                   </div>
 
                   {/* Pricing & Add to Cart */}
-                  <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-100">
-                    <div>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="font-headline-sm font-extrabold text-primary text-[15px]">
+                  <div className="flex items-center justify-between mt-3 sm:mt-4 pt-2 sm:pt-3 border-t border-gray-100 gap-1.5 sm:gap-2">
+                    <div className="flex flex-col min-w-0 pr-1">
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-headline-sm font-extrabold text-primary text-[13px] sm:text-[15px] leading-tight">
                           ₹{item.price}
                         </span>
                         {item.originalPrice > item.price && (
-                          <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11px]">
+                          <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11px] leading-none">
                             ₹{item.originalPrice}
                           </span>
                         )}
                       </div>
                       {discount > 0 && (
-                        <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded">
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
                           {discount}% OFF
                         </span>
                       )}
                     </div>
 
                     {/* Quantity Stepper or Out of Stock Button */}
-                    <div>
+                    <div className="shrink-0">
                       {isOutOfStock ? (
                         <button
                           type="button"
                           disabled
-                          className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-400 font-bold text-[11.5px] border border-gray-200 cursor-not-allowed flex items-center gap-1 select-none shadow-2xs whitespace-nowrap"
+                          className="h-[24px] sm:h-[28px] px-2 sm:px-3 rounded-full bg-gray-100 text-gray-400 font-bold text-[9px] sm:text-[11px] border border-gray-200 cursor-not-allowed select-none shadow-2xs whitespace-nowrap flex items-center justify-center"
                           title="This cut is currently out of stock"
                         >
-                          <span className="material-symbols-outlined text-[13px]">remove_shopping_cart</span>
-                          <span>Out of Stock</span>
+                          Out of Stock
                         </button>
                       ) : (
                         <ProductQuantityStepper

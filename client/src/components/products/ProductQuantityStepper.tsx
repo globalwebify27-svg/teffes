@@ -38,7 +38,7 @@ export default function ProductQuantityStepper({
             e.preventDefault();
             e.stopPropagation();
           }}
-          className={`shrink-0 inline-flex items-center bg-primary text-white rounded-full px-1 py-0.5 shadow-2xs select-none transition-all touch-manipulation h-[32px] sm:h-[34px] ${className}`}
+          className={`shrink-0 inline-flex items-center bg-primary text-white rounded-full px-1 py-0.5 shadow-2xs select-none transition-all touch-manipulation h-[24px] sm:h-[28px] ${className}`}
         >
           {/* Minus Button */}
           <button
@@ -48,15 +48,15 @@ export default function ProductQuantityStepper({
               e.stopPropagation();
               onDecrease(e);
             }}
-            className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-white/20 hover:bg-white/35 active:scale-90 text-white flex items-center justify-center font-bold border-none cursor-pointer transition-all shrink-0"
+            className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-white/20 hover:bg-white/35 active:scale-90 text-white flex items-center justify-center font-bold border-none cursor-pointer transition-all shrink-0"
             aria-label="Decrease quantity"
             title="Decrease quantity"
           >
-            <span className="leading-none select-none text-sm sm:text-base font-bold">−</span>
+            <span className="leading-none select-none text-[10px] sm:text-xs font-bold">−</span>
           </button>
 
           {/* Quantity Number */}
-          <span className="px-2 font-black text-xs sm:text-sm text-white min-w-[20px] text-center leading-none">
+          <span className="px-1.5 font-black text-[10.5px] sm:text-xs text-white min-w-[14px] text-center leading-none">
             {quantity}
           </span>
 
@@ -68,11 +68,11 @@ export default function ProductQuantityStepper({
               e.stopPropagation();
               onIncrease(e);
             }}
-            className="w-6 h-6 sm:w-6.5 sm:h-6.5 rounded-full bg-white/20 hover:bg-white/35 active:scale-90 text-white flex items-center justify-center font-bold border-none cursor-pointer transition-all shrink-0"
+            className="w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-white/20 hover:bg-white/35 active:scale-90 text-white flex items-center justify-center font-bold border-none cursor-pointer transition-all shrink-0"
             aria-label="Increase quantity"
             title="Increase quantity"
           >
-            <span className="leading-none select-none text-sm sm:text-base font-bold">+</span>
+            <span className="leading-none select-none text-[10px] sm:text-xs font-bold">+</span>
           </button>
         </div>
       );
@@ -87,14 +87,14 @@ export default function ProductQuantityStepper({
           e.stopPropagation();
           onAdd(e);
         }}
-        className={`shrink-0 inline-flex items-center justify-center gap-1 h-[32px] sm:h-[34px] px-3 sm:px-3.5 rounded-full border border-primary/30 text-primary bg-white hover:bg-primary hover:text-white font-bold text-xs sm:text-[13px] shadow-2xs cursor-pointer transition-all active:scale-95 select-none touch-manipulation ${
+        className={`shrink-0 inline-flex items-center justify-center gap-0.5 h-[24px] sm:h-[28px] px-2 sm:px-2.5 rounded-full border border-primary/30 text-primary bg-white hover:bg-primary hover:text-white font-extrabold text-[10px] sm:text-[11.5px] shadow-2xs cursor-pointer transition-all active:scale-95 select-none touch-manipulation ${
           isJustAdded ? "bg-primary text-white border-primary shadow-xs" : ""
         } ${className}`}
       >
-        <span className="material-symbols-outlined text-[15px] sm:text-[16px]">
-          {isJustAdded ? "done" : "add_shopping_cart"}
+        <span className="material-symbols-outlined text-[11px] sm:text-[13px]">
+          {isJustAdded ? "done" : "add"}
         </span>
-        <span className="tracking-wide whitespace-nowrap">{isJustAdded ? "ADDED" : addLabel}</span>
+        <span className="tracking-wide whitespace-nowrap">{isJustAdded ? "ADDED" : addLabel.replace(/^\+\s*/, "")}</span>
       </button>
     );
   }

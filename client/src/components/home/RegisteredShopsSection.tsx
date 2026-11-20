@@ -221,8 +221,18 @@ export default function RegisteredShopsSection({
         </div>
       ) : isSingleShop ? (
         <div className="w-full bg-surface-card rounded-3xl border border-gray-200/80 shadow-md p-6 sm:p-8 md:p-10 flex flex-col lg:flex-row items-center gap-8 overflow-hidden relative group">
-          {/* Left/Top Image Showcase */}
-          <div className="w-full lg:w-1/2 aspect-video sm:aspect-[16/10] rounded-2xl overflow-hidden relative shadow-inner bg-neutral-900 shrink-0">
+          {/* Left/Top Image Showcase: Full storefront image 100% visible with ambient blurred backdrop */}
+          <div className="w-full lg:w-1/2 aspect-video sm:aspect-[16/10] rounded-2xl overflow-hidden relative shadow-inner bg-neutral-950 shrink-0 flex items-center justify-center">
+            {/* Ambient Blurred Backdrop to fill the container seamlessly with the store's vibrant tones */}
+            <img
+              src={stores[0].image && stores[0].image.trim() !== "" ? stores[0].image : FALLBACK_STORE_IMAGE}
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none select-none"
+            />
+            <div className="absolute inset-0 bg-black/35 pointer-events-none" />
+
+            {/* Main Storefront Image: 100% visible, complete height & width preserved, zero cropping or cut off */}
             <img
               src={stores[0].image && stores[0].image.trim() !== "" ? stores[0].image : FALLBACK_STORE_IMAGE}
               alt={stores[0].name}
@@ -232,28 +242,15 @@ export default function RegisteredShopsSection({
                   target.src = FALLBACK_STORE_IMAGE;
                 }
               }}
-              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+              className="relative z-10 max-h-full max-w-full w-auto h-full object-contain drop-shadow-xl group-hover:scale-[1.02] transition-transform duration-500"
             />
 
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-
             {/* Top Status Badge */}
-            <div className="absolute top-4 left-4 flex flex-wrap gap-2">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600/90 text-white font-bold text-[11px] backdrop-blur-xs shadow-sm">
+            <div className="absolute top-4 left-4 z-20 flex flex-wrap gap-2">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-600/95 text-white font-bold text-[11px] backdrop-blur-md shadow-sm">
                 <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
                 {stores[0].isOpen !== false ? "Open Now" : "Opens Tomorrow"}
               </span>
-            </div>
-
-            {/* Bottom Overlay Info */}
-            <div className="absolute bottom-4 left-4 right-4 text-white">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-300 mb-0.5">
-                <span className="material-symbols-outlined text-[16px]">store</span>
-                <span>Flagship Store Hub</span>
-              </div>
-              <h3 className="font-headline-md text-lg sm:text-xl font-bold leading-snug">
-                {stores[0].name}
-              </h3>
             </div>
           </div>
 
@@ -349,8 +346,18 @@ export default function RegisteredShopsSection({
                 key={store.storeId || index}
                 className="w-[85vw] sm:w-[380px] md:w-[420px] shrink-0 snap-start bg-surface-card rounded-2xl border border-gray-200/85 shadow-sm hover:shadow-md transition-all flex flex-col justify-between overflow-hidden group"
               >
-                {/* Store Visual Header */}
-                <div className="relative aspect-[16/9] w-full overflow-hidden bg-neutral-900">
+                {/* Store Visual Header: Full storefront image 100% visible with ambient blurred backdrop */}
+                <div className="relative aspect-[16/9] w-full overflow-hidden bg-neutral-950 flex items-center justify-center">
+                  {/* Ambient Blurred Backdrop to fill the card header */}
+                  <img
+                    src={storeImg}
+                    alt=""
+                    aria-hidden="true"
+                    className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-40 scale-110 pointer-events-none select-none"
+                  />
+                  <div className="absolute inset-0 bg-black/35 pointer-events-none" />
+
+                  {/* Main Storefront Image: 100% visible, zero cropping */}
                   <img
                     src={storeImg}
                     alt={store.name}
@@ -360,34 +367,23 @@ export default function RegisteredShopsSection({
                         target.src = FALLBACK_STORE_IMAGE;
                       }
                     }}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    className="relative z-10 max-h-full max-w-full w-auto h-full object-contain drop-shadow-md group-hover:scale-[1.02] transition-transform duration-500"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/25 to-transparent" />
 
                   {/* Top Status Tags */}
-                  <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                  <div className="absolute top-3 left-3 z-20 flex flex-wrap gap-1.5">
                     <span
-                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10.5px] backdrop-blur-xs text-white shadow-xs ${isOpen
-                          ? "bg-emerald-600/90"
+                      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold text-[10.5px] backdrop-blur-md text-white shadow-xs ${isOpen
+                          ? "bg-emerald-600/95"
                           : isPlanned
-                            ? "bg-amber-600/90"
-                            : "bg-gray-700/90"
+                            ? "bg-amber-600/95"
+                            : "bg-gray-700/95"
                         }`}
                     >
                       <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                       {isOpen ? "Open Now" : isPlanned ? "Planned Opening Soon" : "Closed Today"}
                     </span>
-                  </div>
-
-                  {/* Bottom Store Title */}
-                  <div className="absolute bottom-3 left-3 right-3 text-white">
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-amber-300 block mb-0.5">
-                      Outlet #{store.storeId} · {store.city}
-                    </span>
-                    <h3 className="font-bold text-base sm:text-lg leading-snug line-clamp-1 drop-shadow-xs">
-                      {store.name}
-                    </h3>
                   </div>
                 </div>
 

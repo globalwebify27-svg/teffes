@@ -451,9 +451,153 @@ async function getPlaceDetails(placeId) {
   };
 }
 
+// In-memory fast pincode cache for zero-latency lookups
+const pincodeCoordinatesCache = new Map([
+  // Ranchi Localities
+  ['834001', { latitude: 23.3441, longitude: 85.3096, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834002', { latitude: 23.3320, longitude: 85.3210, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834003', { latitude: 23.3600, longitude: 85.3350, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834004', { latitude: 23.3750, longitude: 85.3520, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834005', { latitude: 23.3850, longitude: 85.3100, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834006', { latitude: 23.3620, longitude: 85.3300, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834008', { latitude: 23.3100, longitude: 85.2900, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834009', { latitude: 23.3700, longitude: 85.3250, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834010', { latitude: 23.3750, longitude: 85.2950, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834011', { latitude: 23.3400, longitude: 85.3500, city: 'Ranchi', state: 'Jharkhand' }],
+  ['834012', { latitude: 23.3950, longitude: 85.3350, city: 'Ranchi', state: 'Jharkhand' }],
+  // Pune Localities
+  ['411038', { latitude: 18.5074, longitude: 73.8077, city: 'Pune', state: 'Maharashtra' }],
+  ['411001', { latitude: 18.5204, longitude: 73.8567, city: 'Pune', state: 'Maharashtra' }],
+  ['411004', { latitude: 18.5167, longitude: 73.8417, city: 'Pune', state: 'Maharashtra' }],
+  ['411014', { latitude: 18.5529, longitude: 73.9350, city: 'Pune', state: 'Maharashtra' }],
+  ['411057', { latitude: 18.5913, longitude: 73.7389, city: 'Pune', state: 'Maharashtra' }],
+]);
+
+/**
+ * Geocodes an Indian Pincode or full address text to real Latitude & Longitude.
+ * Returns { success: true, latitude, longitude, city, state, pincode } or null.
+ */
+async function geocodePincodeOrAddress({ pincode = '', address = '', city = '' }) {
+  const cleanPincode = (pincode || '').toString().replace(/\D/g, '').trim();
+
+  // 1. Instant Cache Lookup
+  if (cleanPincode.length === 6 && pincodeCoordinatesCache.has(cleanPincode)) {
+    const cached = pincodeCoordinatesCache.get(cleanPincode);
+    return {
+      success: true,
+      latitude: cached.latitude,
+      longitude: cached.longitude,
+      city: cached.city,
+      state: cached.state,
+      pincode: cleanPincode,
+      provider: 'cache',
+    };
+  }
+
+  const apiKey = getApiKey();
+
+  // 2. Try Google Geocoding API if key configured
+  if (apiKey && !apiKey.includes('placeholder') && !apiKey.includes('your_')) {
+    try {
+      const query = cleanPincode.length === 6
+        ? `${cleanPincode}, India`
+        : `${address || ''} ${city || ''} ${cleanPincode}`.trim();
+
+      const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}&region=in`;
+      const response = await fetch(url);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.status === 'OK' && data.results && data.results.length > 0) {
+          const res = data.results[0];
+          const loc = res.geometry?.location;
+          if (loc && loc.lat && loc.lng) {
+            let resCity = city || 'Ranchi';
+            let resState = 'Jharkhand';
+            for (const comp of res.address_components || []) {
+              if (comp.types.includes('locality')) resCity = comp.long_name;
+              if (comp.types.includes('administrative_area_level_1')) resState = comp.long_name;
+            }
+            if (cleanPincode.length === 6) {
+              pincodeCoordinatesCache.set(cleanPincode, {
+                latitude: loc.lat,
+                longitude: loc.lng,
+                city: resCity,
+                state: resState,
+              });
+            }
+            return {
+              success: true,
+              latitude: loc.lat,
+              longitude: loc.lng,
+              city: resCity,
+              state: resState,
+              pincode: cleanPincode,
+              formattedAddress: res.formatted_address,
+              provider: 'google',
+            };
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[geocodePincodeOrAddress] Google Geocode warning:', e.message);
+    }
+  }
+
+  // 3. Try OpenStreetMap Nominatim
+  try {
+    let nomUrl = '';
+    if (cleanPincode.length === 6) {
+      nomUrl = `https://nominatim.openstreetmap.org/search?format=json&postalcode=${cleanPincode}&country=India&addressdetails=1`;
+    } else {
+      const q = `${address || ''} ${city || ''}`.trim();
+      nomUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&countrycodes=in&addressdetails=1`;
+    }
+
+    const nomRes = await fetch(nomUrl, {
+      headers: { 'User-Agent': 'TeffesApp/1.0 (contact@teffes.com)' },
+    });
+    if (nomRes.ok) {
+      const list = await nomRes.json();
+      if (Array.isArray(list) && list.length > 0) {
+        const item = list[0];
+        const lat = parseFloat(item.lat);
+        const lon = parseFloat(item.lon);
+        if (!isNaN(lat) && !isNaN(lon)) {
+          const addr = item.address || {};
+          const resCity = addr.city || addr.town || addr.village || addr.county || city || 'Unknown';
+          const resState = addr.state || 'India';
+          if (cleanPincode.length === 6) {
+            pincodeCoordinatesCache.set(cleanPincode, {
+              latitude: lat,
+              longitude: lon,
+              city: resCity,
+              state: resState,
+            });
+          }
+          return {
+            success: true,
+            latitude: lat,
+            longitude: lon,
+            city: resCity,
+            state: resState,
+            pincode: cleanPincode || addr.postcode || '',
+            formattedAddress: item.display_name,
+            provider: 'nominatim',
+          };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[geocodePincodeOrAddress] Nominatim warning:', e.message);
+  }
+
+  return null;
+}
+
 module.exports = {
   getRoadDistanceAndDuration,
   reverseGeocode,
   placesAutocomplete,
   getPlaceDetails,
+  geocodePincodeOrAddress,
 };

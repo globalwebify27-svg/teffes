@@ -42,7 +42,7 @@ export default function StoreStatusModal({
   const [rainSurgeFee, setRainSurgeFee] = useState<number>(15);
   const [freeGiftThreshold, setFreeGiftThreshold] = useState<number>(0);
   const [freeGiftName, setFreeGiftName] = useState<string>("");
-  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState<number>(5);
+  const [deliveryRadiusKm, setDeliveryRadiusKm] = useState<number>(10);
   const [defaultRiderDailyTarget, setDefaultRiderDailyTarget] = useState<number>(16);
 
   useEffect(() => {
@@ -358,13 +358,13 @@ export default function StoreStatusModal({
                     <input
                       type="number"
                       min={1}
-                      max={25}
+                      max={50}
                       value={deliveryRadiusKm}
                       onChange={(e) => setDeliveryRadiusKm(Math.max(1, Number(e.target.value)))}
                       className="w-full px-2 py-1 text-sm font-bold border border-gray-200 rounded-lg bg-white focus:outline-none focus:border-primary text-gray-900"
                     />
                   </div>
-                  <span className="text-[9.5px] text-gray-400 block mt-1">Kilometers (Km)</span>
+                  <span className="text-[9.5px] text-gray-400 block mt-1">Max delivery range (Km)</span>
                 </div>
               </div>
             </div>

@@ -62,6 +62,10 @@ class OrderModel {
   final String? etaStage;
   final String? customerPhone;
   final String? customerUserId;
+  final String? receiverPhone;
+  final String? alternatePhone;
+  final String? receiverName;
+  final String? alternateName;
   final String? cancellationReason;
   final String? createdByType;
   final String? orderSource;
@@ -117,6 +121,10 @@ class OrderModel {
     this.etaStage,
     this.customerPhone,
     this.customerUserId,
+    this.receiverPhone,
+    this.alternatePhone,
+    this.receiverName,
+    this.alternateName,
     this.cancellationReason,
     this.createdByType,
     this.orderSource,
@@ -189,6 +197,10 @@ class OrderModel {
       etaStage: json['etaStage']?.toString() ?? json['etaDetails']?['stage']?.toString(),
       customerPhone: json['customer'] is Map ? json['customer']['phone']?.toString() : null,
       customerUserId: json['customer'] is Map ? (json['customer']['userId']?.toString() ?? json['customer']['id']?.toString()) : null,
+      receiverPhone: json['receiverPhone']?.toString() ?? json['alternatePhone']?.toString() ?? (json['customer'] is Map ? (json['customer']['receiverPhone']?.toString() ?? json['customer']['alternatePhone']?.toString()) : null),
+      alternatePhone: json['alternatePhone']?.toString() ?? json['receiverPhone']?.toString() ?? (json['customer'] is Map ? (json['customer']['alternatePhone']?.toString() ?? json['customer']['receiverPhone']?.toString()) : null),
+      receiverName: json['receiverName']?.toString() ?? json['alternateName']?.toString() ?? (json['customer'] is Map ? (json['customer']['receiverName']?.toString() ?? json['customer']['alternateName']?.toString()) : null),
+      alternateName: json['alternateName']?.toString() ?? json['receiverName']?.toString() ?? (json['customer'] is Map ? (json['customer']['alternateName']?.toString() ?? json['customer']['receiverName']?.toString()) : null),
       cancellationReason: json['cancellationReason']?.toString(),
       createdByType: json['createdByType']?.toString(),
       orderSource: json['orderSource']?.toString(),
