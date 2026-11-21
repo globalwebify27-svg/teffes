@@ -61,9 +61,14 @@ const getAvailableStoresHandler = async (req, res, next) => {
     // Address text / Pincode geocoding
     const addressHint = (req.body?.shippingAddress || req.body?.address || req.query?.shippingAddress || req.query?.address || '').trim();
     const pincodeMatch = addressHint.match(/\b\d{6}\b/);
-    const pincodeHint = pincodeMatch ? pincodeMatch[0] : (req.body?.pincode || req.query?.pincode || '');
+    const rawPincode = (req.body?.pincode || req.query?.pincode || (pincodeMatch ? pincodeMatch[0] : '')).toString().trim();
+    const pincodeHint = rawPincode.replace(/\D/g, '');
 
-    if ((customerLat === null || customerLng === null || isNaN(customerLat) || isNaN(customerLng)) && (pincodeHint || addressHint)) {
+    // Force geocoding if coords are missing OR if an explicit non-Ranchi pincode is selected (e.g. Pune 411038 vs Ranchi 834xxx)
+    const isExplicitNonRanchiPincode = pincodeHint && pincodeHint.length === 6 && !pincodeHint.startsWith('834');
+    const shouldGeocode = (customerLat === null || customerLng === null || isNaN(customerLat) || isNaN(customerLng) || isExplicitNonRanchiPincode) && (pincodeHint || addressHint);
+
+    if (shouldGeocode) {
       try {
         const { geocodePincodeOrAddress } = require('../services/googleMapsService');
         const geo = await geocodePincodeOrAddress({ pincode: pincodeHint, address: addressHint });

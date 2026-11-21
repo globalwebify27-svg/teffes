@@ -979,11 +979,25 @@ const createManualOrder = async (req, res, next) => {
       }).catch(() => {});
     }
 
-    // 2. Calculate Pricing with Dynamic Store Delivery Fee
+    // 2. Calculate Pricing with Dynamic Store Delivery Fee & Price Adjustments
     const itemsSubtotal = items.reduce(
       (sum, item) => sum + (Number(item.price) || 0) * (Number(item.quantity) || 1),
       0
     );
+    const catalogOriginalSubtotal = items.reduce(
+      (sum, item) => sum + (Number(item.originalPrice || item.price) || 0) * (Number(item.quantity) || 1),
+      0
+    );
+
+    const rawDiscount = Number(req.body.discountAmount ?? req.body.manualDiscount ?? 0) || 0;
+    const computedDiscount = catalogOriginalSubtotal > itemsSubtotal ? (catalogOriginalSubtotal - itemsSubtotal) : 0;
+    const discountAmount = rawDiscount > 0 ? rawDiscount : computedDiscount;
+    const manualDiscount = discountAmount;
+
+    const rawReason = String(req.body.modificationReason || req.body.reason || req.body.description || '').trim();
+    const hasPriceChange = catalogOriginalSubtotal !== itemsSubtotal || discountAmount > 0;
+    const isModified = Boolean(req.body.isModified || hasPriceChange);
+    const modificationReason = rawReason || (discountAmount > 0 ? 'Store Admin Discount' : null);
 
     // Load store configuration to respect Super Admin delivery fee settings
     const storeDoc = await getStoreById(storeId).catch(() => null) || await getDoc('stores', storeId).catch(() => null);
@@ -999,6 +1013,7 @@ const createManualOrder = async (req, res, next) => {
       deliveryFee = itemsSubtotal >= freeThreshold ? 0 : storeDeliveryFee;
     }
     const finalAmount = Math.max(0, itemsSubtotal + deliveryFee);
+    const originalAmount = Math.max(0, catalogOriginalSubtotal + deliveryFee);
 
     // 3. Deduct Store Inventory
     try {
@@ -1062,6 +1077,7 @@ const createManualOrder = async (req, res, next) => {
           productId: prodId || '',
           name: i.name || 'Fresh Meat Cut',
           price: Number(i.price) || 0,
+          originalPrice: Number(i.originalPrice || i.price) || 0,
           quantity: Number(i.quantity) || 1,
           netWeight: i.netWeight || i.selectedWeight || i.weight || '500g',
           image: itemImage,
@@ -1098,10 +1114,15 @@ const createManualOrder = async (req, res, next) => {
       amount: finalAmount,
       totalAmount: finalAmount,
       itemsSubtotal,
+      originalSubtotal: catalogOriginalSubtotal,
+      originalAmount,
       deliveryFee,
       expressFee: 0,
       tipAmount: 0,
-      discountAmount: 0,
+      discountAmount,
+      manualDiscount,
+      isModified,
+      modificationReason,
       couponCode: null,
       coupon: null,
       storeId,
@@ -1120,7 +1141,7 @@ const createManualOrder = async (req, res, next) => {
       createdByAdminName: req.user?.name || 'Store Admin',
       createdByAdminId: req.user?.id || req.user?._id || 'admin',
       orderSource: 'store_direct',
-      notes: notes || 'Created by Store Admin (Self - Direct/Phone)',
+      notes: notes || modificationReason || 'Created by Store Admin (Self - Direct/Phone)',
       timeline: [
         { status: 'Pending', timestamp: now, note: 'Order created directly by Store Admin (Self)' },
         { status: 'Cutting', timestamp: now, note: 'Order acknowledged and moved to cutting queue' },

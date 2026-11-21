@@ -6,6 +6,7 @@ interface OrderItem {
   name: string;
   quantity: number;
   price: number;
+  originalPrice?: number;
   netWeight?: string;
   cutType?: string;
   cuttingInstructions?: string;
@@ -26,6 +27,7 @@ interface ThermalOrder {
   tipAmount?: number;
   discountAmount?: number;
   manualDiscount?: number;
+  originalSubtotal?: number;
   paymentMethod?: string;
   paymentStatus?: string;
   deliveryOtp?: string;
@@ -144,9 +146,11 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
     order.deliveryInstruction || order.customer?.deliveryInstruction || order.notes || order.specialInstructions;
 
   const items = order.items && order.items.length > 0 ? order.items : [];
-  const subtotal = items.reduce((sum, it) => sum + it.price * (it.quantity || 1), 0) || order.amount;
+  const billedSubtotal = items.reduce((sum, it) => sum + (Number(it.price) || 0) * (it.quantity || 1), 0) || order.amount;
+  const catalogSubtotal = items.reduce((sum, it) => sum + (Number(it.originalPrice || it.price) || 0) * (it.quantity || 1), 0);
+  const discount = Number(order.discountAmount || order.manualDiscount || (catalogSubtotal > billedSubtotal ? catalogSubtotal - billedSubtotal : 0));
+  const subtotal = discount > 0 ? (order.originalSubtotal || catalogSubtotal) : billedSubtotal;
   const deliveryFee = order.deliveryFee != null ? order.deliveryFee : isPickup ? 0 : 35;
-  const discount = order.discountAmount || 0;
   const isPaid =
     order.paymentStatus?.toLowerCase() === "paid" ||
     order.paymentMethod?.toLowerCase().includes("online") ||
@@ -389,9 +393,9 @@ export default function ThermalKOTModal({ order, onClose }: ThermalKOTModalProps
 
               {/* Payment */}
               <div style={{ ...section, textAlign: "center", fontSize: `${F.base}px` }}>
-                {order.isModified && (
+                {(order.isModified || order.modificationReason) && (
                   <div style={{ marginBottom: "4px", padding: "3px 5px", border: "1px solid #000", fontWeight: 900, fontSize: `${F.small}px` }}>
-                    REVISED ORDER (MODIFIED)
+                    {order.isModified ? "REVISED ORDER (MODIFIED)" : "PRICE ADJUSTMENT APPLIED"}
                     {order.modificationReason && <div style={{ fontWeight: 700, marginTop: "2px", wordBreak: "break-word" }}>Reason: {order.modificationReason}</div>}
                   </div>
                 )}

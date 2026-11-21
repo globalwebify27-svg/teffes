@@ -257,6 +257,15 @@ export default function CartDrawer() {
         activeAddr?.pincode,
       ].filter(Boolean).join(" ");
 
+      const validLat = (typeof activeAddr?.lat === "number" && !isNaN(activeAddr.lat))
+        ? activeAddr.lat
+        : ((typeof currentLocation?.lat === "number" && !isNaN(currentLocation.lat)) ? currentLocation.lat : undefined);
+      const validLng = (typeof activeAddr?.lng === "number" && !isNaN(activeAddr.lng))
+        ? activeAddr.lng
+        : ((typeof currentLocation?.lng === "number" && !isNaN(currentLocation.lng)) ? currentLocation.lng : undefined);
+      const rawPincode = activeAddr?.pincode || (fullAddressStr ? (fullAddressStr.match(/\b\d{6}\b/) || [])[0] : undefined);
+      const activePincode = rawPincode ? String(rawPincode).replace(/\D/g, "") : undefined;
+
       const payload = {
         type: fulfillmentType,
         fulfillmentType,
@@ -268,10 +277,11 @@ export default function CartDrawer() {
           badge: i.product.badge,
           netWeight: i.selectedWeight || i.product.netWeight,
         })),
-        customerLat: activeAddr?.lat || currentLocation?.lat || 23.3512,
-        customerLng: activeAddr?.lng || currentLocation?.lng || 85.3154,
-        lat: activeAddr?.lat || currentLocation?.lat,
-        lng: activeAddr?.lng || currentLocation?.lng,
+        customerLat: validLat,
+        customerLng: validLng,
+        lat: validLat,
+        lng: validLng,
+        pincode: activePincode,
         address: fullAddressStr || currentLocation?.fullAddress || "",
         shippingAddress: fullAddressStr || currentLocation?.fullAddress || "",
       };
@@ -481,7 +491,8 @@ export default function CartDrawer() {
     selectedStore &&
     stores.length > 0 &&
     (selectedStore as any).isOpen !== false &&
-    (selectedStore as any).isAvailable !== false
+    (selectedStore as any).status !== "Closed" &&
+    (selectedStore as any).status !== "Inactive"
   );
 
   // Dynamic store-configurable delivery fees, thresholds, express fee, and rain surge
@@ -1286,19 +1297,26 @@ export default function CartDrawer() {
                                   {selectedStore.name}
                                 </span>
                                 <span
-                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${selectedStore.isAvailable !== false
+                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
+                                    isOutOfDeliveryRadius
+                                      ? "text-amber-800 bg-amber-100/90 border border-amber-200"
+                                      : selectedStore.isAvailable !== false
                                       ? "text-emerald-800 bg-emerald-100/90"
                                       : "text-red-700 bg-red-100"
-                                    }`}
+                                  }`}
                                 >
-                                  {selectedStore.isAvailable !== false ? "Nearest • In Stock" : "Out of Stock"}
+                                  {isOutOfDeliveryRadius
+                                    ? "Outside Range"
+                                    : selectedStore.isAvailable !== false
+                                    ? "Nearest • In Stock"
+                                    : "Out of Stock"}
                                 </span>
                               </div>
                               <p className="text-[11px] text-slate-body truncate mt-0.5">{selectedStore.address}</p>
                               <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-body">
                                 <span className="font-bold text-primary">{selectedStore.distance || "0.7 km away"}</span>
                                 <span>•</span>
-                                <span>Dispatching to your address</span>
+                                <span>{isOutOfDeliveryRadius ? "Beyond 10km delivery range" : "Dispatching to your address"}</span>
                               </div>
                             </div>
                           </div>
@@ -2279,10 +2297,17 @@ export default function CartDrawer() {
                     <button
                       type="button"
                       disabled
-                      className="w-full py-3 rounded-full bg-amber-100 border border-amber-300 text-amber-900 font-label-lg font-extrabold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
+                      className="w-full py-3 rounded-full bg-primary/50 text-white font-label-lg font-bold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[14px] opacity-60 select-none"
                     >
-                      <span className="material-symbols-outlined text-[18px] text-amber-700">near_me_disabled</span>
-                      <span>Outside {storeDeliveryRadiusKm} KM Delivery Range</span>
+                      <span>
+                        {isLoggedIn
+                          ? fulfillmentType === "pickup"
+                            ? "Proceed to Store Pickup"
+                            : "Proceed to Checkout"
+                          : "Login to proceed"}
+                      </span>
+                      <span>•</span>
+                      <span>₹{finalPayable}</span>
                     </button>
                   ) : !isStoreOperational ? (
                     <button

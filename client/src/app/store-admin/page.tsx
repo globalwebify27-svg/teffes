@@ -1048,8 +1048,30 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
   const [manualPaymentMethod, setManualPaymentMethod] = useState("Cash on Delivery");
   const [manualPaymentStatus, setManualPaymentStatus] = useState("Pending");
   const [manualOrderNotes, setManualOrderNotes] = useState("");
+  const [manualPriceReason, setManualPriceReason] = useState("");
   const [manualItems, setManualItems] = useState<any[]>([]);
   const [submittingManualOrder, setSubmittingManualOrder] = useState(false);
+
+  // Reset manual order form cleanly
+  const resetManualOrderForm = () => {
+    setManualCustName("");
+    setManualCustPhone("");
+    setManualCustAddress("");
+    setManualIsPickup(false);
+    setManualPaymentMethod("Cash on Delivery");
+    setManualPaymentStatus("Pending");
+    setManualOrderNotes("");
+    setManualPriceReason("");
+    setManualItems([]);
+    setSelectedProductId("");
+    setIsCustomItem(false);
+    setQuickItemProductId("");
+    setQuickItemName("");
+    setQuickItemPrice("");
+    setQuickItemQty(1);
+    setQuickItemWeight("500g");
+    setQuickItemImage("");
+  };
 
   // Quick item entry states
   const [quickItemName, setQuickItemName] = useState("");
@@ -1092,6 +1114,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
   };
 
   const openCreateManualOrderModal = () => {
+    resetManualOrderForm();
     setShowCreateOrderModal(true);
     setSelectedProductId("");
     setIsCustomItem(false);
@@ -1203,16 +1226,24 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
       toast.error("Please enter a valid price", "Invalid Price");
       return;
     }
+
+    const matchedProd = quickItemProductId
+      ? catalogProducts.find((p: any) => String(p.id) === String(quickItemProductId))
+      : catalogProducts.find((p: any) => p.name && p.name.toLowerCase().trim() === quickItemName.toLowerCase().trim());
+
+    const catalogPrice = matchedProd && matchedProd.price != null ? Number(matchedProd.price) : priceNum;
+
     setManualItems(prev => [
       ...prev,
       {
         id: `item-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-        productId: quickItemProductId || undefined,
+        productId: quickItemProductId || matchedProd?.id || undefined,
         name: quickItemName.trim(),
         price: priceNum,
+        originalPrice: catalogPrice,
         quantity: quickItemQty,
         netWeight: quickItemWeight,
-        image: quickItemImage || undefined,
+        image: quickItemImage || matchedProd?.image || undefined,
       }
     ]);
     setSelectedProductId("");
@@ -1224,6 +1255,30 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
     setQuickItemWeight("500g");
     setQuickItemImage("");
   };
+
+  // Calculations for manual order
+  const manualOriginalSubtotal = useMemo(() => {
+    return manualItems.reduce((s, it) => s + (Number(it.originalPrice || it.price) || 0) * (Number(it.quantity) || 1), 0);
+  }, [manualItems]);
+
+  const manualItemsSubtotal = useMemo(() => {
+    return manualItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
+  }, [manualItems]);
+
+  const manualPriceDiff = manualItemsSubtotal - manualOriginalSubtotal;
+  const manualDiscountAmount = manualPriceDiff < 0 ? Math.abs(manualPriceDiff) : 0;
+  const manualSurchargeAmount = manualPriceDiff > 0 ? manualPriceDiff : 0;
+  const manualHasPriceChange = manualPriceDiff !== 0;
+
+  const isManualOrderFormValid = useMemo(() => {
+    const cleanPhone = manualCustPhone.replace(/\D/g, "");
+    if (cleanPhone.length !== 10) return false;
+    if (manualCustName.trim().length < 2) return false;
+    if (!manualIsPickup && !manualCustAddress.trim()) return false;
+    if (manualItems.length === 0) return false;
+    if (manualHasPriceChange && !manualPriceReason.trim()) return false;
+    return true;
+  }, [manualCustPhone, manualCustName, manualIsPickup, manualCustAddress, manualItems, manualHasPriceChange, manualPriceReason]);
 
   const handleSaveManualOrder = async () => {
     const cleanPhone = manualCustPhone.replace(/\D/g, "");
@@ -1248,13 +1303,16 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
       toast.error("Please enter a delivery address or choose Store Pickup", "Address Required");
       return;
     }
+    if (manualHasPriceChange && !manualPriceReason.trim()) {
+      toast.error("Please provide a description / reason for the price adjustment", "Reason Required");
+      return;
+    }
 
     setSubmittingManualOrder(true);
     try {
-      const subtotal = manualItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
       const configuredFee = typeof storeSettings?.standardDeliveryFee === "number" ? storeSettings.standardDeliveryFee : 40;
       const freeThreshold = typeof storeSettings?.freeDeliveryThreshold === "number" ? storeSettings.freeDeliveryThreshold : 399;
-      const deliveryFee = manualIsPickup ? 0 : (subtotal >= freeThreshold ? 0 : configuredFee);
+      const deliveryFee = manualIsPickup ? 0 : (manualItemsSubtotal >= freeThreshold ? 0 : configuredFee);
 
       const res = await api.post<{ success: boolean; message: string; order: any }>(
         "/store-admin/orders/create-manual",
@@ -1265,6 +1323,13 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
           pickupMode: manualIsPickup,
           fulfillmentType: manualIsPickup ? "pickup" : "delivery",
           items: manualItems,
+          itemsSubtotal: manualItemsSubtotal,
+          originalSubtotal: manualOriginalSubtotal,
+          discountAmount: manualDiscountAmount,
+          manualDiscount: manualDiscountAmount,
+          originalAmount: manualOriginalSubtotal + deliveryFee,
+          modificationReason: manualPriceReason.trim() || undefined,
+          isModified: manualHasPriceChange,
           deliveryFee,
           paymentMethod: manualIsPickup ? (manualPaymentStatus === "Paid" ? "Paid at Store Counter" : "Pay at Store Counter") : manualPaymentMethod,
           paymentStatus: manualPaymentStatus,
@@ -1279,14 +1344,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
           "Order Created"
         );
         setShowCreateOrderModal(false);
-        setManualCustName("");
-        setManualCustPhone("");
-        setManualCustAddress("");
-        setManualIsPickup(false);
-        setManualPaymentMethod("Cash on Delivery");
-        setManualPaymentStatus("Pending");
-        setManualOrderNotes("");
-        setManualItems([]);
+        resetManualOrderForm();
         fetchOrders();
       }
     } catch (err: any) {
@@ -3241,7 +3299,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
               </div>
               <button
                 type="button"
-                onClick={() => setShowCreateOrderModal(false)}
+                onClick={() => { setShowCreateOrderModal(false); resetManualOrderForm(); }}
                 style={{
                   background: "rgba(255,255,255,0.15)",
                   border: "none",
@@ -3712,16 +3770,39 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                               />
                             )}
                             <div>
-                              <span style={{ fontWeight: 700, color: "#111827" }}>{item.name}</span>
-                              <span style={{ color: "#6b7280", marginLeft: "6px" }}>({item.netWeight} ×{item.quantity})</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                                <span style={{ fontWeight: 700, color: "#111827" }}>{item.name}</span>
+                                <span style={{ color: "#6b7280" }}>({item.netWeight} ×{item.quantity})</span>
+                                {item.originalPrice && item.originalPrice !== item.price && (
+                                  <span style={{
+                                    fontSize: "0.7rem",
+                                    fontWeight: 700,
+                                    padding: "1px 5px",
+                                    borderRadius: "4px",
+                                    background: item.price < item.originalPrice ? "#ecfdf5" : "#fffbeb",
+                                    color: item.price < item.originalPrice ? "#047857" : "#b45309",
+                                    border: item.price < item.originalPrice ? "1px solid #a7f3d0" : "1px solid #fde68a"
+                                  }}>
+                                    {item.price < item.originalPrice
+                                      ? `Disc: -₹${(item.originalPrice - item.price) * item.quantity}`
+                                      : `Adj: +₹${(item.price - item.originalPrice) * item.quantity}`}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                            {item.originalPrice && item.originalPrice !== item.price && (
+                              <span style={{ fontSize: "0.75rem", textDecoration: "line-through", color: "#9ca3af" }}>
+                                ₹{item.originalPrice * (item.quantity || 1)}
+                              </span>
+                            )}
                             <span style={{ fontWeight: 800, color: "#065f46" }}>₹{(item.price || 0) * (item.quantity || 1)}</span>
                             <button
                               type="button"
                               onClick={() => setManualItems(prev => prev.filter((_, i) => i !== idx))}
                               style={{ background: "none", border: "none", color: "#dc2626", cursor: "pointer", padding: "2px" }}
+                              title="Remove item"
                             >
                               <span className="material-symbols-outlined text-[16px]">delete</span>
                             </button>
@@ -3733,7 +3814,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                 )}
               </div>
 
-              {/* Section 3: Payment & Notes */}
+              {/* Section 3: Payment, Description & Notes */}
               <div style={{ background: "#f9fafb", padding: "14px", borderRadius: "12px", border: "1px solid #e5e7eb" }}>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div>
@@ -3765,9 +3846,59 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                   </div>
                 </div>
 
+                {/* Description & Price Adjustment Reason */}
+                <div style={{ marginTop: "10px" }}>
+                  <label style={{
+                    fontSize: "0.74rem",
+                    fontWeight: 700,
+                    color: manualHasPriceChange ? "#991b1b" : "#374151",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    marginBottom: "4px",
+                  }}>
+                    <span>
+                      Description / Reason for Price Adjustment {manualHasPriceChange ? (
+                        <span style={{ color: "#dc2626" }}>* (Mandatory: Price modified)</span>
+                      ) : (
+                        <span style={{ color: "#6b7280", fontWeight: 500 }}>(Optional)</span>
+                      )}
+                    </span>
+                    {manualHasPriceChange && (
+                      <span style={{
+                        fontSize: "0.7rem",
+                        color: manualPriceDiff < 0 ? "#047857" : "#b45309",
+                        fontWeight: 700,
+                      }}>
+                        {manualPriceDiff < 0 ? `₹${manualDiscountAmount} Discount Applied` : `₹${manualSurchargeAmount} Surcharge Applied`}
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={manualHasPriceChange ? "e.g. Regular customer discount, bulk order deal, phone counter offer" : "Optional order description or discount note"}
+                    value={manualPriceReason}
+                    onChange={(e) => setManualPriceReason(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 10px",
+                      borderRadius: "8px",
+                      border: manualHasPriceChange && !manualPriceReason.trim() ? "1.5px solid #ef4444" : "1px solid #d1d5db",
+                      background: manualHasPriceChange && !manualPriceReason.trim() ? "#fef2f2" : "#fff",
+                      fontSize: "0.8rem",
+                      color: "#111827",
+                    }}
+                  />
+                  {manualHasPriceChange && !manualPriceReason.trim() && (
+                    <div style={{ fontSize: "0.7rem", color: "#dc2626", fontWeight: 600, marginTop: "3px" }}>
+                      ⚠️ Reason is required when modifying product prices (will reflect on KOT and customer invoice).
+                    </div>
+                  )}
+                </div>
+
                 <div style={{ marginTop: "10px" }}>
                   <label style={{ fontSize: "0.74rem", fontWeight: 700, color: "#374151", display: "block", marginBottom: "4px" }}>
-                    Special Cutting / Preparation Notes
+                    Special Cutting / Preparation Notes (Optional)
                   </label>
                   <input
                     type="text"
@@ -3781,25 +3912,51 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
 
               {/* Total Calculation Summary */}
               {manualItems.length > 0 && (() => {
-                const subtotal = manualItems.reduce((s, it) => s + (Number(it.price) || 0) * (Number(it.quantity) || 1), 0);
                 const configuredFee = typeof storeSettings?.standardDeliveryFee === "number" ? storeSettings.standardDeliveryFee : 40;
                 const freeThreshold = typeof storeSettings?.freeDeliveryThreshold === "number" ? storeSettings.freeDeliveryThreshold : 399;
-                const deliveryFee = manualIsPickup ? 0 : (subtotal >= freeThreshold ? 0 : configuredFee);
-                const total = subtotal + deliveryFee;
+                const deliveryFee = manualIsPickup ? 0 : (manualItemsSubtotal >= freeThreshold ? 0 : configuredFee);
+                const total = manualItemsSubtotal + deliveryFee;
 
                 return (
-                  <div style={{ background: "#ecfdf5", padding: "12px 16px", borderRadius: "10px", border: "1px solid #a7f3d0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <div style={{ fontSize: "0.75rem", color: "#065f46" }}>
-                        Subtotal: ₹{subtotal} {deliveryFee > 0 ? `+ ₹${deliveryFee} Delivery` : "(Free Delivery)"}
+                  <div style={{
+                    background: manualHasPriceChange ? "#f8fafc" : "#ecfdf5",
+                    padding: "12px 16px",
+                    borderRadius: "10px",
+                    border: manualHasPriceChange ? "1px solid #cbd5e1" : "1px solid #a7f3d0",
+                  }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px", fontSize: "0.78rem" }}>
+                          {manualHasPriceChange && (
+                            <span style={{ color: "#64748b" }}>
+                              Original Price: <span style={{ textDecoration: "line-through" }}>₹{manualOriginalSubtotal}</span>
+                            </span>
+                          )}
+                          {manualDiscountAmount > 0 && (
+                            <span style={{ color: "#047857", fontWeight: 800, background: "#d1fae5", padding: "2px 7px", borderRadius: "5px" }}>
+                              Discount: -₹{manualDiscountAmount}
+                            </span>
+                          )}
+                          {manualSurchargeAmount > 0 && (
+                            <span style={{ color: "#b45309", fontWeight: 800, background: "#fef3c7", padding: "2px 7px", borderRadius: "5px" }}>
+                              Adjustment: +₹{manualSurchargeAmount}
+                            </span>
+                          )}
+                          <span style={{ color: "#334155", fontWeight: 600 }}>
+                            Subtotal: ₹{manualItemsSubtotal}
+                          </span>
+                          <span style={{ color: deliveryFee > 0 ? "#475569" : "#047857", fontWeight: 600 }}>
+                            {deliveryFee > 0 ? `+ ₹${deliveryFee} Delivery` : "(Free Delivery)"}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "0.72rem", color: "#047857", fontWeight: 600, marginTop: "4px" }}>
+                          📱 Customer can track live on TeFFe App/Web under #{manualCustPhone || "Phone"}
+                        </div>
                       </div>
-                      <div style={{ fontSize: "0.72rem", color: "#047857", fontWeight: 600 }}>
-                        📱 Customer can track live on TeFFe App/Web under #{manualCustPhone}
+                      <div style={{ textAlign: "right", flexShrink: 0 }}>
+                        <div style={{ fontSize: "0.7rem", color: "#64748b", textTransform: "uppercase", fontWeight: 700 }}>Total Order Value</div>
+                        <div style={{ fontSize: "1.25rem", fontWeight: 900, color: "#065f46" }}>₹{total}</div>
                       </div>
-                    </div>
-                    <div style={{ textAlign: "right" }}>
-                      <div style={{ fontSize: "0.72rem", color: "#065f46", textTransform: "uppercase", fontWeight: 700 }}>Total Order Value</div>
-                      <div style={{ fontSize: "1.2rem", fontWeight: 900, color: "#065f46" }}>₹{total}</div>
                     </div>
                   </div>
                 );
@@ -3817,7 +3974,7 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
             }}>
               <button
                 type="button"
-                onClick={() => setShowCreateOrderModal(false)}
+                onClick={() => { setShowCreateOrderModal(false); resetManualOrderForm(); }}
                 style={{
                   padding: "8px 16px",
                   borderRadius: "8px",
@@ -3834,16 +3991,16 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
               <button
                 type="button"
                 onClick={handleSaveManualOrder}
-                disabled={submittingManualOrder || manualItems.length === 0 || manualCustPhone.replace(/\D/g, "").length < 10}
+                disabled={submittingManualOrder || !isManualOrderFormValid}
                 style={{
                   padding: "8px 20px",
                   borderRadius: "8px",
                   border: "none",
-                  background: submittingManualOrder || manualItems.length === 0 || manualCustPhone.replace(/\D/g, "").length < 10 ? "#9ca3af" : "#065f46",
+                  background: submittingManualOrder || !isManualOrderFormValid ? "#9ca3af" : "#065f46",
                   color: "#fff",
                   fontWeight: 800,
                   fontSize: "0.82rem",
-                  cursor: submittingManualOrder || manualItems.length === 0 || manualCustPhone.replace(/\D/g, "").length < 10 ? "not-allowed" : "pointer",
+                  cursor: submittingManualOrder || !isManualOrderFormValid ? "not-allowed" : "pointer",
                   display: "flex",
                   alignItems: "center",
                   gap: "6px",
