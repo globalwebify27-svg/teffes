@@ -322,14 +322,24 @@ class LocationProvider with ChangeNotifier {
             .toList();
 
         if (_savedAddresses.isNotEmpty) {
-          final def = _savedAddresses.firstWhere(
-            (a) => a.isDefault,
-            orElse: () => _savedAddresses.first,
-          );
-          _selectedAddress = def;
+          final existing = _selectedAddress != null
+              ? _savedAddresses.firstWhere(
+                  (a) => a.id == _selectedAddress!.id,
+                  orElse: () => _savedAddresses.firstWhere(
+                    (a) => a.isDefault,
+                    orElse: () => _savedAddresses.first,
+                  ),
+                )
+              : _savedAddresses.firstWhere(
+                  (a) => a.isDefault,
+                  orElse: () => _savedAddresses.first,
+                );
+          _selectedAddress = existing;
+          _persistSelectedAddress(existing);
         } else {
-          _selectedAddress = null;
-          _isGpsDetected = false;
+          if (!_isGpsDetected) {
+            _selectedAddress = null;
+          }
         }
       } else {
         _savedAddresses = [];

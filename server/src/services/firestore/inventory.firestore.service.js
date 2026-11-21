@@ -770,6 +770,24 @@ const updateInventoryItem = async (storeId, itemId, updates = {}, user = null, r
   payload.updatedAt = new Date().toISOString();
   const updated = await updateDoc(INVENTORY_COLLECTION, docId, payload);
 
+  // Synchronize product's master inStock flag with fresh inventory
+  if (payload.stock !== undefined) {
+    try {
+      const stockNum = Number(payload.stock) || 0;
+      const db = getDb();
+      const prodRef = db.collection('products').doc(itemId);
+      const prodSnap = await prodRef.get();
+      if (prodSnap.exists) {
+        await prodRef.update({
+          inStock: stockNum > 0,
+          updatedAt: new Date().toISOString(),
+        });
+      }
+    } catch (e) {
+      console.warn('Syncing product inStock error:', e.message);
+    }
+  }
+
   // Check if fresh stock was changed directly (e.g. morning delivery / restock)
   if (payload.stock !== undefined) {
     const newStock = Number(payload.stock);

@@ -208,6 +208,7 @@ const firebaseLoginHandler = async (req, res, next) => {
     });
 
     const accessToken = await issueTokens(user, res);
+    const addresses = Array.isArray(user.addresses) ? user.addresses : [];
 
     res.status(200).json({
       success: true,
@@ -220,6 +221,7 @@ const firebaseLoginHandler = async (req, res, next) => {
         name: user.name || 'Valued Customer',
         email: user.email || '',
         role: user.role,
+        addresses: addresses.map((a) => ({ ...a, _id: a._id || a.id, id: a.id || a._id })),
       },
     });
   } catch (error) {

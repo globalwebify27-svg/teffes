@@ -280,7 +280,16 @@ class _LoginScreenState extends State<LoginScreen> {
     // Fetch and merge persistent cart from server
     cart.fetchCartFromServer();
 
-    if (auth.user != null && auth.user!.addresses.isNotEmpty) {
+    // Fetch saved addresses from server
+    await location.fetchAddresses();
+
+    if (location.savedAddresses.isNotEmpty) {
+      final def = location.savedAddresses.firstWhere(
+        (a) => a.isDefault,
+        orElse: () => location.savedAddresses.first,
+      );
+      location.selectAddress(def);
+    } else if (auth.user != null && auth.user!.addresses.isNotEmpty) {
       location.setSavedAddresses(auth.user!.addresses);
     } else {
       await location.detectGpsLocation(userTriggered: true);

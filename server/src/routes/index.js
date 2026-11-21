@@ -59,9 +59,14 @@ const getAvailableStoresHandler = async (req, res, next) => {
     let customerLng = req.body?.lng !== undefined ? Number(req.body.lng) : (req.body?.customerLng !== undefined ? Number(req.body.customerLng) : (req.query?.lng !== undefined ? Number(req.query.lng) : (req.query?.customerLng !== undefined ? Number(req.query.customerLng) : null)));
 
     // Address text / Pincode geocoding
-    const addressHint = (req.body?.shippingAddress || req.body?.address || req.query?.shippingAddress || req.query?.address || '').trim();
+    const rawAddress = req.body?.shippingAddress || req.body?.address || req.query?.shippingAddress || req.query?.address || '';
+    const addressHint = typeof rawAddress === 'string'
+      ? rawAddress.trim()
+      : (rawAddress && typeof rawAddress === 'object'
+          ? `${rawAddress.line1 || ''} ${rawAddress.line2 || ''} ${rawAddress.city || ''} ${rawAddress.pincode || ''}`.trim()
+          : '');
     const pincodeMatch = addressHint.match(/\b\d{6}\b/);
-    const rawPincode = (req.body?.pincode || req.query?.pincode || (pincodeMatch ? pincodeMatch[0] : '')).toString().trim();
+    const rawPincode = (req.body?.pincode || req.body?.address?.pincode || req.query?.pincode || (pincodeMatch ? pincodeMatch[0] : '')).toString().trim();
     const pincodeHint = rawPincode.replace(/\D/g, '');
 
     // Force geocoding if coords are missing OR if an explicit non-Ranchi pincode is selected (e.g. Pune 411038 vs Ranchi 834xxx)
@@ -102,12 +107,17 @@ const getAvailableStoresHandler = async (req, res, next) => {
       // Verify inventory in this specific store
       let isAvailable = true;
       const outOfStockItems = [];
+      const outOfStockProductIds = [];
       const invList = await getStoreInventory(store.storeId);
 
       if (items.length > 0) {
         if (!invList || invList.length === 0) {
           isAvailable = false;
           outOfStockItems.push('Catalog unstocked at this location');
+          items.forEach((it) => {
+            if (it.id) outOfStockProductIds.push(it.id);
+            if (it.productId) outOfStockProductIds.push(it.productId);
+          });
         } else {
           for (const item of items) {
             // Check if item is a packaged pantry / cross-sell essential (spices, paste, marinades, eggs, etc.)
@@ -130,6 +140,8 @@ const getAvailableStoresHandler = async (req, res, next) => {
             } else if (matchedInv.status === 'Out of Stock' || (matchedInv.stock !== undefined && matchedInv.stock < reqAmount)) {
               isAvailable = false;
               outOfStockItems.push(`${item.name} (Stock: ${matchedInv.stock || 0} ${matchedInv.unit || 'kg'})`);
+              if (item.id) outOfStockProductIds.push(item.id);
+              if (item.productId) outOfStockProductIds.push(item.productId);
             }
           }
         }
@@ -166,6 +178,7 @@ const getAvailableStoresHandler = async (req, res, next) => {
         isInventoryAvailable: isAvailable,
         isAvailable: isStoreFullyEligible,
         outOfStockItems,
+        outOfStockProductIds,
         stockStatus: !isAvailable ? 'Out of Stock' : (!isWithinRadius ? 'Out of Delivery Range' : 'In Stock'),
         todaySpecialSchedule: todaySchedule,
         specialSchedules: store.specialSchedules || {},

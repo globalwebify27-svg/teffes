@@ -158,6 +158,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
             : 'Tomorrow: 08:00 AM - 09:00 AM');
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
+        context.read<LocationProvider>().fetchAddresses();
         context.read<CartProvider>().fetchCartFromServer();
         context.read<CartProvider>().fetchAvailableCoupons();
         _fetchStores();
@@ -674,6 +675,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 }
 
   void _showAddressPicker(BuildContext context, LocationProvider location) {
+    location.fetchAddresses();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -2516,38 +2518,130 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         const Divider(height: 1, color: AppColors.borderHairline),
                         ...items.map((cartItem) {
                           final prod = cartItem.product;
-                          return Padding(
+                          final bool isItemOutOfStock = !prod.inStock ||
+                              (_selectedStore != null &&
+                                  (_selectedStore!.outOfStockProductIds.contains(prod.id) ||
+                                   _selectedStore!.outOfStockItems.any((name) =>
+                                       prod.name.toLowerCase().contains(name.toLowerCase()) ||
+                                       name.toLowerCase().contains(prod.name.toLowerCase()))));
+
+                          return Container(
+                            margin: isItemOutOfStock ? const EdgeInsets.symmetric(horizontal: 10, vertical: 4) : EdgeInsets.zero,
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: isItemOutOfStock
+                                ? BoxDecoration(
+                                    color: const Color(0xFFFEF2F2),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: const Color(0xFFFECACA)),
+                                  )
+                                : null,
                             child: Row(
                               children: [
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(8),
-                                  child: CachedNetworkImage(
-                                    imageUrl: prod.image,
-                                    width: 50,
-                                    height: 50,
-                                    fit: BoxFit.cover,
-                                    placeholder: (context, url) => Container(color: AppColors.surfaceSubtle),
-                                    errorWidget: (context, url, error) => Container(color: AppColors.surfaceSubtle, child: const Icon(Icons.broken_image_rounded, size: 16)),
-                                  ),
+                                Stack(
+                                  children: [
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: ColorFiltered(
+                                        colorFilter: isItemOutOfStock
+                                            ? const ColorFilter.mode(Colors.grey, BlendMode.saturation)
+                                            : const ColorFilter.mode(Colors.transparent, BlendMode.multiply),
+                                        child: CachedNetworkImage(
+                                          imageUrl: prod.image,
+                                          width: 50,
+                                          height: 50,
+                                          fit: BoxFit.cover,
+                                          placeholder: (context, url) => Container(color: AppColors.surfaceSubtle),
+                                          errorWidget: (context, url, error) => Container(color: AppColors.surfaceSubtle, child: const Icon(Icons.broken_image_rounded, size: 16)),
+                                        ),
+                                      ),
+                                    ),
+                                    if (isItemOutOfStock)
+                                      Positioned.fill(
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withOpacity(0.5),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          alignment: Alignment.center,
+                                          child: const Text(
+                                            'OUT OF\nSTOCK',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 8,
+                                              fontWeight: FontWeight.w900,
+                                              height: 1.1,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(prod.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13), maxLines: 1, overflow: TextOverflow.ellipsis),
+                                      Text(
+                                        prod.name,
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 13,
+                                          color: isItemOutOfStock ? AppColors.textMuted : AppColors.textPrimary,
+                                          decoration: isItemOutOfStock ? TextDecoration.lineThrough : null,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
                                       const SizedBox(height: 2),
-                                      Text('${cartItem.selectedWeight} • ${CurrencyFormatter.format(prod.price)}', style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary)),
+                                      Text(
+                                        '${cartItem.selectedWeight} • ${CurrencyFormatter.format(prod.price)}',
+                                        style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                                      ),
                                     ],
                                   ),
                                 ),
-                                QuantityStepper(
-                                  quantity: cartItem.quantity,
-                                  onAdd: () => cart.addToCart(prod, weight: cartItem.selectedWeight),
-                                  onIncrement: () => cart.increment(prod.id),
-                                  onDecrement: () => cart.decrement(prod.id),
-                                ),
+                                if (isItemOutOfStock) ...[
+                                  // Disabled stepper: Plus and Minus disabled
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade200,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.remove, size: 14, color: Colors.grey.shade400),
+                                        Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                                          child: Text('${cartItem.quantity}', style: TextStyle(color: Colors.grey.shade500, fontWeight: FontWeight.bold, fontSize: 12)),
+                                        ),
+                                        Icon(Icons.add, size: 14, color: Colors.grey.shade400),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  // Enabled Delete Button
+                                  Material(
+                                    color: const Color(0xFFFEE2E2),
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: InkWell(
+                                      onTap: () => cart.removeFromCart(prod.id),
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: const Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: Icon(Icons.delete_outline_rounded, color: Color(0xFFDC2626), size: 20),
+                                      ),
+                                    ),
+                                  ),
+                                ] else
+                                  QuantityStepper(
+                                    quantity: cartItem.quantity,
+                                    onAdd: () => cart.addToCart(prod, weight: cartItem.selectedWeight),
+                                    onIncrement: () => cart.increment(prod.id),
+                                    onDecrement: () => cart.decrement(prod.id),
+                                  ),
                               ],
                             ),
                           );
@@ -3037,11 +3131,68 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                   final bool needsPincodeVerification = !isPickup && selAddr != null && (selAddr.latitude == null || selAddr.longitude == null);
                   final selStore = _selectedStore;
                   final bool isOutOfRadius = !isPickup && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
-                  final bool isCheckoutBlocked = cart.subtotal < 200 || isOutOfRadius || needsPincodeVerification;
+                  final bool hasOutOfStockItems = items.any((cartItem) {
+                    final p = cartItem.product;
+                    return !p.inStock ||
+                        (selStore != null &&
+                            (selStore.outOfStockProductIds.contains(p.id) ||
+                             selStore.outOfStockItems.any((name) =>
+                                 p.name.toLowerCase().contains(name.toLowerCase()) ||
+                                 name.toLowerCase().contains(p.name.toLowerCase()))));
+                  }) || (selStore != null && !selStore.isAvailable);
+                  final bool isStoreOperational = selStore != null &&
+                      selStore.status.toLowerCase() != 'paused' &&
+                      selStore.status.toLowerCase() != 'closed' &&
+                      selStore.status.toLowerCase() != 'inactive';
+                  final bool isCheckoutBlocked = cart.subtotal < 200 || isOutOfRadius || needsPincodeVerification || hasOutOfStockItems || !isStoreOperational;
 
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (hasOutOfStockItems)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFF59E0B)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.remove_shopping_cart_rounded, size: 16, color: Color(0xFFB45309)),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'One or more items in your cart are out of stock. Please remove them to proceed.',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (!isStoreOperational && selStore != null)
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFFEF3C7),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFFF59E0B)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.storefront_rounded, size: 16, color: Color(0xFFB45309)),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Store hub is currently paused / offline. Please check back shortly.',
+                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       if (needsPincodeVerification)
                         GestureDetector(
                           onTap: () => _showPincodeVerificationModal(context, selAddr!),
@@ -3148,13 +3299,11 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                             child: _isPlacingOrder
                                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                 : Text(
-                                    cart.subtotal < 200
-                                        ? 'Add ₹${(200 - cart.subtotal).ceil()} More'
-                                        : !auth.isAuthenticated
-                                            ? 'Login to proceed'
-                                            : (_selectedPaymentMethod == 'payu'
-                                                ? 'Proceed to Pay →'
-                                                : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
+                                    !auth.isAuthenticated
+                                        ? 'Login to proceed'
+                                        : (_selectedPaymentMethod == 'payu'
+                                            ? 'Proceed to Pay →'
+                                            : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
                                     style: TextStyle(
                                       fontWeight: FontWeight.w800,
                                       color: isCheckoutBlocked ? Colors.grey.shade800 : Colors.white,

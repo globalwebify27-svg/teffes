@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/cart_provider.dart';
+import '../../providers/location_provider.dart';
 import '../../widgets/common/bottom_nav_bar.dart';
 import '../../widgets/common/floating_cart_bar.dart';
 import 'category/category_listing_screen.dart';
@@ -33,6 +34,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<CartProvider>().fetchCartFromServer();
+        context.read<LocationProvider>().fetchAddresses();
       }
     });
   }

@@ -46,6 +46,7 @@ const firebaseLogin = async (req, res, next) => {
     });
 
     const accessToken = signAccessToken({ id: user._id || user.id, role: user.role });
+    const addresses = Array.isArray(user.addresses) ? user.addresses : [];
 
     return res.status(200).json({
       success: true,
@@ -60,6 +61,7 @@ const firebaseLogin = async (req, res, next) => {
         email: user.email,
         role: user.role,
         isVerified: user.isVerified !== false,
+        addresses: addresses.map((a) => ({ ...a, _id: a._id || a.id, id: a.id || a._id })),
       },
     });
   } catch (err) {

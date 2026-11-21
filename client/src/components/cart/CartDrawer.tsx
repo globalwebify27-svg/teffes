@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
-import { useCart } from "@/lib/cart";
+import { useCart, type CartItem } from "@/lib/cart";
 import type { Product } from "@/lib/products";
 import { isAuthenticated, getStoredUser, updateUserInStorage } from "@/lib/auth";
 import api from "@/lib/api";
@@ -67,6 +67,7 @@ interface StoreOption {
   isAvailable?: boolean;
   stockStatus?: string;
   outOfStockItems?: string[];
+  outOfStockProductIds?: string[];
   freeDeliveryThreshold?: number;
   standardDeliveryFee?: number;
   expressDeliveryFee?: number;
@@ -248,8 +249,8 @@ export default function CartDrawer() {
   const fetchAvailableStores = async (addrs?: Address[], selectedAddrId?: string) => {
     try {
       const addrList = addrs || addresses;
-      const addrId = selectedAddrId || selectedAddressId;
-      const activeAddr = addrList.find((a) => a._id === addrId) || addrList[0];
+      const addrId = selectedAddrId || currentLocation?.addressId || selectedAddressId;
+      const activeAddr = (addrId ? addrList.find((a) => a._id === addrId) : null) || addrList[0];
       const fullAddressStr = [
         activeAddr?.line1,
         activeAddr?.line2,
@@ -329,11 +330,18 @@ export default function CartDrawer() {
     }
   }, [isOpen]);
 
+  // Synchronize cart drawer address selection when location changes (e.g. user selected an address in LocationModal)
+  useEffect(() => {
+    if (currentLocation?.addressId && currentLocation.addressId !== selectedAddressId) {
+      setSelectedAddressId(currentLocation.addressId);
+    }
+  }, [currentLocation?.addressId]);
+
   useEffect(() => {
     if (isOpen) {
       fetchAvailableStores();
     }
-  }, [fulfillmentType, items, selectedAddressId]);
+  }, [fulfillmentType, items, selectedAddressId, currentLocation]);
 
   // Tip Delivery Partner state (Zepto style)
   const [selectedTip, setSelectedTip] = useState<number>(0);
@@ -611,6 +619,26 @@ export default function CartDrawer() {
   const isUnderMinOrder = subtotal < MIN_ORDER_AMOUNT;
   const amountForMinOrder = Math.max(0, MIN_ORDER_AMOUNT - subtotal);
 
+  // Helper to determine if an individual cart item is out of stock at current store
+  const isCartItemOutOfStock = (item: CartItem) => {
+    if (item.product.inStock === false) return true;
+    if (selectedStore?.outOfStockProductIds && selectedStore.outOfStockProductIds.includes(item.product.id)) return true;
+    if (selectedStore?.outOfStockItems && selectedStore.outOfStockItems.some((s: string) =>
+      s.toLowerCase().includes(item.product.name.toLowerCase()) || item.product.name.toLowerCase().includes(s.toLowerCase())
+    )) return true;
+    return false;
+  };
+
+  const hasOutOfStockItems = items.some(isCartItemOutOfStock) || (Boolean(selectedStore) && selectedStore?.isAvailable === false);
+
+  // Overall check if checkout should be disabled (never removes the button, only disables it)
+  const isCheckoutBlocked = Boolean(
+    hasOutOfStockItems ||
+    isOutOfDeliveryRadius ||
+    !isStoreOperational ||
+    isUnderMinOrder
+  );
+
   // Tip handler
   const handleSelectTip = (amount: number) => {
     setShowCustomInput(false);
@@ -638,10 +666,12 @@ export default function CartDrawer() {
       const res = await api.get<{ success: boolean; addresses: Address[] }>("/user/addresses");
       if (res.data.success && Array.isArray(res.data.addresses)) {
         setAddresses(res.data.addresses);
-        const match = res.data.addresses.find((a) => a._id === currentLocation.addressId);
-        const def = match || res.data.addresses.find((a) => a.isDefault) || res.data.addresses[0];
-        if (def && !selectedAddressId) setSelectedAddressId(def._id);
-        fetchAvailableStores(res.data.addresses, def?._id);
+        const match = currentLocation?.addressId ? res.data.addresses.find((a) => a._id === currentLocation.addressId) : null;
+        const currentSelected = selectedAddressId ? res.data.addresses.find((a) => a._id === selectedAddressId) : null;
+        const def = match || currentSelected || res.data.addresses.find((a) => a.isDefault) || res.data.addresses[0];
+        const targetId = match?._id || currentSelected?._id || def?._id || "";
+        if (targetId) setSelectedAddressId(targetId);
+        fetchAvailableStores(res.data.addresses, targetId);
       }
     } catch (err) {
       console.warn("Could not fetch addresses:", err);
@@ -709,8 +739,8 @@ export default function CartDrawer() {
   };
 
   const activeAddress =
+    (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
     addresses.find((a) => a._id === selectedAddressId) ||
-    addresses.find((a) => a._id === currentLocation?.addressId) ||
     addresses.find((a) => a.isDefault) ||
     addresses[0] ||
     (currentLocation?.isSet && currentLocation?.fullAddress
@@ -731,9 +761,14 @@ export default function CartDrawer() {
       return;
     }
 
-    const outOfStockItem = items.find((i) => i.product.inStock === false);
+    const outOfStockItem = items.find(isCartItemOutOfStock);
     if (outOfStockItem) {
       toast.error(`"${outOfStockItem.product.name}" is out of stock. Please remove it from your cart before proceeding.`, "Out of Stock");
+      return;
+    }
+
+    if (selectedStore && selectedStore.isAvailable === false) {
+      toast.error(`Selected store (${selectedStore.name}) is currently out of stock for items in your cart.`, "Store Out of Stock");
       return;
     }
 
@@ -1561,87 +1596,101 @@ export default function CartDrawer() {
                       <span>Selected Items</span>
                       <span className="text-slate-body text-[12px] font-normal">{totalItemsCount} {totalItemsCount === 1 ? "item" : "items"}</span>
                     </div>
-                    {items.map((item) => (
-                      <div
-                        key={item.product.id}
-                        className="flex gap-3 pb-3 border-b border-gray-100 items-start"
-                      >
-                        <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100 border border-gray-200/60">
-                          <img
-                            src={item.product.image}
-                            alt={item.product.name}
-                            className={`w-full h-full object-cover ${item.product.inStock === false ? "opacity-60 grayscale-[30%]" : ""}`}
-                          />
-                          {item.product.inStock === false && (
-                            <div className="absolute inset-0 bg-red-950/65 flex items-center justify-center p-0.5">
-                              <span className="text-[8.5px] font-black text-white text-center leading-tight uppercase">Out of Stock</span>
-                            </div>
-                          )}
-                        </div>
+                    {items.map((item) => {
+                      const isItemOutOfStock = isCartItemOutOfStock(item);
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <h4 className="font-headline-sm text-on-surface font-bold text-[13.5px] leading-snug line-clamp-1">
-                              {item.product.name}
-                            </h4>
-                            <button
-                              onClick={() => removeFromCart(item.product.id)}
-                              className="text-gray-400 hover:text-error bg-transparent border-none cursor-pointer p-0.5 flex items-center"
-                              aria-label="Remove item"
-                            >
-                              <span className="material-symbols-outlined text-[16px]">delete</span>
-                            </button>
+                      return (
+                        <div
+                          key={item.product.id}
+                          className={`flex gap-3 pb-3 border-b border-gray-100 items-start transition-all ${
+                            isItemOutOfStock ? "bg-red-50/50 p-2.5 rounded-2xl border border-red-200/80" : ""
+                          }`}
+                        >
+                          <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100 border border-gray-200/60">
+                            <img
+                              src={item.product.image}
+                              alt={item.product.name}
+                              className={`w-full h-full object-cover ${isItemOutOfStock ? "opacity-60 grayscale-[50%]" : ""}`}
+                            />
+                            {isItemOutOfStock && (
+                              <div className="absolute inset-0 bg-red-950/70 flex items-center justify-center p-0.5">
+                                <span className="text-[8.5px] font-black text-white text-center leading-tight uppercase tracking-wider">Out of Stock</span>
+                              </div>
+                            )}
                           </div>
 
-                          <div className="font-body-sm text-slate-body text-[11.5px] mb-2 mt-0.5">
-                            {item.selectedWeight} {item.product.cutType ? `• ${item.product.cutType}` : ""}
-                          </div>
-
-                          {item.product.inStock === false && (
-                            <div className="mb-2 px-2 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[11px] font-bold flex items-center gap-1.5">
-                              <span className="material-symbols-outlined text-[14px] text-red-600">block</span>
-                              <span>Out of Stock • Please remove to checkout</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <h4 className={`font-headline-sm font-bold text-[13.5px] leading-snug line-clamp-1 ${
+                                isItemOutOfStock ? "text-gray-500 line-through decoration-red-500/80" : "text-on-surface"
+                              }`}>
+                                {item.product.name}
+                              </h4>
+                              <button
+                                onClick={() => removeFromCart(item.product.id)}
+                                className={`transition-all border-none cursor-pointer p-1 rounded-lg flex items-center justify-center ${
+                                  isItemOutOfStock
+                                    ? "text-red-600 bg-red-100 hover:bg-red-200 ring-1 ring-red-300"
+                                    : "text-gray-400 hover:text-error bg-transparent"
+                                }`}
+                                title="Remove item"
+                                aria-label="Remove item"
+                              >
+                                <span className="material-symbols-outlined text-[17px]">delete</span>
+                              </button>
                             </div>
-                          )}
 
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="font-headline-sm font-extrabold text-primary text-[14px]">
-                                ₹{item.product.price * item.quantity}
-                              </span>
-                              {item.product.originalPrice > item.product.price && (
-                                <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11px]">
-                                  ₹{item.product.originalPrice * item.quantity}
+                            <div className="font-body-sm text-slate-body text-[11.5px] mb-2 mt-0.5">
+                              {item.selectedWeight} {item.product.cutType ? `• ${item.product.cutType}` : ""}
+                            </div>
+
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-baseline gap-1.5">
+                                <span className={`font-headline-sm font-extrabold text-[14px] ${isItemOutOfStock ? "text-gray-400" : "text-primary"}`}>
+                                  ₹{item.product.price * item.quantity}
                                 </span>
-                              )}
-                            </div>
+                                {item.product.originalPrice > item.product.price && (
+                                  <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-[11px]">
+                                    ₹{item.product.originalPrice * item.quantity}
+                                  </span>
+                                )}
+                              </div>
 
-                            {/* Spaced Quantity Stepper */}
-                            <div className="flex items-center bg-gray-100/90 rounded-full px-1 py-0.5 border border-gray-200">
-                              <button
-                                type="button"
-                                className="w-7 h-7 rounded-full bg-white hover:bg-primary hover:text-white text-gray-700 flex items-center justify-center transition-all shadow-xs cursor-pointer border-none font-bold text-base"
-                                onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                                aria-label="Decrease quantity"
-                              >
-                                −
-                              </button>
-                              <span className="px-3 font-extrabold text-sm text-gray-900 min-w-[24px] text-center">
-                                {item.quantity}
-                              </span>
-                              <button
-                                type="button"
-                                className="w-7 h-7 rounded-full bg-white hover:bg-primary hover:text-white text-gray-700 flex items-center justify-center transition-all shadow-xs cursor-pointer border-none font-bold text-base"
-                                onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                                aria-label="Increase quantity"
-                              >
-                                +
-                              </button>
+                              {/* Spaced Quantity Stepper */}
+                              <div className={`flex items-center rounded-full px-1 py-0.5 border ${
+                                isItemOutOfStock ? "bg-gray-100 border-gray-200 opacity-40 cursor-not-allowed" : "bg-gray-100/90 border-gray-200"
+                              }`}>
+                                <button
+                                  type="button"
+                                  disabled={isItemOutOfStock}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-xs border-none font-bold text-base ${
+                                    isItemOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-white hover:bg-primary hover:text-white text-gray-700 cursor-pointer"
+                                  }`}
+                                  onClick={() => !isItemOutOfStock && updateQuantity(item.product.id, item.quantity - 1)}
+                                  aria-label="Decrease quantity"
+                                >
+                                  −
+                                </button>
+                                <span className="px-3 font-extrabold text-sm text-gray-900 min-w-[24px] text-center">
+                                  {item.quantity}
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={isItemOutOfStock}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-xs border-none font-bold text-base ${
+                                    isItemOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-white hover:bg-primary hover:text-white text-gray-700 cursor-pointer"
+                                  }`}
+                                  onClick={() => !isItemOutOfStock && updateQuantity(item.product.id, item.quantity + 1)}
+                                  aria-label="Increase quantity"
+                                >
+                                  +
+                                </button>
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* ─── CROSS-SELLING SECTION (Recipe Essentials & Add-ons) ─── */}
@@ -2267,95 +2316,100 @@ export default function CartDrawer() {
                       </div>
                     )}
                   </div>
+                </div>
 
+                {/* ─── STICKY BOTTOM CHECKOUT FOOTER (Always visible at bottom of drawer) ─── */}
+                <div className="bg-white/95 backdrop-blur-md px-5 py-3.5 border-t border-gray-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] shrink-0 space-y-2">
                   {/* Delivery Radius Restriction Warning Banner */}
                   {isOutOfDeliveryRadius && (
-                    <div className="bg-amber-50 border border-amber-300 rounded-2xl p-3 mb-2 flex items-start gap-2.5 text-left">
-                      <span className="material-symbols-outlined text-amber-700 text-[20px] shrink-0 mt-0.5">location_off</span>
-                      <div className="text-xs text-amber-900 leading-snug flex-1">
-                        <p className="font-bold">
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 flex items-start gap-2 text-left">
+                      <span className="material-symbols-outlined text-amber-700 text-[18px] shrink-0 mt-0.5">location_off</span>
+                      <div className="text-[11px] text-amber-900 leading-snug flex-1">
+                        <span className="font-bold">
                           Outside Delivery Range ({selectedStore?.distanceKm ? `${selectedStore.distanceKm.toFixed(1)} km away` : "Beyond limit"})
-                        </p>
-                        <p className="mt-0.5 text-amber-800 text-[11.5px]">
+                        </span>
+                        <p className="mt-0.5 text-amber-800 text-[10.5px]">
                           We deliver orders within {storeDeliveryRadiusKm} km of our shop. Switch to <strong>Store Pickup</strong> or select a closer address.
                         </p>
                       </div>
                     </div>
                   )}
 
-                  {/* Checkout CTA Button */}
-                  {items.some((i) => i.product.inStock === false) ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="w-full py-3 rounded-full bg-amber-50 border border-amber-300 text-amber-900 font-label-lg font-extrabold shadow-xs cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
-                    >
-                      <span className="material-symbols-outlined text-[18px] text-amber-700">remove_shopping_cart</span>
-                      <span>Remove Out-of-Stock Item to Checkout</span>
-                    </button>
-                  ) : isOutOfDeliveryRadius ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="w-full py-3 rounded-full bg-primary/50 text-white font-label-lg font-bold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[14px] opacity-60 select-none"
-                    >
-                      <span>
-                        {isLoggedIn
-                          ? fulfillmentType === "pickup"
-                            ? "Proceed to Store Pickup"
-                            : "Proceed to Checkout"
-                          : "Login to proceed"}
-                      </span>
-                      <span>•</span>
-                      <span>₹{finalPayable}</span>
-                    </button>
-                  ) : !isStoreOperational ? (
-                    <button
-                      type="button"
-                      disabled
-                      className="w-full py-3 rounded-full bg-gray-200 border border-gray-300 text-gray-500 font-label-lg font-extrabold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
-                    >
-                      <span className="material-symbols-outlined text-[18px]">store_mall_directory</span>
-                      <span>Store Paused — Orders Disabled</span>
-                    </button>
-                  ) : isUnderMinOrder ? (
-                    <div className="space-y-2">
-                      <button
-                        type="button"
-                        disabled
-                        className="w-full py-3 rounded-full bg-gray-200 border border-gray-300 text-gray-500 font-label-lg font-extrabold shadow-none cursor-not-allowed flex items-center justify-center gap-2 text-[13.5px] select-none"
-                      >
-                        <span className="material-symbols-outlined text-[18px]">shopping_bag</span>
-                        <span>Add ₹{amountForMinOrder} More to Order</span>
-                      </button>
-                      <div className="flex items-center justify-center gap-1.5 text-[11.5px] font-bold text-amber-900 bg-amber-50 py-1.5 px-3 rounded-xl border border-amber-200 text-center">
-                        <span className="material-symbols-outlined text-[15px] text-amber-700">info</span>
-                        <span>Minimum cart order is ₹{MIN_ORDER_AMOUNT}. Add ₹{amountForMinOrder} more items to proceed.</span>
+                  {/* Out of Stock Warning Banner */}
+                  {hasOutOfStockItems && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 flex items-start gap-2 text-left">
+                      <span className="material-symbols-outlined text-amber-700 text-[18px] shrink-0 mt-0.5">remove_shopping_cart</span>
+                      <div className="text-[11px] text-amber-900 leading-snug flex-1">
+                        <span className="font-bold">Item(s) Out of Stock</span>
+                        <p className="mt-0.5 text-amber-800 text-[10.5px]">
+                          One or more items in your cart are out of stock. Please remove them using the delete icon to proceed.
+                        </p>
                       </div>
                     </div>
-                  ) : (
-                    <button
-                      id="cart-checkout-btn"
-                      onClick={handleProceedToPayment}
-                      className="w-full py-3 rounded-full bg-primary hover:bg-primary-dark text-white font-label-lg font-bold shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 text-[14px]"
-                    >
-                      <span>
-                        {isLoggedIn
-                          ? fulfillmentType === "pickup"
-                            ? "Proceed to Store Pickup"
-                            : "Proceed to Checkout"
-                          : "Login to proceed"}
-                      </span>
-                      <span>•</span>
-                      <span>₹{finalPayable}</span>
-                    </button>
                   )}
 
-                  <div className="text-center font-body-sm text-slate-subtle mt-2 text-[11.5px] flex items-center justify-center gap-1">
-                    <span className="material-symbols-outlined text-[15px] text-slate-subtle">lock</span>
+                  {/* Store Paused Warning Banner */}
+                  {!isStoreOperational && selectedStore && (
+                    <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 flex items-start gap-2 text-left">
+                      <span className="material-symbols-outlined text-amber-700 text-[18px] shrink-0 mt-0.5">storefront</span>
+                      <div className="text-[11px] text-amber-900 leading-snug flex-1">
+                        <span className="font-bold">Store Paused / Temporarily Offline</span>
+                        <p className="mt-0.5 text-amber-800 text-[10.5px]">
+                          Our fulfilling hub is currently paused and not accepting orders. Please check back shortly.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Minimum Order Helper Banner (only shown when below minimum order amount) */}
+                  {isUnderMinOrder && (
+                    <div className="flex items-center justify-center gap-1.5 text-[11px] font-bold text-amber-900 bg-amber-50 py-1 px-3 rounded-xl border border-amber-200 text-center">
+                      <span className="material-symbols-outlined text-[14px] text-amber-700">info</span>
+                      <span>Minimum cart order is ₹{MIN_ORDER_AMOUNT}. Add ₹{amountForMinOrder} more items to proceed.</span>
+                    </div>
+                  )}
+
+                  {/* Checkout CTA Button - NEVER removed, ALWAYS same button text, clearly visible & disabled when blocked */}
+                  <button
+                    id="cart-checkout-btn"
+                    type="button"
+                    disabled={isCheckoutBlocked}
+                    onClick={isCheckoutBlocked ? undefined : handleProceedToPayment}
+                    style={{
+                      backgroundColor: isCheckoutBlocked ? "#e2e8f0" : "#91000a",
+                      color: isCheckoutBlocked ? "#475569" : "#ffffff",
+                      border: isCheckoutBlocked ? "1.5px solid #cbd5e1" : "none",
+                      cursor: isCheckoutBlocked ? "not-allowed" : "pointer",
+                      width: "100%",
+                      padding: "12px 16px",
+                      borderRadius: "9999px",
+                      fontWeight: 700,
+                      fontSize: "14px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                      boxShadow: isCheckoutBlocked ? "none" : "0 4px 14px rgba(145, 0, 10, 0.25)",
+                      userSelect: "none",
+                      transition: "all 150ms ease",
+                    }}
+                  >
+                    <span>
+                      {isLoggedIn
+                        ? fulfillmentType === "pickup"
+                          ? "Proceed to Store Pickup"
+                          : "Proceed to Checkout"
+                        : "Login to proceed"}
+                    </span>
+                    <span>•</span>
+                    <span>₹{finalPayable}</span>
+                  </button>
+
+                  <div className="text-center font-body-sm text-slate-subtle text-[11px] flex items-center justify-center gap-1">
+                    <span className="material-symbols-outlined text-[14px] text-slate-subtle">lock</span>
                     <span>
                       {fulfillmentType === "pickup"
-                        ? `Pickup at ${selectedStore?.name} | Pay at Counter or Online`
+                        ? `Pickup at ${selectedStore?.name || "Store"} | Pay at Counter or Online`
                         : "100% Secure Checkout | Cash on Delivery / UPI"}
                     </span>
                   </div>
@@ -2497,7 +2551,10 @@ export default function CartDrawer() {
                           name="delivery-addr"
                           value={addr._id}
                           checked={selectedAddressId === addr._id}
-                          onChange={() => setSelectedAddressId(addr._id)}
+                          onChange={() => {
+                            setSelectedAddressId(addr._id);
+                            selectSavedAddress(addr);
+                          }}
                           className="mt-0.5 text-primary focus:ring-primary"
                         />
                         <div className="min-w-0 flex-1">

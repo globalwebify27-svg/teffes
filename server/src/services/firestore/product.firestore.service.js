@@ -65,20 +65,52 @@ const getProducts = async (options = {}) => {
         !p.isTest &&
         !String(p.id || '').startsWith('e2e_') &&
         !String(p.id || '').startsWith('test_') &&
-        !String(p.id || '').startsWith('phase')
+        !String(p.id || '').startsWith('phase') &&
+        !String(p.id || '').startsWith('qa_') &&
+        !String(p.storeId || '').startsWith('qa_')
     );
+  }
+
+  // Overlay store inventory: If fresh inventory count is 0 for an active store, mark inStock: false
+  try {
+    const targetStoreId = options.storeId || 'S001';
+    const invDocs = await queryDocs('inventory', (ref) => ref.where('storeId', '==', targetStoreId));
+    if (Array.isArray(invDocs) && invDocs.length > 0) {
+      const invStockMap = new Map();
+      invDocs.forEach((inv) => {
+        const id = inv.itemId || (inv.id ? String(inv.id).replace(/^[A-Z0-9]+_/, '') : '');
+        if (id) invStockMap.set(id, Number(inv.stock) || 0);
+        if (inv.item) invStockMap.set(inv.item.toLowerCase().trim(), Number(inv.stock) || 0);
+      });
+
+      products = products.map((p) => {
+        const directStock = invStockMap.get(p.id);
+        const nameStock = p.name ? invStockMap.get(p.name.toLowerCase().trim()) : undefined;
+        const effectiveStock = directStock !== undefined ? directStock : nameStock;
+
+        const isOutOfStock = (effectiveStock !== undefined && effectiveStock <= 0) || p.inStock === false;
+        return {
+          ...p,
+          inStock: !isOutOfStock,
+        };
+      });
+    } else {
+      products = products.map((p) => ({
+        ...p,
+        inStock: p.inStock !== false,
+      }));
+    }
+  } catch (err) {
+    products = products.map((p) => ({
+      ...p,
+      inStock: p.inStock !== false,
+    }));
   }
 
   // 1. Stock availability filter (omit only if explicitly requested)
   if (options.inStockOnly === true || options.inStockOnly === 'true') {
     products = products.filter((p) => p.inStock === true);
   }
-
-  // Normalize inStock property so it is strictly boolean across all catalog items
-  products = products.map((p) => ({
-    ...p,
-    inStock: p.inStock !== false,
-  }));
 
   // 2. Category filter
   if (category && category !== 'all') {
@@ -145,12 +177,25 @@ const getProducts = async (options = {}) => {
 /**
  * Retrieve a single product by ID with up to 4 related category items.
  */
-const getProductById = async (id) => {
+const getProductById = async (id, options = {}) => {
   if (!id || typeof id !== 'string') return null;
   const cleanId = id.trim();
   const product = await getDoc(COLLECTION, cleanId);
 
   if (!product) return null;
+
+  try {
+    const targetStoreId = options.storeId || 'S001';
+    const invDocs = await queryDocs('inventory', (ref) =>
+      ref.where('itemId', '==', cleanId).where('storeId', '==', targetStoreId).limit(1)
+    );
+    if (invDocs && invDocs.length > 0) {
+      const stock = Number(invDocs[0].stock) || 0;
+      if (stock <= 0) {
+        product.inStock = false;
+      }
+    }
+  } catch (_) {}
 
   // Fetch related products in the same category
   const allInCat = await queryDocs(COLLECTION, (ref) =>

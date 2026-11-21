@@ -338,33 +338,31 @@ export default function ProductCard({ product }: { product: Product }) {
             <span style={{ fontSize: "0.7rem", color: "var(--gray-400)" }}>Inclusive of all taxes</span>
           </div>
 
-          {/* Add to Cart or Out-of-Stock Notify Me */}
+          {/* Add to Cart or Out-of-Stock Status */}
           <div>
             {isOutOfStock ? (
               <button
                 type="button"
-                onClick={handleNotifyMe}
-                disabled={subscribing}
-                title={isNotified ? "We will notify you as soon as stock arrives!" : "Click to get notified when fresh stock arrives"}
+                disabled
+                title="This product is currently out of stock"
                 style={{
                   padding: "7px 12px",
                   borderRadius: "8px",
                   fontSize: "0.78rem",
                   fontWeight: 700,
-                  cursor: isNotified ? "default" : "pointer",
-                  border: isNotified ? "1.5px solid #a7f3d0" : "1.5px solid #d97706",
-                  background: isNotified ? "#ecfdf5" : "#fffbeb",
-                  color: isNotified ? "#059669" : "#b45309",
+                  cursor: "not-allowed",
+                  border: "1.5px solid #e5e7eb",
+                  background: "#f3f4f6",
+                  color: "#9ca3af",
                   display: "inline-flex",
                   alignItems: "center",
                   gap: "5px",
-                  transition: "all 150ms ease",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.03em",
                 }}
               >
-                <span className="material-symbols-outlined text-[15px]">
-                  {isNotified ? "check_circle" : "notifications_active"}
-                </span>
-                <span>{isNotified ? "Subscribed" : subscribing ? "Saving…" : "Notify Me"}</span>
+                <span className="material-symbols-outlined text-[14px]">block</span>
+                <span>Out of Stock</span>
               </button>
             ) : (
               <ProductQuantityStepper

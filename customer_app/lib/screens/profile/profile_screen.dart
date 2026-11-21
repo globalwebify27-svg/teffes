@@ -38,6 +38,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       onCancel: _onWalletPayUCancel,
     );
     _fetchPaymentSettings();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        context.read<LocationProvider>().fetchAddresses();
+      }
+    });
   }
 
   Future<void> _fetchPaymentSettings() async {

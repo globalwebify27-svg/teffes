@@ -11,6 +11,7 @@ class StoreModel {
   final String distance;
   final bool isAvailable;
   final List<String> outOfStockItems;
+  final List<String> outOfStockProductIds;
   final double? distanceKm;
   final double? deliveryRadiusKm;
   final bool isWithinRadius;
@@ -29,6 +30,7 @@ class StoreModel {
     this.distance = '',
     this.isAvailable = true,
     this.outOfStockItems = const [],
+    this.outOfStockProductIds = const [],
     this.distanceKm,
     this.deliveryRadiusKm = 10.0,
     this.isWithinRadius = true,
@@ -43,6 +45,9 @@ class StoreModel {
     final isAvail = json['isAvailable'] == null ? true : (json['isAvailable'] == true);
     final outOfStockList = (json['outOfStockItems'] is List)
         ? (json['outOfStockItems'] as List).map((e) => e.toString()).toList()
+        : <String>[];
+    final outOfStockProdIds = (json['outOfStockProductIds'] is List)
+        ? (json['outOfStockProductIds'] as List).map((e) => e.toString()).toList()
         : <String>[];
     final radius = json['deliveryRadiusKm'] != null ? (json['deliveryRadiusKm'] as num).toDouble() : 10.0;
     final distKm = json['distanceKm'] != null ? (json['distanceKm'] as num).toDouble() : null;
@@ -64,6 +69,7 @@ class StoreModel {
       distance: dist,
       isAvailable: isAvail,
       outOfStockItems: outOfStockList,
+      outOfStockProductIds: outOfStockProdIds,
       distanceKm: distKm,
       deliveryRadiusKm: radius,
       isWithinRadius: withinRadius,
