@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
+import '../../core/utils/page_transitions.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/location_provider.dart';
+import '../../screens/profile/profile_screen.dart';
 
 class LocationHeader extends StatelessWidget {
   final VoidCallback? onNotificationTap;
@@ -96,6 +99,59 @@ class LocationHeader extends StatelessWidget {
                 ),
               ),
             ),
+
+          // Dynamic Profile Completion Avatar Ring
+          Consumer<AuthProvider>(
+            builder: (context, auth, _) {
+              final user = auth.user;
+              final percentage = user?.profileCompletionPercentage ?? 0;
+              final initial = (user != null && user.name.trim().isNotEmpty)
+                  ? user.name.trim()[0].toUpperCase()
+                  : 'U';
+
+              return GestureDetector(
+                onTap: () {
+                  Navigator.of(context).push(SmoothPageRoute(page: const ProfileScreen()));
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(left: 8),
+                  width: 40,
+                  height: 40,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox(
+                        width: 38,
+                        height: 38,
+                        child: CircularProgressIndicator(
+                          value: percentage / 100.0,
+                          strokeWidth: 2.5,
+                          backgroundColor: AppColors.borderHairline,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            percentage == 100
+                                ? const Color(0xFF16A34A)
+                                : AppColors.primaryMaroon,
+                          ),
+                        ),
+                      ),
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: AppColors.primaryMaroon.withOpacity(0.08),
+                        child: Text(
+                          initial,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primaryMaroon,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
         ],
       ),
     );

@@ -15,6 +15,7 @@ import '../../widgets/common/search_input_bar.dart';
 import '../../widgets/common/super_offer_card.dart';
 import '../../widgets/common/brand_watermark_footer.dart';
 import '../../widgets/common/running_announcement_bar.dart';
+import '../../widgets/common/promotional_popup_dialog.dart';
 import '../category/category_listing_screen.dart';
 import '../product_details/product_details_screen.dart';
 
@@ -47,6 +48,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
     if (!locationProvider.hasPromptedPermission && !locationProvider.hasSelectedAddress) {
       showInitialLocationPrompt(context, locationProvider);
+    }
+    // Check and display active Super Admin promotional popup if eligible
+    if (mounted) {
+      await PromotionalPopupDialog.checkAndShow(context);
     }
   }
 
@@ -99,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final productsProvider = context.watch<ProductsProvider>();
+    final locationProvider = context.watch<LocationProvider>();
     final categories = productsProvider.categories;
     final chickenCuts = productsProvider.homeChickenCuts;
     final fishCuts = productsProvider.homeFishCuts;
@@ -126,6 +132,50 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   // 1. Top Location Header (Home ⌄ + Address + Bell)
                   const LocationHeader(),
+
+                  // Upfront Outside Delivery Range Warning Banner (No emojis)
+                  if (locationProvider.isOutOfDeliveryRadius)
+                    Container(
+                      margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd, vertical: 6),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFFFBEB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFDE68A)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              const Icon(Icons.location_off_outlined, size: 20, color: Color(0xFFB45309)),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  locationProvider.activeDistanceKm != null
+                                      ? 'Outside Delivery Range (${locationProvider.activeDistanceKm!.toStringAsFixed(1)} km away)'
+                                      : 'Outside 10 KM Delivery Range',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: Color(0xFF92400E),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 5),
+                          const Text(
+                            'We deliver fresh cuts within 10 km of our store. Switch to Store Pickup or select a delivery address closer to our store.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFFB45309),
+                              height: 1.35,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
 
                   // 2. Running Marquee Announcement Bar (Live Store Alert & Updates)
                   const RunningAnnouncementBar(),

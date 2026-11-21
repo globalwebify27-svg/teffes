@@ -523,10 +523,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Add New Address Modal
+  // Add New Address Modal (Structured 4-Field Form with Mandatory Pincode)
   void _showAddAddressDialog(BuildContext context, LocationProvider location) {
     String selectedTag = 'Home';
     final line1Controller = TextEditingController();
+    final line2Controller = TextEditingController();
     final landmarkController = TextEditingController();
     final pincodeController = TextEditingController();
 
@@ -582,31 +583,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 12),
+                  // Field 1: House / Flat / Block / Floor No. (Mandatory)
                   TextField(
                     controller: line1Controller,
                     decoration: InputDecoration(
-                      hintText: 'Flat / House No. / Street Address',
+                      labelText: 'House / Flat / Block / Floor No. *',
+                      hintText: 'e.g. Flat 402, Block B, Panchawati Apts',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Field 2: Apartment / Road / Area / Locality (Mandatory)
                   TextField(
-                    controller: landmarkController,
+                    controller: line2Controller,
                     decoration: InputDecoration(
-                      hintText: 'Landmark (e.g. Near CMPDI / Circular Road)',
+                      labelText: 'Apartment / Road / Area / Locality *',
+                      hintText: 'e.g. Doranda, Hinoo Main Road',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Field 3: 6-digit Pincode (Mandatory)
                   TextField(
                     controller: pincodeController,
                     keyboardType: TextInputType.number,
+                    maxLength: 6,
                     decoration: InputDecoration(
-                      hintText: 'Enter 6-digit Pincode',
+                      counterText: '',
+                      labelText: 'Pincode (6 Digits) *',
+                      hintText: 'e.g. 834002',
+                      filled: true,
+                      fillColor: AppColors.surfaceSubtle,
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Field 4: Landmark (Optional)
+                  TextField(
+                    controller: landmarkController,
+                    decoration: InputDecoration(
+                      labelText: 'Landmark (Optional)',
+                      hintText: 'e.g. Near CMPDI / Circular Road',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
@@ -619,23 +640,35 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon),
                       onPressed: () async {
-                        if (line1Controller.text.trim().isEmpty) {
+                        final l1 = line1Controller.text.trim();
+                        final l2 = line2Controller.text.trim();
+                        final pin = pincodeController.text.trim();
+
+                        if (l1.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter your house/street address')),
+                            const SnackBar(content: Text('Please enter House / Flat / Floor No.')),
                           );
                           return;
                         }
-                        if (pincodeController.text.trim().isEmpty || pincodeController.text.trim().length < 6) {
+                        if (l2.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter Apartment / Road / Area')),
+                          );
+                          return;
+                        }
+                        if (pin.length != 6 || int.tryParse(pin) == null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Please enter a valid 6-digit pincode')),
                           );
                           return;
                         }
+
                         await location.addAddress(
                           tag: selectedTag,
-                          line1: line1Controller.text.trim(),
+                          line1: l1,
+                          line2: l2,
                           landmark: landmarkController.text.trim(),
-                          pincode: pincodeController.text.trim(),
+                          pincode: pin,
                           city: 'Ranchi',
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
@@ -658,10 +691,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // Edit Existing Address Modal
+  // Edit Existing Address Modal (Structured 4-Field Form with Mandatory Pincode)
   void _showEditAddressDialog(BuildContext context, LocationProvider location, AddressModel addr) {
     String selectedTag = addr.tag;
     final line1Controller = TextEditingController(text: addr.line1);
+    final line2Controller = TextEditingController(text: addr.line2 ?? '');
     final landmarkController = TextEditingController(text: addr.landmark ?? '');
     final pincodeController = TextEditingController(text: addr.pincode);
 
@@ -716,34 +750,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 12),
+                  // Field 1: House / Flat / Block / Floor No. (Mandatory)
                   TextField(
                     controller: line1Controller,
-                    decoration: const InputDecoration(
-                      hintText: 'Flat / House No. / Street Address',
+                    decoration: InputDecoration(
+                      labelText: 'House / Flat / Block / Floor No. *',
+                      hintText: 'e.g. Flat 402, Block B',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Field 2: Apartment / Road / Area / Locality (Mandatory)
                   TextField(
-                    controller: landmarkController,
-                    decoration: const InputDecoration(
-                      hintText: 'Landmark (e.g. Near CMPDI / Circular Road)',
+                    controller: line2Controller,
+                    decoration: InputDecoration(
+                      labelText: 'Apartment / Road / Area / Locality *',
+                      hintText: 'e.g. Doranda, Hinoo Main Road',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Field 3: 6-digit Pincode (Mandatory)
                   TextField(
                     controller: pincodeController,
                     keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(
-                      hintText: 'Pincode (Ranchi)',
+                    maxLength: 6,
+                    decoration: InputDecoration(
+                      counterText: '',
+                      labelText: 'Pincode (6 Digits) *',
+                      hintText: 'e.g. 834002',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
-                      border: OutlineInputBorder(borderRadius: BorderRadius.all(Radius.circular(8)), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Field 4: Landmark (Optional)
+                  TextField(
+                    controller: landmarkController,
+                    decoration: InputDecoration(
+                      labelText: 'Landmark (Optional)',
+                      hintText: 'e.g. Near CMPDI / Circular Road',
+                      filled: true,
+                      fillColor: AppColors.surfaceSubtle,
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -773,13 +827,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: ElevatedButton(
                             style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon),
                             onPressed: () async {
-                              if (line1Controller.text.trim().isEmpty) return;
+                              final l1 = line1Controller.text.trim();
+                              final l2 = line2Controller.text.trim();
+                              final pin = pincodeController.text.trim();
+
+                              if (l1.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please enter House / Flat / Floor No.')),
+                                );
+                                return;
+                              }
+                              if (l2.isEmpty) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please enter Apartment / Road / Area')),
+                                );
+                                return;
+                              }
+                              if (pin.length != 6 || int.tryParse(pin) == null) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Please enter a valid 6-digit pincode')),
+                                );
+                                return;
+                              }
+
                               await location.editAddress(
                                 id: addr.id,
                                 tag: selectedTag,
-                                line1: line1Controller.text.trim(),
+                                line1: l1,
+                                line2: l2,
                                 landmark: landmarkController.text.trim(),
-                                pincode: pincodeController.text.trim(),
+                                pincode: pin,
                                 city: 'Ranchi',
                                 isDefault: addr.isDefault,
                               );
@@ -801,10 +878,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           );
         },
-        );
-      },
-    );
-  }
+      );
+    },
+  );
+}
 
   // Delivered Order Receipt Modal (Replaces live tracking for already delivered orders)
   void _showOrderReceiptModal(BuildContext context, OrderModel ord) {
@@ -1113,6 +1190,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       onPressed: () => _showEditProfileDialog(context, auth),
                       child: const Text('Edit', style: TextStyle(color: AppColors.primaryMaroon, fontWeight: FontWeight.bold, fontSize: 11.5)),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Dynamic Profile Completion Card (Option 1 - No emojis)
+              Container(
+                margin: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: AppDimensions.roundedLg,
+                  border: Border.all(
+                    color: (auth.user?.profileCompletionPercentage ?? 0) == 100
+                        ? const Color(0xFFBBF7D0)
+                        : const Color(0xFFFED7AA),
+                  ),
+                  boxShadow: AppDimensions.cardShadow,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Icon(
+                              (auth.user?.profileCompletionPercentage ?? 0) == 100
+                                  ? Icons.verified_rounded
+                                  : Icons.account_circle_outlined,
+                              size: 18,
+                              color: (auth.user?.profileCompletionPercentage ?? 0) == 100
+                                  ? const Color(0xFF16A34A)
+                                  : AppColors.primaryMaroon,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Profile ${auth.user?.profileCompletionPercentage ?? 0}% Complete',
+                              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.textPrimary),
+                            ),
+                          ],
+                        ),
+                        if ((auth.user?.profileCompletionPercentage ?? 0) < 100)
+                          GestureDetector(
+                            onTap: () => _showEditProfileDialog(context, auth),
+                            child: const Text(
+                              'Complete Now',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primaryMaroon,
+                                decoration: TextDecoration.underline,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: (auth.user?.profileCompletionPercentage ?? 0) / 100.0,
+                        minHeight: 6,
+                        backgroundColor: AppColors.surfaceSubtle,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          (auth.user?.profileCompletionPercentage ?? 0) == 100
+                              ? const Color(0xFF16A34A)
+                              : AppColors.primaryMaroon,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      auth.user?.profileMissingFieldHint ?? '',
+                      style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
                     ),
                   ],
                 ),
@@ -1814,9 +1967,81 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
+            const SizedBox(height: 12),
+
+            // 7. Official Social Channels (Point 8 - No emojis)
+            Container(
+              padding: const EdgeInsets.all(AppDimensions.spaceMd),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: AppDimensions.roundedLg,
+                border: Border.all(color: AppColors.borderHairline),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Connect with TeFFe\'s',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5, color: AppColors.textPrimary),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Follow our official channels for kitchen tips, recipes & fresh batch updates.',
+                    style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      // Facebook Button
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF1877F2),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.facebook_rounded, size: 18),
+                          label: const Text('Facebook', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: () async {
+                            final uri = Uri.parse('https://www.facebook.com/share/1CiB6pjwvK/');
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Instagram Button
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFE1306C),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            elevation: 0,
+                          ),
+                          icon: const Icon(Icons.camera_alt_outlined, size: 17),
+                          label: const Text('Instagram', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          onPressed: () async {
+                            final uri = Uri.parse('https://www.instagram.com/teffes2?igsh=MTA5eXB0cmhyb29kYQ%3D%3D');
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: AppDimensions.spaceXl),
 
-            // 7. Logout Button
+            // 8. Logout Button
             if (auth.isAuthenticated)
               SizedBox(
                 width: double.infinity,

@@ -4925,6 +4925,7 @@ function InventoryTab() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<"all" | "fresh" | "defreeze" | "waste" | "transfers" | "history">("all");
+  const [stockStatusFilter, setStockStatusFilter] = useState<"all" | "low_or_out" | "out_of_stock" | "low_stock" | "healthy">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const currentUser = getStoredUser();
 
@@ -5162,6 +5163,19 @@ function InventoryTab() {
       const matchId = (item.itemId || item.id)?.toLowerCase().includes(q);
       if (!matchName && !matchCat && !matchId) return false;
     }
+
+    // Stock Status filter (≤10 kg, 0 kg, 1-10 kg, >10 kg)
+    const freshStock = Number(item.stock) || 0;
+    if (stockStatusFilter === "low_or_out") {
+      if (freshStock > 10) return false;
+    } else if (stockStatusFilter === "out_of_stock") {
+      if (freshStock > 0) return false;
+    } else if (stockStatusFilter === "low_stock") {
+      if (freshStock <= 0 || freshStock > 10) return false;
+    } else if (stockStatusFilter === "healthy") {
+      if (freshStock <= 10) return false;
+    }
+
     if (activeFilter === "fresh") return true;
     if (activeFilter === "defreeze") return (item.defreezeStock || 0) > 0;
     if (activeFilter === "waste") return (item.wasteStock || 0) > 0;
@@ -5172,10 +5186,12 @@ function InventoryTab() {
   const totalFreshStock = items.reduce((sum, i) => sum + (Number(i.stock) || 0), 0);
   const totalDefreezeStock = items.reduce((sum, i) => sum + (Number(i.defreezeStock) || 0), 0);
   const totalWasteStock = items.reduce((sum, i) => sum + (Number(i.wasteStock) || 0), 0);
-  const lowStockCount = items.filter(i => {
-    const min = Number(i.min) || 0;
-    return min > 0 && Number(i.stock || 0) <= min && Number(i.stock || 0) > 0;
+  const outOfStockCount = items.filter(i => (Number(i.stock) || 0) <= 0).length;
+  const lowStockOnlyCount = items.filter(i => {
+    const s = Number(i.stock) || 0;
+    return s > 0 && s <= 10;
   }).length;
+  const lowOrOutOfStockCount = items.filter(i => (Number(i.stock) || 0) <= 10).length;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
@@ -5244,24 +5260,70 @@ function InventoryTab() {
           </div>
         </div>
 
-        <div style={{
-          background: lowStockCount > 0 ? "#fef3c7" : "#fff",
-          borderRadius: "14px",
-          padding: "14px 18px",
-          border: `1.5px solid ${lowStockCount > 0 ? "#fde68a" : "#ede8e0"}`,
-          boxShadow: "0 2px 6px rgba(0,0,0,0.02)",
-        }}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => {
+            if (activeFilter === "transfers" || activeFilter === "history") {
+              setActiveFilter("all");
+            }
+            setStockStatusFilter(prev => prev === "low_or_out" ? "all" : "low_or_out");
+          }}
+          onKeyDown={e => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              if (activeFilter === "transfers" || activeFilter === "history") {
+                setActiveFilter("all");
+              }
+              setStockStatusFilter(prev => prev === "low_or_out" ? "all" : "low_or_out");
+            }
+          }}
+          style={{
+            background: stockStatusFilter === "low_or_out" ? "#fef3c7" : lowOrOutOfStockCount > 0 ? "#fffbeb" : "#fff",
+            borderRadius: "14px",
+            padding: "14px 18px",
+            border: stockStatusFilter === "low_or_out" ? "2px solid #b45309" : `1.5px solid ${lowOrOutOfStockCount > 0 ? "#fde68a" : "#ede8e0"}`,
+            boxShadow: stockStatusFilter === "low_or_out" ? "0 0 0 3px rgba(217, 119, 6, 0.25), 0 2px 8px rgba(0,0,0,0.05)" : "0 2px 6px rgba(0,0,0,0.02)",
+            cursor: "pointer",
+            transition: "all 180ms ease",
+          }}
+          title={stockStatusFilter === "low_or_out" ? "Click to clear filter and show all products" : "Click to view Low & Out of Stock products (≤ 10 kg)"}
+        >
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "6px" }}>
-            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: lowStockCount > 0 ? "#b45309" : "#73695b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-              Low Stock Warnings
+            <span style={{ fontSize: "0.78rem", fontWeight: 700, color: stockStatusFilter === "low_or_out" || lowOrOutOfStockCount > 0 ? "#b45309" : "#73695b", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+              Low or Out of Stock
             </span>
-            <span className="material-symbols-outlined text-[20px]" style={{ color: lowStockCount > 0 ? "#d97706" : "#73695b" }}>warning</span>
+            <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              {stockStatusFilter === "low_or_out" && (
+                <span style={{
+                  fontSize: "0.68rem",
+                  fontWeight: 800,
+                  background: "#b45309",
+                  color: "#fff",
+                  padding: "2px 7px",
+                  borderRadius: "10px",
+                  letterSpacing: "0.02em"
+                }}>
+                  ACTIVE
+                </span>
+              )}
+              <span className="material-symbols-outlined text-[20px]" style={{ color: stockStatusFilter === "low_or_out" || lowOrOutOfStockCount > 0 ? "#d97706" : "#73695b" }}>
+                {lowOrOutOfStockCount > 0 ? "warning" : "check_circle"}
+              </span>
+            </div>
           </div>
-          <div style={{ fontSize: "1.65rem", fontWeight: 900, color: lowStockCount > 0 ? "#b45309" : "#171410", fontFamily: "Outfit, sans-serif" }}>
-            {lowStockCount} <span style={{ fontSize: "0.85rem", color: lowStockCount > 0 ? "#b45309" : "#73695b", fontWeight: 600 }}>products</span>
+          <div style={{ fontSize: "1.65rem", fontWeight: 900, color: stockStatusFilter === "low_or_out" || lowOrOutOfStockCount > 0 ? "#b45309" : "#171410", fontFamily: "Outfit, sans-serif" }}>
+            {lowOrOutOfStockCount} <span style={{ fontSize: "0.85rem", color: stockStatusFilter === "low_or_out" || lowOrOutOfStockCount > 0 ? "#b45309" : "#73695b", fontWeight: 600 }}>products (≤10 kg)</span>
           </div>
-          <div style={{ fontSize: "0.74rem", color: lowStockCount > 0 ? "#b45309" : "#73695b", marginTop: "3px" }}>
-            {lowStockCount > 0 ? "Replenish from De-Freeze soon" : "All products healthy"}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px" }}>
+            <span style={{ fontSize: "0.74rem", color: lowOrOutOfStockCount > 0 ? "#b45309" : "#73695b", fontWeight: 500 }}>
+              {lowOrOutOfStockCount > 0
+                ? `${outOfStockCount} Out of stock • ${lowStockOnlyCount} Low stock`
+                : "All products healthy (>10 kg)"}
+            </span>
+            <span style={{ fontSize: "0.72rem", color: stockStatusFilter === "low_or_out" ? "#92400e" : "#8c7e6c", textDecoration: "underline", fontWeight: 700 }}>
+              {stockStatusFilter === "low_or_out" ? "Clear Filter ✕" : "Tap to filter"}
+            </span>
           </div>
         </div>
       </div>
@@ -5273,86 +5335,252 @@ function InventoryTab() {
         padding: "14px 16px",
         border: "1px solid #ede8e0",
         display: "flex",
-        flexWrap: "wrap",
-        alignItems: "center",
-        justifyContent: "space-between",
+        flexDirection: "column",
         gap: "12px",
       }}>
-        {/* Navigation Tabs */}
-        <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-          {[
-            { key: "all", label: "All Items", icon: "inventory_2", count: items.length },
-            { key: "fresh", label: "Fresh Stock", icon: "eco" },
-            { key: "defreeze", label: "De-Freeze Pool", icon: "ac_unit" },
-            { key: "waste", label: "Damage & Waste", icon: "delete_sweep" },
-            { key: "transfers", label: "Inter-Store Transfers", icon: "swap_horiz" },
-            { key: "history", label: "Movement History", icon: "history" },
-          ].map(t => {
-            const isActive = activeFilter === t.key;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                onClick={() => setActiveFilter(t.key as any)}
+        <div style={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          width: "100%",
+        }}>
+          {/* Navigation Tabs */}
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", alignItems: "center" }}>
+            {[
+              { key: "all", label: "All Items", icon: "inventory_2", count: items.length },
+              { key: "fresh", label: "Fresh Stock", icon: "eco" },
+              { key: "defreeze", label: "De-Freeze Pool", icon: "ac_unit" },
+              { key: "waste", label: "Damage & Waste", icon: "delete_sweep" },
+              { key: "transfers", label: "Inter-Store Transfers", icon: "swap_horiz" },
+              { key: "history", label: "Movement History", icon: "history" },
+            ].map(t => {
+              const isActive = activeFilter === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  onClick={() => setActiveFilter(t.key as any)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "8px 14px",
+                    borderRadius: "10px",
+                    border: isActive ? "1.5px solid #941717" : "1px solid #ede8e0",
+                    background: isActive ? "#941717" : "#faf8f5",
+                    color: isActive ? "#fff" : "#423b32",
+                    fontWeight: 700,
+                    fontSize: "0.82rem",
+                    cursor: "pointer",
+                    transition: "all 180ms ease",
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
+                  <span>{t.label}</span>
+                  {t.count !== undefined && (
+                    <span style={{
+                      background: isActive ? "rgba(255,255,255,0.25)" : "#ede8e0",
+                      color: isActive ? "#fff" : "#73695b",
+                      padding: "1px 6px",
+                      borderRadius: "10px",
+                      fontSize: "0.72rem",
+                    }}>
+                      {t.count}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Right Controls: Responsive Dropdown + Search Field */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 w-full xl:w-auto flex-1 xl:flex-initial">
+            {/* Responsive Stock Status Filter Dropdown */}
+            <div className="relative w-full sm:w-56 md:w-60">
+              <span
+                className="material-symbols-outlined"
                 style={{
-                  display: "inline-flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  padding: "8px 14px",
-                  borderRadius: "10px",
-                  border: isActive ? "1.5px solid #941717" : "1px solid #ede8e0",
-                  background: isActive ? "#941717" : "#faf8f5",
-                  color: isActive ? "#fff" : "#423b32",
-                  fontWeight: 700,
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  transition: "all 180ms ease",
+                  position: "absolute",
+                  left: "10px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: stockStatusFilter !== "all" ? "#b45309" : "#a89f91",
+                  fontSize: "18px",
+                  pointerEvents: "none",
                 }}
               >
-                <span className="material-symbols-outlined text-[16px]">{t.icon}</span>
-                <span>{t.label}</span>
-                {t.count !== undefined && (
-                  <span style={{
-                    background: isActive ? "rgba(255,255,255,0.25)" : "#ede8e0",
-                    color: isActive ? "#fff" : "#73695b",
-                    padding: "1px 6px",
-                    borderRadius: "10px",
-                    fontSize: "0.72rem",
-                  }}>
-                    {t.count}
-                  </span>
+                {stockStatusFilter === "out_of_stock"
+                  ? "block"
+                  : stockStatusFilter === "low_stock" || stockStatusFilter === "low_or_out"
+                  ? "warning"
+                  : stockStatusFilter === "healthy"
+                  ? "check_circle"
+                  : "filter_list"}
+              </span>
+              <select
+                aria-label="Filter items by stock level"
+                value={stockStatusFilter}
+                onChange={e => {
+                  if (activeFilter === "transfers" || activeFilter === "history") {
+                    setActiveFilter("all");
+                  }
+                  setStockStatusFilter(e.target.value as any);
+                }}
+                style={{
+                  padding: "8px 28px 8px 34px",
+                  borderRadius: "8px",
+                  border: stockStatusFilter !== "all" ? "1.5px solid #d97706" : "1px solid #d1cbbf",
+                  background: stockStatusFilter !== "all" ? "#fef3c7" : "#fff",
+                  color: stockStatusFilter !== "all" ? "#92400e" : "#171410",
+                  width: "100%",
+                  fontSize: "0.82rem",
+                  fontWeight: 600,
+                  boxSizing: "border-box",
+                  height: "38px",
+                  cursor: "pointer",
+                  appearance: "none",
+                  WebkitAppearance: "none",
+                }}
+              >
+                {stockStatusFilter === "low_or_out" && (
+                  <option value="low_or_out" hidden>Low or Out of Stock (≤10 kg)</option>
                 )}
-              </button>
-            );
-          })}
+                <option value="all">All Stock Statuses ({items.length})</option>
+                <option value="out_of_stock">Out of Stock Only (0 kg) ({outOfStockCount})</option>
+                <option value="low_stock">Low Stock Only (1-10 kg) ({lowStockOnlyCount})</option>
+                <option value="healthy">Healthy Stock (&gt;10 kg) ({items.length - lowOrOutOfStockCount})</option>
+              </select>
+              <span
+                className="material-symbols-outlined"
+                style={{
+                  position: "absolute",
+                  right: "8px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: stockStatusFilter !== "all" ? "#b45309" : "#73695b",
+                  fontSize: "18px",
+                  pointerEvents: "none",
+                }}
+              >
+                expand_more
+              </span>
+            </div>
+
+            {/* Search Field */}
+            <div className="relative w-full sm:w-60 md:w-64">
+              <span
+                className="material-symbols-outlined"
+                style={{
+                  position: "absolute",
+                  left: "10px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  color: "#a89f91",
+                  fontSize: "18px",
+                  pointerEvents: "none",
+                }}
+              >
+                search
+              </span>
+              <input
+                type="text"
+                placeholder={activeFilter === "history" ? "Search history, order #, reason…" : "Search product name or category…"}
+                value={activeFilter === "history" ? historySearch : searchQuery}
+                onChange={e => {
+                  if (activeFilter === "history") setHistorySearch(e.target.value);
+                  else setSearchQuery(e.target.value);
+                }}
+                onKeyDown={e => {
+                  if (e.key === "Enter" && activeFilter === "history") fetchHistory();
+                }}
+                style={{
+                  padding: "8px 12px 8px 34px",
+                  borderRadius: "8px",
+                  border: "1px solid #d1cbbf",
+                  width: "100%",
+                  fontSize: "0.85rem",
+                  boxSizing: "border-box",
+                  height: "38px",
+                }}
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  style={{
+                    position: "absolute",
+                    right: "8px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "none",
+                    border: "none",
+                    color: "#a89f91",
+                    cursor: "pointer",
+                    padding: "2px",
+                    display: "flex",
+                    alignItems: "center",
+                  }}
+                  title="Clear search"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
-        {/* Search Field */}
-        <div style={{ position: "relative", minWidth: "240px", flex: 1, maxWidth: "340px" }}>
-          <span className="material-symbols-outlined" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#a89f91", fontSize: "18px" }}>
-            search
-          </span>
-          <input
-            type="text"
-            placeholder={activeFilter === "history" ? "Search history, order #, reason…" : "Search product name or category…"}
-            value={activeFilter === "history" ? historySearch : searchQuery}
-            onChange={e => {
-              if (activeFilter === "history") setHistorySearch(e.target.value);
-              else setSearchQuery(e.target.value);
-            }}
-            onKeyDown={e => {
-              if (e.key === "Enter" && activeFilter === "history") fetchHistory();
-            }}
+        {/* Active Filter Banner when stockStatusFilter is applied */}
+        {stockStatusFilter !== "all" && (
+          <div
             style={{
-              padding: "8px 12px 8px 34px",
-              borderRadius: "8px",
-              border: "1px solid #d1cbbf",
-              width: "100%",
-              fontSize: "0.85rem",
-              boxSizing: "border-box",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: "8px",
+              paddingTop: "10px",
+              borderTop: "1px solid #fde68a",
+              fontSize: "0.8rem",
             }}
-          />
-        </div>
+          >
+            <div style={{ display: "flex", alignItems: "center", gap: "6px", color: "#92400e", fontWeight: 700 }}>
+              <span className="material-symbols-outlined text-[16px]" style={{ color: "#d97706" }}>filter_alt</span>
+              <span>
+                Filtered by:{" "}
+                <strong style={{ color: "#78350f", textDecoration: "underline" }}>
+                  {stockStatusFilter === "low_or_out" && "Low or Out of Stock (≤ 10 kg)"}
+                  {stockStatusFilter === "out_of_stock" && "Out of Stock Only (0 kg)"}
+                  {stockStatusFilter === "low_stock" && "Low Stock Only (1 - 10 kg)"}
+                  {stockStatusFilter === "healthy" && "Healthy Stock (> 10 kg)"}
+                </strong>
+                {" "}• {filteredItems.length} products found
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setStockStatusFilter("all")}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "4px 10px",
+                borderRadius: "6px",
+                border: "1px solid #d97706",
+                background: "#fef3c7",
+                color: "#92400e",
+                fontWeight: 800,
+                fontSize: "0.76rem",
+                cursor: "pointer",
+                transition: "all 150ms ease",
+              }}
+            >
+              <span className="material-symbols-outlined text-[14px]">close</span>
+              Clear Filter
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ─── BODY CONTENT: TRANSFERS, AUDIT HISTORY, OR CARDS GRID ────────────────── */}
@@ -5563,8 +5791,33 @@ function InventoryTab() {
               <span className="material-symbols-outlined" style={{ fontSize: "36px", color: "#a89f91", marginBottom: "8px" }}>search_off</span>
               <div style={{ fontWeight: 700, color: "#171410" }}>No inventory items found</div>
               <div style={{ fontSize: "0.8rem", color: "#a89f91", marginTop: "4px" }}>
-                Try adjusting your search query or switching tabs.
+                {stockStatusFilter !== "all"
+                  ? `No products match the stock status filter (${stockStatusFilter === "low_or_out" ? "≤ 10 kg" : stockStatusFilter}).`
+                  : "Try adjusting your search query or switching tabs."}
               </div>
+              {stockStatusFilter !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setStockStatusFilter("all")}
+                  style={{
+                    marginTop: "12px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: "6px",
+                    padding: "7px 14px",
+                    borderRadius: "8px",
+                    background: "#941717",
+                    color: "#fff",
+                    fontWeight: 700,
+                    fontSize: "0.8rem",
+                    border: "none",
+                    cursor: "pointer",
+                  }}
+                >
+                  <span className="material-symbols-outlined text-[16px]">refresh</span>
+                  Show All Products
+                </button>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 w-full">

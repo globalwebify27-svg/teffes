@@ -540,9 +540,137 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     );
   }
 
+  /// Prompts for customer's full name if name is empty or default placeholder (Point 4 - No emojis)
+  void _showMandatoryNameDialog(BuildContext context, AuthProvider auth, CartProvider cart, LocationProvider location) {
+    final nameController = TextEditingController();
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            final bottomPadding = (MediaQuery.of(ctx).viewInsets.bottom > 0
+                ? MediaQuery.of(ctx).viewInsets.bottom
+                : MediaQuery.of(ctx).viewPadding.bottom) + AppDimensions.spaceMd;
+
+            return SafeArea(
+              bottom: true,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: AppDimensions.spaceMd,
+                  right: AppDimensions.spaceMd,
+                  top: AppDimensions.spaceMd,
+                  bottom: bottomPadding,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Enter Full Name',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: AppColors.textPrimary),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close_rounded),
+                          onPressed: () => Navigator.pop(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Please enter your full name so our fulfilling store and delivery partner can identify your order.',
+                      style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: InputDecoration(
+                        labelText: 'Your Full Name *',
+                        hintText: 'e.g. Rahul Sharma',
+                        filled: true,
+                        fillColor: AppColors.surfaceSubtle,
+                        border: OutlineInputBorder(
+                          borderRadius: AppDimensions.roundedMd,
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryMaroon,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: isSaving
+                            ? null
+                            : () async {
+                                final cleanName = nameController.text.trim();
+                                if (cleanName.isEmpty || cleanName.length < 2) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Please enter a valid full name (at least 2 letters).'),
+                                      backgroundColor: AppColors.primaryMaroon,
+                                    ),
+                                  );
+                                  return;
+                                }
+                                setModalState(() => isSaving = true);
+                                final ok = await auth.updateProfileDetails(
+                                  name: cleanName,
+                                  phone: auth.user?.phone ?? '',
+                                  email: auth.user?.email ?? '',
+                                );
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                if (ok && mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Name updated to $cleanName. Proceeding to checkout.'),
+                                      backgroundColor: const Color(0xFF16A34A),
+                                    ),
+                                  );
+                                  _handlePlaceOrder(cart, location, auth);
+                                }
+                              },
+                        child: isSaving
+                            ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text(
+                                'Save & Proceed with Order',
+                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.white),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showAddAddressDialog(BuildContext context, LocationProvider location) {
     String selectedTag = 'Home';
     final line1Controller = TextEditingController();
+    final line2Controller = TextEditingController();
     final landmarkController = TextEditingController();
     final pincodeController = TextEditingController();
 
@@ -597,31 +725,51 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     }).toList(),
                   ),
                   const SizedBox(height: 12),
+                  // Field 1: House / Flat / Block / Floor No. (Mandatory)
                   TextField(
                     controller: line1Controller,
                     decoration: InputDecoration(
-                      hintText: 'Flat / House No. / Street Address',
+                      labelText: 'House / Flat / Block / Floor No. *',
+                      hintText: 'e.g. Flat 402, Block B, Panchawati Apts',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Field 2: Apartment / Road / Area / Locality (Mandatory)
                   TextField(
-                    controller: landmarkController,
+                    controller: line2Controller,
                     decoration: InputDecoration(
-                      hintText: 'Landmark (e.g. Near CMPDI / Circular Road)',
+                      labelText: 'Apartment / Road / Area / Locality *',
+                      hintText: 'e.g. Doranda, Hinoo Main Road',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Field 3: 6-digit Pincode (Mandatory)
                   TextField(
                     controller: pincodeController,
                     keyboardType: TextInputType.number,
+                    maxLength: 6,
                     decoration: InputDecoration(
-                      hintText: 'Enter 6-digit Pincode',
+                      counterText: '',
+                      labelText: 'Pincode (6 Digits) *',
+                      hintText: 'e.g. 834002',
+                      filled: true,
+                      fillColor: AppColors.surfaceSubtle,
+                      border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  // Field 4: Landmark (Optional)
+                  TextField(
+                    controller: landmarkController,
+                    decoration: InputDecoration(
+                      labelText: 'Landmark (Optional)',
+                      hintText: 'e.g. Near CMPDI / Circular Road',
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
@@ -634,23 +782,35 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(backgroundColor: AppColors.primaryMaroon),
                       onPressed: () async {
-                        if (line1Controller.text.trim().isEmpty) {
+                        final l1 = line1Controller.text.trim();
+                        final l2 = line2Controller.text.trim();
+                        final pin = pincodeController.text.trim();
+
+                        if (l1.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Please enter your house/street address')),
+                            const SnackBar(content: Text('Please enter House / Flat / Floor No.')),
                           );
                           return;
                         }
-                        if (pincodeController.text.trim().isEmpty || pincodeController.text.trim().length < 6) {
+                        if (l2.isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Please enter Apartment / Road / Area')),
+                          );
+                          return;
+                        }
+                        if (pin.length != 6 || int.tryParse(pin) == null) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(content: Text('Please enter a valid 6-digit pincode')),
                           );
                           return;
                         }
+
                         await location.addAddress(
                           tag: selectedTag,
-                          line1: line1Controller.text.trim(),
+                          line1: l1,
+                          line2: l2,
                           landmark: landmarkController.text.trim(),
-                          pincode: pincodeController.text.trim(),
+                          pincode: pin,
                           city: 'Ranchi',
                         );
                         if (ctx.mounted) Navigator.pop(ctx);
@@ -1048,6 +1208,17 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         );
         return;
       }
+    }
+
+    // Mandatory Customer Name Validation (Point 4 - No placeholder/empty customer names)
+    final currentUserName = auth.user?.name.trim() ?? '';
+    final isNameInvalid = currentUserName.isEmpty ||
+        currentUserName.toLowerCase() == 'customer' ||
+        currentUserName.toLowerCase() == 'guest';
+
+    if (isNameInvalid) {
+      _showMandatoryNameDialog(context, auth, cart, location);
+      return;
     }
 
     if (selStore != null && !selStore.isAvailable) {

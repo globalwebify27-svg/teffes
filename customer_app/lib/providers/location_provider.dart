@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -23,6 +24,37 @@ class LocationProvider with ChangeNotifier {
   bool get hasSelectedAddress => _selectedAddress != null;
   double? get latitude => _selectedAddress?.latitude;
   double? get longitude => _selectedAddress?.longitude;
+
+  /// Central Hub latitude & longitude (Ranchi Doranda / Main Counter)
+  static const double storeLat = 23.3320;
+  static const double storeLng = 85.3210;
+
+  /// Calculates Haversine distance in km between two GPS coordinates
+  static double calculateHaversineDistanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const double r = 6371.0;
+    final dLat = (lat2 - lat1) * math.pi / 180.0;
+    final dLon = (lon2 - lon1) * math.pi / 180.0;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(lat1 * math.pi / 180.0) * math.cos(lat2 * math.pi / 180.0) *
+        math.sin(dLon / 2) * math.sin(dLon / 2);
+    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    return r * c;
+  }
+
+  /// Distance from selected address to central store in km
+  double? get activeDistanceKm {
+    final double? addrLat = _selectedAddress?.latitude ?? latitude;
+    final double? addrLng = _selectedAddress?.longitude ?? longitude;
+    if (addrLat == null || addrLng == null) return null;
+    return calculateHaversineDistanceKm(addrLat, addrLng, storeLat, storeLng);
+  }
+
+  /// Whether current active location is outside standard 10km delivery radius
+  bool get isOutOfDeliveryRadius {
+    final dist = activeDistanceKm;
+    if (dist == null) return false;
+    return dist > 10.0;
+  }
 
   String get activeLabel {
     if (_selectedAddress != null) {

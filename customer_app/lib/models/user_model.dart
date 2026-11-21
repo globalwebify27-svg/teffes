@@ -129,4 +129,38 @@ class UserModel {
       addresses: addresses ?? this.addresses,
     );
   }
+
+  /// Calculates profile completion percentage (0 - 100%)
+  int get profileCompletionPercentage {
+    int score = 0;
+    final cleanName = name.trim().toLowerCase();
+    if (cleanName.isNotEmpty && cleanName != 'customer' && cleanName != 'guest') {
+      score += 25;
+    }
+    if (phone.trim().isNotEmpty) {
+      score += 25;
+    }
+    if (email != null && email!.trim().isNotEmpty) {
+      score += 25;
+    }
+    if (addresses.isNotEmpty) {
+      score += 25;
+    }
+    return score;
+  }
+
+  /// Returns hint text for next missing profile field
+  String get profileMissingFieldHint {
+    final cleanName = name.trim().toLowerCase();
+    if (cleanName.isEmpty || cleanName == 'customer' || cleanName == 'guest') {
+      return 'Add your full name';
+    }
+    if (email == null || email!.trim().isEmpty) {
+      return 'Add your email address';
+    }
+    if (addresses.isEmpty) {
+      return 'Add a delivery address';
+    }
+    return 'Profile is 100% complete';
+  }
 }
