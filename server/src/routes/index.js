@@ -100,9 +100,9 @@ const getAvailableStoresHandler = async (req, res, next) => {
         storeLat = store.location.coordinates[1];
       }
 
-      const distKm = hasValidCoords ? (calculateDistanceKm(customerLat, customerLng, storeLat, storeLng) ?? 1.5) : 9999;
+      const distKm = hasValidCoords ? (calculateDistanceKm(customerLat, customerLng, storeLat, storeLng) ?? 1.5) : null;
       const maxDeliveryRadius = typeof store.deliveryRadiusKm === 'number' ? store.deliveryRadiusKm : 10;
-      const isWithinRadius = type === 'pickup' ? true : (distKm <= maxDeliveryRadius);
+      const isWithinRadius = type === 'pickup' ? true : (hasValidCoords ? (distKm <= maxDeliveryRadius) : true);
 
       // Verify inventory in this specific store
       let isAvailable = true;
@@ -168,14 +168,14 @@ const getAvailableStoresHandler = async (req, res, next) => {
         deliveryRadiusKm: maxDeliveryRadius,
         defaultRiderDailyTarget: store.defaultRiderDailyTarget ?? 16,
         distanceKm: distKm,
-        distance: `${distKm.toFixed(1)} km away`,
+        distance: typeof distKm === 'number' ? `${distKm.toFixed(1)} km away` : null,
         isWithinRadius,
         isDeliverable,
         isInventoryAvailable: isAvailable,
         isAvailable: isStoreFullyEligible,
         outOfStockItems,
         outOfStockProductIds,
-        stockStatus: !isAvailable ? 'Out of Stock' : (!isWithinRadius ? 'Out of Delivery Range' : 'In Stock'),
+        stockStatus: !isAvailable ? 'Out of Stock' : (hasValidCoords && !isWithinRadius ? 'Out of Delivery Range' : 'In Stock'),
         todaySpecialSchedule: todaySchedule,
         specialSchedules: store.specialSchedules || {},
       });
@@ -191,7 +191,9 @@ const getAvailableStoresHandler = async (req, res, next) => {
         return a.isDeliverable ? -1 : 1;
       }
       // 3. Then sorted by nearest distance
-      return a.distanceKm - b.distanceKm;
+      const distA = typeof a.distanceKm === 'number' ? a.distanceKm : 9999;
+      const distB = typeof b.distanceKm === 'number' ? b.distanceKm : 9999;
+      return distA - distB;
     });
 
     const eligibleStores = evaluatedStores.filter((s) => s.isAvailable);

@@ -251,8 +251,22 @@ export default function CartDrawer() {
   const fetchAvailableStores = async (addrs?: Address[], selectedAddrId?: string) => {
     try {
       const addrList = addrs || addresses;
-      const addrId = selectedAddrId || currentLocation?.addressId || selectedAddressId;
-      const activeAddr = (addrId ? addrList.find((a) => a._id === addrId) : null) || (addrList.length > 0 ? addrList[0] : null);
+      const isLiveGps = !currentLocation?.addressId && Boolean(currentLocation?.isSet && (currentLocation?.fullAddress || (currentLocation?.lat && currentLocation?.lng)));
+
+      let activeAddr: any = null;
+      if (isLiveGps) {
+        activeAddr = {
+          line1: currentLocation.fullAddress,
+          city: "Ranchi",
+          pincode: (currentLocation.fullAddress?.match(/\b\d{6}\b/) || [])[0] || "",
+          lat: currentLocation.lat,
+          lng: currentLocation.lng,
+        };
+      } else {
+        const addrId = selectedAddrId !== undefined ? selectedAddrId : (currentLocation?.addressId || selectedAddressId);
+        activeAddr = (addrId ? addrList.find((a) => a._id === addrId) : null) || (addrList.length > 0 && !currentLocation?.isSet ? (addrList.find((a) => a.isDefault) || addrList[0]) : null);
+      }
+
       const fullAddressStr = [
         activeAddr?.line1,
         activeAddr?.line2,
@@ -260,18 +274,16 @@ export default function CartDrawer() {
         activeAddr?.pincode,
       ].filter(Boolean).join(" ");
 
-      const isLiveGps = !currentLocation?.addressId && Boolean(currentLocation?.lat && currentLocation?.lng);
       const validLat = (typeof activeAddr?.lat === "number" && !isNaN(activeAddr.lat))
         ? activeAddr.lat
-        : (isLiveGps ? currentLocation?.lat : undefined);
+        : (isLiveGps && typeof currentLocation?.lat === "number" ? currentLocation.lat : undefined);
       const validLng = (typeof activeAddr?.lng === "number" && !isNaN(activeAddr.lng))
         ? activeAddr.lng
-        : (isLiveGps ? currentLocation?.lng : undefined);
+        : (isLiveGps && typeof currentLocation?.lng === "number" ? currentLocation.lng : undefined);
       const rawPincode = activeAddr?.pincode || (fullAddressStr ? (fullAddressStr.match(/\b\d{6}\b/) || [])[0] : undefined);
       const activePincode = rawPincode ? String(rawPincode).replace(/\D/g, "") : undefined;
 
-      const fallbackAddress = isLiveGps ? (currentLocation?.fullAddress || "") : "";
-      const effectiveAddress = fullAddressStr || fallbackAddress;
+      const effectiveAddress = fullAddressStr || (isLiveGps ? currentLocation.fullAddress : "");
 
       const payload = {
         type: fulfillmentType,
@@ -336,25 +348,32 @@ export default function CartDrawer() {
     }
   }, [isOpen]);
 
-  // Synchronize cart drawer address selection when location changes (e.g. user selected an address in LocationModal)
+  // Synchronize cart drawer address selection when location changes (e.g. user selected an address in LocationModal or clicked GPS)
   useEffect(() => {
-    if (currentLocation?.addressId && currentLocation.addressId !== selectedAddressId) {
-      setSelectedAddressId(currentLocation.addressId);
-    } else if (!currentLocation?.addressId && !currentLocation?.isSet) {
+    if (currentLocation?.addressId) {
+      if (currentLocation.addressId !== selectedAddressId) {
+        setSelectedAddressId(currentLocation.addressId);
+      }
+    } else if (currentLocation?.isSet) {
+      // User is using Live GPS location: clear selected saved address so activeAddress points to GPS
+      setSelectedAddressId("");
+    } else {
       setSelectedAddressId("");
     }
-  }, [currentLocation?.addressId, currentLocation?.isSet]);
+  }, [currentLocation?.addressId, currentLocation?.isSet, currentLocation?.lat, currentLocation?.lng, currentLocation?.fullAddress]);
 
-  // Synchronize addresses immediately on global events (address deleted, added, or location cleared)
+  // Synchronize addresses immediately on global events (address deleted, added, or location changed/cleared)
   useEffect(() => {
     const handleSync = () => {
       fetchAddresses();
     };
     window.addEventListener("teffes:addresses_updated", handleSync);
     window.addEventListener("teffes:location_cleared", handleSync);
+    window.addEventListener("teffes:location_changed", handleSync);
     return () => {
       window.removeEventListener("teffes:addresses_updated", handleSync);
       window.removeEventListener("teffes:location_cleared", handleSync);
+      window.removeEventListener("teffes:location_changed", handleSync);
     };
   }, []);
 
@@ -515,21 +534,21 @@ export default function CartDrawer() {
 
   const isPickup = fulfillmentType === "pickup";
 
-  const activeAddress =
-    (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
-    addresses.find((a) => a._id === selectedAddressId) ||
-    (addresses.length > 0 ? (addresses.find((a) => a.isDefault) || addresses[0]) : null) ||
-    (currentLocation?.isSet && !currentLocation?.addressId && currentLocation?.fullAddress
-      ? {
+  const isLiveGps = !currentLocation?.addressId && Boolean(currentLocation?.isSet && (currentLocation?.fullAddress || (currentLocation?.lat && currentLocation?.lng)));
+
+  const activeAddress = isLiveGps
+    ? {
         _id: "loc-selected",
-        tag: currentLocation.label || "Delivery Address",
+        tag: currentLocation.label || "Current Location",
         line1: currentLocation.fullAddress,
         city: "Ranchi",
-        pincode: (currentLocation.fullAddress.match(/\b\d{6}\b/) || [])[0] || "",
+        pincode: (currentLocation.fullAddress?.match(/\b\d{6}\b/) || [])[0] || "",
         lat: currentLocation.lat,
         lng: currentLocation.lng,
       }
-      : null);
+    : (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
+      (selectedAddressId ? addresses.find((a) => a._id === selectedAddressId) : null) ||
+      (addresses.length > 0 && !currentLocation?.isSet ? (addresses.find((a) => a.isDefault) || addresses[0]) : null);
 
   // Store is operational only if stores are present and selectedStore is active & not paused
   const isStoreOperational = Boolean(
@@ -709,6 +728,13 @@ export default function CartDrawer() {
         const fetchedAddrs = res.data.addresses;
         setAddresses(fetchedAddrs);
 
+        const isLiveGps = !currentLocation?.addressId && Boolean(currentLocation?.isSet && (currentLocation?.fullAddress || (currentLocation?.lat && currentLocation?.lng)));
+        if (isLiveGps) {
+          setSelectedAddressId("");
+          fetchAvailableStores(fetchedAddrs, "");
+          return;
+        }
+
         if (fetchedAddrs.length === 0) {
           setSelectedAddressId("");
           if (currentLocation?.addressId) {
@@ -720,8 +746,8 @@ export default function CartDrawer() {
 
         const match = currentLocation?.addressId ? fetchedAddrs.find((a) => a._id === currentLocation.addressId) : null;
         const currentSelected = selectedAddressId ? fetchedAddrs.find((a) => a._id === selectedAddressId) : null;
-        const def = match || currentSelected || fetchedAddrs.find((a) => a.isDefault) || fetchedAddrs[0];
-        const targetId = match?._id || currentSelected?._id || def?._id || "";
+        const def = match || currentSelected || (!currentLocation?.isSet ? (fetchedAddrs.find((a) => a.isDefault) || fetchedAddrs[0]) : null);
+        const targetId = def?._id || "";
         setSelectedAddressId(targetId);
         fetchAvailableStores(fetchedAddrs, targetId);
       }
@@ -1181,7 +1207,9 @@ export default function CartDrawer() {
                           </button>
                         </div>
                         <p className="font-label-md text-on-surface font-semibold text-[13px] leading-tight mt-0.5 truncate">
-                          {activeAddress.line1}{activeAddress.line2 ? `, ${activeAddress.line2}` : ""}, {activeAddress.city}
+                          {activeAddress.line1.includes(activeAddress.city)
+                            ? activeAddress.line1
+                            : `${activeAddress.line1}${activeAddress.line2 ? `, ${activeAddress.line2}` : ""}, ${activeAddress.city}`}
                         </p>
                         <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5 truncate">
                           {activeAddress.pincode ? `Pincode: ${activeAddress.pincode} • ${storeDeliveryRadiusKm}km Delivery Radius` : `${storeDeliveryRadiusKm}km Delivery Radius`}
@@ -1328,7 +1356,7 @@ export default function CartDrawer() {
                                     </span>
                                     <span>•</span>
                                     <span>{store.timings || "08:00 AM - 08:30 PM"}</span>
-                                    {store.distance && (
+                                    {store.distance && (typeof store.distanceKm !== "number" || store.distanceKm < 9000) && activeAddress && (
                                       <>
                                         <span>•</span>
                                         <span className="font-bold text-primary">{store.distance}</span>
@@ -1391,9 +1419,15 @@ export default function CartDrawer() {
                               </div>
                               <p className="text-[11px] text-slate-body truncate mt-0.5">{selectedStore.address}</p>
                               <div className="flex items-center gap-2 mt-1 text-[11px] text-slate-body">
-                                <span className="font-bold text-primary">{selectedStore.distance || "0.7 km away"}</span>
-                                <span>•</span>
-                                <span>{isOutOfDeliveryRadius ? "Beyond 10km delivery range" : "Dispatching to your address"}</span>
+                                {activeAddress && selectedStore.distance && (typeof selectedStore.distanceKm !== "number" || selectedStore.distanceKm < 9000) ? (
+                                  <>
+                                    <span className="font-bold text-primary">{selectedStore.distance}</span>
+                                    <span>•</span>
+                                    <span>{isOutOfDeliveryRadius ? "Beyond 10km delivery range" : "Dispatching to your address"}</span>
+                                  </>
+                                ) : (
+                                  <span>Dispatching to your address</span>
+                                )}
                               </div>
                             </div>
                           </div>

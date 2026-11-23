@@ -326,6 +326,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
             setIsDetecting(false);
             setIsLocationModalOpen(false);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("teffes:location_changed", { detail: newLoc }));
+            }
             toast.success(`Location detected: ${short}`, "Location Updated");
             resolve(true);
           } catch (err) {
@@ -342,6 +345,9 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem("teffes_current_location", JSON.stringify(fallbackLoc));
             setIsDetecting(false);
             setIsLocationModalOpen(false);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("teffes:location_changed", { detail: fallbackLoc }));
+            }
             toast.success(`Location set to GPS: ${lat.toFixed(3)}, ${lng.toFixed(3)}`, "Location Set");
             resolve(true);
           }
@@ -371,6 +377,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     setCurrentLocation(newLoc);
     localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
     setIsLocationModalOpen(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("teffes:location_changed", { detail: newLoc }));
+      window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
+    }
   };
 
   const openLocationModal = () => setIsLocationModalOpen(true);

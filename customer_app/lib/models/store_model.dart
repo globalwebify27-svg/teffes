@@ -38,9 +38,10 @@ class StoreModel {
   });
 
   factory StoreModel.fromJson(Map<String, dynamic> json, [int index = 0]) {
-    final dist = json['distance'] != null && json['distance'].toString().isNotEmpty
-        ? json['distance'].toString()
-        : '${(0.8 + index * 0.8).toStringAsFixed(1)} km away';
+    final rawDist = json['distance']?.toString();
+    final dist = (rawDist != null && rawDist.isNotEmpty && !rawDist.contains('9999'))
+        ? rawDist
+        : '';
 
     final isAvail = json['isAvailable'] == null ? true : (json['isAvailable'] == true);
     final outOfStockList = (json['outOfStockItems'] is List)

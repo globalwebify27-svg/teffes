@@ -192,8 +192,9 @@ export default function LocationModal() {
               <div className="space-y-2">
                 {savedAddresses.map((addr) => {
                   const isSelected =
-                    currentLocation.addressId === (addr._id || addr.id) ||
-                    currentLocation.fullAddress.includes(addr.line1);
+                    Boolean(currentLocation.addressId) &&
+                    (currentLocation.addressId === (addr._id || addr.id) ||
+                      currentLocation.fullAddress.includes(addr.line1));
                   return (
                     <div
                       key={addr._id || addr.id || addr.line1}
