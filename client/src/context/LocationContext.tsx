@@ -34,7 +34,9 @@ interface LocationContextType {
   isLocationModalOpen: boolean;
   detectLocation: () => Promise<boolean>;
   selectSavedAddress: (addr: UserAddress) => void;
-  refreshSavedAddresses: () => Promise<void>;
+  refreshSavedAddresses: (explicitAddresses?: UserAddress[]) => Promise<void>;
+  handleAddressDeleted: (deletedId: string) => Promise<void>;
+  clearLocation: () => void;
   openLocationModal: () => void;
   closeLocationModal: () => void;
   setCurrentLocation: (loc: CurrentLocation) => void;
@@ -112,18 +114,82 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const clearLocation = useCallback(() => {
+    setCurrentLocation(DEFAULT_LOCATION);
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("teffes_current_location");
+      window.dispatchEvent(new CustomEvent("teffes:location_cleared"));
+    }
+  }, []);
+
   // Fetch saved addresses from backend if user is authenticated
-  const refreshSavedAddresses = useCallback(async () => {
+  const refreshSavedAddresses = useCallback(async (explicitAddresses?: UserAddress[]) => {
     if (!isAuthenticated()) return;
     try {
-      const res = await api.get<{ success: boolean; addresses: UserAddress[] }>("/user/addresses");
-      if (res.data.success && Array.isArray(res.data.addresses)) {
-        setSavedAddresses(res.data.addresses);
+      let addrs = explicitAddresses;
+      if (!addrs) {
+        const res = await api.get<{ success: boolean; addresses: UserAddress[] }>("/user/addresses");
+        if (res.data?.success && Array.isArray(res.data.addresses)) {
+          addrs = res.data.addresses;
+        }
+      }
+      if (Array.isArray(addrs)) {
+        setSavedAddresses(addrs);
 
-        // If user has saved addresses and current location isn't set, pick default
-        const defaultAddr = res.data.addresses.find((a: UserAddress) => a.isDefault) || res.data.addresses[0];
-        const savedLocal = localStorage.getItem("teffes_current_location");
-        if (defaultAddr && (!savedLocal || savedLocal.includes("Kacheri Chowk, Near Kishore Ganj"))) {
+        const savedLocal = typeof window !== "undefined" ? localStorage.getItem("teffes_current_location") : null;
+        let localAddrId: string | undefined;
+        let isLocalSet = false;
+        if (savedLocal) {
+          try {
+            const parsed = JSON.parse(savedLocal);
+            localAddrId = parsed.addressId;
+            isLocalSet = Boolean(parsed.isSet);
+          } catch {}
+        }
+
+        const activeAddrId = currentLocation?.addressId || localAddrId;
+
+        if (activeAddrId) {
+          const stillExists = addrs.find((a) => (a._id || a.id) === activeAddrId);
+          if (!stillExists) {
+            // Active address was deleted from backend!
+            if (addrs.length > 0) {
+              const fallbackAddr = addrs.find((a) => a.isDefault) || addrs[0];
+              const newLoc: CurrentLocation = {
+                label: fallbackAddr.tag || "Home",
+                shortAddress: `${fallbackAddr.line1.slice(0, 24)}, ${fallbackAddr.city}`,
+                fullAddress: `${fallbackAddr.line1}, ${fallbackAddr.line2 ? fallbackAddr.line2 + ", " : ""}${fallbackAddr.city} ${fallbackAddr.pincode}`,
+                addressId: fallbackAddr._id || fallbackAddr.id,
+                isSet: true,
+              };
+              setCurrentLocation(newLoc);
+              if (typeof window !== "undefined") {
+                localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
+              }
+            } else {
+              // No addresses left in user account
+              clearLocation();
+            }
+          } else {
+            // Update in case address fields were edited
+            const updatedLoc: CurrentLocation = {
+              label: stillExists.tag || "Home",
+              shortAddress: `${stillExists.line1.slice(0, 24)}, ${stillExists.city}`,
+              fullAddress: `${stillExists.line1}, ${stillExists.line2 ? stillExists.line2 + ", " : ""}${stillExists.city} ${stillExists.pincode}`,
+              addressId: stillExists._id || stillExists.id,
+              isSet: true,
+            };
+            setCurrentLocation(updatedLoc);
+            if (typeof window !== "undefined") {
+              localStorage.setItem("teffes_current_location", JSON.stringify(updatedLoc));
+            }
+          }
+        } else if (addrs.length === 0 && (!currentLocation?.lat || !currentLocation?.lng)) {
+          if (currentLocation?.isSet || isLocalSet) {
+            clearLocation();
+          }
+        } else if (addrs.length > 0 && !currentLocation?.isSet && !isLocalSet) {
+          const defaultAddr = addrs.find((a) => a.isDefault) || addrs[0];
           const newLoc: CurrentLocation = {
             label: defaultAddr.tag || "Home",
             shortAddress: `${defaultAddr.line1.slice(0, 24)}, ${defaultAddr.city}`,
@@ -132,16 +198,80 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             isSet: true,
           };
           setCurrentLocation(newLoc);
-          localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
+          if (typeof window !== "undefined") {
+            localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
+          }
         }
       }
     } catch (err) {
       console.warn("Could not fetch user addresses:", err);
     }
-  }, []);
+  }, [currentLocation, clearLocation]);
+
+  const handleAddressDeleted = useCallback(
+    async (deletedId: string) => {
+      let remaining: UserAddress[] = [];
+      setSavedAddresses((prev) => {
+        remaining = prev.filter((a) => (a._id || a.id) !== deletedId);
+        return remaining;
+      });
+
+      const savedLocal = typeof window !== "undefined" ? localStorage.getItem("teffes_current_location") : null;
+      let localAddrId: string | undefined;
+      if (savedLocal) {
+        try {
+          const parsed = JSON.parse(savedLocal);
+          localAddrId = parsed.addressId;
+        } catch {}
+      }
+
+      const isCurrentDeleted =
+        currentLocation?.addressId === deletedId ||
+        localAddrId === deletedId;
+
+      if (isCurrentDeleted) {
+        if (remaining.length > 0) {
+          const fallback = remaining.find((a) => a.isDefault) || remaining[0];
+          const newLoc: CurrentLocation = {
+            label: fallback.tag || "Home",
+            shortAddress: `${fallback.line1.slice(0, 24)}, ${fallback.city}`,
+            fullAddress: `${fallback.line1}, ${fallback.line2 ? fallback.line2 + ", " : ""}${fallback.city} ${fallback.pincode}`,
+            addressId: fallback._id || fallback.id,
+            isSet: true,
+          };
+          setCurrentLocation(newLoc);
+          if (typeof window !== "undefined") {
+            localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
+          }
+        } else {
+          clearLocation();
+        }
+      } else if (remaining.length === 0 && (!currentLocation?.lat || !currentLocation?.lng)) {
+        clearLocation();
+      }
+
+      await refreshSavedAddresses();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
+      }
+    },
+    [currentLocation, clearLocation, refreshSavedAddresses]
+  );
 
   useEffect(() => {
     refreshSavedAddresses();
+  }, [refreshSavedAddresses]);
+
+  useEffect(() => {
+    const handleSync = () => {
+      refreshSavedAddresses();
+    };
+    window.addEventListener("teffes:addresses_updated", handleSync);
+    window.addEventListener("storage", handleSync);
+    return () => {
+      window.removeEventListener("teffes:addresses_updated", handleSync);
+      window.removeEventListener("storage", handleSync);
+    };
   }, [refreshSavedAddresses]);
 
   // GPS Location Detection via browser navigator.geolocation
@@ -260,6 +390,8 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         detectLocation,
         selectSavedAddress,
         refreshSavedAddresses,
+        handleAddressDeleted,
+        clearLocation,
         openLocationModal,
         closeLocationModal,
         setCurrentLocation,

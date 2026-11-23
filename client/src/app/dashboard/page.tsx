@@ -10,6 +10,7 @@ import api from "@/lib/api";
 import GoogleLiveMap from "@/components/tracking/GoogleLiveMap";
 import { getSocket } from "@/lib/socket";
 import { toast } from "@/lib/toast";
+import { useLocation } from "@/context/LocationContext";
 
 type TabKey = "orders" | "support" | "addresses" | "profile" | "policy";
 
@@ -33,6 +34,7 @@ const submitPayUForm = (payuParams: Record<string, string>, payuUrl: string) => 
 export default function DashboardPage() {
   const router = useRouter();
   const { addToCart, openCart } = useCart();
+  const { refreshSavedAddresses, handleAddressDeleted } = useLocation();
 
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -639,6 +641,10 @@ export default function DashboardPage() {
         setAddressFeedback({ type: "success", message: "Address saved successfully!" });
         setNewAddressForm({ tag: "Home", line1: "", line2: "", city: "Ranchi", pincode: "" });
         setShowAddAddressModal(false);
+        await refreshSavedAddresses(res.data.addresses);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
+        }
         setTimeout(() => setAddressFeedback(null), 3500);
       }
     } catch (err: any) {
@@ -674,6 +680,10 @@ export default function DashboardPage() {
                 landmark: a.landmark || "",
               }))
             );
+            await handleAddressDeleted(id);
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
+            }
             toast.success("Address deleted successfully", "Address Removed");
           }
         } catch (err: any) {
@@ -707,6 +717,10 @@ export default function DashboardPage() {
             landmark: a.landmark || "",
           }))
         );
+        await refreshSavedAddresses(res.data.addresses);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
+        }
         setAddressFeedback({ type: "success", message: "Default address updated!" });
         setTimeout(() => setAddressFeedback(null), 3500);
       }
@@ -910,6 +924,10 @@ export default function DashboardPage() {
         );
         setAddressFeedback({ type: "success", message: "Address updated successfully!" });
         setEditingAddress(null);
+        await refreshSavedAddresses(res.data.addresses);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
+        }
         setTimeout(() => setAddressFeedback(null), 3500);
       }
     } catch (err: any) {

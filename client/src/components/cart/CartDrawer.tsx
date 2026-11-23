@@ -116,6 +116,7 @@ export default function CartDrawer() {
     currentLocation,
     selectSavedAddress,
     refreshSavedAddresses,
+    clearLocation,
     isLocationSet,
     openLocationModal,
   } = useLocation();
@@ -251,7 +252,7 @@ export default function CartDrawer() {
     try {
       const addrList = addrs || addresses;
       const addrId = selectedAddrId || currentLocation?.addressId || selectedAddressId;
-      const activeAddr = (addrId ? addrList.find((a) => a._id === addrId) : null) || addrList[0];
+      const activeAddr = (addrId ? addrList.find((a) => a._id === addrId) : null) || (addrList.length > 0 ? addrList[0] : null);
       const fullAddressStr = [
         activeAddr?.line1,
         activeAddr?.line2,
@@ -259,14 +260,18 @@ export default function CartDrawer() {
         activeAddr?.pincode,
       ].filter(Boolean).join(" ");
 
+      const isLiveGps = !currentLocation?.addressId && Boolean(currentLocation?.lat && currentLocation?.lng);
       const validLat = (typeof activeAddr?.lat === "number" && !isNaN(activeAddr.lat))
         ? activeAddr.lat
-        : ((typeof currentLocation?.lat === "number" && !isNaN(currentLocation.lat)) ? currentLocation.lat : undefined);
+        : (isLiveGps ? currentLocation?.lat : undefined);
       const validLng = (typeof activeAddr?.lng === "number" && !isNaN(activeAddr.lng))
         ? activeAddr.lng
-        : ((typeof currentLocation?.lng === "number" && !isNaN(currentLocation.lng)) ? currentLocation.lng : undefined);
+        : (isLiveGps ? currentLocation?.lng : undefined);
       const rawPincode = activeAddr?.pincode || (fullAddressStr ? (fullAddressStr.match(/\b\d{6}\b/) || [])[0] : undefined);
       const activePincode = rawPincode ? String(rawPincode).replace(/\D/g, "") : undefined;
+
+      const fallbackAddress = isLiveGps ? (currentLocation?.fullAddress || "") : "";
+      const effectiveAddress = fullAddressStr || fallbackAddress;
 
       const payload = {
         type: fulfillmentType,
@@ -284,8 +289,8 @@ export default function CartDrawer() {
         lat: validLat,
         lng: validLng,
         pincode: activePincode,
-        address: fullAddressStr || currentLocation?.fullAddress || "",
-        shippingAddress: fullAddressStr || currentLocation?.fullAddress || "",
+        address: effectiveAddress,
+        shippingAddress: effectiveAddress,
       };
 
       const res = await api.post<{
@@ -335,8 +340,23 @@ export default function CartDrawer() {
   useEffect(() => {
     if (currentLocation?.addressId && currentLocation.addressId !== selectedAddressId) {
       setSelectedAddressId(currentLocation.addressId);
+    } else if (!currentLocation?.addressId && !currentLocation?.isSet) {
+      setSelectedAddressId("");
     }
-  }, [currentLocation?.addressId]);
+  }, [currentLocation?.addressId, currentLocation?.isSet]);
+
+  // Synchronize addresses immediately on global events (address deleted, added, or location cleared)
+  useEffect(() => {
+    const handleSync = () => {
+      fetchAddresses();
+    };
+    window.addEventListener("teffes:addresses_updated", handleSync);
+    window.addEventListener("teffes:location_cleared", handleSync);
+    return () => {
+      window.removeEventListener("teffes:addresses_updated", handleSync);
+      window.removeEventListener("teffes:location_cleared", handleSync);
+    };
+  }, []);
 
   useEffect(() => {
     if (isOpen) {
@@ -495,6 +515,22 @@ export default function CartDrawer() {
 
   const isPickup = fulfillmentType === "pickup";
 
+  const activeAddress =
+    (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
+    addresses.find((a) => a._id === selectedAddressId) ||
+    (addresses.length > 0 ? (addresses.find((a) => a.isDefault) || addresses[0]) : null) ||
+    (currentLocation?.isSet && !currentLocation?.addressId && currentLocation?.fullAddress
+      ? {
+        _id: "loc-selected",
+        tag: currentLocation.label || "Delivery Address",
+        line1: currentLocation.fullAddress,
+        city: "Ranchi",
+        pincode: (currentLocation.fullAddress.match(/\b\d{6}\b/) || [])[0] || "",
+        lat: currentLocation.lat,
+        lng: currentLocation.lng,
+      }
+      : null);
+
   // Store is operational only if stores are present and selectedStore is active & not paused
   const isStoreOperational = Boolean(
     selectedStore &&
@@ -514,6 +550,7 @@ export default function CartDrawer() {
   const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 10;
   const isOutOfDeliveryRadius = Boolean(
     fulfillmentType === "delivery" &&
+    Boolean(activeAddress) &&
     isLocationSet &&
     selectedStore &&
     (
@@ -669,13 +706,24 @@ export default function CartDrawer() {
     try {
       const res = await api.get<{ success: boolean; addresses: Address[] }>("/user/addresses");
       if (res.data.success && Array.isArray(res.data.addresses)) {
-        setAddresses(res.data.addresses);
-        const match = currentLocation?.addressId ? res.data.addresses.find((a) => a._id === currentLocation.addressId) : null;
-        const currentSelected = selectedAddressId ? res.data.addresses.find((a) => a._id === selectedAddressId) : null;
-        const def = match || currentSelected || res.data.addresses.find((a) => a.isDefault) || res.data.addresses[0];
+        const fetchedAddrs = res.data.addresses;
+        setAddresses(fetchedAddrs);
+
+        if (fetchedAddrs.length === 0) {
+          setSelectedAddressId("");
+          if (currentLocation?.addressId) {
+            clearLocation();
+          }
+          fetchAvailableStores([], "");
+          return;
+        }
+
+        const match = currentLocation?.addressId ? fetchedAddrs.find((a) => a._id === currentLocation.addressId) : null;
+        const currentSelected = selectedAddressId ? fetchedAddrs.find((a) => a._id === selectedAddressId) : null;
+        const def = match || currentSelected || fetchedAddrs.find((a) => a.isDefault) || fetchedAddrs[0];
         const targetId = match?._id || currentSelected?._id || def?._id || "";
-        if (targetId) setSelectedAddressId(targetId);
-        fetchAvailableStores(res.data.addresses, targetId);
+        setSelectedAddressId(targetId);
+        fetchAvailableStores(fetchedAddrs, targetId);
       }
     } catch (err) {
       console.warn("Could not fetch addresses:", err);
@@ -741,21 +789,6 @@ export default function CartDrawer() {
       setIsSavingAddress(false);
     }
   };
-
-  const activeAddress =
-    (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
-    addresses.find((a) => a._id === selectedAddressId) ||
-    addresses.find((a) => a.isDefault) ||
-    addresses[0] ||
-    (currentLocation?.isSet && currentLocation?.fullAddress
-      ? {
-        _id: currentLocation.addressId || "loc-selected",
-        tag: currentLocation.label || "Delivery Address",
-        line1: currentLocation.fullAddress,
-        city: "Ranchi",
-        pincode: "",
-      }
-      : null);
 
   // Proceed from cart to payment view inside drawer
   const handleProceedToPayment = async () => {
