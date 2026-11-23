@@ -264,7 +264,7 @@ export default function CartDrawer() {
         };
       } else {
         const addrId = selectedAddrId !== undefined ? selectedAddrId : (currentLocation?.addressId || selectedAddressId);
-        activeAddr = (addrId ? addrList.find((a) => a._id === addrId) : null) || (addrList.length > 0 && !currentLocation?.isSet ? (addrList.find((a) => a.isDefault) || addrList[0]) : null);
+        activeAddr = addrId ? addrList.find((a) => a._id === addrId) : null;
       }
 
       const fullAddressStr = [
@@ -354,26 +354,21 @@ export default function CartDrawer() {
       if (currentLocation.addressId !== selectedAddressId) {
         setSelectedAddressId(currentLocation.addressId);
       }
-    } else if (currentLocation?.isSet) {
-      // User is using Live GPS location: clear selected saved address so activeAddress points to GPS
-      setSelectedAddressId("");
     } else {
       setSelectedAddressId("");
     }
-  }, [currentLocation?.addressId, currentLocation?.isSet, currentLocation?.lat, currentLocation?.lng, currentLocation?.fullAddress]);
+  }, [currentLocation?.addressId, currentLocation?.isSet]);
 
-  // Synchronize addresses immediately on global events (address deleted, added, or location changed/cleared)
+  // Synchronize addresses immediately on global events (address deleted, added, or location cleared)
   useEffect(() => {
     const handleSync = () => {
       fetchAddresses();
     };
     window.addEventListener("teffes:addresses_updated", handleSync);
     window.addEventListener("teffes:location_cleared", handleSync);
-    window.addEventListener("teffes:location_changed", handleSync);
     return () => {
       window.removeEventListener("teffes:addresses_updated", handleSync);
       window.removeEventListener("teffes:location_cleared", handleSync);
-      window.removeEventListener("teffes:location_changed", handleSync);
     };
   }, []);
 
@@ -548,7 +543,17 @@ export default function CartDrawer() {
       }
     : (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
       (selectedAddressId ? addresses.find((a) => a._id === selectedAddressId) : null) ||
-      (addresses.length > 0 && !currentLocation?.isSet ? (addresses.find((a) => a.isDefault) || addresses[0]) : null);
+      (currentLocation?.addressId && currentLocation?.fullAddress
+        ? {
+            _id: currentLocation.addressId,
+            tag: currentLocation.label || "Saved Address",
+            line1: currentLocation.fullAddress,
+            city: "Ranchi",
+            pincode: (currentLocation.fullAddress?.match(/\b\d{6}\b/) || [])[0] || "",
+            lat: currentLocation.lat,
+            lng: currentLocation.lng,
+          }
+        : null);
 
   // Store is operational only if stores are present and selectedStore is active & not paused
   const isStoreOperational = Boolean(
@@ -722,34 +727,22 @@ export default function CartDrawer() {
 
   // Fetch user addresses from backend
   const fetchAddresses = async () => {
+    if (!isAuthenticated()) {
+      setAddresses([]);
+      return;
+    }
     try {
       const res = await api.get<{ success: boolean; addresses: Address[] }>("/user/addresses");
       if (res.data.success && Array.isArray(res.data.addresses)) {
         const fetchedAddrs = res.data.addresses;
         setAddresses(fetchedAddrs);
 
-        const isLiveGps = !currentLocation?.addressId && Boolean(currentLocation?.isSet && (currentLocation?.fullAddress || (currentLocation?.lat && currentLocation?.lng)));
-        if (isLiveGps) {
-          setSelectedAddressId("");
-          fetchAvailableStores(fetchedAddrs, "");
-          return;
-        }
-
         if (fetchedAddrs.length === 0) {
           setSelectedAddressId("");
           if (currentLocation?.addressId) {
             clearLocation();
           }
-          fetchAvailableStores([], "");
-          return;
         }
-
-        const match = currentLocation?.addressId ? fetchedAddrs.find((a) => a._id === currentLocation.addressId) : null;
-        const currentSelected = selectedAddressId ? fetchedAddrs.find((a) => a._id === selectedAddressId) : null;
-        const def = match || currentSelected || (!currentLocation?.isSet ? (fetchedAddrs.find((a) => a.isDefault) || fetchedAddrs[0]) : null);
-        const targetId = def?._id || "";
-        setSelectedAddressId(targetId);
-        fetchAvailableStores(fetchedAddrs, targetId);
       }
     } catch (err) {
       console.warn("Could not fetch addresses:", err);
@@ -802,7 +795,7 @@ export default function CartDrawer() {
             isDefault: newest.isDefault,
           });
         }
-        await refreshSavedAddresses();
+        await refreshSavedAddresses(res.data.addresses as any);
         setShowAddAddressForm(false);
         setView("cart");
         setNewAddress({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
@@ -824,7 +817,7 @@ export default function CartDrawer() {
       return;
     }
 
-    if (fulfillmentType === "delivery" && !isLocationSet && !selectedAddressId) {
+    if (fulfillmentType === "delivery" && !isLocationSet && !activeAddress) {
       openLocationModal();
       return;
     }
@@ -871,21 +864,21 @@ export default function CartDrawer() {
       await fetchAddresses();
 
       // Enforce location selection: cannot proceed if no location or address has been chosen
-      if (!isLocationSet && !selectedAddressId && addresses.length === 0 && !activeAddress) {
+      if (!isLocationSet && !activeAddress) {
         toast.warning("Please select or detect your delivery location before proceeding to checkout.", "Location Required");
         openLocationModal();
         return;
       }
 
-      if (addresses.length === 0 && !selectedAddressId && !activeAddress) {
+      if (!activeAddress) {
         toast.warning("Please add a delivery address to proceed.", "Address Required");
         setShowAddAddressForm(true);
         setView("address");
         return;
       }
 
-      if (!selectedAddressId && activeAddress) {
-        setSelectedAddressId(activeAddress._id || "loc-selected");
+      if (!selectedAddressId && activeAddress?._id) {
+        setSelectedAddressId(activeAddress._id);
       }
     } else {
       if (!selectedStoreId && stores.length > 0) {
@@ -2529,8 +2522,8 @@ export default function CartDrawer() {
                 <p className="font-body-sm text-slate-body text-[11.5px] truncate mt-0.5">
                   {isPickup
                     ? `Self Pickup: ${selectedStore?.name} — ${selectedStore?.address}`
-                    : addresses.find((a) => a._id === selectedAddressId)
-                      ? `${addresses.find((a) => a._id === selectedAddressId)?.line1}, ${addresses.find((a) => a._id === selectedAddressId)?.city}`
+                    : activeAddress
+                      ? `${activeAddress.line1}, ${activeAddress.city}`
                       : "Select or add your delivery address below"}
                 </p>
               </div>
@@ -2849,7 +2842,7 @@ export default function CartDrawer() {
                 {selectedPayment === "cod" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || !isStoreOperational || (!isPickup && !activeAddress)}
                     onClick={handleConfirmOrder}
                     className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
@@ -2862,7 +2855,7 @@ export default function CartDrawer() {
                 ) : selectedPayment === "wallet" ? (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || !isStoreOperational || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || !isStoreOperational || (!isPickup && !activeAddress)}
                     onClick={async () => {
                       // Let's use the handleConfirmOrder but set the paymentMethod to Wallet on backend
                       await handleConfirmOrder();
@@ -2881,7 +2874,7 @@ export default function CartDrawer() {
                 ) : (
                   <button
                     type="button"
-                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || (!isPickup && !selectedAddressId && addresses.length > 0)}
+                    disabled={isPlacingOrder || isUnderMinOrder || isOutOfDeliveryRadius || (!isPickup && !activeAddress)}
                     onClick={handleRazorpayPayment}
                     className="w-full py-4 rounded-xl bg-primary hover:bg-primary-dark text-white font-bold text-[15px] shadow-md transition-all cursor-pointer border-none flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >

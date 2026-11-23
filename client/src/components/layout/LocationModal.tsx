@@ -80,9 +80,14 @@ export default function LocationModal() {
       const res = await api.post<{ success: boolean; addresses: UserAddress[] }>("/user/addresses", newAddr);
       if (res.data.success && res.data.addresses) {
         updateUserInStorage({ addresses: res.data.addresses });
-        await refreshSavedAddresses();
         const newest = res.data.addresses[res.data.addresses.length - 1];
-        if (newest) selectSavedAddress(newest);
+        if (newest) {
+          selectSavedAddress(newest);
+        }
+        await refreshSavedAddresses(res.data.addresses);
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
+        }
         setShowAddForm(false);
         setNewAddr({ tag: "Home", line1: "", line2: "", city: "", pincode: "" });
         toast.success("Delivery address saved successfully!", "Address Saved");

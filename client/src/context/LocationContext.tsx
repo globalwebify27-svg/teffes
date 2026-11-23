@@ -59,6 +59,12 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
   const [isDetecting, setIsDetecting] = useState(false);
   const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
+  const currentLocationRef = React.useRef<CurrentLocation>(DEFAULT_LOCATION);
+
+  const updateCurrentLocation = useCallback((loc: CurrentLocation) => {
+    currentLocationRef.current = loc;
+    setCurrentLocation(loc);
+  }, []);
 
   // Determine if a real location has been chosen or detected by the user
   const isLocationSet = Boolean(
@@ -115,12 +121,12 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const clearLocation = useCallback(() => {
-    setCurrentLocation(DEFAULT_LOCATION);
+    updateCurrentLocation(DEFAULT_LOCATION);
     if (typeof window !== "undefined") {
       localStorage.removeItem("teffes_current_location");
       window.dispatchEvent(new CustomEvent("teffes:location_cleared"));
     }
-  }, []);
+  }, [updateCurrentLocation]);
 
   // Fetch saved addresses from backend if user is authenticated
   const refreshSavedAddresses = useCallback(async (explicitAddresses?: UserAddress[]) => {
@@ -136,18 +142,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       if (Array.isArray(addrs)) {
         setSavedAddresses(addrs);
 
-        const savedLocal = typeof window !== "undefined" ? localStorage.getItem("teffes_current_location") : null;
-        let localAddrId: string | undefined;
-        let isLocalSet = false;
-        if (savedLocal) {
-          try {
-            const parsed = JSON.parse(savedLocal);
-            localAddrId = parsed.addressId;
-            isLocalSet = Boolean(parsed.isSet);
-          } catch {}
+        const cur = currentLocationRef.current;
+        // If user is currently using Live GPS, do NOT override with saved addresses!
+        if (cur?.isSet && !cur?.addressId) {
+          return;
         }
 
-        const activeAddrId = currentLocation?.addressId || localAddrId;
+        const activeAddrId = cur?.addressId;
 
         if (activeAddrId) {
           const stillExists = addrs.find((a) => (a._id || a.id) === activeAddrId);
@@ -160,9 +161,11 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
                 shortAddress: `${fallbackAddr.line1.slice(0, 24)}, ${fallbackAddr.city}`,
                 fullAddress: `${fallbackAddr.line1}, ${fallbackAddr.line2 ? fallbackAddr.line2 + ", " : ""}${fallbackAddr.city} ${fallbackAddr.pincode}`,
                 addressId: fallbackAddr._id || fallbackAddr.id,
+                lat: (fallbackAddr as any).lat,
+                lng: (fallbackAddr as any).lng,
                 isSet: true,
               };
-              setCurrentLocation(newLoc);
+              updateCurrentLocation(newLoc);
               if (typeof window !== "undefined") {
                 localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
               }
@@ -170,43 +173,13 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
               // No addresses left in user account
               clearLocation();
             }
-          } else {
-            // Update in case address fields were edited
-            const updatedLoc: CurrentLocation = {
-              label: stillExists.tag || "Home",
-              shortAddress: `${stillExists.line1.slice(0, 24)}, ${stillExists.city}`,
-              fullAddress: `${stillExists.line1}, ${stillExists.line2 ? stillExists.line2 + ", " : ""}${stillExists.city} ${stillExists.pincode}`,
-              addressId: stillExists._id || stillExists.id,
-              isSet: true,
-            };
-            setCurrentLocation(updatedLoc);
-            if (typeof window !== "undefined") {
-              localStorage.setItem("teffes_current_location", JSON.stringify(updatedLoc));
-            }
-          }
-        } else if (addrs.length === 0 && (!currentLocation?.lat || !currentLocation?.lng)) {
-          if (currentLocation?.isSet || isLocalSet) {
-            clearLocation();
-          }
-        } else if (addrs.length > 0 && !currentLocation?.isSet && !isLocalSet) {
-          const defaultAddr = addrs.find((a) => a.isDefault) || addrs[0];
-          const newLoc: CurrentLocation = {
-            label: defaultAddr.tag || "Home",
-            shortAddress: `${defaultAddr.line1.slice(0, 24)}, ${defaultAddr.city}`,
-            fullAddress: `${defaultAddr.line1}, ${defaultAddr.line2 ? defaultAddr.line2 + ", " : ""}${defaultAddr.city} ${defaultAddr.pincode}`,
-            addressId: defaultAddr._id || defaultAddr.id,
-            isSet: true,
-          };
-          setCurrentLocation(newLoc);
-          if (typeof window !== "undefined") {
-            localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
           }
         }
       }
     } catch (err) {
       console.warn("Could not fetch user addresses:", err);
     }
-  }, [currentLocation, clearLocation]);
+  }, [clearLocation, updateCurrentLocation]);
 
   const handleAddressDeleted = useCallback(
     async (deletedId: string) => {
@@ -216,6 +189,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
         return remaining;
       });
 
+      const cur = currentLocationRef.current;
       const savedLocal = typeof window !== "undefined" ? localStorage.getItem("teffes_current_location") : null;
       let localAddrId: string | undefined;
       if (savedLocal) {
@@ -226,7 +200,7 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       }
 
       const isCurrentDeleted =
-        currentLocation?.addressId === deletedId ||
+        cur?.addressId === deletedId ||
         localAddrId === deletedId;
 
       if (isCurrentDeleted) {
@@ -237,25 +211,27 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
             shortAddress: `${fallback.line1.slice(0, 24)}, ${fallback.city}`,
             fullAddress: `${fallback.line1}, ${fallback.line2 ? fallback.line2 + ", " : ""}${fallback.city} ${fallback.pincode}`,
             addressId: fallback._id || fallback.id,
+            lat: (fallback as any).lat,
+            lng: (fallback as any).lng,
             isSet: true,
           };
-          setCurrentLocation(newLoc);
+          updateCurrentLocation(newLoc);
           if (typeof window !== "undefined") {
             localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
           }
         } else {
           clearLocation();
         }
-      } else if (remaining.length === 0 && (!currentLocation?.lat || !currentLocation?.lng)) {
+      } else if (remaining.length === 0 && (!cur?.lat || !cur?.lng)) {
         clearLocation();
       }
 
-      await refreshSavedAddresses();
+      await refreshSavedAddresses(remaining);
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
       }
     },
-    [currentLocation, clearLocation, refreshSavedAddresses]
+    [clearLocation, refreshSavedAddresses, updateCurrentLocation]
   );
 
   useEffect(() => {
@@ -319,10 +295,11 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
               fullAddress: full,
               lat,
               lng,
+              addressId: undefined,
               isSet: true,
             };
 
-            setCurrentLocation(newLoc);
+            updateCurrentLocation(newLoc);
             localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
             setIsDetecting(false);
             setIsLocationModalOpen(false);
@@ -339,9 +316,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
               fullAddress: `Ranchi Zone (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
               lat,
               lng,
+              addressId: undefined,
               isSet: true,
             };
-            setCurrentLocation(fallbackLoc);
+            updateCurrentLocation(fallbackLoc);
             localStorage.setItem("teffes_current_location", JSON.stringify(fallbackLoc));
             setIsDetecting(false);
             setIsLocationModalOpen(false);
@@ -372,14 +350,15 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       shortAddress: `${addr.line1.slice(0, 24)}, ${addr.city}`,
       fullAddress: `${addr.line1}, ${addr.line2 ? addr.line2 + ", " : ""}${addr.city} ${addr.pincode}`,
       addressId: addr._id || addr.id,
+      lat: (addr as any).lat,
+      lng: (addr as any).lng,
       isSet: true,
     };
-    setCurrentLocation(newLoc);
+    updateCurrentLocation(newLoc);
     localStorage.setItem("teffes_current_location", JSON.stringify(newLoc));
     setIsLocationModalOpen(false);
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("teffes:location_changed", { detail: newLoc }));
-      window.dispatchEvent(new CustomEvent("teffes:addresses_updated"));
     }
   };
 
