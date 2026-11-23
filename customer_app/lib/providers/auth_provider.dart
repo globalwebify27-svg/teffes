@@ -149,6 +149,36 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// Sign in directly using a PhoneAuthCredential (e.g. from Firebase instant verificationCompleted)
+  Future<bool> signInWithCredential(
+    PhoneAuthCredential credential, {
+    String? phone,
+    String? name,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    final cleanPhone = phone?.replaceAll(RegExp(r'\D'), '') ?? '';
+    final clean10 = cleanPhone.length > 10 ? cleanPhone.substring(cleanPhone.length - 10) : cleanPhone;
+
+    try {
+      return await _signInWithFirebaseCredential(credential, phone: clean10, name: name);
+    } on FirebaseAuthException catch (e) {
+      debugPrint('[AuthProvider] FirebaseAuthException in signInWithCredential: [${e.code}] ${e.message}');
+      _isLoading = false;
+      _error = 'Auto-verification failed. Please enter the OTP manually.';
+      notifyListeners();
+      return false;
+    } catch (e) {
+      debugPrint('[AuthProvider] Error in signInWithCredential: $e');
+      _isLoading = false;
+      _error = 'Auto-verification failed. Please enter the OTP manually.';
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Verify 6-digit OTP code with Firebase and exchange ID Token with TeFFe backend
   Future<bool> verifyFirebaseOtp({
     required String verificationId,

@@ -812,17 +812,24 @@ Future<void> showInitialLocationPrompt(BuildContext context, LocationProvider lo
                               final success = await locationProvider.detectGpsLocation(userTriggered: true);
                               if (ctx.mounted) {
                                 Navigator.pop(ctx);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      success
-                                        ? 'Location set to ${locationProvider.activeLabel}'
-                                        : 'Set to ${locationProvider.activeLabel}',
+                                if (success) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Location set to ${locationProvider.activeLabel}'),
+                                      behavior: SnackBarBehavior.floating,
+                                      duration: const Duration(seconds: 2),
                                     ),
-                                    behavior: SnackBarBehavior.floating,
-                                    duration: const Duration(seconds: 2),
-                                  ),
-                                );
+                                  );
+                                } else {
+                                  // If GPS denied or unavailable, immediately open manual search/pincode picker so user is never stuck
+                                  showModalBottomSheet(
+                                    context: context,
+                                    isScrollControlled: true,
+                                    useSafeArea: true,
+                                    backgroundColor: Colors.transparent,
+                                    builder: (_) => const LocationPickerModal(),
+                                  );
+                                }
                               }
                             },
                       style: ElevatedButton.styleFrom(

@@ -49,6 +49,9 @@ const DEFAULT_LOCATION: CurrentLocation = {
 
 const LocationContext = createContext<LocationContextType | undefined>(undefined);
 
+// In-memory flag: resets on every browser refresh (F5), but persists during Next.js client-side page navigation
+let hasDismissedInCurrentPageLoad = false;
+
 export function LocationProvider({ children }: { children: React.ReactNode }) {
   const [currentLocation, setCurrentLocation] = useState<CurrentLocation>(DEFAULT_LOCATION);
   const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
@@ -65,10 +68,11 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
       currentLocation.shortAddress !== "Select Location")
   );
 
-  // Load persisted location from localStorage on client mount
+  // Load persisted location from localStorage on client mount, or prompt location upfront if unset
   useEffect(() => {
     try {
       const saved = localStorage.getItem("teffes_current_location");
+      let hasValidSaved = false;
       if (saved) {
         const parsed = JSON.parse(saved);
         // Clear old default fallback if it was never explicitly set by user
@@ -85,7 +89,23 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
           parsed.shortAddress !== "Select Location"
         ) {
           setCurrentLocation({ ...parsed, isSet: true });
+          hasValidSaved = true;
         }
+      }
+
+      // Clean up any legacy sessionStorage flags
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("teffes_location_modal_dismissed");
+        sessionStorage.removeItem("teffes_location_prompted");
+        sessionStorage.removeItem("teffes_initial_loc_dismissed");
+      }
+
+      // If location is unset, prompt LocationModal upfront on every browser refresh / first mount
+      if (!hasValidSaved && !hasDismissedInCurrentPageLoad) {
+        const timer = setTimeout(() => {
+          setIsLocationModalOpen(true);
+        }, 400);
+        return () => clearTimeout(timer);
       }
     } catch (e) {
       console.warn("Could not read location from localStorage", e);
@@ -224,7 +244,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
   };
 
   const openLocationModal = () => setIsLocationModalOpen(true);
-  const closeLocationModal = () => setIsLocationModalOpen(false);
+  const closeLocationModal = () => {
+    hasDismissedInCurrentPageLoad = true;
+    setIsLocationModalOpen(false);
+  };
 
   return (
     <LocationContext.Provider

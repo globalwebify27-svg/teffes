@@ -142,7 +142,7 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                           Icon(Icons.inventory_2_outlined, size: 48, color: Colors.grey.shade400),
                           const SizedBox(height: 8),
                           Text(
-                            'No cuts found in this category',
+                            'No items found in this category',
                             style: Theme.of(context).textTheme.titleMedium,
                           ),
                         ],

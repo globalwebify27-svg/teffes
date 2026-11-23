@@ -12,7 +12,8 @@ export default function NotificationPrompt() {
     if (typeof window !== "undefined" && "Notification" in window) {
       const isDismissed = sessionStorage.getItem("teffes_fcm_prompt_dismissed");
       if (Notification.permission === "default" && !isDismissed) {
-        const timer = setTimeout(() => setDismissed(false), 2500);
+        // Wait 15s so it does not conflict with initial location setup on mount
+        const timer = setTimeout(() => setDismissed(false), 15000);
         return () => clearTimeout(timer);
       }
     }

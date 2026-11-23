@@ -30,6 +30,18 @@ export default function LocationModal() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
+  const handleDetectLocation = async () => {
+    const success = await detectLocation();
+    if (!success) {
+      // If GPS permission denied or failed, automatically open the manual address form so user is never stuck
+      setShowAddForm(true);
+    }
+  };
+
+  const handleClose = () => {
+    closeLocationModal();
+  };
+
   if (!isLocationModalOpen) return null;
 
   const handleSaveAddress = async (e: React.FormEvent) => {
@@ -94,7 +106,7 @@ export default function LocationModal() {
     <div
       className="fixed inset-0 z-[1100] bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-fade-in"
       onClick={(e) => {
-        if (e.target === e.currentTarget) closeLocationModal();
+        if (e.target === e.currentTarget) handleClose();
       }}
     >
       <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl border border-gray-100 flex flex-col max-h-[90vh]">
@@ -116,7 +128,7 @@ export default function LocationModal() {
 
           <button
             type="button"
-            onClick={closeLocationModal}
+            onClick={handleClose}
             className="w-9 h-9 rounded-full bg-white text-gray-400 hover:text-gray-700 hover:bg-gray-100 flex items-center justify-center border border-gray-200 cursor-pointer transition-colors"
           >
             <span className="material-symbols-outlined text-[20px]">close</span>
@@ -128,7 +140,7 @@ export default function LocationModal() {
           {/* Detect Current Location Button */}
           <button
             type="button"
-            onClick={detectLocation}
+            onClick={handleDetectLocation}
             disabled={isDetecting}
             className="w-full p-4 rounded-2xl border-2 border-dashed border-primary/40 bg-primary/5 hover:bg-primary/10 transition-colors flex items-center justify-between text-left cursor-pointer group"
           >

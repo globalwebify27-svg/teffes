@@ -156,9 +156,8 @@ export default function NavbarSearch({
       {/* Search Input Box */}
       <div className="relative w-full flex items-center">
         <span
-          className={`material-symbols-outlined absolute left-3.5 text-[20px] pointer-events-none ${
-            isScrolled && !isMobile ? "text-slate-500" : "text-slate-400"
-          }`}
+          className={`material-symbols-outlined absolute left-3.5 text-[20px] pointer-events-none ${isScrolled && !isMobile ? "text-slate-500" : "text-slate-400"
+            }`}
         >
           search
         </span>
@@ -171,13 +170,12 @@ export default function NavbarSearch({
           }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className={`w-full pl-10 pr-10 py-2.5 font-body-sm text-body-sm placeholder:text-slate-400 focus:outline-none transition-all ${
-            isMobile
+          className={`w-full pl-10 pr-10 py-2.5 font-body-sm text-body-sm placeholder:text-slate-400 focus:outline-none transition-all ${isMobile
               ? "rounded-full bg-white shadow-xs text-on-surface border border-gray-200 focus:ring-2 focus:ring-primary/20"
               : isScrolled
-              ? "rounded-full bg-white text-gray-900 border border-white shadow-sm focus:ring-2 focus:ring-amber-300 focus:shadow-md"
-              : "rounded-full bg-surface-container-low text-on-surface border border-gray-200/70 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:shadow-md"
-          }`}
+                ? "rounded-full bg-white text-gray-900 border border-white shadow-sm focus:ring-2 focus:ring-amber-300 focus:shadow-md"
+                : "rounded-full bg-surface-container-low text-on-surface border border-gray-200/70 focus:bg-white focus:ring-2 focus:ring-primary/20 focus:shadow-md"
+            }`}
           autoComplete="off"
         />
 
@@ -216,7 +214,7 @@ export default function NavbarSearch({
                 <span className="material-symbols-outlined text-[24px]">search_off</span>
               </div>
               <p className="font-headline-sm font-bold text-slate-800 text-[15px]">
-                No cuts found for &ldquo;{query}&rdquo;
+                No items found for &ldquo;{query}&rdquo;
               </p>
               <p className="text-xs text-slate-500 mt-1 max-w-xs mx-auto">
                 Try searching for Chicken, Mutton, Fish, Lollipops, Eggs, or Biryani cuts.

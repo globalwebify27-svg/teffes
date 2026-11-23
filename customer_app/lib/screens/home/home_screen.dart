@@ -27,6 +27,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static bool _hasPromptedLocationThisSession = false;
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   Timer? _debounce;
@@ -46,7 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
     await Future.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
     final locationProvider = Provider.of<LocationProvider>(context, listen: false);
-    if (!locationProvider.hasPromptedPermission && !locationProvider.hasSelectedAddress) {
+    if (!locationProvider.hasSelectedAddress && !_hasPromptedLocationThisSession) {
+      _hasPromptedLocationThisSession = true;
       showInitialLocationPrompt(context, locationProvider);
     }
     // Check and display active Super Admin promotional popup if eligible

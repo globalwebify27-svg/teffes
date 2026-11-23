@@ -1166,13 +1166,17 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     : _selectedSlot;
 
     final selAddr = location.selectedAddress;
+    if (!isPickup && selAddr == null) {
+      _showAddressPicker(context, location);
+      return;
+    }
     if (!isPickup && selAddr != null && (selAddr.latitude == null || selAddr.longitude == null)) {
       _showPincodeVerificationModal(context, selAddr);
       return;
     }
 
     final selStore = _selectedStore;
-    final isOutOfRadius = !isPickup && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
+    final isOutOfRadius = !isPickup && selAddr != null && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
     if (isOutOfRadius) {
       final distStr = selStore?.distanceKm != null ? '${selStore!.distanceKm!.toStringAsFixed(1)} km' : 'beyond delivery limit';
       final radiusLimit = selStore?.deliveryRadiusKm?.toInt() ?? 10;
@@ -3299,9 +3303,10 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               child: Builder(
                 builder: (context) {
                   final selAddr = location.selectedAddress;
+                  final bool isLocationMissing = !isPickup && selAddr == null;
                   final bool needsPincodeVerification = !isPickup && selAddr != null && (selAddr.latitude == null || selAddr.longitude == null);
                   final selStore = _selectedStore;
-                  final bool isOutOfRadius = !isPickup && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
+                  final bool isOutOfRadius = !isPickup && selAddr != null && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
                   final bool hasOutOfStockItems = items.any((cartItem) {
                     final p = cartItem.product;
                     return !p.inStock ||
@@ -3310,12 +3315,12 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                              selStore.outOfStockItems.any((name) =>
                                  p.name.toLowerCase().contains(name.toLowerCase()) ||
                                  name.toLowerCase().contains(p.name.toLowerCase()))));
-                  }) || (selStore != null && !selStore.isAvailable);
+                  });
                   final bool isStoreOperational = selStore != null &&
                       selStore.status.toLowerCase() != 'paused' &&
                       selStore.status.toLowerCase() != 'closed' &&
                       selStore.status.toLowerCase() != 'inactive';
-                  final bool isCheckoutBlocked = cart.subtotal < 200 || isOutOfRadius || needsPincodeVerification || hasOutOfStockItems || !isStoreOperational;
+                  final bool isCheckoutBlocked = cart.subtotal < 200 || (auth.isAuthenticated && !isLocationMissing && (isOutOfRadius || needsPincodeVerification)) || hasOutOfStockItems || !isStoreOperational;
 
                   return Column(
                     mainAxisSize: MainAxisSize.min,
@@ -3400,6 +3405,32 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                             ),
                           ),
                         ),
+                      if (isLocationMissing)
+                        GestureDetector(
+                          onTap: () => _showAddressPicker(context, location),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryLight.withValues(alpha: 0.35),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: AppColors.primaryMaroon.withValues(alpha: 0.3)),
+                            ),
+                            child: const Row(
+                              children: [
+                                Icon(Icons.location_on_rounded, size: 16, color: AppColors.primaryMaroon),
+                                SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Select delivery location to check 90-min delivery options',
+                                    style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.primaryMaroon),
+                                  ),
+                                ),
+                                Icon(Icons.chevron_right_rounded, size: 16, color: AppColors.primaryMaroon),
+                              ],
+                            ),
+                          ),
+                        ),
                       if (isOutOfRadius)
                         Container(
                           margin: const EdgeInsets.only(bottom: 10),
@@ -3459,25 +3490,40 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           ),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isCheckoutBlocked ? Colors.grey.shade400 : AppColors.primaryMaroon,
+                              backgroundColor: (!auth.isAuthenticated || isLocationMissing)
+                                  ? AppColors.primaryMaroon
+                                  : (isCheckoutBlocked ? Colors.grey.shade400 : AppColors.primaryMaroon),
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
-                              elevation: isCheckoutBlocked ? 0 : 2,
+                              shape: const RoundedRectangleBorder(borderRadius: AppDimensions.roundedMd),
+                              elevation: (isCheckoutBlocked && auth.isAuthenticated && !isLocationMissing) ? 0 : 2,
                             ),
-                            onPressed: (_isPlacingOrder || isCheckoutBlocked)
-                                ? (needsPincodeVerification ? () => _showPincodeVerificationModal(context, selAddr!) : null)
-                                : () => _handlePlaceOrder(cart, location, auth),
+                            onPressed: _isPlacingOrder
+                                ? null
+                                : !auth.isAuthenticated
+                                    ? () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                        );
+                                      }
+                                    : isLocationMissing
+                                        ? () => _showAddressPicker(context, location)
+                                        : isCheckoutBlocked
+                                            ? (needsPincodeVerification ? () => _showPincodeVerificationModal(context, selAddr!) : null)
+                                            : () => _handlePlaceOrder(cart, location, auth),
                             child: _isPlacingOrder
                                 ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                                 : Text(
                                     !auth.isAuthenticated
                                         ? 'Login to proceed'
-                                        : (_selectedPaymentMethod == 'payu'
-                                            ? 'Proceed to Pay →'
-                                            : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
+                                        : isLocationMissing
+                                            ? 'Select Delivery Location →'
+                                            : (_selectedPaymentMethod == 'payu'
+                                                ? 'Proceed to Pay →'
+                                                : (isPickup ? 'Confirm Pickup →' : 'Place Order →')),
                                     style: TextStyle(
                                       fontWeight: FontWeight.w800,
-                                      color: isCheckoutBlocked ? Colors.grey.shade800 : Colors.white,
+                                      color: (isCheckoutBlocked && auth.isAuthenticated && !isLocationMissing) ? Colors.grey.shade800 : Colors.white,
                                     ),
                                   ),
                           ),

@@ -147,10 +147,6 @@ const getAvailableStoresHandler = async (req, res, next) => {
         }
       }
 
-      if (!isWithinRadius && type === 'delivery') {
-        outOfStockItems.push(`Address is outside delivery radius (${distKm.toFixed(1)} km > ${maxDeliveryRadius} km)`);
-      }
-
       const isDeliverable = type === 'pickup' ? true : isWithinRadius;
       const isStoreFullyEligible = isAvailable && isDeliverable;
 

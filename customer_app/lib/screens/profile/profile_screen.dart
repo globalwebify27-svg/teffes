@@ -1027,13 +1027,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
               const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.surfaceSubtle, foregroundColor: AppColors.textPrimary),
-                  onPressed: () => Navigator.pop(ctx),
-                  child: const Text('Close Receipt', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: const Color(0xFF047857),
+                        side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.star_rate_rounded, size: 16, color: Color(0xFFD97706)),
+                      label: const Text('Rate on Play Store', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openPlayStoreRating();
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.surfaceSubtle,
+                        foregroundColor: AppColors.textPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1041,6 +1067,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     },
   );
+  }
+
+  /// Opens Google Play Store page for rating the app
+  Future<void> _openPlayStoreRating() async {
+    const packageName = 'com.teffes.com';
+    final marketUri = Uri.parse('market://details?id=$packageName');
+    final webUri = Uri.parse('https://play.google.com/store/apps/details?id=$packageName');
+    try {
+      if (await canLaunchUrl(marketUri)) {
+        await launchUrl(marketUri, mode: LaunchMode.externalApplication);
+        return;
+      }
+      if (await canLaunchUrl(webUri)) {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+        return;
+      }
+    } catch (_) {
+      try {
+        await launchUrl(webUri, mode: LaunchMode.externalApplication);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not open Play Store. Please search for TeFFe\'s on Google Play.')),
+          );
+        }
+      }
+    }
   }
 
   void _confirmLogout(BuildContext context, AuthProvider auth) {
@@ -1739,15 +1792,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     },
                                   )
                                 else
-                                  TextButton.icon(
-                                    style: TextButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    icon: const Icon(Icons.receipt_long_rounded, size: 14, color: AppColors.textSecondary),
-                                    label: const Text('View Receipt', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
-                                    onPressed: () => _showOrderReceiptModal(context, ord),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      TextButton.icon(
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                          foregroundColor: const Color(0xFF047857),
+                                        ),
+                                        icon: const Icon(Icons.thumb_up_alt_outlined, size: 13, color: Color(0xFF059669)),
+                                        label: const Text('Rate Us', style: TextStyle(fontSize: 11.5, color: Color(0xFF047857), fontWeight: FontWeight.bold)),
+                                        onPressed: _openPlayStoreRating,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      TextButton.icon(
+                                        style: TextButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                                          minimumSize: Size.zero,
+                                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        ),
+                                        icon: const Icon(Icons.receipt_long_rounded, size: 14, color: AppColors.textSecondary),
+                                        label: const Text('View Receipt', style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary, fontWeight: FontWeight.bold)),
+                                        onPressed: () => _showOrderReceiptModal(context, ord),
+                                      ),
+                                    ],
                                   ),
                               ],
                             ),

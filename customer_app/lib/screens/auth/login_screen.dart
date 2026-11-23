@@ -16,23 +16,12 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> {
+class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   final TextEditingController _phoneController = TextEditingController();
 
-  // 6 Separate Controllers and FocusNodes for the 6-Digit Firebase SMS Code
-  final TextEditingController _box1 = TextEditingController();
-  final TextEditingController _box2 = TextEditingController();
-  final TextEditingController _box3 = TextEditingController();
-  final TextEditingController _box4 = TextEditingController();
-  final TextEditingController _box5 = TextEditingController();
-  final TextEditingController _box6 = TextEditingController();
-
-  final FocusNode _fn1 = FocusNode();
-  final FocusNode _fn2 = FocusNode();
-  final FocusNode _fn3 = FocusNode();
-  final FocusNode _fn4 = FocusNode();
-  final FocusNode _fn5 = FocusNode();
-  final FocusNode _fn6 = FocusNode();
+  // Unified 6-Digit OTP Controller & FocusNode for Native OS Autofill, Clipboard, & SMS Auto-Verification
+  final TextEditingController _otpController = TextEditingController();
+  final FocusNode _otpFocusNode = FocusNode();
 
   bool _isOtpSent = false;
   String? _verificationId;
@@ -78,22 +67,51 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _countdownTimer?.cancel();
     _phoneController.dispose();
-    _box1.dispose();
-    _box2.dispose();
-    _box3.dispose();
-    _box4.dispose();
-    _box5.dispose();
-    _box6.dispose();
-    _fn1.dispose();
-    _fn2.dispose();
-    _fn3.dispose();
-    _fn4.dispose();
-    _fn5.dispose();
-    _fn6.dispose();
+    _otpController.dispose();
+    _otpFocusNode.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _isOtpSent && _currentOtp.length < 6) {
+      _checkClipboardForOtp();
+    }
+  }
+
+  /// Automatically reads and populates OTP if user copied the code from SMS/Notification bar
+  Future<void> _checkClipboardForOtp() async {
+    try {
+      final data = await Clipboard.getData(Clipboard.kTextPlain);
+      final text = data?.text?.trim() ?? '';
+      if (text.isEmpty) return;
+      final match = RegExp(r'\b\d{6}\b').firstMatch(text);
+      if (match != null) {
+        final code = match.group(0)!;
+        if (code != _currentOtp && code.length == 6) {
+          _fillOtp(code);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text('Auto-detected OTP $code from SMS'),
+                backgroundColor: const Color(0xFF065F46),
+                duration: const Duration(seconds: 2),
+              ),
+            );
+          }
+        }
+      }
+    } catch (_) {}
   }
 
   void _startResendTimer() {
@@ -111,30 +129,23 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _fillOtp(String code) {
     final clean = code.replaceAll(RegExp(r'\D'), '');
-    if (clean.length >= 6) {
-      _box1.text = clean[0];
-      _box2.text = clean[1];
-      _box3.text = clean[2];
-      _box4.text = clean[3];
-      _box5.text = clean[4];
-      _box6.text = clean[5];
-      _fn6.requestFocus();
+    if (clean.isNotEmpty) {
+      final safeCode = clean.length > 6 ? clean.substring(0, 6) : clean;
+      _otpController.text = safeCode;
+      _otpController.selection = TextSelection.fromPosition(TextPosition(offset: safeCode.length));
       setState(() {});
+      if (safeCode.length == 6) {
+        _handleVerifyOtp();
+      }
     }
   }
 
   void _clearOtpBoxes() {
-    _box1.clear();
-    _box2.clear();
-    _box3.clear();
-    _box4.clear();
-    _box5.clear();
-    _box6.clear();
+    _otpController.clear();
     setState(() {});
   }
 
-  String get _currentOtp =>
-      '${_box1.text}${_box2.text}${_box3.text}${_box4.text}${_box5.text}${_box6.text}'.trim();
+  String get _currentOtp => _otpController.text.trim();
 
   Future<void> _handleSendOtp({bool isResend = false}) async {
     final cleanPhone = _phoneController.text.replaceAll(RegExp(r'\D'), '');
@@ -172,6 +183,10 @@ class _LoginScreenState extends State<LoginScreen> {
         });
         _clearOtpBoxes();
         _startResendTimer();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _otpFocusNode.requestFocus();
+          _checkClipboardForOtp();
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Row(
@@ -197,9 +212,11 @@ class _LoginScreenState extends State<LoginScreen> {
       },
       onAutoCompleted: (credential) async {
         if (!mounted) return;
-        final success = await auth.verifyFirebaseOtp(
-          verificationId: _verificationId ?? '',
-          smsCode: credential.smsCode ?? '',
+        if (credential.smsCode != null && credential.smsCode!.isNotEmpty) {
+          _fillOtp(credential.smsCode!);
+        }
+        final success = await auth.signInWithCredential(
+          credential,
           phone: cleanPhone,
         );
         if (success && mounted) {
@@ -308,85 +325,6 @@ class _LoginScreenState extends State<LoginScreen> {
     Navigator.of(context).pop(true);
   }
 
-  Widget _buildOtpSquare({
-    required TextEditingController controller,
-    required FocusNode focusNode,
-    FocusNode? nextFocus,
-    FocusNode? prevFocus,
-  }) {
-    final hasValue = controller.text.isNotEmpty;
-    final hasFocus = focusNode.hasFocus;
-
-    return Container(
-      width: 44,
-      height: 52,
-      decoration: BoxDecoration(
-        color: hasFocus ? Colors.white : AppColors.surfaceInput,
-        borderRadius: AppDimensions.roundedMd,
-        border: Border.all(
-          color: hasFocus
-              ? AppColors.primaryMaroon
-              : (hasValue ? AppColors.textPrimary : AppColors.borderHairline),
-          width: hasFocus ? 2.0 : 1.2,
-        ),
-        boxShadow: hasFocus
-            ? [
-                BoxShadow(
-                  color: AppColors.primaryMaroon.withValues(alpha: 0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ]
-            : null,
-      ),
-      child: RawKeyboardListener(
-        focusNode: FocusNode(),
-        onKey: (event) {
-          if (event is RawKeyDownEvent &&
-              event.logicalKey == LogicalKeyboardKey.backspace &&
-              controller.text.isEmpty &&
-              prevFocus != null) {
-            prevFocus.requestFocus();
-          }
-        },
-        child: TextField(
-          controller: controller,
-          focusNode: focusNode,
-          keyboardType: TextInputType.number,
-          textAlign: TextAlign.center,
-          maxLength: 1,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w900,
-            color: AppColors.textPrimary,
-          ),
-          decoration: const InputDecoration(
-            counterText: '',
-            border: InputBorder.none,
-            enabledBorder: InputBorder.none,
-            focusedBorder: InputBorder.none,
-            contentPadding: EdgeInsets.zero,
-          ),
-          inputFormatters: [
-            FilteringTextInputFormatter.digitsOnly,
-          ],
-          onChanged: (val) {
-            if (val.isNotEmpty) {
-              if (nextFocus != null) {
-                nextFocus.requestFocus();
-              } else {
-                focusNode.unfocus();
-                if (_currentOtp.length == 6) {
-                  _handleVerifyOtp();
-                }
-              }
-            }
-            setState(() {});
-          },
-        ),
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -616,45 +554,87 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 12),
 
-                // 6 Separate Square Input Boxes
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _buildOtpSquare(
-                      controller: _box1,
-                      focusNode: _fn1,
-                      nextFocus: _fn2,
+                // 6-Digit OTP Input with OS Autofill, Keyboard Suggestions & Clipboard Detection
+                AutofillGroup(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _otpFocusNode.requestFocus(),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Real underlying input field hooked to Android/iOS SMS Autofill framework
+                        Opacity(
+                          opacity: 0.0,
+                          child: SizedBox(
+                            height: 52,
+                            child: TextField(
+                              controller: _otpController,
+                              focusNode: _otpFocusNode,
+                              keyboardType: TextInputType.number,
+                              autofillHints: const [AutofillHints.oneTimeCode],
+                              maxLength: 6,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.digitsOnly,
+                                LengthLimitingTextInputFormatter(6),
+                              ],
+                              onChanged: (val) {
+                                setState(() {});
+                                if (val.length == 6) {
+                                  _handleVerifyOtp();
+                                }
+                              },
+                            ),
+                          ),
+                        ),
+
+                        // Visual 6-Square Layout
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: List.generate(6, (index) {
+                            final text = _otpController.text;
+                            final char = index < text.length ? text[index] : '';
+                            final isFocused = _otpFocusNode.hasFocus &&
+                                (index == text.length || (index == 5 && text.length == 6));
+                            final hasValue = char.isNotEmpty;
+
+                            return Container(
+                              width: 44,
+                              height: 52,
+                              decoration: BoxDecoration(
+                                color: isFocused ? Colors.white : AppColors.surfaceInput,
+                                borderRadius: AppDimensions.roundedMd,
+                                border: Border.all(
+                                  color: isFocused
+                                      ? AppColors.primaryMaroon
+                                      : (hasValue ? AppColors.textPrimary : AppColors.borderHairline),
+                                  width: isFocused ? 2.0 : 1.2,
+                                ),
+                                boxShadow: isFocused
+                                    ? [
+                                        BoxShadow(
+                                          color: AppColors.primaryMaroon.withValues(alpha: 0.15),
+                                          blurRadius: 8,
+                                          offset: const Offset(0, 2),
+                                        ),
+                                      ]
+                                    : null,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  char,
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w900,
+                                    color: AppColors.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      ],
                     ),
-                    _buildOtpSquare(
-                      controller: _box2,
-                      focusNode: _fn2,
-                      nextFocus: _fn3,
-                      prevFocus: _fn1,
-                    ),
-                    _buildOtpSquare(
-                      controller: _box3,
-                      focusNode: _fn3,
-                      nextFocus: _fn4,
-                      prevFocus: _fn2,
-                    ),
-                    _buildOtpSquare(
-                      controller: _box4,
-                      focusNode: _fn4,
-                      nextFocus: _fn5,
-                      prevFocus: _fn3,
-                    ),
-                    _buildOtpSquare(
-                      controller: _box5,
-                      focusNode: _fn5,
-                      nextFocus: _fn6,
-                      prevFocus: _fn4,
-                    ),
-                    _buildOtpSquare(
-                      controller: _box6,
-                      focusNode: _fn6,
-                      prevFocus: _fn5,
-                    ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 

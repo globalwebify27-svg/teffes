@@ -65,6 +65,7 @@ interface StoreOption {
   deliveryEnabled?: boolean;
   isOpen?: boolean;
   isAvailable?: boolean;
+  isInventoryAvailable?: boolean;
   stockStatus?: string;
   outOfStockItems?: string[];
   outOfStockProductIds?: string[];
@@ -513,6 +514,7 @@ export default function CartDrawer() {
   const storeDeliveryRadiusKm = selectedStore?.deliveryRadiusKm ?? 10;
   const isOutOfDeliveryRadius = Boolean(
     fulfillmentType === "delivery" &&
+    isLocationSet &&
     selectedStore &&
     (
       (selectedStore as any).isWithinRadius === false ||
@@ -629,14 +631,16 @@ export default function CartDrawer() {
     return false;
   };
 
-  const hasOutOfStockItems = items.some(isCartItemOutOfStock) || (Boolean(selectedStore) && selectedStore?.isAvailable === false);
+  const hasOutOfStockItems = items.some(isCartItemOutOfStock) || (Boolean(selectedStore) && selectedStore?.isInventoryAvailable === false);
 
-  // Overall check if checkout should be disabled (never removes the button, only disables it)
+  // Overall check if checkout should be genuinely blocked by stock, operational status, minimum order, or out-of-range address
+  // If not logged in, user is never blocked (button allows clicking "Login to proceed")
+  // If delivery location is missing, user is never blocked (button allows clicking "Select Delivery Location")
   const isCheckoutBlocked = Boolean(
     hasOutOfStockItems ||
-    isOutOfDeliveryRadius ||
     !isStoreOperational ||
-    isUnderMinOrder
+    isUnderMinOrder ||
+    (isLoggedIn && isLocationSet && isOutOfDeliveryRadius)
   );
 
   // Tip handler
@@ -761,13 +765,18 @@ export default function CartDrawer() {
       return;
     }
 
+    if (fulfillmentType === "delivery" && !isLocationSet && !selectedAddressId) {
+      openLocationModal();
+      return;
+    }
+
     const outOfStockItem = items.find(isCartItemOutOfStock);
     if (outOfStockItem) {
       toast.error(`"${outOfStockItem.product.name}" is out of stock. Please remove it from your cart before proceeding.`, "Out of Stock");
       return;
     }
 
-    if (selectedStore && selectedStore.isAvailable === false) {
+    if (selectedStore && selectedStore.isInventoryAvailable === false) {
       toast.error(`Selected store (${selectedStore.name}) is currently out of stock for items in your cart.`, "Store Out of Stock");
       return;
     }
@@ -1335,14 +1344,14 @@ export default function CartDrawer() {
                                   className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
                                     isOutOfDeliveryRadius
                                       ? "text-amber-800 bg-amber-100/90 border border-amber-200"
-                                      : selectedStore.isAvailable !== false
+                                      : selectedStore.isInventoryAvailable !== false
                                       ? "text-emerald-800 bg-emerald-100/90"
                                       : "text-red-700 bg-red-100"
                                   }`}
                                 >
                                   {isOutOfDeliveryRadius
                                     ? "Outside Range"
-                                    : selectedStore.isAvailable !== false
+                                    : selectedStore.isInventoryAvailable !== false
                                     ? "Nearest • In Stock"
                                     : "Out of Stock"}
                                 </span>
@@ -2394,15 +2403,29 @@ export default function CartDrawer() {
                       transition: "all 150ms ease",
                     }}
                   >
-                    <span>
-                      {isLoggedIn
-                        ? fulfillmentType === "pickup"
-                          ? "Proceed to Store Pickup"
-                          : "Proceed to Checkout"
-                        : "Login to proceed"}
-                    </span>
-                    <span>•</span>
-                    <span>₹{finalPayable}</span>
+                    {!isLoggedIn ? (
+                      <>
+                        <span className="material-symbols-outlined text-[18px]">login</span>
+                        <span>Login to proceed</span>
+                      </>
+                    ) : fulfillmentType === "delivery" && !isLocationSet && !selectedAddressId ? (
+                      <>
+                        <span className="material-symbols-outlined text-[18px]">location_on</span>
+                        <span>Select Delivery Location</span>
+                      </>
+                    ) : fulfillmentType === "pickup" ? (
+                      <>
+                        <span>Proceed to Store Pickup</span>
+                        <span>•</span>
+                        <span>₹{finalPayable}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Proceed to Checkout</span>
+                        <span>•</span>
+                        <span>₹{finalPayable}</span>
+                      </>
+                    )}
                   </button>
 
                   <div className="text-center font-body-sm text-slate-subtle text-[11px] flex items-center justify-center gap-1">
