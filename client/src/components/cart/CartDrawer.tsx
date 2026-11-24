@@ -274,16 +274,21 @@ export default function CartDrawer() {
         activeAddr?.pincode,
       ].filter(Boolean).join(" ");
 
-      const validLat = (typeof activeAddr?.lat === "number" && !isNaN(activeAddr.lat))
-        ? activeAddr.lat
-        : (isLiveGps && typeof currentLocation?.lat === "number" ? currentLocation.lat : undefined);
-      const validLng = (typeof activeAddr?.lng === "number" && !isNaN(activeAddr.lng))
-        ? activeAddr.lng
-        : (isLiveGps && typeof currentLocation?.lng === "number" ? currentLocation.lng : undefined);
-      const rawPincode = activeAddr?.pincode || (fullAddressStr ? (fullAddressStr.match(/\b\d{6}\b/) || [])[0] : undefined);
+      // Fallback to currentLocation.fullAddress if addrList has not loaded yet on refresh
+      let effectiveAddress = fullAddressStr;
+      if (!effectiveAddress && currentLocation?.isSet && currentLocation?.fullAddress) {
+        effectiveAddress = currentLocation.fullAddress;
+      }
+
+      const rawPincode = activeAddr?.pincode || (effectiveAddress ? (effectiveAddress.match(/\b\d{6}\b/) || [])[0] : undefined);
       const activePincode = rawPincode ? String(rawPincode).replace(/\D/g, "") : undefined;
 
-      const effectiveAddress = fullAddressStr || (isLiveGps ? currentLocation.fullAddress : "");
+      const validLat = (typeof activeAddr?.lat === "number" && !isNaN(activeAddr.lat))
+        ? activeAddr.lat
+        : (typeof currentLocation?.lat === "number" && !isNaN(currentLocation.lat) ? currentLocation.lat : undefined);
+      const validLng = (typeof activeAddr?.lng === "number" && !isNaN(activeAddr.lng))
+        ? activeAddr.lng
+        : (typeof currentLocation?.lng === "number" && !isNaN(currentLocation.lng) ? currentLocation.lng : undefined);
 
       const payload = {
         type: fulfillmentType,
@@ -742,6 +747,9 @@ export default function CartDrawer() {
           if (currentLocation?.addressId) {
             clearLocation();
           }
+        } else {
+          // Re-evaluate with loaded database addresses
+          fetchAvailableStores(fetchedAddrs);
         }
       }
     } catch (err) {
@@ -843,7 +851,7 @@ export default function CartDrawer() {
       return;
     }
 
-    if (isOrderingForSomeoneElse) {
+    if (fulfillmentType === "delivery" && isOrderingForSomeoneElse) {
       const cleanReceiver = receiverPhone.replace(/\D/g, "");
       if (cleanReceiver.length !== 10) {
         toast.warning("Please enter a valid 10-digit mobile number for the receiver.", "Receiver Phone Required");
@@ -912,7 +920,7 @@ export default function CartDrawer() {
       return;
     }
 
-    if (isOrderingForSomeoneElse) {
+    if (fulfillmentType === "delivery" && isOrderingForSomeoneElse) {
       const cleanReceiver = receiverPhone.replace(/\D/g, "");
       if (cleanReceiver.length !== 10) {
         toast.warning("Please enter a valid 10-digit mobile number for the receiver.", "Receiver Phone Required");
@@ -959,9 +967,9 @@ export default function CartDrawer() {
         expressFee: expressFee,
         tip: effectiveTip,
         deliveryInstruction: (fulfillmentType === "pickup" ? pickupNote : deliveryNote).trim() || undefined,
-        receiverPhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
-        alternatePhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
-        receiverName: isOrderingForSomeoneElse && receiverName ? receiverName.trim() : undefined,
+        receiverPhone: fulfillmentType === "delivery" && isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        alternatePhone: fulfillmentType === "delivery" && isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        receiverName: fulfillmentType === "delivery" && isOrderingForSomeoneElse && receiverName ? receiverName.trim() : undefined,
         paymentMethod: selectedPayment === "wallet" ? "wallet" : fulfillmentType === "pickup" ? "Pay at Store Counter" : "Cash on Delivery",
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
@@ -997,7 +1005,7 @@ export default function CartDrawer() {
       return;
     }
 
-    if (isOrderingForSomeoneElse) {
+    if (fulfillmentType === "delivery" && isOrderingForSomeoneElse) {
       const cleanReceiver = receiverPhone.replace(/\D/g, "");
       if (cleanReceiver.length !== 10) {
         toast.warning("Please enter a valid 10-digit mobile number for the receiver.", "Receiver Phone Required");
@@ -1045,9 +1053,9 @@ export default function CartDrawer() {
         expressFee: expressFee,
         tip: effectiveTip,
         deliveryInstruction: (fulfillmentType === "pickup" ? pickupNote : deliveryNote).trim() || undefined,
-        receiverPhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
-        alternatePhone: isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
-        receiverName: isOrderingForSomeoneElse && receiverName ? receiverName.trim() : undefined,
+        receiverPhone: fulfillmentType === "delivery" && isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        alternatePhone: fulfillmentType === "delivery" && isOrderingForSomeoneElse && receiverPhone ? receiverPhone.replace(/\D/g, "").slice(-10) : undefined,
+        receiverName: fulfillmentType === "delivery" && isOrderingForSomeoneElse && receiverName ? receiverName.trim() : undefined,
         couponCode: appliedCoupon?.code,
         discountAmount: appliedCoupon?.discountValue || 0,
       };
@@ -1131,39 +1139,6 @@ export default function CartDrawer() {
               </button>
             </div>
 
-            {/* ─── TOP TABS: DELIVERY VS STORE PICKUP ──────────────────────────── */}
-            <div className="bg-[#f8f6f2] px-5 py-2.5 border-b border-gray-200 shrink-0">
-              <div className="bg-gray-200/80 p-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
-                {/* Tab 1: Normal Delivery Flow (Auto-selected by default) */}
-                <button
-                  type="button"
-                  id="tab-delivery-flow"
-                  onClick={() => setFulfillmentType("delivery")}
-                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "delivery"
-                    ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
-                    : "bg-transparent text-slate-body hover:text-on-surface"
-                    }`}
-                >
-                  <span className="material-symbols-outlined text-[18px]">two_wheeler</span>
-                  <span>Home Delivery</span>
-                </button>
-
-                {/* Tab 2: Store Pickup Flow */}
-                <button
-                  type="button"
-                  id="tab-pickup-flow"
-                  onClick={() => setFulfillmentType("pickup")}
-                  className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "pickup"
-                    ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
-                    : "bg-transparent text-slate-body hover:text-on-surface"
-                    }`}
-                >
-                  <span className="material-symbols-outlined text-[18px]">storefront</span>
-                  <span>Store Pickup</span>
-                </button>
-              </div>
-            </div>
-
             {items.length === 0 ? (
               /* Empty Cart */
               <div className="flex-1 p-8 flex flex-col items-center justify-center text-center">
@@ -1180,86 +1155,115 @@ export default function CartDrawer() {
               </div>
             ) : (
               <>
-                {/* ─── FULFILLMENT BANNER ─── */}
-                {fulfillmentType === "delivery" ? (
-                  activeAddress ? (
-                    /* Delivery Address Block (with CHANGE button and active customer address) */
-                    <div className="bg-surface-container-low px-5 py-3 border-b border-gray-200/80 flex items-start gap-3 shrink-0">
-                      <span className="material-symbols-outlined text-primary text-[22px] mt-0.5 shrink-0">location_on</span>
-                      <div className="flex-1 text-left min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className="font-label-badge uppercase text-tertiary font-bold tracking-wider text-[10px]">
-                            Deliver to {activeAddress.tag} (90 Mins)
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => openLocationModal()}
-                            className="text-primary font-black text-[11.5px] uppercase tracking-wider hover:underline bg-transparent border-none cursor-pointer py-0.5 px-2 rounded-md hover:bg-primary/10 transition-colors"
-                          >
-                            CHANGE
-                          </button>
-                        </div>
-                        <p className="font-label-md text-on-surface font-semibold text-[13px] leading-tight mt-0.5 truncate">
-                          {activeAddress.line1.includes(activeAddress.city)
-                            ? activeAddress.line1
-                            : `${activeAddress.line1}${activeAddress.line2 ? `, ${activeAddress.line2}` : ""}, ${activeAddress.city}`}
-                        </p>
-                        <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5 truncate">
-                          {activeAddress.pincode ? `Pincode: ${activeAddress.pincode} • ${storeDeliveryRadiusKm}km Delivery Radius` : `${storeDeliveryRadiusKm}km Delivery Radius`}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    /* No Saved Address Banner */
-                    <div className="bg-primary/5 px-5 py-3 border-b border-primary/20 flex items-center justify-between gap-3 shrink-0">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                          <span className="material-symbols-outlined text-[20px]">add_location_alt</span>
-                        </div>
-                        <div className="min-w-0">
-                          <span className="font-label-badge uppercase text-primary font-bold tracking-wider text-[10px] block">
-                            Delivery Address Needed
-                          </span>
-                          <p className="font-label-md text-on-surface font-semibold text-[12px] leading-tight mt-0.5 truncate">
-                            Please add a delivery address to order
+                {/* Scrollable Body: Everything scrolls smoothly from top to bottom */}
+                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                  {/* ─── TOP TABS: DELIVERY VS STORE PICKUP (Scrollable) ─────────────── */}
+                  <div className="bg-gray-200/80 p-1 rounded-xl flex items-center gap-1.5 shadow-2xs">
+                    {/* Tab 1: Normal Delivery Flow (Auto-selected by default) */}
+                    <button
+                      type="button"
+                      id="tab-delivery-flow"
+                      onClick={() => setFulfillmentType("delivery")}
+                      className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-2 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "delivery"
+                        ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
+                        : "bg-transparent text-slate-body hover:text-on-surface"
+                        }`}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">two_wheeler</span>
+                      <span>Home Delivery</span>
+                    </button>
+
+                    {/* Tab 2: Store Pickup Flow */}
+                    <button
+                      type="button"
+                      id="tab-pickup-flow"
+                      onClick={() => setFulfillmentType("pickup")}
+                      className={`flex-1 py-2 px-3 rounded-lg flex items-center justify-center gap-1.5 font-bold text-[13px] transition-all border-none cursor-pointer ${fulfillmentType === "pickup"
+                        ? "bg-white text-primary shadow-xs ring-1 ring-black/5"
+                        : "bg-transparent text-slate-body hover:text-on-surface"
+                        }`}
+                    >
+                      <span className="material-symbols-outlined text-[18px]">storefront</span>
+                      <span>Store Pickup</span>
+                    </button>
+                  </div>
+
+                  {/* ─── FULFILLMENT BANNER / ADDRESS CARD (Scrollable) ─── */}
+                  {fulfillmentType === "delivery" ? (
+                    activeAddress ? (
+                      /* Delivery Address Block (with CHANGE button and active customer address) */
+                      <div className="bg-white p-3.5 rounded-2xl border border-gray-200 shadow-2xs flex items-start gap-3">
+                        <span className="material-symbols-outlined text-primary text-[22px] mt-0.5 shrink-0">location_on</span>
+                        <div className="flex-1 text-left min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className="font-label-badge uppercase text-tertiary font-bold tracking-wider text-[10px]">
+                              Deliver to {activeAddress.tag} (90 Mins)
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => openLocationModal()}
+                              className="text-primary font-black text-[11.5px] uppercase tracking-wider hover:underline bg-transparent border-none cursor-pointer py-0.5 px-2 rounded-md hover:bg-primary/10 transition-colors"
+                            >
+                              CHANGE
+                            </button>
+                          </div>
+                          <p className="font-label-md text-on-surface font-semibold text-[13px] leading-tight mt-0.5 truncate">
+                            {activeAddress.line1.includes(activeAddress.city)
+                              ? activeAddress.line1
+                              : `${activeAddress.line1}${activeAddress.line2 ? `, ${activeAddress.line2}` : ""}, ${activeAddress.city}`}
+                          </p>
+                          <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5 truncate">
+                            {activeAddress.pincode ? `Pincode: ${activeAddress.pincode} • ${storeDeliveryRadiusKm}km Delivery Radius` : `${storeDeliveryRadiusKm}km Delivery Radius`}
                           </p>
                         </div>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => openLocationModal()}
-                        className="bg-primary hover:bg-primary-dark text-white font-bold text-[11px] uppercase tracking-wider py-1.5 px-3 rounded-lg border-none cursor-pointer shadow-xs transition-colors shrink-0"
-                      >
-                        + ADD
-                      </button>
-                    </div>
-                  )
-                ) : (
-                  /* Store Pickup Selected Banner */
-                  <div className="bg-emerald-50/90 px-5 py-3 border-b border-emerald-200/70 flex items-start gap-3 shrink-0">
-                    <span className="material-symbols-outlined text-emerald-700 text-[22px] mt-0.5 shrink-0">storefront</span>
-                    <div className="flex-1 text-left">
-                      <div className="flex items-center justify-between">
-                        <span className="font-label-badge uppercase text-emerald-800 font-extrabold tracking-wider text-[10px]">
-                          Pickup At Store (Zero Fee)
-                        </span>
-                        <span className="font-label-badge text-[11px] text-emerald-800 font-black bg-emerald-100 px-2 py-0.5 rounded-full">
-                          Ready in 15 mins
-                        </span>
+                    ) : (
+                      /* No Saved Address Banner */
+                      <div className="bg-primary/5 p-3.5 rounded-2xl border border-primary/20 flex items-center justify-between gap-3 shadow-2xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                            <span className="material-symbols-outlined text-[20px]">add_location_alt</span>
+                          </div>
+                          <div className="min-w-0">
+                            <span className="font-label-badge uppercase text-primary font-bold tracking-wider text-[10px] block">
+                              Delivery Address Needed
+                            </span>
+                            <p className="font-label-md text-on-surface font-semibold text-[12px] leading-tight mt-0.5 truncate">
+                              Please add a delivery address to order
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => openLocationModal()}
+                          className="bg-primary hover:bg-primary-dark text-white font-bold text-[11px] uppercase tracking-wider py-1.5 px-3 rounded-lg border-none cursor-pointer shadow-xs transition-colors shrink-0"
+                        >
+                          + ADD
+                        </button>
                       </div>
-                      <p className="font-label-md text-on-surface font-extrabold text-[13px] leading-tight mt-0.5">
-                        {selectedStore?.name}
-                      </p>
-                      <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5">
-                        {selectedStore?.address}
-                      </p>
+                    )
+                  ) : (
+                    /* Store Pickup Selected Banner */
+                    <div className="bg-emerald-50/90 p-3.5 rounded-2xl border border-emerald-200/70 flex items-start gap-3 shadow-2xs">
+                      <span className="material-symbols-outlined text-emerald-700 text-[22px] mt-0.5 shrink-0">storefront</span>
+                      <div className="flex-1 text-left">
+                        <div className="flex items-center justify-between">
+                          <span className="font-label-badge uppercase text-emerald-800 font-extrabold tracking-wider text-[10px]">
+                            Pickup At Store (Zero Fee)
+                          </span>
+                          <span className="font-label-badge text-[11px] text-emerald-800 font-black bg-emerald-100 px-2 py-0.5 rounded-full">
+                            Ready in 15 mins
+                          </span>
+                        </div>
+                        <p className="font-label-md text-on-surface font-extrabold text-[13px] leading-tight mt-0.5">
+                          {selectedStore?.name}
+                        </p>
+                        <p className="font-body-sm text-slate-body text-[11px] leading-tight mt-0.5">
+                          {selectedStore?.address}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-
-
-                {/* Scrollable Body: Stores List OR Delivery Speed + Items + Instructions */}
-                <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+                  )}
                   {/* ─── TAB 2 CONTENT: STORE SELECTION LIST (PICKUP) ─── */}
                   {fulfillmentType === "pickup" && (
                     <div className="space-y-2.5">
@@ -1434,6 +1438,62 @@ export default function CartDrawer() {
                               <p className="text-[11px] text-amber-800 leading-relaxed mt-1">
                                 Our fulfilling store hub is currently paused and not accepting delivery orders. Please check back shortly.
                               </p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* ─── ORDERING FOR SOMEONE ELSE / ALTERNATE PHONE (DELIVERY ONLY) ─── */}
+                      <div className="bg-white rounded-2xl border border-gray-200 p-3.5 space-y-2.5 shadow-2xs">
+                        <label className="flex items-center justify-between cursor-pointer select-none">
+                          <div className="flex items-center gap-2">
+                            <span className="material-symbols-outlined text-primary text-[19px]">contact_phone</span>
+                            <div>
+                              <span className="font-label-md font-bold text-on-surface text-[13px] block">
+                                Ordering for someone else?
+                              </span>
+                              <span className="text-[11px] text-gray-500 block">
+                                Add alternate contact / receiver number
+                              </span>
+                            </div>
+                          </div>
+                          <input
+                            type="checkbox"
+                            checked={isOrderingForSomeoneElse}
+                            onChange={(e) => setIsOrderingForSomeoneElse(e.target.checked)}
+                            className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 cursor-pointer accent-[#91000a]"
+                          />
+                        </label>
+
+                        {isOrderingForSomeoneElse && (
+                          <div className="pt-2 border-t border-gray-100 space-y-2">
+                            <div>
+                              <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                                Receiver Mobile Number <span className="text-red-500">*</span>
+                              </label>
+                              <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 px-3 focus-within:border-primary focus-within:bg-white transition-all">
+                                <span className="text-xs font-bold text-gray-500 mr-2">+91</span>
+                                <input
+                                  type="tel"
+                                  maxLength={10}
+                                  value={receiverPhone}
+                                  onChange={(e) => setReceiverPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
+                                  placeholder="10-digit mobile number"
+                                  className="w-full py-2 bg-transparent text-xs text-on-surface outline-none font-medium"
+                                />
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-[11px] font-bold text-gray-700 mb-1">
+                                Receiver Name <span className="text-red-500">*</span>
+                              </label>
+                              <input
+                                type="text"
+                                value={receiverName}
+                                onChange={(e) => setReceiverName(e.target.value)}
+                                placeholder="Family member / friend's name"
+                                className="w-full p-2 bg-gray-50 rounded-xl border border-gray-200 text-xs text-on-surface outline-none focus:border-primary focus:bg-white transition-all"
+                              />
                             </div>
                           </div>
                         )}
@@ -2040,62 +2100,6 @@ export default function CartDrawer() {
                     </div>
                   )}
 
-                  {/* ─── ORDERING FOR SOMEONE ELSE / ALTERNATE PHONE ─── */}
-                  <div className="bg-white rounded-2xl border border-gray-200 p-3.5 space-y-2.5 shadow-2xs">
-                    <label className="flex items-center justify-between cursor-pointer select-none">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary text-[19px]">contact_phone</span>
-                        <div>
-                          <span className="font-label-md font-bold text-on-surface text-[13px] block">
-                            Ordering for someone else?
-                          </span>
-                          <span className="text-[11px] text-gray-500 block">
-                            Add alternate contact / receiver number
-                          </span>
-                        </div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        checked={isOrderingForSomeoneElse}
-                        onChange={(e) => setIsOrderingForSomeoneElse(e.target.checked)}
-                        className="w-4 h-4 rounded text-primary focus:ring-primary border-gray-300 cursor-pointer accent-[#91000a]"
-                      />
-                    </label>
-
-                    {isOrderingForSomeoneElse && (
-                      <div className="pt-2 border-t border-gray-100 space-y-2">
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                            Receiver Mobile Number <span className="text-red-500">*</span>
-                          </label>
-                          <div className="flex items-center rounded-xl border border-gray-200 bg-gray-50 px-3 focus-within:border-primary focus-within:bg-white transition-all">
-                            <span className="text-xs font-bold text-gray-500 mr-2">+91</span>
-                            <input
-                              type="tel"
-                              maxLength={10}
-                              value={receiverPhone}
-                              onChange={(e) => setReceiverPhone(e.target.value.replace(/\D/g, "").slice(0, 10))}
-                              placeholder="10-digit mobile number"
-                              className="w-full py-2 bg-transparent text-xs text-on-surface outline-none font-medium"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-bold text-gray-700 mb-1">
-                            Receiver Name <span className="text-red-500">*</span>
-                          </label>
-                          <input
-                            type="text"
-                            value={receiverName}
-                            onChange={(e) => setReceiverName(e.target.value)}
-                            placeholder="Family member / friend's name"
-                            className="w-full p-2 bg-gray-50 rounded-xl border border-gray-200 text-xs text-on-surface outline-none focus:border-primary focus:bg-white transition-all"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
                   {/* ─── COLLAPSIBLE COUPON / PROMO SECTION (Below instructions, inside scrollable area) ─── */}
                   <div className="bg-white rounded-2xl border border-gray-200 shadow-2xs overflow-hidden transition-all">
                     {/* Collapsible Header Button */}
@@ -2285,110 +2289,109 @@ export default function CartDrawer() {
                         )}
                       </div>
                     )}
-                  </div>
-                </div>
 
-
-
-                {/* ─── BILL SUMMARY & CTA ────────────────────────────────────────── */}
-                <div className="border-t border-gray-200 px-5 py-4 bg-white shadow-[0_-4px_12px_rgba(0,0,0,0.03)] shrink-0">
-                  <div className="flex flex-col gap-1.5 mb-3 font-body-sm text-[13px]">
-                    <div className="flex justify-between text-slate-body">
-                      <span>Item Total</span>
-                      <span>₹{subtotal}</span>
-                    </div>
-
-                    {/* Delivery Fee or Store Pickup Free indicator */}
-                    {fulfillmentType === "delivery" ? (
-                      <>
+                    {/* ─── BILL SUMMARY (Scrollable inside cart) ────────────────────────── */}
+                    <div className="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-2xs mt-2">
+                      <h4 className="font-headline-sm font-extrabold text-on-surface text-sm mb-3">Bill Details</h4>
+                      <div className="flex flex-col gap-2 font-body-sm text-[13px]">
                         <div className="flex justify-between text-slate-body">
-                          <span>Delivery Fee</span>
-                          <span>
-                            {effectiveDeliveryFee === 0 ? (
-                              <strong className="text-tertiary">FREE</strong>
-                            ) : (
-                              `₹${effectiveDeliveryFee}`
-                            )}
-                          </span>
+                          <span>Item Total</span>
+                          <span>₹{subtotal}</span>
                         </div>
-                        {effectiveDeliveryFee > 0 && (
-                          <div className="text-[11.5px] text-primary font-medium">
-                            Add ₹{amountForFreeDelivery} more for FREE delivery
-                          </div>
-                        )}
-                        {selectedTip > 0 && (
-                          <div className="flex justify-between text-[#0284c7] font-semibold">
-                            <span className="flex items-center gap-1">
-                              <span>Delivery Partner Tip</span>
-                              <span className="text-[11px] bg-sky-100 text-sky-800 px-1.5 py-0.2 rounded">100% to partner</span>
+
+                        {/* Delivery Fee or Store Pickup Free indicator */}
+                        {fulfillmentType === "delivery" ? (
+                          <>
+                            <div className="flex justify-between text-slate-body">
+                              <span>Delivery Fee</span>
+                              <span>
+                                {effectiveDeliveryFee === 0 ? (
+                                  <strong className="text-tertiary">FREE</strong>
+                                ) : (
+                                  `₹${effectiveDeliveryFee}`
+                                )}
+                              </span>
+                            </div>
+                            {effectiveDeliveryFee > 0 && (
+                              <div className="text-[11.5px] text-primary font-medium">
+                                Add ₹{amountForFreeDelivery} more for FREE delivery
+                              </div>
+                            )}
+                            {selectedTip > 0 && (
+                              <div className="flex justify-between text-[#0284c7] font-semibold">
+                                <span className="flex items-center gap-1">
+                                  <span>Delivery Partner Tip</span>
+                                  <span className="text-[11px] bg-sky-100 text-sky-800 px-1.5 py-0.2 rounded">100% to partner</span>
+                                </span>
+                                <span>₹{selectedTip}</span>
+                              </div>
+                            )}
+                            {expressFee > 0 && (
+                              <div className="flex justify-between text-slate-body">
+                                <span>Express 60-Min Priority Delivery</span>
+                                <span>+₹{expressFee}</span>
+                              </div>
+                            )}
+                            {rainSurgeFee > 0 && (
+                              <div className="flex justify-between items-center text-amber-900 bg-amber-50/80 px-2 py-1 rounded font-semibold text-xs border border-amber-200/60">
+                                <span className="flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[15px] text-amber-700">rainy</span>
+                                  <span>Bad Weather / Rain Surge</span>
+                                </span>
+                                <span>+₹{rainSurgeFee}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="flex justify-between items-center text-emerald-700 font-bold bg-emerald-50/70 px-2.5 py-1.5 rounded-lg border border-emerald-200/50">
+                            <span className="flex items-center gap-1.5 text-[12.5px]">
+                              <span className="material-symbols-outlined text-[16px]">storefront</span>
+                              <span>Store Self-Pickup Fee</span>
                             </span>
-                            <span>₹{selectedTip}</span>
-                          </div>
-                        )}
-                        {expressFee > 0 && (
-                          <div className="flex justify-between text-slate-body">
-                            <span>Express 60-Min Priority Delivery</span>
-                            <span>+₹{expressFee}</span>
-                          </div>
-                        )}
-                        {rainSurgeFee > 0 && (
-                          <div className="flex justify-between items-center text-amber-900 bg-amber-50/80 px-2 py-1 rounded font-semibold text-xs border border-amber-200/60">
-                            <span className="flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[15px] text-amber-700">rainy</span>
-                              <span>Bad Weather / Rain Surge</span>
+                            <span className="flex items-center gap-1.5">
+                              <span className="line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-gray-400 text-xs font-normal">₹40</span>
+                              <span className="text-emerald-800 font-black">FREE (₹0)</span>
                             </span>
-                            <span>+₹{rainSurgeFee}</span>
                           </div>
                         )}
-                      </>
-                    ) : (
-                      <div className="flex justify-between items-center text-emerald-700 font-bold bg-emerald-50/70 px-2.5 py-1.5 rounded-lg border border-emerald-200/50">
-                        <span className="flex items-center gap-1.5 text-[12.5px]">
-                          <span className="material-symbols-outlined text-[16px]">storefront</span>
-                          <span>Store Self-Pickup Fee</span>
-                        </span>
-                        <span className="flex items-center gap-1.5">
-                          <span className="line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-gray-400 text-xs font-normal">₹40</span>
-                          <span className="text-emerald-800 font-black">FREE (₹0)</span>
-                        </span>
-                      </div>
-                    )}
 
-                    <div className="flex justify-between text-slate-body">
-                      <span>Hygienic Temperature-Controlled Packing</span>
-                      <strong className="text-tertiary">FREE</strong>
+                        <div className="flex justify-between text-slate-body">
+                          <span>Hygienic Temperature-Controlled Packing</span>
+                          <strong className="text-tertiary">FREE</strong>
+                        </div>
+
+                        {discountAmount > 0 && (
+                          <div className="flex justify-between text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded-md">
+                            <span className="flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[15px]">local_offer</span>
+                              <span>Coupon Discount {appliedCoupon ? `(${appliedCoupon.code})` : ""}</span>
+                            </span>
+                            <span>-₹{discountAmount}</span>
+                          </div>
+                        )}
+
+                        <div className="flex justify-between pt-2.5 border-t border-dashed border-gray-200 font-headline-sm font-extrabold text-on-surface text-[15px]">
+                          <span>To Pay</span>
+                          <span className="text-primary font-black text-[17px]">₹{finalPayable}</span>
+                        </div>
+
+                        {/* Delivery Timing Confirmation Line */}
+                        {fulfillmentType === "delivery" && isStoreOperational && (
+                          <div className="mt-1 px-3 py-1.5 rounded-xl bg-[#faf8f5] border border-[#ede8e0] flex items-center justify-between text-xs text-[#524538]">
+                            <span className="flex items-center gap-1.5 font-bold text-gray-700">
+                              <span className="material-symbols-outlined text-[16px] text-primary">schedule</span>
+                              <span>Delivery Timing:</span>
+                            </span>
+                            <span className="font-extrabold text-[#941717]">{resolvedDeliverySlot}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-
-                    {discountAmount > 0 && (
-                      <div className="flex justify-between text-emerald-700 font-bold bg-emerald-50 px-2 py-1 rounded-md">
-                        <span className="flex items-center gap-1">
-                          <span className="material-symbols-outlined text-[15px]">local_offer</span>
-                          <span>Coupon Discount {appliedCoupon ? `(${appliedCoupon.code})` : ""}</span>
-                        </span>
-                        <span>-₹{discountAmount}</span>
-                      </div>
-                    )}
-
-                    <div className="flex justify-between pt-2 border-t border-dashed border-gray-200 font-headline-sm font-extrabold text-on-surface text-[15px]">
-                      <span>To Pay</span>
-                      <span className="text-primary font-black text-[17px]">₹{finalPayable}</span>
-                    </div>
-
-                    {/* Delivery Timing Confirmation Line */}
-                    {fulfillmentType === "delivery" && isStoreOperational && (
-                      <div className="mt-2.5 px-3 py-1.5 rounded-xl bg-[#faf8f5] border border-[#ede8e0] flex items-center justify-between text-xs text-[#524538]">
-                        <span className="flex items-center gap-1.5 font-bold text-gray-700">
-                          <span className="material-symbols-outlined text-[16px] text-primary">schedule</span>
-                          <span>Delivery Timing:</span>
-                        </span>
-                        <span className="font-extrabold text-[#941717]">{resolvedDeliverySlot}</span>
-                      </div>
-                    )}
                   </div>
                 </div>
 
                 {/* ─── STICKY BOTTOM CHECKOUT FOOTER (Always visible at bottom of drawer) ─── */}
-                <div className="bg-white/95 backdrop-blur-md px-5 py-3.5 border-t border-gray-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] shrink-0 space-y-2">
+                <div className="bg-white/95 backdrop-blur-md px-5 py-3 border-t border-gray-200/90 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] shrink-0 space-y-2">
                   {/* Delivery Radius Restriction Warning Banner */}
                   {isOutOfDeliveryRadius && (
                     <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 flex items-start gap-2 text-left">
@@ -2450,7 +2453,7 @@ export default function CartDrawer() {
                       border: isCheckoutBlocked ? "1.5px solid #cbd5e1" : "none",
                       cursor: isCheckoutBlocked ? "not-allowed" : "pointer",
                       width: "100%",
-                      padding: "12px 16px",
+                      padding: "13px 16px",
                       borderRadius: "9999px",
                       fontWeight: 700,
                       fontSize: "14px",
@@ -2487,15 +2490,6 @@ export default function CartDrawer() {
                       </>
                     )}
                   </button>
-
-                  <div className="text-center font-body-sm text-slate-subtle text-[11px] flex items-center justify-center gap-1">
-                    <span className="material-symbols-outlined text-[14px] text-slate-subtle">lock</span>
-                    <span>
-                      {fulfillmentType === "pickup"
-                        ? `Pickup at ${selectedStore?.name || "Store"} | Pay at Counter or Online`
-                        : "100% Secure Checkout | Cash on Delivery / UPI"}
-                    </span>
-                  </div>
                 </div>
               </>
             )}

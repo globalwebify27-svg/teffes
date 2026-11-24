@@ -85,6 +85,8 @@ const getAvailableStoresHandler = async (req, res, next) => {
     }
 
     const hasValidCoords = customerLat !== null && customerLng !== null && !isNaN(customerLat) && !isNaN(customerLng);
+    const isRanchiAddress = (pincodeHint && pincodeHint.startsWith('834')) || /ranchi/i.test(addressHint);
+    const isExplicitNonRanchi = (pincodeHint && pincodeHint.length === 6 && !pincodeHint.startsWith('834')) || /(pune|mumbai|delhi|bangalore|bengaluru|kolkata|hyderabad|chennai|ahmedabad|patna|jaipur)/i.test(addressHint);
 
     const activeStores = await getActiveStores();
     const evaluatedStores = [];
@@ -100,9 +102,28 @@ const getAvailableStoresHandler = async (req, res, next) => {
         storeLat = store.location.coordinates[1];
       }
 
-      const distKm = hasValidCoords ? (calculateDistanceKm(customerLat, customerLng, storeLat, storeLng) ?? 1.5) : null;
+      const calculatedDist = hasValidCoords ? calculateDistanceKm(customerLat, customerLng, storeLat, storeLng) : null;
       const maxDeliveryRadius = typeof store.deliveryRadiusKm === 'number' ? store.deliveryRadiusKm : 10;
-      const isWithinRadius = type === 'pickup' ? true : (hasValidCoords ? (distKm <= maxDeliveryRadius) : true);
+
+      let distKm = calculatedDist;
+      let isWithinRadius = true;
+
+      if (type === 'delivery') {
+        if (hasValidCoords && calculatedDist !== null) {
+          distKm = calculatedDist;
+          isWithinRadius = calculatedDist <= maxDeliveryRadius;
+        } else if (isExplicitNonRanchi) {
+          distKm = calculatedDist || 1300;
+          isWithinRadius = false;
+        } else if (isRanchiAddress) {
+          // Ranchi address is guaranteed within delivery range
+          distKm = calculatedDist || 1.5;
+          isWithinRadius = true;
+        } else {
+          distKm = null;
+          isWithinRadius = true;
+        }
+      }
 
       // Verify inventory in this specific store
       let isAvailable = true;

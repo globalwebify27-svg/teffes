@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { firebaseLogin } from "@/lib/auth";
+import { firebaseLogin, sendOTP as sendBackendOTP, verifyOTP as verifyBackendOTP } from "@/lib/auth";
 import { getFirebaseAuth } from "@/lib/firebase";
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from "firebase/auth";
 import { toast } from "@/lib/toast";
@@ -26,6 +26,7 @@ export default function OTPForm({
   const [error, setError] = useState("");
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
+  const [isBackendFlow, setIsBackendFlow] = useState(false);
 
   const confirmationResultRef = useRef<ConfirmationResult | null>(null);
   const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
@@ -128,15 +129,42 @@ export default function OTPForm({
       const verifier = getOrCreateRecaptchaVerifier();
       const confirmation = await signInWithPhoneNumber(auth, formattedPhone, verifier);
       confirmationResultRef.current = confirmation;
+      setIsBackendFlow(false);
 
       setStep("otp");
       setResendTimer(30);
       setCanResend(false);
       toast.success("Verification code sent via SMS", "OTP Sent");
     } catch (err: any) {
-      console.error("[Firebase Web Phone Auth] Error sending OTP:", err?.code || err?.message || err);
-      // Cleanly reset verifier on failure so the next attempt starts fresh without DOM collisions
+      console.warn("[Firebase Web Phone Auth] Attempt failed:", err?.code || err?.message || err);
       resetRecaptcha();
+
+      // If reCAPTCHA or domain credential verification fails (e.g. un-whitelisted domain like teffes.com),
+      // seamlessly fall back to TeFFe Server OTP so user is never blocked!
+      if (
+        err.code === "auth/invalid-app-credential" ||
+        err.code === "auth/app-not-authorized" ||
+        err.code === "auth/captcha-check-failed" ||
+        err.code === "auth/internal-error"
+      ) {
+        try {
+          console.log("[Auth] Falling back to TeFFe backend OTP service...");
+          const fallbackRes = await sendBackendOTP(cleanPhone);
+          if (fallbackRes.success) {
+            setIsBackendFlow(true);
+            setStep("otp");
+            setResendTimer(30);
+            setCanResend(false);
+            if (fallbackRes.otp) {
+              console.log(`[Dev OTP] Your verification code is: ${fallbackRes.otp}`);
+            }
+            toast.success("Verification code sent via SMS", "OTP Sent");
+            return;
+          }
+        } catch (backendSendErr: any) {
+          console.error("[Backend Send OTP Fallback Error]:", backendSendErr);
+        }
+      }
 
       let msg = "Failed to send verification SMS. Please try again.";
       if (err.code === "auth/invalid-phone-number") {
@@ -148,7 +176,7 @@ export default function OTPForm({
       } else if (err.code === "auth/billing-not-enabled") {
         msg = "SMS billing is not enabled on this Firebase project. Please ensure Blaze plan is active.";
       } else if (err.code === "auth/invalid-app-credential") {
-        msg = "reCAPTCHA verification failed (auth/invalid-app-credential). On localhost, add 127.0.0.1 to Authorized Domains or use a configured test phone number.";
+        msg = "reCAPTCHA verification failed (auth/invalid-app-credential). On custom domains like teffes.com, add the domain to Firebase Console > Authentication > Settings > Authorized Domains.";
       } else if (err.code === "auth/operation-not-allowed") {
         msg = "Phone sign-in is not enabled in Firebase Console. Please enable Phone provider under Authentication > Sign-in method.";
       } else if (err.message) {
@@ -169,14 +197,43 @@ export default function OTPForm({
       return;
     }
 
-    if (!confirmationResultRef.current) {
-      setError("Session expired. Please request a new verification code.");
-      setStep("phone");
+    setError("");
+    setLoading(true);
+
+    // If using Backend OTP fallback:
+    if (isBackendFlow) {
+      const cleanPhone = phone.replace(/\D/g, "");
+      try {
+        const verifyRes = await verifyBackendOTP(cleanPhone, cleanOtp);
+        if (verifyRes.success) {
+          toast.success("Welcome to TeFFe! You are signed in.", "Login Successful");
+          if (onSuccess) {
+            onSuccess(verifyRes.user);
+          } else if (redirectOnSuccess) {
+            router.push("/");
+          }
+        } else {
+          setError((verifyRes as any).message || "Invalid verification code.");
+        }
+      } catch (backendErr: any) {
+        console.error("[Backend Verify OTP Error]:", backendErr);
+        const backendMsg =
+          backendErr?.response?.data?.message ||
+          backendErr?.message ||
+          "Incorrect or expired verification code.";
+        setError(backendMsg);
+      } finally {
+        setLoading(false);
+      }
       return;
     }
 
-    setError("");
-    setLoading(true);
+    if (!confirmationResultRef.current) {
+      setError("Session expired. Please request a new verification code.");
+      setStep("phone");
+      setLoading(false);
+      return;
+    }
 
     let idToken = "";
     try {

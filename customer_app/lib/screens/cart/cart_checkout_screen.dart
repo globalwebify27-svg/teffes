@@ -1190,7 +1190,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       return;
     }
 
-    if (_isOrderingForSomeoneElse) {
+    if (!isPickup && _isOrderingForSomeoneElse) {
       final clean = _receiverPhoneController.text.replaceAll(RegExp(r'\D'), '');
       if (clean.length != 10) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1351,7 +1351,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         'pickupMode': isPickup,
         'tip': effectiveTip,
         'deliveryInstruction': activeInstruction,
-        if (_isOrderingForSomeoneElse && _receiverPhoneController.text.trim().isNotEmpty) ...{
+        if (!isPickup && _isOrderingForSomeoneElse && _receiverPhoneController.text.trim().isNotEmpty) ...{
           'receiverPhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
           'alternatePhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
           if (_receiverNameController.text.trim().isNotEmpty)
@@ -2160,7 +2160,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     ),
 
                   // 1.05 Fulfilling Hub Card for Delivery (Nearest Auto-Selected, Locked for Home Delivery)
-                  if (!isPickup)
+                  if (!isPickup) ...[
                     Container(
                       margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, 0, AppDimensions.spaceMd, AppDimensions.spaceMd),
                       padding: const EdgeInsets.all(AppDimensions.spaceMd),
@@ -2278,6 +2278,126 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         ],
                       ),
                     ),
+
+                    // 1.06 Alternate / Receiver Phone Number ("Ordering for someone else?" - Delivery Only)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, 0, AppDimensions.spaceMd, AppDimensions.spaceMd),
+                      padding: const EdgeInsets.all(AppDimensions.spaceMd),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: AppDimensions.roundedLg,
+                        border: Border.all(color: AppColors.borderHairline),
+                        boxShadow: AppDimensions.cardShadow,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          InkWell(
+                            onTap: () {
+                              setState(() {
+                                _isOrderingForSomeoneElse = !_isOrderingForSomeoneElse;
+                              });
+                            },
+                            child: Row(
+                              children: [
+                                const Icon(Icons.contact_phone_outlined, color: AppColors.primaryMaroon, size: 20),
+                                const SizedBox(width: 8),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Ordering for someone else?',
+                                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
+                                      ),
+                                      Text(
+                                        'Add alternate / receiver phone number',
+                                        style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Checkbox(
+                                  value: _isOrderingForSomeoneElse,
+                                  activeColor: AppColors.primaryMaroon,
+                                  onChanged: (val) {
+                                    setState(() {
+                                      _isOrderingForSomeoneElse = val ?? false;
+                                    });
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_isOrderingForSomeoneElse) ...[
+                            const SizedBox(height: 10),
+                            const Divider(height: 1, color: AppColors.borderHairline),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Receiver Mobile Number *',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _receiverPhoneController,
+                              keyboardType: TextInputType.phone,
+                              maxLength: 10,
+                              decoration: InputDecoration(
+                                counterText: '',
+                                prefixText: '+91 ',
+                                prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
+                                hintText: '10-digit mobile number',
+                                hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                fillColor: AppColors.surfaceSubtle,
+                                filled: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: AppColors.borderHairline),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: AppColors.borderHairline),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: AppColors.primaryMaroon),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            const Text(
+                              'Receiver Name *',
+                              style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(height: 6),
+                            TextField(
+                              controller: _receiverNameController,
+                              decoration: InputDecoration(
+                                hintText: "Family member / friend's name",
+                                hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                                fillColor: AppColors.surfaceSubtle,
+                                filled: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: AppColors.borderHairline),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: AppColors.borderHairline),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(color: AppColors.primaryMaroon),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
 
                   // 1.1 Slot Selector (Pickup Slots vs Delivery Slots)
                   Container(
@@ -3060,125 +3180,6 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     ),
                     const SizedBox(height: AppDimensions.spaceMd),
                   ],
-
-                  // Alternate / Receiver Phone Number ("Ordering for someone else?")
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
-                    padding: const EdgeInsets.all(AppDimensions.spaceMd),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: AppDimensions.roundedLg,
-                      border: Border.all(color: AppColors.borderHairline),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        InkWell(
-                          onTap: () {
-                            setState(() {
-                              _isOrderingForSomeoneElse = !_isOrderingForSomeoneElse;
-                            });
-                          },
-                          child: Row(
-                            children: [
-                              const Icon(Icons.contact_phone_outlined, color: AppColors.primaryMaroon, size: 20),
-                              const SizedBox(width: 8),
-                              const Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      'Ordering for someone else?',
-                                      style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13.5),
-                                    ),
-                                    Text(
-                                      'Add alternate / receiver phone number',
-                                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Checkbox(
-                                value: _isOrderingForSomeoneElse,
-                                activeColor: AppColors.primaryMaroon,
-                                onChanged: (val) {
-                                  setState(() {
-                                    _isOrderingForSomeoneElse = val ?? false;
-                                  });
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (_isOrderingForSomeoneElse) ...[
-                          const SizedBox(height: 10),
-                          const Divider(height: 1, color: AppColors.borderHairline),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Receiver Mobile Number *',
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _receiverPhoneController,
-                            keyboardType: TextInputType.phone,
-                            maxLength: 10,
-                            decoration: InputDecoration(
-                              counterText: '',
-                              prefixText: '+91 ',
-                              prefixStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textPrimary),
-                              hintText: '10-digit mobile number',
-                              hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                              fillColor: AppColors.surfaceSubtle,
-                              filled: true,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.borderHairline),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.borderHairline),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.primaryMaroon),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          const Text(
-                            'Receiver Name *',
-                            style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-                          ),
-                          const SizedBox(height: 6),
-                          TextField(
-                            controller: _receiverNameController,
-                            decoration: InputDecoration(
-                              hintText: "Family member / friend's name",
-                              hintStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
-                              fillColor: AppColors.surfaceSubtle,
-                              filled: true,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.borderHairline),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.borderHairline),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(10),
-                                borderSide: const BorderSide(color: AppColors.primaryMaroon),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppDimensions.spaceMd),
 
                   // 4. Collapsible Offers & Coupon Section
                   _buildCouponSection(cart),
