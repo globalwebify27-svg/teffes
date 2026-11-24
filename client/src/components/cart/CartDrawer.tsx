@@ -383,11 +383,10 @@ export default function CartDrawer() {
     }
   }, [fulfillmentType, items, selectedAddressId, currentLocation]);
 
-  // Tip Delivery Partner state (Zepto style)
+  // Tip Delivery Partner state
   const [selectedTip, setSelectedTip] = useState<number>(0);
   const [customTipInput, setCustomTipInput] = useState<string>("");
   const [showCustomInput, setShowCustomInput] = useState<boolean>(false);
-  const [tipTab, setTipTab] = useState<"tip" | "instructions">("tip");
   const [deliveryNote, setDeliveryNote] = useState<string>("");
 
   // Alternate / Receiver Phone state ("Ordering for someone else?")
@@ -538,27 +537,27 @@ export default function CartDrawer() {
 
   const activeAddress = isLiveGps
     ? {
-        _id: "loc-selected",
-        tag: currentLocation.label || "Current Location",
+      _id: "loc-selected",
+      tag: currentLocation.label || "Current Location",
+      line1: currentLocation.fullAddress,
+      city: "Ranchi",
+      pincode: (currentLocation.fullAddress?.match(/\b\d{6}\b/) || [])[0] || "",
+      lat: currentLocation.lat,
+      lng: currentLocation.lng,
+    }
+    : (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
+    (selectedAddressId ? addresses.find((a) => a._id === selectedAddressId) : null) ||
+    (currentLocation?.addressId && currentLocation?.fullAddress
+      ? {
+        _id: currentLocation.addressId,
+        tag: currentLocation.label || "Saved Address",
         line1: currentLocation.fullAddress,
         city: "Ranchi",
         pincode: (currentLocation.fullAddress?.match(/\b\d{6}\b/) || [])[0] || "",
         lat: currentLocation.lat,
         lng: currentLocation.lng,
       }
-    : (currentLocation?.addressId ? addresses.find((a) => a._id === currentLocation.addressId) : null) ||
-      (selectedAddressId ? addresses.find((a) => a._id === selectedAddressId) : null) ||
-      (currentLocation?.addressId && currentLocation?.fullAddress
-        ? {
-            _id: currentLocation.addressId,
-            tag: currentLocation.label || "Saved Address",
-            line1: currentLocation.fullAddress,
-            city: "Ranchi",
-            pincode: (currentLocation.fullAddress?.match(/\b\d{6}\b/) || [])[0] || "",
-            lat: currentLocation.lat,
-            lng: currentLocation.lng,
-          }
-        : null);
+      : null);
 
   // Store is operational only if stores are present and selectedStore is active & not paused
   const isStoreOperational = Boolean(
@@ -948,8 +947,54 @@ export default function CartDrawer() {
       return;
     }
 
+    const getEffectiveAddressDetails = () => {
+      if (fulfillmentType === "pickup") {
+        const storeAddr = selectedStore?.address
+          ? `Store Pickup: ${selectedStore.name}, ${selectedStore.address}`
+          : "Store Pickup: Store Takeaway Counter, Ranchi";
+        return {
+          addressString: storeAddr,
+          lat: undefined as number | undefined,
+          lng: undefined as number | undefined,
+          pincode: undefined as string | undefined,
+        };
+      }
+
+      let addrText = "";
+      if (activeAddress) {
+        if (activeAddress.line1) {
+          addrText = activeAddress.line1.includes(activeAddress.city || "Ranchi")
+            ? activeAddress.line1
+            : [activeAddress.line1, activeAddress.line2, activeAddress.city].filter(Boolean).join(", ");
+          if (activeAddress.pincode && !addrText.includes(activeAddress.pincode)) {
+            addrText += ` - ${activeAddress.pincode}`;
+          }
+        }
+      }
+      if (!addrText && currentLocation?.fullAddress) {
+        addrText = currentLocation.fullAddress;
+      }
+
+      const effectiveLat = typeof activeAddress?.lat === "number" && !isNaN(activeAddress.lat)
+        ? activeAddress.lat
+        : (typeof currentLocation?.lat === "number" && !isNaN(currentLocation.lat) ? currentLocation.lat : undefined);
+      const effectiveLng = typeof activeAddress?.lng === "number" && !isNaN(activeAddress.lng)
+        ? activeAddress.lng
+        : (typeof currentLocation?.lng === "number" && !isNaN(currentLocation.lng) ? currentLocation.lng : undefined);
+      const rawPin = activeAddress?.pincode || (addrText ? (addrText.match(/\b\d{6}\b/) || [])[0] : undefined);
+      const effectivePincode = rawPin ? String(rawPin).replace(/\D/g, "") : undefined;
+
+      return {
+        addressString: addrText.trim(),
+        lat: effectiveLat,
+        lng: effectiveLng,
+        pincode: effectivePincode,
+      };
+    };
+
     setIsPlacingOrder(true);
     try {
+      const addrDetails = getEffectiveAddressDetails();
       const orderPayload = {
         items: items.map((i) => ({
           productId: i.product.id,
@@ -961,6 +1006,13 @@ export default function CartDrawer() {
         })),
         amount: finalPayable,
         addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
+        shippingAddress: addrDetails.addressString,
+        address: addrDetails.addressString,
+        customerLat: addrDetails.lat,
+        customerLng: addrDetails.lng,
+        lat: addrDetails.lat,
+        lng: addrDetails.lng,
+        pincode: addrDetails.pincode,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
         deliverySlot: resolvedDeliverySlot,
@@ -1033,8 +1085,54 @@ export default function CartDrawer() {
       return;
     }
 
+    const getEffectiveAddressDetails = () => {
+      if (fulfillmentType === "pickup") {
+        const storeAddr = selectedStore?.address
+          ? `Store Pickup: ${selectedStore.name}, ${selectedStore.address}`
+          : "Store Pickup: Store Takeaway Counter, Ranchi";
+        return {
+          addressString: storeAddr,
+          lat: undefined as number | undefined,
+          lng: undefined as number | undefined,
+          pincode: undefined as string | undefined,
+        };
+      }
+
+      let addrText = "";
+      if (activeAddress) {
+        if (activeAddress.line1) {
+          addrText = activeAddress.line1.includes(activeAddress.city || "Ranchi")
+            ? activeAddress.line1
+            : [activeAddress.line1, activeAddress.line2, activeAddress.city].filter(Boolean).join(", ");
+          if (activeAddress.pincode && !addrText.includes(activeAddress.pincode)) {
+            addrText += ` - ${activeAddress.pincode}`;
+          }
+        }
+      }
+      if (!addrText && currentLocation?.fullAddress) {
+        addrText = currentLocation.fullAddress;
+      }
+
+      const effectiveLat = typeof activeAddress?.lat === "number" && !isNaN(activeAddress.lat)
+        ? activeAddress.lat
+        : (typeof currentLocation?.lat === "number" && !isNaN(currentLocation.lat) ? currentLocation.lat : undefined);
+      const effectiveLng = typeof activeAddress?.lng === "number" && !isNaN(activeAddress.lng)
+        ? activeAddress.lng
+        : (typeof currentLocation?.lng === "number" && !isNaN(currentLocation.lng) ? currentLocation.lng : undefined);
+      const rawPin = activeAddress?.pincode || (addrText ? (addrText.match(/\b\d{6}\b/) || [])[0] : undefined);
+      const effectivePincode = rawPin ? String(rawPin).replace(/\D/g, "") : undefined;
+
+      return {
+        addressString: addrText.trim(),
+        lat: effectiveLat,
+        lng: effectiveLng,
+        pincode: effectivePincode,
+      };
+    };
+
     setIsPlacingOrder(true);
     try {
+      const addrDetails = getEffectiveAddressDetails();
       const orderPayload = {
         items: items.map((i) => ({
           productId: i.product.id,
@@ -1046,6 +1144,13 @@ export default function CartDrawer() {
         })),
         amount: finalPayable,
         addressId: fulfillmentType === "delivery" ? (selectedAddressId || activeAddress?._id) : undefined,
+        shippingAddress: addrDetails.addressString,
+        address: addrDetails.addressString,
+        customerLat: addrDetails.lat,
+        customerLng: addrDetails.lng,
+        lat: addrDetails.lat,
+        lng: addrDetails.lng,
+        pincode: addrDetails.pincode,
         pickupMode: fulfillmentType === "pickup",
         storeId: selectedStore?.storeId || "S001",
         storeName: selectedStore?.name || "Central Store",
@@ -1268,7 +1373,7 @@ export default function CartDrawer() {
                   {fulfillmentType === "pickup" && (
                     <div className="space-y-2.5">
                       <div className="flex items-center justify-between">
-                        <div className="font-headline-sm font-extrabold text-on-surface text-[13.5px] flex items-center gap-1.5">
+                        <div className="font-store-name-sm font-extrabold text-on-surface text-[13.5px] flex items-center gap-1.5">
                           <span className="material-symbols-outlined text-primary text-[18px]">location_searching</span>
                           <span>Select Pickup Store nearby you</span>
                         </div>
@@ -1320,20 +1425,20 @@ export default function CartDrawer() {
                                 <div className="flex-1 min-w-0">
                                   <div className="flex items-center justify-between gap-1 flex-wrap">
                                     <div className="flex items-center gap-1.5">
-                                      <span className="font-headline-sm font-extrabold text-on-surface text-[13.5px]">
+                                      <span className="font-store-name-sm font-extrabold text-on-surface text-[13.5px]">
                                         {store.name}
                                       </span>
-                                      {isNearest && (
+                                      {/* {isNearest && (
                                         <span className="text-[9.5px] uppercase font-black px-1.5 py-0.2 bg-emerald-700 text-white rounded-full">
                                           Nearest
                                         </span>
-                                      )}
+                                      )} */}
                                     </div>
-                                    {isSelected && (
+                                    {/* {isSelected && (
                                       <span className="text-[10px] uppercase font-black px-1.5 py-0.2 bg-primary text-white rounded-full shrink-0">
                                         Selected
                                       </span>
-                                    )}
+                                    )} */}
                                   </div>
 
                                   <p className="font-body-sm text-slate-body text-[11.5px] mt-0.5 leading-snug">
@@ -1395,23 +1500,22 @@ export default function CartDrawer() {
                             <span className="material-symbols-outlined text-primary text-[20px] shrink-0 mt-0.5">location_on</span>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between gap-1">
-                                <span className="font-headline-sm font-extrabold text-on-surface text-[13px] truncate">
+                                <span className="font-store-name-sm font-extrabold text-on-surface text-[13px] truncate">
                                   {selectedStore.name}
                                 </span>
                                 <span
-                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${
-                                    isOutOfDeliveryRadius
-                                      ? "text-amber-800 bg-amber-100/90 border border-amber-200"
-                                      : selectedStore.isInventoryAvailable !== false
+                                  className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full shrink-0 ${isOutOfDeliveryRadius
+                                    ? "text-amber-800 bg-amber-100/90 border border-amber-200"
+                                    : selectedStore.isInventoryAvailable !== false
                                       ? "text-emerald-800 bg-emerald-100/90"
                                       : "text-red-700 bg-red-100"
-                                  }`}
+                                    }`}
                                 >
                                   {isOutOfDeliveryRadius
                                     ? "Outside Range"
                                     : selectedStore.isInventoryAvailable !== false
-                                    ? "Nearest • In Stock"
-                                    : "Out of Stock"}
+                                      ? "Nearest • In Stock"
+                                      : "Out of Stock"}
                                 </span>
                               </div>
                               <p className="text-[11px] text-slate-body truncate mt-0.5">{selectedStore.address}</p>
@@ -1509,10 +1613,10 @@ export default function CartDrawer() {
                                   {isSpecialClosedToday
                                     ? "store"
                                     : isSpecialCutoffPassed
-                                    ? "hourglass_bottom"
-                                    : isEarlyMorningBefore8AM()
-                                    ? "wb_twilight"
-                                    : "nightlight"}
+                                      ? "hourglass_bottom"
+                                      : isEarlyMorningBefore8AM()
+                                        ? "wb_twilight"
+                                        : "nightlight"}
                                 </span>
                               </div>
                               <div className="flex-1">
@@ -1520,21 +1624,21 @@ export default function CartDrawer() {
                                   {isSpecialClosedToday
                                     ? "Store Closed Today for Operations"
                                     : isSpecialCutoffPassed
-                                    ? `Today's Cutoff Passed (${formatTime12(todaySpecial?.closeTime)})`
-                                    : isEarlyMorningBefore8AM()
-                                    ? "Store Opens at 8:00 AM Today"
-                                    : "Teffes Store Hours: 8:00 AM – 8:00 PM"}
+                                      ? `Today's Cutoff Passed (${formatTime12(todaySpecial?.closeTime)})`
+                                      : isEarlyMorningBefore8AM()
+                                        ? "Store Opens at 8:00 AM Today"
+                                        : "Teffes Store Hours: 8:00 AM – 8:00 PM"}
                                 </h4>
                                 <p className="font-body-sm text-amber-900/90 text-[11.5px] leading-relaxed mt-1">
                                   {isSpecialClosedToday
                                     ? (todaySpecial?.customerNote || "Our fulfilling store is closed today for special kitchen maintenance. Orders placed now will be delivered tomorrow morning by 9:00 AM.")
                                     : isSpecialCutoffPassed
-                                    ? (todaySpecial?.customerNote
-                                      ? `${todaySpecial.customerNote}. Your order will be prepared fresh and delivered tomorrow morning by 9:00 AM.`
-                                      : `Today's same-day delivery closed at ${formatTime12(todaySpecial?.closeTime)}. Orders placed now will be delivered tomorrow morning by 9:00 AM.`)
-                                    : isEarlyMorningBefore8AM()
-                                    ? "Store timing is 8:00 AM to 8:00 PM. As you are placing your order early morning before opening, it will be prepared fresh and delivered today by 9:00 AM."
-                                    : "Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM."}
+                                      ? (todaySpecial?.customerNote
+                                        ? `${todaySpecial.customerNote}. Your order will be prepared fresh and delivered tomorrow morning by 9:00 AM.`
+                                        : `Today's same-day delivery closed at ${formatTime12(todaySpecial?.closeTime)}. Orders placed now will be delivered tomorrow morning by 9:00 AM.`)
+                                      : isEarlyMorningBefore8AM()
+                                        ? "Store timing is 8:00 AM to 8:00 PM. As you are placing your order early morning before opening, it will be prepared fresh and delivered today by 9:00 AM."
+                                        : "Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM."}
                                 </p>
                                 <div className="mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100/90 border border-emerald-200 rounded-lg text-emerald-900 text-[11px] font-bold">
                                   <span className="material-symbols-outlined text-[15px] text-emerald-700">wb_sunny</span>
@@ -1731,9 +1835,8 @@ export default function CartDrawer() {
                       return (
                         <div
                           key={item.product.id}
-                          className={`flex gap-3 pb-3 border-b border-gray-100 items-start transition-all ${
-                            isItemOutOfStock ? "bg-red-50/50 p-2.5 rounded-2xl border border-red-200/80" : ""
-                          }`}
+                          className={`flex gap-3 pb-3 border-b border-gray-100 items-start transition-all ${isItemOutOfStock ? "bg-red-50/50 p-2.5 rounded-2xl border border-red-200/80" : ""
+                            }`}
                         >
                           <div className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 bg-gray-100 border border-gray-200/60">
                             <img
@@ -1750,18 +1853,16 @@ export default function CartDrawer() {
 
                           <div className="flex-1 min-w-0">
                             <div className="flex items-start justify-between gap-2">
-                              <h4 className={`font-headline-sm font-bold text-[13.5px] leading-snug line-clamp-1 ${
-                                isItemOutOfStock ? "text-gray-500 line-through decoration-red-500/80" : "text-on-surface"
-                              }`}>
+                              <h4 className={`font-store-name-sm font-bold text-[13.5px] leading-snug line-clamp-1 ${isItemOutOfStock ? "text-gray-500 line-through decoration-red-500/80" : "text-on-surface"
+                                }`}>
                                 {item.product.name}
                               </h4>
                               <button
                                 onClick={() => removeFromCart(item.product.id)}
-                                className={`transition-all border-none cursor-pointer p-1 rounded-lg flex items-center justify-center ${
-                                  isItemOutOfStock
-                                    ? "text-red-600 bg-red-100 hover:bg-red-200 ring-1 ring-red-300"
-                                    : "text-gray-400 hover:text-error bg-transparent"
-                                }`}
+                                className={`transition-all border-none cursor-pointer p-1 rounded-lg flex items-center justify-center ${isItemOutOfStock
+                                  ? "text-red-600 bg-red-100 hover:bg-red-200 ring-1 ring-red-300"
+                                  : "text-gray-400 hover:text-error bg-transparent"
+                                  }`}
                                 title="Remove item"
                                 aria-label="Remove item"
                               >
@@ -1786,15 +1887,13 @@ export default function CartDrawer() {
                               </div>
 
                               {/* Spaced Quantity Stepper */}
-                              <div className={`flex items-center rounded-full px-1 py-0.5 border ${
-                                isItemOutOfStock ? "bg-gray-100 border-gray-200 opacity-40 cursor-not-allowed" : "bg-gray-100/90 border-gray-200"
-                              }`}>
+                              <div className={`flex items-center rounded-full px-1 py-0.5 border ${isItemOutOfStock ? "bg-gray-100 border-gray-200 opacity-40 cursor-not-allowed" : "bg-gray-100/90 border-gray-200"
+                                }`}>
                                 <button
                                   type="button"
                                   disabled={isItemOutOfStock}
-                                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-xs border-none font-bold text-base ${
-                                    isItemOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-white hover:bg-primary hover:text-white text-gray-700 cursor-pointer"
-                                  }`}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-xs border-none font-bold text-base ${isItemOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-white hover:bg-primary hover:text-white text-gray-700 cursor-pointer"
+                                    }`}
                                   onClick={() => !isItemOutOfStock && updateQuantity(item.product.id, item.quantity - 1)}
                                   aria-label="Decrease quantity"
                                 >
@@ -1806,9 +1905,8 @@ export default function CartDrawer() {
                                 <button
                                   type="button"
                                   disabled={isItemOutOfStock}
-                                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-xs border-none font-bold text-base ${
-                                    isItemOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-white hover:bg-primary hover:text-white text-gray-700 cursor-pointer"
-                                  }`}
+                                  className={`w-7 h-7 rounded-full flex items-center justify-center transition-all shadow-xs border-none font-bold text-base ${isItemOutOfStock ? "bg-gray-200 text-gray-400 cursor-not-allowed" : "bg-white hover:bg-primary hover:text-white text-gray-700 cursor-pointer"
+                                    }`}
                                   onClick={() => !isItemOutOfStock && updateQuantity(item.product.id, item.quantity + 1)}
                                   aria-label="Increase quantity"
                                 >
@@ -1827,7 +1925,7 @@ export default function CartDrawer() {
                     <div className="flex items-center justify-between mb-2.5">
                       <div className="flex items-center gap-1.5">
                         <span className="material-symbols-outlined text-amber-700 text-[18px]">shopping_basket</span>
-                        <span className="font-headline-sm font-extrabold text-on-surface text-[13px] tracking-tight">
+                        <span className="font-store-name-sm font-extrabold text-on-surface text-[13px] tracking-tight">
                           Add Cooking Essentials
                         </span>
                       </div>
@@ -1907,177 +2005,139 @@ export default function CartDrawer() {
                     )}
                   </div>
 
-                  {/* ─── TIP DELIVERY PARTNER (Only in Delivery Flow) ─── */}
+                  {/* ─── TIP FOR RIDER & INSTRUCTIONS (Delivery Flow) ─── */}
                   {fulfillmentType === "delivery" ? (
-                    <div className="bg-[#f0f9ff]/85 border border-[#bae6fd] rounded-2xl p-4 shadow-xs">
-                      {/* Top Switcher Tabs */}
-                      <div className="bg-[#e0f2fe]/70 p-1 rounded-xl flex items-center gap-1 mb-3.5">
-                        <button
-                          type="button"
-                          onClick={() => setTipTab("tip")}
-                          className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${tipTab === "tip"
-                            ? "bg-white text-on-surface shadow-xs"
-                            : "bg-transparent text-slate-body hover:text-on-surface"
-                            }`}
-                        >
-                          Give a Tip
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setTipTab("instructions")}
-                          className={`flex-1 py-1.5 rounded-lg text-[12px] font-bold transition-all border-none cursor-pointer ${tipTab === "instructions"
-                            ? "bg-white text-on-surface shadow-xs"
-                            : "bg-transparent text-slate-body hover:text-on-surface"
-                            }`}
-                        >
-                          Instructions
-                        </button>
-                      </div>
-
-                      {tipTab === "tip" ? (
-                        <div>
-                          {/* Title & Rider Visual */}
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div>
-                              <h4 className="font-headline-sm font-extrabold text-on-surface text-[14px] leading-tight">
-                                Tip Delivery Partner
-                              </h4>
-                              <p className="font-body-sm text-slate-body text-[11.5px] leading-relaxed mt-0.5 max-w-[240px]">
-                                Help them earn a little extra for their effort. 100% of this tip will go to them.
-                              </p>
-                              <span className="font-body-sm text-[11px] text-slate-body/80 underline decoration-dotted block mt-1 cursor-pointer">
-                                Delivery Partner Safety
-                              </span>
-                            </div>
-
-                            {/* Delivery Rider Graphic */}
-                            <div className="w-14 h-14 rounded-2xl bg-[#0284c7]/10 flex items-center justify-center text-[#0284c7] shrink-0 shadow-xs">
-                              <span className="material-symbols-outlined text-[32px]">two_wheeler</span>
-                            </div>
-                          </div>
-
-                          {/* 4 Selectable Options (10, 35, 50, Custom) */}
-                          <div className="grid grid-cols-4 gap-2 mt-3">
-                            {/* Option 10: Chai */}
-                            <button
-                              type="button"
-                              onClick={() => handleSelectTip(10)}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 10 && !showCustomInput
-                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                                }`}
-                            >
-
-                              <span className="text-[13px]">₹10</span>
-                            </button>
-
-                            {/* Option 35: Snacks */}
-                            <button
-                              type="button"
-                              onClick={() => handleSelectTip(35)}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 35 && !showCustomInput
-                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                                }`}
-                            >
-                              <span className="text-[13px]">₹35</span>
-                            </button>
-
-                            {/* Option 50: Meal */}
-                            <button
-                              type="button"
-                              onClick={() => handleSelectTip(50)}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${selectedTip === 50 && !showCustomInput
-                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                                }`}
-                            >
-                              <span className="text-[13px]">₹50</span>
-                            </button>
-
-                            {/* Option Custom */}
+                    <div className="bg-white rounded-2xl border border-gray-200 p-3.5 space-y-3 shadow-2xs">
+                      {/* Tip for Rider */}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <h4 className="font-store-name-sm font-extrabold text-on-surface text-[13.5px]">
+                            Tip for Rider
+                          </h4>
+                          {selectedTip > 0 && (
                             <button
                               type="button"
                               onClick={() => {
-                                setShowCustomInput((prev) => !prev);
+                                setSelectedTip(0);
+                                setShowCustomInput(false);
                               }}
-                              className={`py-2 px-1 rounded-xl flex items-center justify-center gap-1 transition-all border cursor-pointer ${showCustomInput || (selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50)
-                                ? "bg-white border-primary shadow-sm ring-2 ring-primary/20 text-primary font-black"
-                                : "bg-white border-gray-200/80 hover:border-gray-300 text-on-surface font-bold"
-                                }`}
+                              className="text-primary text-[11px] hover:underline font-bold bg-transparent border-none cursor-pointer"
                             >
-                              <span className="text-[12px]">
-                                {selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50
-                                  ? `₹${selectedTip}`
-                                  : "Custom"}
-                              </span>
+                              Clear Tip
                             </button>
-                          </div>
+                          )}
+                        </div>
+                        <p className="text-slate-body text-[11px] mt-0.5">
+                          100% of this tip goes to your delivery partner.
+                        </p>
 
-                          {/* Custom Input Field */}
-                          {showCustomInput && (
-                            <form
-                              onSubmit={handleCustomTipSubmit}
-                              className="mt-3 flex items-center gap-2 bg-white p-2 rounded-xl border border-primary/40 shadow-xs"
+                        {/* 4 Selectable Options (10, 35, 50, Custom) */}
+                        <div className="grid grid-cols-4 gap-2 mt-2.5">
+                          {/* Option 10 */}
+                          <button
+                            type="button"
+                            onClick={() => handleSelectTip(10)}
+                            className={`py-2 px-1 rounded-xl flex items-center justify-center transition-all border cursor-pointer ${selectedTip === 10 && !showCustomInput
+                              ? "bg-primary/5 border-primary ring-1 ring-primary/20 text-primary font-black"
+                              : "bg-slate-50/90 hover:bg-slate-100 border-gray-200 text-on-surface font-bold"
+                              }`}
+                          >
+                            <span className="text-[13px]">₹10</span>
+                          </button>
+
+                          {/* Option 35 */}
+                          <button
+                            type="button"
+                            onClick={() => handleSelectTip(35)}
+                            className={`py-2 px-1 rounded-xl flex items-center justify-center transition-all border cursor-pointer ${selectedTip === 35 && !showCustomInput
+                              ? "bg-primary/5 border-primary ring-1 ring-primary/20 text-primary font-black"
+                              : "bg-slate-50/90 hover:bg-slate-100 border-gray-200 text-on-surface font-bold"
+                              }`}
+                          >
+                            <span className="text-[13px]">₹35</span>
+                          </button>
+
+                          {/* Option 50 */}
+                          <button
+                            type="button"
+                            onClick={() => handleSelectTip(50)}
+                            className={`py-2 px-1 rounded-xl flex items-center justify-center transition-all border cursor-pointer ${selectedTip === 50 && !showCustomInput
+                              ? "bg-primary/5 border-primary ring-1 ring-primary/20 text-primary font-black"
+                              : "bg-slate-50/90 hover:bg-slate-100 border-gray-200 text-on-surface font-bold"
+                              }`}
+                          >
+                            <span className="text-[13px]">₹50</span>
+                          </button>
+
+                          {/* Option Custom */}
+                          <button
+                            type="button"
+                            onClick={() => setShowCustomInput((prev) => !prev)}
+                            className={`py-2 px-1 rounded-xl flex items-center justify-center transition-all border cursor-pointer ${showCustomInput || (selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50)
+                              ? "bg-primary/5 border-primary ring-1 ring-primary/20 text-primary font-black"
+                              : "bg-slate-50/90 hover:bg-slate-100 border-gray-200 text-on-surface font-bold"
+                              }`}
+                          >
+                            <span className="text-[12.5px]">
+                              {selectedTip > 0 && selectedTip !== 10 && selectedTip !== 35 && selectedTip !== 50
+                                ? `₹${selectedTip}`
+                                : "Custom"}
+                            </span>
+                          </button>
+                        </div>
+
+                        {/* Custom Input Field */}
+                        {showCustomInput && (
+                          <form
+                            onSubmit={handleCustomTipSubmit}
+                            className="mt-2.5 flex items-center gap-2 bg-slate-50/80 p-2 rounded-xl border border-primary/40 shadow-xs"
+                          >
+                            <span className="text-gray-500 font-bold text-xs pl-1">₹</span>
+                            <input
+                              type="number"
+                              min="1"
+                              max="1000"
+                              autoFocus
+                              placeholder="Enter amount (e.g. 25)"
+                              value={customTipInput}
+                              onChange={(e) => setCustomTipInput(e.target.value)}
+                              className="flex-1 py-1 px-1 text-xs font-bold text-on-surface outline-none border-none bg-transparent"
+                            />
+                            <button
+                              type="submit"
+                              className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-primary-dark transition-colors"
                             >
-                              <span className="text-gray-500 font-bold text-sm pl-1">₹</span>
-                              <input
-                                type="number"
-                                min="1"
-                                max="1000"
-                                autoFocus
-                                placeholder="Enter amount (e.g. 25)"
-                                value={customTipInput}
-                                onChange={(e) => setCustomTipInput(e.target.value)}
-                                className="flex-1 py-1 px-1 text-sm font-bold text-on-surface outline-none border-none bg-transparent"
-                              />
-                              <button
-                                type="submit"
-                                className="bg-primary text-white text-xs font-bold px-3 py-1.5 rounded-lg border-none cursor-pointer hover:bg-primary-dark"
-                              >
-                                Add
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setShowCustomInput(false);
+                              Add
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setShowCustomInput(false);
+                                if (![10, 35, 50].includes(selectedTip)) {
                                   setSelectedTip(0);
-                                }}
-                                className="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xs"
-                              >
-                                Cancel
-                              </button>
-                            </form>
-                          )}
+                                }
+                              }}
+                              className="text-gray-400 hover:text-gray-600 border-none bg-transparent cursor-pointer text-xs px-1"
+                            >
+                              ✕
+                            </button>
+                          </form>
+                        )}
+                      </div>
 
-                          {selectedTip > 0 && (
-                            <div className="mt-2.5 flex items-center justify-between text-[11.5px] text-[#0369a1] font-semibold">
-                              <span>₹{selectedTip} added to delivery partner tip</span>
-                              <button
-                                type="button"
-                                onClick={() => setSelectedTip(0)}
-                                className="text-primary hover:underline border-none bg-transparent cursor-pointer font-bold"
-                              >
-                                Remove
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        /* Delivery Instructions Tab */
-                        <div>
-                          <h4 className="font-headline-sm font-extrabold text-on-surface text-[14px] mb-1">
-                            Instructions
-                          </h4>
-                          <input
-                            type="text"
-                            value={deliveryNote}
-                            onChange={(e) => setDeliveryNote(e.target.value)}
-                            placeholder="e.g. Leave with security / Ring bell twice"
-                            className="w-full p-2.5 bg-white rounded-xl border border-gray-200 text-xs text-on-surface outline-none focus:border-primary"
-                          />
-                        </div>
-                      )}
+                      {/* Instructions */}
+                      <div className="pt-2 border-t border-gray-100">
+                        <h4 className="font-store-name-sm font-extrabold text-on-surface text-[13.5px] mb-1.5">
+                          Instructions
+                        </h4>
+                        <input
+                          type="text"
+                          value={deliveryNote}
+                          onChange={(e) => setDeliveryNote(e.target.value)}
+                          placeholder="E.g. Leave at door, Don't ring bell"
+                          className="w-full px-3 py-2 bg-slate-50/80 rounded-xl border border-gray-200 text-xs text-on-surface outline-none focus:border-primary focus:bg-white transition-all placeholder:text-gray-400"
+                        />
+                      </div>
                     </div>
                   ) : (
                     /* ─── STORE PICKUP NOTES BOX (Only in Store Pickup Flow) ─── */
@@ -2135,7 +2195,7 @@ export default function CartDrawer() {
                             </div>
                           ) : (
                             <div>
-                              <span className="font-headline-sm font-extrabold text-on-surface text-[13px] block">
+                              <span className="font-store-name-sm font-extrabold text-on-surface text-[13px] block">
                                 Apply Coupon / Promo Code
                               </span>
                               <p className="font-body-sm text-slate-body text-[11px] mt-0.5">
@@ -2292,7 +2352,7 @@ export default function CartDrawer() {
 
                     {/* ─── BILL SUMMARY (Scrollable inside cart) ────────────────────────── */}
                     <div className="rounded-2xl border border-gray-200/80 bg-white p-4 shadow-2xs mt-2">
-                      <h4 className="font-headline-sm font-extrabold text-on-surface text-sm mb-3">Bill Details</h4>
+                      <h4 className="font-store-name-sm font-extrabold text-on-surface text-sm mb-3">Bill Details</h4>
                       <div className="flex flex-col gap-2 font-body-sm text-[13px]">
                         <div className="flex justify-between text-slate-body">
                           <span>Item Total</span>
@@ -2306,7 +2366,7 @@ export default function CartDrawer() {
                               <span>Delivery Fee</span>
                               <span>
                                 {effectiveDeliveryFee === 0 ? (
-                                  <strong className="text-tertiary">FREE</strong>
+                                  <strong className="text-tertiary">Free</strong>
                                 ) : (
                                   `₹${effectiveDeliveryFee}`
                                 )}
@@ -2343,21 +2403,12 @@ export default function CartDrawer() {
                             )}
                           </>
                         ) : (
-                          <div className="flex justify-between items-center text-emerald-700 font-bold bg-emerald-50/70 px-2.5 py-1.5 rounded-lg border border-emerald-200/50">
-                            <span className="flex items-center gap-1.5 text-[12.5px]">
-                              <span className="material-symbols-outlined text-[16px]">storefront</span>
-                              <span>Store Self-Pickup Fee</span>
-                            </span>
-                            <span className="flex items-center gap-1.5">
-                              <span className="line-through decoration-primary [text-decoration-color:#800020] decoration-[1.5px] text-gray-400 text-xs font-normal">₹40</span>
-                              <span className="text-emerald-800 font-black">FREE (₹0)</span>
-                            </span>
-                          </div>
+                          <></>
                         )}
 
                         <div className="flex justify-between text-slate-body">
                           <span>Hygienic Temperature-Controlled Packing</span>
-                          <strong className="text-tertiary">FREE</strong>
+                          <strong className="text-tertiary">Free</strong>
                         </div>
 
                         {discountAmount > 0 && (
@@ -2688,13 +2739,12 @@ export default function CartDrawer() {
                       }
                       setSelectedPayment("cod");
                     }}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
-                      !paymentSettings.codEnabled
-                        ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
-                        : selectedPayment === "cod"
-                          ? "border-primary ring-1 ring-primary/20 cursor-pointer"
-                          : "border-gray-200 hover:border-gray-300 cursor-pointer"
-                    }`}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${!paymentSettings.codEnabled
+                      ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
+                      : selectedPayment === "cod"
+                        ? "border-primary ring-1 ring-primary/20 cursor-pointer"
+                        : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${!paymentSettings.codEnabled ? "bg-gray-100 text-gray-400" : "bg-pink-50 text-primary"}`}>
@@ -2732,13 +2782,12 @@ export default function CartDrawer() {
                       }
                       setSelectedPayment("razorpay");
                     }}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
-                      (!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured)
-                        ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
-                        : selectedPayment === "razorpay"
-                          ? "border-primary ring-1 ring-primary/20 cursor-pointer"
-                          : "border-gray-200 hover:border-gray-300 cursor-pointer"
-                    }`}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured)
+                      ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
+                      : selectedPayment === "razorpay"
+                        ? "border-primary ring-1 ring-primary/20 cursor-pointer"
+                        : "border-gray-200 hover:border-gray-300 cursor-pointer"
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${(!paymentSettings.onlineEnabled || !paymentSettings.payuConfigured) ? "bg-gray-100 text-gray-400" : "bg-blue-50 text-blue-600"}`}>
@@ -2780,13 +2829,12 @@ export default function CartDrawer() {
                       }
                       setSelectedPayment("wallet");
                     }}
-                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${
-                      !paymentSettings.walletEnabled
-                        ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
-                        : walletBalance < finalPayable
-                          ? "opacity-60 cursor-not-allowed border-gray-200"
-                          : "cursor-pointer " + (selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300")
-                    }`}
+                    className={`p-4 rounded-2xl border-2 flex items-center justify-between transition-all bg-white shadow-2xs ${!paymentSettings.walletEnabled
+                      ? "opacity-50 cursor-not-allowed bg-gray-50/90 border-gray-200"
+                      : walletBalance < finalPayable
+                        ? "opacity-60 cursor-not-allowed border-gray-200"
+                        : "cursor-pointer " + (selectedPayment === "wallet" ? "border-primary ring-1 ring-primary/20" : "border-gray-200 hover:border-gray-300")
+                      }`}
                   >
                     <div className="flex items-center gap-3">
                       <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${!paymentSettings.walletEnabled ? "bg-gray-100 text-gray-400" : "bg-purple-50 text-purple-600"}`}>

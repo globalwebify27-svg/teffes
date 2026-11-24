@@ -2805,7 +2805,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Selected Cuts (${items.length})', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+                              Text('Selected Items (${items.length})', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
                               Text(CurrencyFormatter.format(cart.subtotal), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.primaryMaroon)),
                             ],
                           ),

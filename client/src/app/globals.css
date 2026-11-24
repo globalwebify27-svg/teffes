@@ -296,6 +296,13 @@ body {
   line-height: 1.4 !important;
 }
 
+.font-store-name-sm {
+  font-family: var(--font-plus-jakarta) !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  line-height: 1.4 !important;
+}
+
 .font-body-lg {
   font-family: var(--font-body) !important;
   font-size: 1rem !important;

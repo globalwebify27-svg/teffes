@@ -344,8 +344,8 @@ const createOrder = async (req, res, next) => {
     const finalAmount = amount !== undefined ? Number(amount) : (totalAmount !== undefined ? Number(totalAmount) : computedFinalAmount);
 
     let orderAddress = isPickup
-      ? (shippingAddress || 'Store Pickup: Store Takeaway Counter, Ranchi')
-      : (shippingAddress || 'Ranchi Delivery');
+      ? (shippingAddress || req.body.address || 'Store Pickup: Store Takeaway Counter, Ranchi')
+      : (shippingAddress || req.body.address || 'Ranchi Delivery');
 
     if (!isPickup && addressId && Array.isArray(user.addresses)) {
       const addr = user.addresses.find((a) => String(a.id || a._id) === String(addressId));
@@ -441,6 +441,9 @@ const createOrder = async (req, res, next) => {
       alternatePhone: cleanReceiverPhone || null,
       receiverName: cleanReceiverName || null,
       alternateName: cleanReceiverName || null,
+      shippingAddress: orderAddress,
+      deliveryAddress: orderAddress,
+      address: orderAddress,
       customer: {
         name: user.name || req.body.customerName || 'Valued Customer',
         phone: user.phone || req.body.customerPhone || '9999999999',
@@ -452,8 +455,12 @@ const createOrder = async (req, res, next) => {
         userId: user.id,
         address: orderAddress,
         deliveryInstruction: deliveryInstruction || null,
-        lat: req.body.customerLat || 23.3512,
-        lng: req.body.customerLng || 85.3154,
+        lat: custLat !== null && custLat !== undefined && !isNaN(custLat)
+          ? Number(custLat)
+          : (req.body.customerLat ? Number(req.body.customerLat) : (req.body.lat ? Number(req.body.lat) : 23.3512)),
+        lng: custLng !== null && custLng !== undefined && !isNaN(custLng)
+          ? Number(custLng)
+          : (req.body.customerLng ? Number(req.body.customerLng) : (req.body.lng ? Number(req.body.lng) : 85.3154)),
       },
       items: items.map((i) => ({
         productId: i.productId || i.id || '',

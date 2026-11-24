@@ -11,6 +11,7 @@ const {
   recordInventoryWaste,
   getInventoryHistory,
   getStoreCustomers,
+  exportStoreCustomers,
   getDeliverySlots,
   updateDeliverySlot,
   getReturnRequests,
@@ -74,6 +75,7 @@ router.post('/inventory/waste', recordInventoryWaste);
 router.get('/inventory/history', getInventoryHistory);
 
 // 4. Customers
+router.get('/customers/export', exportStoreCustomers);
 router.get('/customers', getStoreCustomers);
 
 // 5. Delivery Slots

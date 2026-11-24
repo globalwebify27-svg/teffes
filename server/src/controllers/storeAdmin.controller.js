@@ -95,7 +95,22 @@ const parseDateToMillis = (val) => {
   }
   if (typeof val === 'number') return val;
   if (typeof val === 'string') {
-    const t = new Date(val).getTime();
+    let t = new Date(val).getTime();
+    if (!isNaN(t)) return t;
+
+    // Normalize single-digit hours/minutes/seconds from legacy records e.g. T9:11:50 or T0:24:00
+    let s = val.trim();
+    s = s.replace(/T(\d):/, (m, h) => `T0${h}:`);
+    s = s.replace(/:(\d):/, (m, min) => `:0${min}:`);
+    s = s.replace(/:(\d)([^\d]|$)/, (m, sec, end) => `:0${sec}${end}`);
+
+    // Handle DD/MM/YYYY or DD-MM-YYYY
+    const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (dmy) {
+      s = `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}${s.slice(dmy[0].length)}`;
+    }
+
+    t = new Date(s).getTime();
     if (!isNaN(t)) return t;
   }
   if (val instanceof Date) {
@@ -1446,94 +1461,288 @@ const getInventoryHistory = async (req, res, next) => {
 };
 
 /**
+ * Cache store customers aggregation to prevent expensive scans on every pagination/search request.
+ */
+const STORE_CUSTOMERS_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+const storeCustomersCache = new Map(); // storeId -> { timestamp, customers, segmentCounts }
+
+const getAggregatedStoreCustomers = async (storeId) => {
+  const cached = storeCustomersCache.get(storeId);
+  const nowMs = Date.now();
+  if (cached && (nowMs - cached.timestamp) < STORE_CUSTOMERS_CACHE_TTL_MS) {
+    return cached;
+  }
+
+  // Fetch all orders including historical migrated orders
+  const orders = await getStoreOrders(storeId, null, { includeMigrated: true });
+  const map = new Map();
+
+  for (const o of orders) {
+    // Exclude cancelled and failed payment orders
+    if (o.status === 'Cancelled' || o.paymentStatus === 'Failed') continue;
+
+    const rawPhone = o.customer?.phone || '';
+    const cleanPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
+    const key = cleanPhone || rawPhone || 'Unknown';
+
+    const amt = Number(o.amount != null ? o.amount : o.totalAmount) || 0;
+    const orderDateMs = parseDateToMillis(o.createdAt || o.created_at || o.orderDate) || 0;
+    const orderDate = orderDateMs ? new Date(orderDateMs) : null;
+
+    if (!map.has(key)) {
+      map.set(key, {
+        id: `CUST-${cleanPhone || o.customer?.userId || key}`,
+        name: o.customer?.name || 'Customer',
+        phone: cleanPhone ? `+91 ${cleanPhone}` : (rawPhone || 'Unknown'),
+        address: o.customer?.address || o.shippingAddress?.address || 'Ranchi',
+        orders: 1,
+        totalOrders: 1,
+        totalSpent: amt,
+        lastOrder: orderDateMs ? formatDDMMYYYY_IST(orderDateMs) : '',
+        lastOrderDate: orderDate ? orderDate.toISOString() : '',
+        _lastOrderMs: orderDateMs,
+      });
+    } else {
+      const entry = map.get(key);
+      entry.orders += 1;
+      entry.totalOrders = entry.orders;
+      entry.totalSpent = Math.round((entry.totalSpent + amt) * 100) / 100;
+
+      // Keep most descriptive name if current name is generic
+      const genericNames = ['verified gourmet user', 'valued customer', 'customer'];
+      const currentNameLower = (entry.name || '').trim().toLowerCase();
+      const orderName = (o.customer?.name || '').trim();
+      if (orderName && (!entry.name || genericNames.includes(currentNameLower))) {
+        entry.name = orderName;
+      }
+
+      // Keep latest address and order date
+      if (orderDateMs >= (entry._lastOrderMs || 0)) {
+        entry._lastOrderMs = orderDateMs;
+        if (orderDate) {
+          entry.lastOrderDate = orderDate.toISOString();
+          entry.lastOrder = formatDDMMYYYY_IST(orderDateMs);
+        }
+        if (o.customer?.address || o.shippingAddress?.address) {
+          entry.address = o.customer?.address || o.shippingAddress?.address;
+        }
+      }
+    }
+  }
+
+  const customers = Array.from(map.values()).map((c) => {
+    const lastMs = c._lastOrderMs || null;
+    c._lastOrderMs = lastMs; // Retain for dynamic sorting
+    c.totalSpent = Math.round(c.totalSpent * 100) / 100;
+
+    const daysSince = lastMs ? getCalendarDaysSinceOrderIST(lastMs, nowMs) : null;
+    c.daysSinceLastOrder = daysSince;
+
+    const count = Number(c.totalOrders || c.orders || 0);
+    if (count >= 2) {
+      c.segment = (daysSince != null && daysSince <= 30) ? 'active' : 'inactive';
+    } else if (count === 1) {
+      c.segment = (daysSince != null && daysSince <= 30) ? 'new' : 'inactive';
+    } else {
+      c.segment = 'new';
+    }
+    return c;
+  });
+
+  // Default sort: Latest order first, then total orders descending
+  customers.sort((a, b) => {
+    const diff = (b._lastOrderMs || 0) - (a._lastOrderMs || 0);
+    if (diff !== 0) return diff;
+    return (b.totalOrders || 0) - (a.totalOrders || 0);
+  });
+
+  let activeCount = 0;
+  let newCount = 0;
+  let inactiveCount = 0;
+  for (const c of customers) {
+    if (c.segment === 'active') activeCount++;
+    else if (c.segment === 'new') newCount++;
+    else if (c.segment === 'inactive') inactiveCount++;
+  }
+
+  const segmentCounts = {
+    all: customers.length,
+    active: activeCount,
+    new: newCount,
+    inactive: inactiveCount,
+  };
+
+  const cacheEntry = { timestamp: nowMs, customers, segmentCounts };
+  storeCustomersCache.set(storeId, cacheEntry);
+  return cacheEntry;
+};
+
+/**
+ * Sorts customer records based on selected criteria
+ */
+const sortCustomerRecords = (list, sortBy = 'latest') => {
+  const sorted = [...list];
+  switch (sortBy) {
+    case 'orders_desc':
+      return sorted.sort((a, b) => {
+        const diff = (b.totalOrders || 0) - (a.totalOrders || 0);
+        if (diff !== 0) return diff;
+        return (b._lastOrderMs || 0) - (a._lastOrderMs || 0);
+      });
+    case 'spent_desc':
+      return sorted.sort((a, b) => {
+        const diff = (b.totalSpent || 0) - (a.totalSpent || 0);
+        if (diff !== 0) return diff;
+        return (b._lastOrderMs || 0) - (a._lastOrderMs || 0);
+      });
+    case 'oldest':
+      return sorted.sort((a, b) => {
+        const aMs = a._lastOrderMs || 0;
+        const bMs = b._lastOrderMs || 0;
+        if (aMs === 0 && bMs > 0) return 1;
+        if (bMs === 0 && aMs > 0) return -1;
+        return aMs - bMs;
+      });
+    case 'latest':
+    default:
+      return sorted.sort((a, b) => {
+        const diff = (b._lastOrderMs || 0) - (a._lastOrderMs || 0);
+        if (diff !== 0) return diff;
+        return (b.totalOrders || 0) - (a.totalOrders || 0);
+      });
+  }
+};
+
+/**
  * GET /api/store-admin/customers
- * List customers who placed orders at this store
+ * List customers who placed orders at this store (with backend search & pagination)
  */
 const getStoreCustomers = async (req, res, next) => {
   try {
     const storeId = getEffectiveStoreId(req);
+    const { page = 1, limit = 50, search = '', segment = 'all', sortBy = 'latest' } = req.query;
 
-    const orders = await getStoreOrders(storeId);
-    const map = new Map();
+    const { customers, segmentCounts } = await getAggregatedStoreCustomers(storeId);
 
-    for (const o of orders) {
-      // Exclude cancelled and failed payment orders
-      if (o.status === 'Cancelled' || o.paymentStatus === 'Failed') continue;
+    let filtered = customers;
 
-      const rawPhone = o.customer?.phone || '';
-      const cleanPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
-      const key = cleanPhone || rawPhone || 'Unknown';
-
-      const amt = Number(o.amount != null ? o.amount : o.totalAmount) || 0;
-      const orderDateMs = parseDateToMillis(o.createdAt) || Date.now();
-      const orderDate = new Date(orderDateMs);
-
-      if (!map.has(key)) {
-        map.set(key, {
-          id: `CUST-${cleanPhone ? cleanPhone.slice(-4) : (o.customer?.userId || '0000')}`,
-          name: o.customer?.name || 'Customer',
-          phone: cleanPhone ? `+91 ${cleanPhone}` : (rawPhone || 'Unknown'),
-          address: o.customer?.address || o.shippingAddress?.address || 'Ranchi',
-          orders: 1,
-          totalOrders: 1,
-          totalSpent: amt,
-          lastOrder: formatDDMMYYYY_IST(orderDateMs),
-          lastOrderDate: orderDate.toISOString(),
-          _lastOrderMs: orderDateMs,
-        });
-      } else {
-        const entry = map.get(key);
-        entry.orders += 1;
-        entry.totalOrders = entry.orders;
-        entry.totalSpent = Math.round((entry.totalSpent + amt) * 100) / 100;
-
-        // Keep most descriptive name if current name is generic
-        const genericNames = ['verified gourmet user', 'valued customer', 'customer'];
-        const currentNameLower = (entry.name || '').trim().toLowerCase();
-        const orderName = (o.customer?.name || '').trim();
-        if (orderName && (!entry.name || genericNames.includes(currentNameLower))) {
-          entry.name = orderName;
-        }
-
-        // Keep latest address and order date
-        if (orderDateMs >= (entry._lastOrderMs || 0)) {
-          entry._lastOrderMs = orderDateMs;
-          entry.lastOrderDate = orderDate.toISOString();
-          entry.lastOrder = formatDDMMYYYY_IST(orderDateMs);
-          if (o.customer?.address || o.shippingAddress?.address) {
-            entry.address = o.customer?.address || o.shippingAddress?.address;
-          }
-        }
-      }
+    // Segment filter
+    if (segment && segment !== 'all') {
+      filtered = filtered.filter((c) => c.segment === segment);
     }
 
-    const nowMs = Date.now();
-    const customers = Array.from(map.values()).map((c) => {
-      const lastMs = c._lastOrderMs || null;
-      delete c._lastOrderMs;
-      c.totalSpent = Math.round(c.totalSpent * 100) / 100;
+    // Search filter
+    const query = String(search || '').trim().toLowerCase();
+    if (query) {
+      filtered = filtered.filter((c) => {
+        const name = (c.name || '').toLowerCase();
+        const phone = (c.phone || '').toLowerCase();
+        const address = (c.address || '').toLowerCase();
+        return name.includes(query) || phone.includes(query) || address.includes(query);
+      });
+    }
 
-      const daysSince = lastMs ? getCalendarDaysSinceOrderIST(lastMs, nowMs) : null;
-      c.daysSinceLastOrder = daysSince;
+    // Dynamic sorting
+    filtered = sortCustomerRecords(filtered, sortBy);
 
-      const count = Number(c.totalOrders || c.orders || 0);
-      if (count >= 2) {
-        c.segment = (daysSince != null && daysSince <= 30) ? 'active' : 'inactive';
-      } else if (count === 1) {
-        c.segment = (daysSince != null && daysSince <= 30) ? 'new' : 'inactive';
-      } else {
-        c.segment = 'new';
-      }
-      return c;
-    });
-
-    customers.sort((a, b) => (b.totalOrders || b.orders || 0) - (a.totalOrders || a.orders || 0));
+    const total = filtered.length;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+    const totalPages = Math.ceil(total / limitNum) || 1;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginatedCustomers = filtered.slice(startIndex, startIndex + limitNum);
 
     res.status(200).json({
       success: true,
-      count: customers.length,
-      customers,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages,
+      segmentCounts,
+      customers: paginatedCustomers,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/store-admin/customers/export
+ * Export customers data as CSV matching filters
+ */
+const exportStoreCustomers = async (req, res, next) => {
+  try {
+    const storeId = getEffectiveStoreId(req);
+    const { search = '', segment = 'all', sortBy = 'latest' } = req.query;
+
+    const { customers } = await getAggregatedStoreCustomers(storeId);
+
+    let filtered = customers;
+
+    if (segment && segment !== 'all') {
+      filtered = filtered.filter((c) => c.segment === segment);
+    }
+
+    const query = String(search || '').trim().toLowerCase();
+    if (query) {
+      filtered = filtered.filter((c) => {
+        const name = (c.name || '').toLowerCase();
+        const phone = (c.phone || '').toLowerCase();
+        const address = (c.address || '').toLowerCase();
+        return name.includes(query) || phone.includes(query) || address.includes(query);
+      });
+    }
+
+    // Dynamic sorting for export
+    filtered = sortCustomerRecords(filtered, sortBy);
+
+    const escapeCsv = (val) => {
+      if (val == null) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const headers = [
+      'Customer ID',
+      'Customer Name',
+      'Phone Number',
+      'Delivery Address',
+      'Segment',
+      'Total Orders',
+      'Total Spent (INR)',
+      'Last Order Date',
+      'Days Since Last Order',
+    ];
+
+    const rows = filtered.map((c) => {
+      const segLabel =
+        c.segment === 'active'
+          ? 'Active Repeat'
+          : c.segment === 'new'
+          ? 'New Customer'
+          : 'Inactive';
+      return [
+        escapeCsv(c.id),
+        escapeCsv(c.name),
+        escapeCsv(c.phone),
+        escapeCsv(c.address),
+        escapeCsv(segLabel),
+        c.totalOrders || c.orders || 0,
+        c.totalSpent != null ? Number(c.totalSpent).toFixed(2) : '0.00',
+        escapeCsv(c.lastOrder || ''),
+        c.daysSinceLastOrder != null ? c.daysSinceLastOrder : 'N/A',
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="teffes_customers_${storeId}_${dateStr}.csv"`
+    );
+    res.status(200).send(csvContent);
   } catch (error) {
     next(error);
   }
@@ -2273,6 +2482,7 @@ module.exports = {
   recordInventoryWaste,
   getInventoryHistory,
   getStoreCustomers,
+  exportStoreCustomers,
   getDeliverySlots,
   updateDeliverySlot,
   getReturnRequests,
