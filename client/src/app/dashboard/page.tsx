@@ -439,6 +439,23 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // Real-time synchronization for saved addresses when added/edited/deleted elsewhere (e.g. from Cart Drawer or Location Modal)
+  useEffect(() => {
+    const handleAddressesSync = () => {
+      fetchAddresses();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("teffes:addresses_updated", handleAddressesSync);
+      window.addEventListener("storage", handleAddressesSync);
+    }
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener("teffes:addresses_updated", handleAddressesSync);
+        window.removeEventListener("storage", handleAddressesSync);
+      }
+    };
+  }, []);
+
   // Real-time socket sync for active customer orders
   useEffect(() => {
     const socket = getSocket();

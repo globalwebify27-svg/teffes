@@ -362,7 +362,10 @@ export function LocationProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const openLocationModal = () => setIsLocationModalOpen(true);
+  const openLocationModal = () => {
+    refreshSavedAddresses();
+    setIsLocationModalOpen(true);
+  };
   const closeLocationModal = () => {
     hasDismissedInCurrentPageLoad = true;
     setIsLocationModalOpen(false);

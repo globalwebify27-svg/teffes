@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLocation, UserAddress } from "@/context/LocationContext";
 import { isAuthenticated, updateUserInStorage } from "@/lib/auth";
 import api from "@/lib/api";
@@ -41,6 +41,12 @@ export default function LocationModal() {
   const handleClose = () => {
     closeLocationModal();
   };
+
+  useEffect(() => {
+    if (isLocationModalOpen) {
+      refreshSavedAddresses();
+    }
+  }, [isLocationModalOpen, refreshSavedAddresses]);
 
   if (!isLocationModalOpen) return null;
 

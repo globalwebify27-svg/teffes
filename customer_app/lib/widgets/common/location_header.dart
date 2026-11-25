@@ -158,6 +158,7 @@ class LocationHeader extends StatelessWidget {
   }
 
   void _showLocationBottomSheet(BuildContext context) {
+    Provider.of<LocationProvider>(context, listen: false).fetchAddresses();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -724,6 +725,7 @@ void showAddAddressSheet(BuildContext context, LocationProvider location) {
 
 /// Prompt displayed on initial app open if location permission / address hasn't been set yet
 Future<void> showInitialLocationPrompt(BuildContext context, LocationProvider locationProvider) async {
+  locationProvider.fetchAddresses();
   return showModalBottomSheet<void>(
     context: context,
     isDismissible: true,
