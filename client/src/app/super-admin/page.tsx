@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { getStoredUser, clearAuth } from "@/lib/auth";
 import type { User } from "@/lib/auth";
@@ -4468,8 +4468,13 @@ function CustomersTab() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [segmentFilter, setSegmentFilter] = useState<"all" | "active" | "new" | "inactive">("all");
+  const [sortBy, setSortBy] = useState<"latest" | "orders_desc" | "spent_desc" | "oldest">("latest");
   const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [segmentCounts, setSegmentCounts] = useState({ all: 0, active: 0, new: 0, inactive: 0 });
+  const [isExporting, setIsExporting] = useState(false);
   const pageSize = 50;
 
   // Modal State for Adding Balance to Customer
@@ -4479,68 +4484,98 @@ function CustomersTab() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: "success" | "error"; message: string } | null>(null);
 
-  const fetchCustomers = () => {
-    api.get<{ success: boolean; customers: any[] }>("/super-admin/customers")
-      .then(res => {
-        if (res.data.success) {
-          setCustomers(res.data.customers || []);
-        }
-      })
-      .catch(err => console.warn("Failed to fetch platform customers:", err))
-      .finally(() => setLoading(false));
-  };
-
+  // Debounce search input by 350ms
   useEffect(() => {
-    fetchCustomers();
-  }, []);
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery.trim());
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-  // Reset pagination on search query or segment change
+  // Reset page when search, segment, or sort changes
   useEffect(() => {
     setPage(1);
-  }, [searchQuery, segmentFilter]);
+  }, [debouncedSearch, segmentFilter, sortBy]);
 
-  // Counts for segmentation pills
-  const segmentCounts = useMemo(() => {
-    let active = 0;
-    let newCust = 0;
-    let inactive = 0;
-    customers.forEach(c => {
-      const seg = c.segment || "new";
-      if (seg === "active") active++;
-      else if (seg === "new") newCust++;
-      else if (seg === "inactive") inactive++;
-    });
-    return { all: customers.length, active, new: newCust, inactive };
-  }, [customers]);
+  // Fetch paginated customers from backend
+  const fetchCustomers = useCallback(() => {
+    let isMounted = true;
+    setLoading(true);
 
-  const filteredCustomers = useMemo(() => {
-    return customers.filter(c => {
-      // Segment filter
-      if (segmentFilter !== "all") {
-        const seg = c.segment || "new";
-        if (seg !== segmentFilter) return false;
-      }
-      // Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim();
-        const name = (c.name || "").toLowerCase();
-        const phone = (c.phone || "").toLowerCase();
-        const addr = (c.address || "").toLowerCase();
-        const addressesMatch = c.addresses && c.addresses.some((a: any) =>
-          (a.line1 || "").toLowerCase().includes(q) || (a.city || "").toLowerCase().includes(q)
-        );
-        if (!name.includes(q) && !phone.includes(q) && !addr.includes(q) && !addressesMatch) {
-          return false;
+    api.get<{
+      success: boolean;
+      total: number;
+      page: number;
+      limit: number;
+      totalPages: number;
+      segmentCounts: { all: number; active: number; new: number; inactive: number };
+      customers: any[];
+    }>("/super-admin/customers", {
+      params: {
+        page,
+        limit: pageSize,
+        search: debouncedSearch,
+        segment: segmentFilter,
+        sortBy,
+      },
+    })
+      .then(res => {
+        if (!isMounted) return;
+        if (res.data.success) {
+          setCustomers(res.data.customers || []);
+          setTotalItems(res.data.total ?? 0);
+          if (res.data.segmentCounts) {
+            setSegmentCounts(res.data.segmentCounts);
+          }
         }
-      }
-      return true;
-    });
-  }, [customers, searchQuery, segmentFilter]);
+      })
+      .catch(err => {
+        if (isMounted) console.warn("Failed to fetch platform customers:", err);
+      })
+      .finally(() => {
+        if (isMounted) setLoading(false);
+      });
 
-  const paginatedCustomers = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return filteredCustomers.slice(start, start + pageSize);
-  }, [filteredCustomers, page, pageSize]);
+    return () => {
+      isMounted = false;
+    };
+  }, [page, debouncedSearch, segmentFilter, sortBy]);
+
+  useEffect(() => {
+    const cleanup = fetchCustomers();
+    return cleanup;
+  }, [fetchCustomers]);
+
+  // Export CSV handler
+  const handleExportCSV = async () => {
+    try {
+      setIsExporting(true);
+      const res = await api.get("/super-admin/customers/export", {
+        params: {
+          search: debouncedSearch,
+          segment: segmentFilter,
+          sortBy,
+        },
+        responseType: "blob",
+      });
+
+      const blob = new Blob([res.data], { type: "text/csv;charset=utf-8;" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      const dateStr = new Date().toISOString().split("T")[0];
+      link.setAttribute("download", `teffes_platform_customers_${dateStr}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Failed to export platform customers CSV:", err);
+      alert("Failed to export platform customers CSV. Please try again.");
+    } finally {
+      setIsExporting(false);
+    }
+  };
 
   const openBalanceModal = (customer: any) => {
     setBalanceModalUser({
@@ -4666,20 +4701,14 @@ function CustomersTab() {
         })}
       </div>
 
-      {/* Search Toolbar */}
-      <div style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        flexWrap: "wrap",
-        gap: "12px",
-        marginBottom: "16px",
-        background: "#faf8f5",
-        padding: "12px 16px",
-        borderRadius: "12px",
-        border: "1px solid #ede8e0",
-      }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: 1, maxWidth: "420px" }}>
+      {/* Search & Actions Toolbar - Fully Responsive */}
+      <div
+        className="flex items-center justify-between flex-wrap gap-3 mb-4 rounded-xl border border-[#ede8e0] p-3 sm:p-4 bg-[#faf8f5]"
+      >
+        {/* Search Input: full width on mobile, constrained on desktop */}
+        <div
+          className="flex items-center gap-2 w-full md:w-auto md:max-w-[380px] flex-1 min-w-[200px]"
+        >
           <span className="material-symbols-outlined text-[18px] text-gray-500">search</span>
           <input
             type="text"
@@ -4687,7 +4716,7 @@ function CustomersTab() {
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{
-              padding: "7px 12px",
+              padding: "8px 12px",
               borderRadius: "8px",
               border: "1px solid #d1d5db",
               fontSize: "0.825rem",
@@ -4707,14 +4736,81 @@ function CustomersTab() {
                 cursor: "pointer",
                 fontSize: "0.8rem",
                 fontWeight: 700,
+                padding: "4px",
               }}
             >
               Clear
             </button>
           )}
         </div>
-        <div style={{ fontSize: "0.8rem", color: "#73695b", fontWeight: 600 }}>
-          Showing: <strong style={{ color: "#941717" }}>{filteredCustomers.length}</strong> customers
+
+        {/* Action Controls: Left-aligned on mobile, Right-aligned on desktop */}
+        <div
+          className="flex items-center flex-wrap gap-2.5 w-full md:w-auto justify-start md:justify-end"
+        >
+          {/* Sorting Dropdown */}
+          <div style={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
+            background: "#ffffff",
+            border: "1px solid #d1d5db",
+            borderRadius: "8px",
+            padding: "2px 8px",
+            height: "36px",
+          }}>
+            <span className="material-symbols-outlined text-[18px] text-gray-500">sort</span>
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as any)}
+              style={{
+                padding: "6px 2px",
+                border: "none",
+                fontSize: "0.8rem",
+                background: "transparent",
+                fontWeight: 600,
+                color: "#374151",
+                cursor: "pointer",
+                outline: "none",
+              }}
+              title="Sort customers list"
+            >
+              <option value="latest">Latest First</option>
+              <option value="orders_desc">Highest Orders First</option>
+              <option value="spent_desc">Highest Spent First</option>
+              <option value="oldest">Oldest First</option>
+            </select>
+          </div>
+
+          {/* Export CSV Button */}
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            disabled={isExporting || totalItems === 0}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "6px",
+              padding: "7px 14px",
+              height: "36px",
+              borderRadius: "8px",
+              background: isExporting ? "#f3f4f6" : "#ffffff",
+              border: "1px solid #d1d5db",
+              color: isExporting ? "#9ca3af" : "#374151",
+              fontWeight: 700,
+              fontSize: "0.8rem",
+              cursor: isExporting || totalItems === 0 ? "not-allowed" : "pointer",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              transition: "all 120ms ease",
+              whiteSpace: "nowrap",
+            }}
+            title="Download customers data as CSV"
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              {isExporting ? "hourglass_empty" : "download"}
+            </span>
+            <span>{isExporting ? "Exporting..." : "Export CSV"}</span>
+          </button>
         </div>
       </div>
 
@@ -4731,14 +4827,14 @@ function CustomersTab() {
               </tr>
             </thead>
             <tbody>
-              {filteredCustomers.length === 0 ? (
+              {customers.length === 0 ? (
                 <tr>
                   <td colSpan={8} style={{ padding: "32px", textAlign: "center", color: "#73695b" }}>
                     No customer accounts found matching this segment/search.
                   </td>
                 </tr>
               ) : (
-                paginatedCustomers.map((c, i) => {
+                customers.map((c, i) => {
                   const seg = c.segment || "new";
                   const cleanPhone = String(c.phone || "").replace(/\D/g, "").slice(-10);
                   const isInactive = seg === "inactive";
@@ -4746,7 +4842,7 @@ function CustomersTab() {
                   const isNew = seg === "new";
 
                   return (
-                    <tr key={c.id || c._id || (c.phone ? `${c.phone}-${i}` : i)} style={{ borderBottom: i < paginatedCustomers.length - 1 ? "1px solid #ede8e0" : "none" }}>
+                    <tr key={`${c.id || c.phone || 'cust'}-${i}`} style={{ borderBottom: i < customers.length - 1 ? "1px solid #ede8e0" : "none" }}>
                       <td style={{ padding: "14px 16px" }}>
                         <div style={{ fontWeight: 700, color: "#171410" }}>{c.name || "Customer"}</div>
                         <div style={{ color: "#73695b", fontSize: "0.75rem", marginTop: "2px" }}>
@@ -4878,7 +4974,7 @@ function CustomersTab() {
 
       <Pagination
         currentPage={page}
-        totalItems={filteredCustomers.length}
+        totalItems={totalItems}
         pageSize={pageSize}
         onPageChange={setPage}
         itemLabel="customers"

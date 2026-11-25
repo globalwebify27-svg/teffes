@@ -18,13 +18,17 @@ class CartProvider with ChangeNotifier {
   bool _isSyncing = false;
   List<CouponModel> _availableCoupons = [];
   bool _isLoadingCoupons = false;
+  double _freeDeliveryThreshold = 399.0;
+  double _standardDeliveryFee = 40.0;
 
   Map<String, CartItemModel> get items => {..._items};
   int get itemCount => _items.values.fold(0, (sum, item) => sum + item.quantity);
   int get uniqueItemCount => _items.length;
 
   double get subtotal => _items.values.fold(0.0, (sum, item) => sum + item.totalPrice);
-  double get deliveryFee => (subtotal >= 399 || subtotal == 0) ? 0.0 : 40.0;
+  double get freeDeliveryThreshold => _freeDeliveryThreshold;
+  double get standardDeliveryFee => _standardDeliveryFee;
+  double get deliveryFee => (subtotal >= _freeDeliveryThreshold || subtotal == 0) ? 0.0 : _standardDeliveryFee;
   double get couponDiscount => _couponDiscount;
   String? get appliedCoupon => _appliedCoupon;
   CouponModel? get appliedCouponModel => _appliedCouponModel;
@@ -32,6 +36,21 @@ class CartProvider with ChangeNotifier {
   List<CouponModel> get availableCoupons => [..._availableCoupons];
   bool get isLoadingCoupons => _isLoadingCoupons;
   double get grandTotal => (subtotal - _couponDiscount + deliveryFee).clamp(0.0, double.infinity);
+
+  void updateDeliveryConfig({double? freeDeliveryThreshold, double? standardDeliveryFee}) {
+    bool changed = false;
+    if (freeDeliveryThreshold != null && _freeDeliveryThreshold != freeDeliveryThreshold) {
+      _freeDeliveryThreshold = freeDeliveryThreshold;
+      changed = true;
+    }
+    if (standardDeliveryFee != null && _standardDeliveryFee != standardDeliveryFee) {
+      _standardDeliveryFee = standardDeliveryFee;
+      changed = true;
+    }
+    if (changed) {
+      notifyListeners();
+    }
+  }
 
   CartProvider() {
     _init();

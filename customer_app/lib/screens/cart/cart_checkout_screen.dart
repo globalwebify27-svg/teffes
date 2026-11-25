@@ -77,9 +77,45 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     return _isNightAfter8PM() || _isEarlyMorningBefore8AM();
   }
 
+  String _formatTime12(String? t) {
+    if (t == null || t.isEmpty) return '';
+    final parts = t.split(':');
+    final hStr = parts[0];
+    final mStr = parts.length > 1 ? parts[1] : '00';
+    final h = int.tryParse(hStr);
+    if (h == null) return t;
+    final ampm = h >= 12 ? 'PM' : 'AM';
+    var displayH = h > 12 ? h - 12 : h;
+    if (displayH == 0) displayH = 12;
+    return '$displayH:$mStr $ampm';
+  }
+
   List<Map<String, dynamic>> _getHourlySlots() {
     final now = DateTime.now();
     final currentHour = now.hour;
+    final selStore = _selectedStore;
+    final todaySpecial = selStore?.todaySpecialSchedule;
+    int specialOpenH = 8;
+    int specialCloseH = 20;
+
+    if (todaySpecial != null) {
+      if (todaySpecial['mode'] == 'closed') {
+        specialOpenH = 24;
+        specialCloseH = 0;
+      } else {
+        if (todaySpecial['openTime'] != null) {
+          final parts = todaySpecial['openTime'].toString().split(':');
+          final h = int.tryParse(parts[0]);
+          if (h != null) specialOpenH = h;
+        }
+        if (todaySpecial['closeTime'] != null) {
+          final parts = todaySpecial['closeTime'].toString().split(':');
+          final h = int.tryParse(parts[0]);
+          if (h != null) specialCloseH = h;
+        }
+      }
+    }
+
     final all = [
       {'start': 8, 'label': '08:00 AM - 09:00 AM'},
       {'start': 9, 'label': '09:00 AM - 10:00 AM'},
@@ -97,7 +133,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
 
     return all.map((s) {
       final start = s['start'] as int;
-      final isPassed = start <= currentHour;
+      final isPassed = start <= currentHour || start < specialOpenH || start >= specialCloseH;
       return {
         'label': s['label'] as String,
         'start': start,
@@ -318,6 +354,15 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 }
               }
             }
+
+            final currentStore = _stores.firstWhere(
+              (s) => s.storeId == _selectedStoreId,
+              orElse: () => firstAvail,
+            );
+            cart.updateDeliveryConfig(
+              freeDeliveryThreshold: currentStore.freeDeliveryThreshold,
+              standardDeliveryFee: currentStore.standardDeliveryFee,
+            );
           });
           _fetchCrossSellItems();
         }
@@ -1150,20 +1195,38 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       return;
     }
 
-    final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
-    final isAfterHours = !isPickup && _isAfter8PM();
-    final expressFee = (!isPickup && !isAfterHours && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
+    final selStore = _selectedStore;
+    final isSpecialClosed = selStore != null && selStore.isClosedToday;
+    final isCutoffPassed = selStore != null && (selStore.todaySpecialSchedule?['mode'] == 'half_day' || selStore.todaySpecialSchedule?['mode'] == 'custom_hours') && selStore.isSpecialCutoffPassed();
+    final isAfterHours = !isPickup && (_isAfter8PM() || isSpecialClosed || isCutoffPassed);
+
+    final storeFreeThreshold = selStore?.freeDeliveryThreshold ?? 399.0;
+    final storeStandardFee = selStore?.standardDeliveryFee ?? 40.0;
+    final storeExpressFee = selStore?.expressDeliveryFee ?? 50.0;
+    final storeExpressEnabled = (selStore?.isStoreOperational ?? true) && (selStore?.expressDeliveryEnabled ?? true);
+    final storeRainSurgeEnabled = (selStore?.isStoreOperational ?? true) && (selStore?.rainSurgeEnabled ?? false);
+    final storeRainSurgeFee = storeRainSurgeEnabled ? (selStore?.rainSurgeFee ?? 15.0) : 0.0;
+
+    final isFreeDelivery = cart.subtotal >= storeFreeThreshold;
+    final effectiveDeliveryFee = isPickup ? 0.0 : (isFreeDelivery ? 0.0 : storeStandardFee);
+    final expressFee = (!isPickup && !isAfterHours && _selectedSlot.contains('60 min') && storeExpressEnabled) ? storeExpressFee : 0.0;
+    final rainSurgeFee = (!isPickup && storeRainSurgeEnabled) ? storeRainSurgeFee : 0.0;
     final effectiveTip = isPickup ? 0 : _selectedTip;
-    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
+    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + rainSurgeFee + effectiveTip - cart.couponDiscount).clamp(0.0, double.infinity);
     final resolvedDeliverySlot = isPickup
         ? 'Store Pickup (Counter Takeaway)'
-        : _isNightAfter8PM()
+        : (isSpecialClosed || isCutoffPassed || _isNightAfter8PM())
             ? 'Next-Day Delivery: Tomorrow by 09:00 AM'
             : _isEarlyMorningBefore8AM()
                 ? 'Morning Delivery: Today by 09:00 AM'
-                : _selectedSlot == 'Custom Delivery'
-                    ? 'Custom Delivery: $_selectedCustomSlot'
-                    : _selectedSlot;
+                : (selStore != null &&
+                        (selStore.todaySpecialSchedule?['mode'] == 'late_opening' ||
+                            selStore.todaySpecialSchedule?['mode'] == 'custom_hours') &&
+                        selStore.isBeforeSpecialOpen())
+                    ? 'Delivering Today After ${_formatTime12(selStore.specialOpenTime)}'
+                    : _selectedSlot == 'Custom Delivery'
+                        ? 'Custom Delivery: $_selectedCustomSlot'
+                        : _selectedSlot;
 
     final selAddr = location.selectedAddress;
     if (!isPickup && selAddr == null) {
@@ -1175,7 +1238,19 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       return;
     }
 
-    final selStore = _selectedStore;
+    if (selStore != null && !selStore.isStoreOperational) {
+      final notice = (selStore.emergencyNotice != null && selStore.emergencyNotice!.trim().isNotEmpty)
+          ? selStore.emergencyNotice!.trim()
+          : 'Our fulfilling store (${selStore.name}) is currently paused and not accepting new orders. Please check back shortly.';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(notice),
+          backgroundColor: Colors.red.shade800,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final isOutOfRadius = !isPickup && selAddr != null && (selStore != null && (!selStore.isWithinRadius || (selStore.distanceKm != null && selStore.distanceKm! > (selStore.deliveryRadiusKm ?? 10.0))));
     if (isOutOfRadius) {
       final distStr = selStore?.distanceKm != null ? '${selStore!.distanceKm!.toStringAsFixed(1)} km' : 'beyond delivery limit';
@@ -1214,14 +1289,31 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       }
     }
 
-    // Mandatory Customer Name Validation (Point 4 - No placeholder/empty customer names)
+    // Mandatory Customer Name Validation (No placeholder/empty customer names)
     final currentUserName = auth.user?.name.trim() ?? '';
     final isNameInvalid = currentUserName.isEmpty ||
         currentUserName.toLowerCase() == 'customer' ||
+        currentUserName.toLowerCase() == 'valued customer' ||
         currentUserName.toLowerCase() == 'guest';
 
     if (isNameInvalid) {
       _showMandatoryNameDialog(context, auth, cart, location);
+      return;
+    }
+
+    // Mandatory Customer Phone Validation
+    final currentUserPhone = (auth.user?.phone ?? '').replaceAll(RegExp(r'\D'), '');
+    if (currentUserPhone.length < 10) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please log in with a valid 10-digit mobile number before placing your order.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      await Navigator.of(context).push<bool>(
+        SmoothPageRoute(page: const LoginScreen()),
+      );
       return;
     }
 
@@ -1242,6 +1334,16 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         ? 'Store Pickup: ${selStore?.name ?? "Store Counter"}, ${selStore?.address ?? "Ranchi"}'
         : location.activeAddressString;
     final activeInstruction = isPickup ? _pickupInstructionController.text.trim() : _deliveryInstruction;
+
+    final double? custLat = isPickup ? null : (selAddr?.latitude ?? location.latitude);
+    final double? custLng = isPickup ? null : (selAddr?.longitude ?? location.longitude);
+    final String? addressId = (!isPickup && selAddr != null && !selAddr.id.startsWith('gps-')) ? selAddr.id : null;
+    final String? rawPincode = isPickup
+        ? null
+        : (selAddr?.pincode.isNotEmpty == true
+            ? selAddr!.pincode
+            : RegExp(r'\b\d{6}\b').firstMatch(shippingAddress)?.group(0));
+    final String? cleanPincode = rawPincode?.replaceAll(RegExp(r'\D'), '');
 
     // Validate that selected payment method is active in store settings
     if (_selectedPaymentMethod == 'cod' && !_codEnabled) {
@@ -1285,8 +1387,15 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
         activeInstruction: activeInstruction,
         isPickup: isPickup,
         expressFee: expressFee,
+        rainSurgeFee: rainSurgeFee,
         effectiveDeliveryFee: effectiveDeliveryFee,
         effectiveTip: effectiveTip,
+        custLat: custLat,
+        custLng: custLng,
+        addressId: addressId,
+        pincode: cleanPincode,
+        customerName: auth.user?.name,
+        customerPhone: auth.user?.phone,
       );
       return;
     }
@@ -1364,8 +1473,22 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                 : 'Cash on Delivery (COD)',
         'paymentStatus': _selectedPaymentMethod == 'wallet' ? 'Paid' : 'Pending',
         'shippingAddress': shippingAddress,
+        'address': shippingAddress,
+        if (custLat != null) ...{
+          'customerLat': custLat,
+          'lat': custLat,
+        },
+        if (custLng != null) ...{
+          'customerLng': custLng,
+          'lng': custLng,
+        },
+        if (addressId != null) 'addressId': addressId,
+        if (cleanPincode != null && cleanPincode.isNotEmpty) 'pincode': cleanPincode,
+        'customerName': auth.user?.name ?? 'Valued Customer',
+        'customerPhone': auth.user?.phone ?? '',
         'deliverySlot': resolvedDeliverySlot,
         'expressFee': expressFee,
+        'rainSurgeFee': rainSurgeFee,
         'storeId': storeId,
         'storeName': storeName,
       };
@@ -1500,8 +1623,15 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     required String activeInstruction,
     required bool isPickup,
     required double expressFee,
+    required double rainSurgeFee,
     required double effectiveDeliveryFee,
     required int effectiveTip,
+    double? custLat,
+    double? custLng,
+    String? addressId,
+    String? pincode,
+    String? customerName,
+    String? customerPhone,
   }) async {
     setState(() => _isPlacingOrder = true);
     final auth = context.read<AuthProvider>();
@@ -1515,8 +1645,15 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       'activeInstruction': activeInstruction,
       'isPickup': isPickup,
       'expressFee': expressFee,
+      'rainSurgeFee': rainSurgeFee,
       'effectiveDeliveryFee': effectiveDeliveryFee,
       'effectiveTip': effectiveTip,
+      'customerLat': custLat,
+      'customerLng': custLng,
+      'addressId': addressId,
+      'pincode': pincode,
+      'customerName': customerName ?? auth.user?.name,
+      'customerPhone': customerPhone ?? auth.user?.phone,
     };
 
     try {
@@ -1585,6 +1722,14 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     final isPickup = details['isPickup'] == true;
     final effectiveDeliveryFee = (details['effectiveDeliveryFee'] as num?)?.toDouble() ?? (isPickup ? 0.0 : cart.deliveryFee);
     final effectiveTip = (details['effectiveTip'] as num?)?.toInt() ?? 0;
+    final expressFee = (details['expressFee'] as num?)?.toDouble() ?? 0.0;
+    final rainSurgeFee = (details['rainSurgeFee'] as num?)?.toDouble() ?? 0.0;
+    final custLat = (details['customerLat'] as num?)?.toDouble();
+    final custLng = (details['customerLng'] as num?)?.toDouble();
+    final addressId = details['addressId']?.toString();
+    final pincode = details['pincode']?.toString();
+    final customerName = details['customerName']?.toString() ?? (auth.user?.name ?? 'Valued Customer');
+    final customerPhone = details['customerPhone']?.toString() ?? (auth.user?.phone ?? '');
 
     final newOrderId = 'TEF-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
     final orderPayload = {
@@ -1599,6 +1744,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       }).toList(),
       'subtotal': cart.subtotal,
       'deliveryFee': effectiveDeliveryFee,
+      'expressFee': expressFee,
+      'rainSurgeFee': rainSurgeFee,
       'discount': cart.couponDiscount,
       'couponCode': cart.appliedCoupon,
       'discountAmount': cart.couponDiscount,
@@ -1612,11 +1759,24 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
       'transactionId': transactionId,
       'payuPaymentId': paymentId,
       'shippingAddress': shippingAddress,
+      'address': shippingAddress,
+      if (custLat != null) ...{
+        'customerLat': custLat,
+        'lat': custLat,
+      },
+      if (custLng != null) ...{
+        'customerLng': custLng,
+        'lng': custLng,
+      },
+      if (addressId != null) 'addressId': addressId,
+      if (pincode != null && pincode.isNotEmpty) 'pincode': pincode,
+      'customerName': customerName,
+      'customerPhone': customerPhone,
       'deliverySlot': resolvedDeliverySlot,
       'storeId': storeId,
       'storeName': storeName,
       'deliveryInstruction': activeInstruction,
-      if (_isOrderingForSomeoneElse && _receiverPhoneController.text.trim().isNotEmpty) ...{
+      if (!isPickup && _isOrderingForSomeoneElse && _receiverPhoneController.text.trim().isNotEmpty) ...{
         'receiverPhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
         'alternatePhone': _receiverPhoneController.text.replaceAll(RegExp(r'\D'), ''),
         if (_receiverNameController.text.trim().isNotEmpty)
@@ -1681,10 +1841,22 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
     final auth = context.watch<AuthProvider>();
     final items = cart.items.values.toList();
     final isPickup = _fulfillmentType == 'pickup';
-    final isAfterHours = !isPickup && _isAfter8PM();
-    final effectiveDeliveryFee = isPickup ? 0.0 : cart.deliveryFee;
-    final expressFee = (!isPickup && !isAfterHours && _selectedSlot.contains('60 min')) ? 50.0 : 0.0;
-    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + _selectedTip - cart.couponDiscount).clamp(0.0, double.infinity);
+    final selStore = _selectedStore;
+    final isSpecialClosed = selStore != null && selStore.isClosedToday;
+    final isCutoffPassed = selStore != null && (selStore.todaySpecialSchedule?['mode'] == 'half_day' || selStore.todaySpecialSchedule?['mode'] == 'custom_hours') && selStore.isSpecialCutoffPassed();
+    final isAfterHours = !isPickup && (_isAfter8PM() || isSpecialClosed || isCutoffPassed);
+    final storeFreeThreshold = selStore?.freeDeliveryThreshold ?? 399.0;
+    final storeStandardFee = selStore?.standardDeliveryFee ?? 40.0;
+    final storeExpressFee = selStore?.expressDeliveryFee ?? 50.0;
+    final storeExpressEnabled = (selStore?.isStoreOperational ?? true) && (selStore?.expressDeliveryEnabled ?? true);
+    final storeRainSurgeEnabled = (selStore?.isStoreOperational ?? true) && (selStore?.rainSurgeEnabled ?? false);
+    final storeRainSurgeFee = storeRainSurgeEnabled ? (selStore?.rainSurgeFee ?? 15.0) : 0.0;
+
+    final isFreeDelivery = cart.subtotal >= storeFreeThreshold;
+    final effectiveDeliveryFee = isPickup ? 0.0 : (isFreeDelivery ? 0.0 : storeStandardFee);
+    final expressFee = (!isPickup && !isAfterHours && _selectedSlot.contains('60 min') && storeExpressEnabled) ? storeExpressFee : 0.0;
+    final rainSurgeFee = (!isPickup && storeRainSurgeEnabled) ? storeRainSurgeFee : 0.0;
+    final effectiveGrandTotal = (cart.subtotal + effectiveDeliveryFee + expressFee + rainSurgeFee + _selectedTip - cart.couponDiscount).clamp(0.0, double.infinity);
     final double bottomInset = MediaQuery.of(context).viewPadding.bottom;
 
     return Scaffold(
@@ -1719,6 +1891,41 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
+                  // Live Emergency Notice Banner (if enabled on fulfilling store)
+                  if (selStore != null && selStore.emergencyNotice != null && selStore.emergencyNotice!.trim().isNotEmpty)
+                    Container(
+                      margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, AppDimensions.spaceSm, AppDimensions.spaceMd, 0),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFEF2F2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFCA5A5)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, size: 20, color: Color(0xFFDC2626)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Store Operational Notice',
+                                  style: TextStyle(fontWeight: FontWeight.w800, fontSize: 12, color: Color(0xFF991B1B)),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  selStore.emergencyNotice!.trim(),
+                                  style: const TextStyle(fontSize: 11.5, color: Color(0xFFB91C1C), height: 1.3),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                   // 0. Fulfillment Type Switcher (Home Delivery vs Store Pickup)
                   Container(
                     margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, AppDimensions.spaceSm, AppDimensions.spaceMd, 0),
@@ -2491,8 +2698,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                               ),
                             ],
                           )
-                        else if (_isAfter8PM()) ...[
-                          // After 7:59 PM Customer Education Notice Banner (Locks slots, schedules next morning 9 AM delivery)
+                        else if (isAfterHours) ...[
+                          // After Hours / Special Cutoff Notice Banner (Locks slots, schedules next morning 9 AM delivery)
                           Container(
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
@@ -2521,9 +2728,13 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        _isEarlyMorningBefore8AM()
-                                            ? 'Store Opens at 8:00 AM Today'
-                                            : 'Teffes Store Hours: 8:00 AM – 8:00 PM',
+                                        isSpecialClosed
+                                            ? 'Store Closed Today for Operations'
+                                            : isCutoffPassed
+                                                ? "Today's Cutoff Passed (${_formatTime12(selStore?.specialCloseTime)})"
+                                                : _isEarlyMorningBefore8AM()
+                                                    ? 'Store Opens at 8:00 AM Today'
+                                                    : 'Teffes Store Hours: 8:00 AM – 8:00 PM',
                                         style: const TextStyle(
                                           fontWeight: FontWeight.w800,
                                           fontSize: 12.5,
@@ -2532,9 +2743,17 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                       ),
                                       const SizedBox(height: 3),
                                       Text(
-                                        _isEarlyMorningBefore8AM()
-                                            ? 'Store timing is 8:00 AM to 8:00 PM. As you are placing your order early morning before opening, it will be delivered today by 9:00 AM.'
-                                            : 'Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM.',
+                                        isSpecialClosed
+                                            ? (selStore?.customerScheduleNote != null && selStore!.customerScheduleNote!.isNotEmpty
+                                                ? selStore.customerScheduleNote!
+                                                : 'Our fulfilling store is closed today for special kitchen maintenance. Orders placed now will be delivered tomorrow morning by 9:00 AM.')
+                                            : isCutoffPassed
+                                                ? (selStore?.customerScheduleNote != null && selStore!.customerScheduleNote!.isNotEmpty
+                                                    ? '${selStore.customerScheduleNote!}. Your order will be prepared fresh and delivered tomorrow morning by 9:00 AM.'
+                                                    : "Today's same-day delivery closed at ${_formatTime12(selStore?.specialCloseTime)}. Orders placed now will be delivered tomorrow morning by 9:00 AM.")
+                                                : _isEarlyMorningBefore8AM()
+                                                    ? 'Store timing is 8:00 AM to 8:00 PM. As you are placing your order early morning before opening, it will be delivered today by 9:00 AM.'
+                                                    : 'Store timing is 8:00 AM to 8:00 PM. As you are placing your order after 7:59 PM, it will be delivered tomorrow by 9:00 AM.',
                                         style: const TextStyle(
                                           fontSize: 11.5,
                                           height: 1.35,
@@ -2555,9 +2774,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                             const Icon(Icons.wb_sunny_rounded, size: 13, color: Color(0xFF047857)),
                                             const SizedBox(width: 5),
                                             Text(
-                                              _isEarlyMorningBefore8AM()
-                                                  ? 'Scheduled: Today by 09:00 AM'
-                                                  : 'Scheduled: Tomorrow by 09:00 AM',
+                                              (isSpecialClosed || isCutoffPassed || _isNightAfter8PM())
+                                                  ? 'Scheduled: Tomorrow by 09:00 AM'
+                                                  : 'Scheduled: Today by 09:00 AM',
                                               style: const TextStyle(
                                                 fontSize: 11,
                                                 fontWeight: FontWeight.w800,
@@ -2574,53 +2793,146 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                             ),
                           ),
                         ] else ...[
-                          // 3 Options for Home Delivery
-                          Row(
-                            children: [
-                              // 1. Express Delivery (60 min) (+₹50)
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () => setState(() => _selectedSlot = 'Express Delivery (60 min)'),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 7),
-                                    decoration: BoxDecoration(
-                                      color: _selectedSlot.contains('60 min') ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
-                                      borderRadius: AppDimensions.roundedMd,
-                                      border: Border.all(
-                                        color: _selectedSlot.contains('60 min') ? AppColors.primaryMaroon : AppColors.borderHairline,
-                                      ),
-                                    ),
+                          // Live Late Opening Notice if placed before store opens
+                          if (selStore != null &&
+                              (selStore.todaySpecialSchedule?['mode'] == 'late_opening' ||
+                                  selStore.todaySpecialSchedule?['mode'] == 'custom_hours') &&
+                              selStore.isBeforeSpecialOpen()) ...[
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF0F9FF),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFBAE6FD)),
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Icon(Icons.schedule_rounded, size: 16, color: Color(0xFF0284C7)),
+                                  const SizedBox(width: 8),
+                                  Expanded(
                                     child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(
-                                              'Express',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 11.5,
-                                                color: _selectedSlot.contains('60 min') ? AppColors.primaryMaroon : AppColors.textPrimary,
-                                              ),
-                                            ),
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
-                                              decoration: BoxDecoration(
-                                                color: Colors.amber.shade100,
-                                                borderRadius: BorderRadius.circular(4),
-                                              ),
-                                              child: const Text('+₹50', style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w900, color: Colors.brown)),
-                                            ),
-                                          ],
+                                        Text(
+                                          'Store Opens at ${_formatTime12(selStore.specialOpenTime)} Today',
+                                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5, color: Color(0xFF0369A1)),
                                         ),
-                                        const SizedBox(height: 3),
-                                        Text('60 Mins', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.bold, color: _selectedSlot.contains('60 min') ? AppColors.primaryMaroon : AppColors.textPrimary)),
-                                        const Text('Priority rush', style: TextStyle(fontSize: 9, color: AppColors.textMuted)),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          selStore.customerScheduleNote?.isNotEmpty == true
+                                              ? selStore.customerScheduleNote!
+                                              : 'Deliveries will commence once the kitchen opens at ${_formatTime12(selStore.specialOpenTime)}.',
+                                          style: const TextStyle(fontSize: 10.5, color: Color(0xFF0284C7)),
+                                        ),
                                       ],
                                     ),
                                   ),
-                                ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          // Live Bad Weather / Rain Surge Alert if enabled by Store Admin
+                          if (storeRainSurgeEnabled && !isPickup) ...[
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFFBEB),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFFFDE68A)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.thunderstorm_rounded, size: 16, color: Color(0xFFD97706)),
+                                  const SizedBox(width: 8),
+                                  const Expanded(
+                                    child: Text(
+                                      'Bad Weather / Rain Surge Active in your area',
+                                      style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF78350F)),
+                                    ),
+                                  ),
+                                  Text(
+                                    '+₹${storeRainSurgeFee.toInt()}',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF78350F)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                          // 3 Options for Home Delivery
+                          Row(
+                            children: [
+                              // 1. Express Delivery (60 min)
+                              Builder(
+                                builder: (context) {
+                                  final bool isExpressDisabled = selStore?.expressDeliveryEnabled == false || !(selStore?.isStoreOperational ?? true);
+                                  return Expanded(
+                                    child: GestureDetector(
+                                      onTap: isExpressDisabled ? null : () => setState(() => _selectedSlot = 'Express Delivery (60 min)'),
+                                      child: Opacity(
+                                        opacity: isExpressDisabled ? 0.5 : 1.0,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 7),
+                                          decoration: BoxDecoration(
+                                            color: _selectedSlot.contains('60 min') && !isExpressDisabled ? AppColors.primaryLight.withOpacity(0.35) : AppColors.surfaceSubtle,
+                                            borderRadius: AppDimensions.roundedMd,
+                                            border: Border.all(
+                                              color: _selectedSlot.contains('60 min') && !isExpressDisabled ? AppColors.primaryMaroon : AppColors.borderHairline,
+                                            ),
+                                          ),
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                                children: [
+                                                  Text(
+                                                    'Express',
+                                                    style: TextStyle(
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 11.5,
+                                                      color: _selectedSlot.contains('60 min') && !isExpressDisabled ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1.5),
+                                                    decoration: BoxDecoration(
+                                                      color: isExpressDisabled ? Colors.grey.shade200 : Colors.amber.shade100,
+                                                      borderRadius: BorderRadius.circular(4),
+                                                    ),
+                                                    child: Text(
+                                                      isExpressDisabled ? 'Paused' : '+₹${storeExpressFee.toInt()}',
+                                                      style: TextStyle(
+                                                        fontSize: 8.5,
+                                                        fontWeight: FontWeight.w900,
+                                                        color: isExpressDisabled ? Colors.grey.shade700 : Colors.brown,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                '60 Mins',
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: _selectedSlot.contains('60 min') && !isExpressDisabled ? AppColors.primaryMaroon : AppColors.textPrimary,
+                                                ),
+                                              ),
+                                              Text(
+                                                isExpressDisabled ? 'Kitchen backlog' : 'Priority rush',
+                                                style: const TextStyle(fontSize: 9, color: AppColors.textMuted),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                               const SizedBox(width: 6),
                               // 2. 90 Min Delivery (Standard Free)
@@ -3266,6 +3578,19 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                   : CurrencyFormatter.format(effectiveDeliveryFee),
                           isHighlight: effectiveDeliveryFee == 0,
                         ),
+                        if (!isPickup && effectiveDeliveryFee > 0 && cart.subtotal < storeFreeThreshold)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2, bottom: 6),
+                            child: Text(
+                              'Add ₹${(storeFreeThreshold - cart.subtotal).ceil()} more for FREE delivery',
+                              style: const TextStyle(fontSize: 11, color: AppColors.primaryMaroon, fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        if (rainSurgeFee > 0)
+                          _buildBillRow(
+                            'Bad Weather / Rain Surge',
+                            '+ ${CurrencyFormatter.format(rainSurgeFee)}',
+                          ),
                         if (expressFee > 0)
                           _buildBillRow(
                             'Express (60 Min) Priority Fee',
@@ -3317,10 +3642,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                  p.name.toLowerCase().contains(name.toLowerCase()) ||
                                  name.toLowerCase().contains(p.name.toLowerCase()))));
                   });
-                  final bool isStoreOperational = selStore != null &&
-                      selStore.status.toLowerCase() != 'paused' &&
-                      selStore.status.toLowerCase() != 'closed' &&
-                      selStore.status.toLowerCase() != 'inactive';
+                  final bool isStoreOperational = selStore != null && selStore.isStoreOperational;
                   final bool isCheckoutBlocked = cart.subtotal < 200 || (auth.isAuthenticated && !isLocationMissing && (isOutOfRadius || needsPincodeVerification)) || hasOutOfStockItems || !isStoreOperational;
 
                   return Column(
@@ -3357,14 +3679,16 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                             borderRadius: BorderRadius.circular(8),
                             border: Border.all(color: const Color(0xFFF59E0B)),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(Icons.storefront_rounded, size: 16, color: Color(0xFFB45309)),
-                              SizedBox(width: 8),
+                              const Icon(Icons.storefront_rounded, size: 16, color: Color(0xFFB45309)),
+                              const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Store hub is currently paused / offline. Please check back shortly.',
-                                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
+                                  (selStore.emergencyNotice != null && selStore.emergencyNotice!.trim().isNotEmpty)
+                                      ? selStore.emergencyNotice!.trim()
+                                      : 'Store hub (${selStore.name}) is currently paused / offline. Please check back shortly.',
+                                  style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700, color: Color(0xFF92400E)),
                                 ),
                               ),
                             ],
@@ -3372,7 +3696,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                         ),
                       if (needsPincodeVerification)
                         GestureDetector(
-                          onTap: () => _showPincodeVerificationModal(context, selAddr!),
+                          onTap: () => _showPincodeVerificationModal(context, selAddr),
                           child: Container(
                             margin: const EdgeInsets.only(bottom: 10),
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -3517,7 +3841,9 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                 : Text(
                                     !auth.isAuthenticated
                                         ? 'Login to proceed'
-                                        : isLocationMissing
+                                        : !isStoreOperational
+                                            ? 'Store Paused / Offline'
+                                            : isLocationMissing
                                             ? 'Select Delivery Location →'
                                             : (_selectedPaymentMethod == 'payu'
                                                 ? 'Proceed to Pay →'

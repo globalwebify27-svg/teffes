@@ -15,6 +15,7 @@ const {
   updateRider,
   deleteRider,
   getPlatformCustomers,
+  exportPlatformCustomers,
   getCoupons,
   createCoupon,
   updateCoupon,
@@ -54,6 +55,7 @@ router.put('/riders/:id', updateRider);
 router.delete('/riders/:id', deleteRider);
 
 // 5. Customers
+router.get('/customers/export', exportPlatformCustomers);
 router.get('/customers', getPlatformCustomers);
 
 // 6. Coupons

@@ -210,7 +210,7 @@ const addAddress = async (req, res, next) => {
       updatedAt: new Date().toISOString(),
     });
 
-    res.status(201).json({ success: true, addresses });
+    res.status(201).json({ success: true, addresses, address: newAddress });
   } catch (error) {
     next(error);
   }
@@ -245,7 +245,7 @@ const updateAddress = async (req, res, next) => {
       updatedAt: new Date().toISOString(),
     });
 
-    res.status(200).json({ success: true, addresses });
+    res.status(200).json({ success: true, addresses, address: addresses[targetIdx] });
   } catch (error) {
     next(error);
   }

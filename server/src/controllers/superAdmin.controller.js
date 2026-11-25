@@ -676,8 +676,46 @@ const formatDDMMYYYY_IST = (dateInput) => {
  * - Order placed yesterday in IST -> 1
  * - Order placed N calendar days ago in IST -> N
  */
+/**
+ * Safely parses any date/timestamp format (including legacy CSV records with non-padded single-digit hours) to millis.
+ */
+const parseDateToMillisSafe = (val) => {
+  if (!val) return 0;
+  if (typeof val?.toDate === 'function') {
+    try { return val.toDate().getTime(); } catch (_) {}
+  }
+  if (typeof val === 'object') {
+    const s = val._seconds ?? val.seconds;
+    if (typeof s === 'number') return s * 1000;
+  }
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') {
+    let t = new Date(val).getTime();
+    if (!isNaN(t)) return t;
+
+    // Normalize single-digit hours/minutes/seconds e.g. T9:11:50 or T0:24:00
+    let s = val.trim();
+    s = s.replace(/T(\d):/, (m, h) => `T0${h}:`);
+    s = s.replace(/:(\d):/, (m, min) => `:0${min}:`);
+    s = s.replace(/:(\d)([^\d]|$)/, (m, sec, end) => `:0${sec}${end}`);
+
+    const dmy = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    if (dmy) {
+      s = `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}${s.slice(dmy[0].length)}`;
+    }
+
+    t = new Date(s).getTime();
+    if (!isNaN(t)) return t;
+  }
+  if (val instanceof Date) {
+    const t = val.getTime();
+    if (!isNaN(t)) return t;
+  }
+  return 0;
+};
+
 const getCalendarDaysSinceOrderIST = (orderDateInput, refNowMs = Date.now()) => {
-  const orderMs = parseDateMillis(orderDateInput);
+  const orderMs = parseDateToMillisSafe(orderDateInput);
   if (!orderMs) return null;
 
   const orderIST = new Date(orderMs + (5.5 * 60 * 60 * 1000));
@@ -691,174 +729,376 @@ const getCalendarDaysSinceOrderIST = (orderDateInput, refNowMs = Date.now()) => 
 };
 
 /**
+ * Cache Super Admin platform customers aggregation to prevent expensive Firestore scans.
+ */
+const PLATFORM_CUSTOMERS_CACHE_TTL_MS = 60 * 1000; // 60 seconds
+let platformCustomersCache = null; // { timestamp, customers, segmentCounts }
+
+const invalidatePlatformCustomersCache = () => {
+  platformCustomersCache = null;
+};
+
+const getAggregatedPlatformCustomers = async () => {
+  const nowMs = Date.now();
+  if (platformCustomersCache && (nowMs - platformCustomersCache.timestamp) < PLATFORM_CUSTOMERS_CACHE_TTL_MS) {
+    return platformCustomersCache;
+  }
+
+  const [users, allOrders] = await Promise.all([
+    queryDocs('users', (ref) => ref.where('role', '==', 'customer')),
+    getAllOrdersFS({ includeTest: false }),
+  ]);
+
+  // Exclude test users from platform directory
+  const activeUsers = users.filter((u) => !u.isTest && u.role === 'customer');
+
+  // Filter valid orders: exclude cancelled and failed payments
+  const validOrders = allOrders.filter(
+    (o) => !o.isTest && o.status !== 'Cancelled' && o.paymentStatus !== 'Failed'
+  );
+
+  const customerMap = new Map();
+  const userIdToKeyMap = new Map();
+
+  const genericNames = ['verified gourmet user', 'valued customer', 'customer'];
+
+  // 1. Index registered users
+  for (const u of activeUsers) {
+    const copy = { ...u };
+    delete copy.password;
+    const cleanPhone = String(copy.phone || '').replace(/\D/g, '').slice(-10);
+    const uId = String(copy.id || copy._id || '').trim();
+
+    const key = cleanPhone || uId;
+    if (!key) continue;
+
+    if (uId) {
+      userIdToKeyMap.set(uId, key);
+    }
+
+    if (customerMap.has(key)) {
+      const existing = customerMap.get(key);
+      if (genericNames.includes((existing.name || '').trim().toLowerCase())) {
+        if (copy.name && !genericNames.includes(copy.name.trim().toLowerCase())) {
+          existing.name = copy.name;
+        }
+      }
+    } else {
+      const defaultAddress = (copy.addresses && copy.addresses.length > 0)
+        ? `${copy.addresses[0].line1 || ''}, ${copy.addresses[0].city || 'Ranchi'}`
+        : (copy.address || 'Ranchi');
+
+      customerMap.set(key, {
+        ...copy,
+        id: copy.id || copy._id || `CUST-${key}`,
+        phone: cleanPhone ? `+91 ${cleanPhone}` : (copy.phone || 'Unknown'),
+        address: defaultAddress,
+        addresses: copy.addresses && copy.addresses.length > 0 ? copy.addresses : [{ line1: defaultAddress, city: 'Ranchi', isDefault: true }],
+        walletBalance: Number(copy.walletBalance) || 0,
+        totalOrders: 0,
+        orders: 0,
+        totalSpent: 0,
+        _orderIds: new Set(),
+      });
+    }
+  }
+
+  // 2. Unify with all orders across all stores
+  for (const o of validOrders) {
+    const oId = String(o.orderId || o.id || o._id || '');
+    const amt = Number(o.amount != null ? o.amount : o.totalAmount) || 0;
+    const rawPhone = o.customer?.phone || '';
+    const oPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
+    const oUserId = o.customer?.userId ? String(o.customer.userId).trim() : null;
+
+    let key = oPhone;
+    if (!key && oUserId && userIdToKeyMap.has(oUserId)) {
+      key = userIdToKeyMap.get(oUserId);
+    } else if (!key && oUserId) {
+      key = oUserId;
+    }
+
+    if (!key) continue;
+
+    let entry = customerMap.get(key);
+    if (!entry) {
+      const orderAddress = o.customer?.address || o.shippingAddress?.address || 'Ranchi';
+      entry = {
+        id: oUserId || `CUST-${key}`,
+        name: o.customer?.name || 'Customer',
+        phone: oPhone ? `+91 ${oPhone}` : (rawPhone || 'Unknown'),
+        email: o.customer?.email || '',
+        address: orderAddress,
+        addresses: [{ line1: orderAddress, city: 'Ranchi', isDefault: true }],
+        walletBalance: 0,
+        totalOrders: 0,
+        orders: 0,
+        totalSpent: 0,
+        _orderIds: new Set(),
+        createdAt: o.createdAt || new Date().toISOString(),
+      };
+      customerMap.set(key, entry);
+    }
+
+    // Name resolution: prefer real checkout name over generic placeholder
+    const currentNameLower = (entry.name || '').trim().toLowerCase();
+    const orderName = (o.customer?.name || '').trim();
+    if (orderName && (!entry.name || genericNames.includes(currentNameLower))) {
+      entry.name = orderName;
+    }
+
+    // Address resolution: update if address is default 'Ranchi'
+    if ((!entry.address || entry.address === 'Ranchi') && (o.customer?.address || o.shippingAddress?.address)) {
+      const addr = o.customer?.address || o.shippingAddress?.address;
+      entry.address = addr;
+      if (!entry.addresses || entry.addresses.length === 0 || entry.addresses[0].line1 === 'Ranchi') {
+        entry.addresses = [{ line1: addr, city: 'Ranchi', isDefault: true }];
+      }
+    }
+
+    // Mathematical order & spent calculation (strictly de-duplicated by order ID)
+    if (!entry._orderIds.has(oId)) {
+      entry._orderIds.add(oId);
+      entry.totalOrders = entry._orderIds.size;
+      entry.orders = entry.totalOrders;
+      entry.totalSpent = Math.round((entry.totalSpent + amt) * 100) / 100;
+    }
+
+    // Track latest order date across all customer orders using safe date parser
+    const oDateMs = parseDateToMillisSafe(o.createdAt || o.created_at || o.orderDate);
+    if (oDateMs && (!entry._lastOrderDateMs || oDateMs > entry._lastOrderDateMs)) {
+      entry._lastOrderDateMs = oDateMs;
+      entry.lastOrderDate = new Date(oDateMs).toISOString();
+      entry.lastOrder = formatDDMMYYYY_IST(oDateMs);
+    }
+  }
+
+  const safeCustomers = Array.from(customerMap.values()).map((c) => {
+    delete c._orderIds;
+    const lastMs = c._lastOrderDateMs || null;
+    c._lastOrderDateMs = lastMs; // Retain for dynamic sorting
+    c.totalSpent = Math.round((Number(c.totalSpent) || 0) * 100) / 100;
+
+    const daysSince = lastMs ? getCalendarDaysSinceOrderIST(lastMs, nowMs) : null;
+    c.daysSinceLastOrder = daysSince;
+
+    const count = Number(c.totalOrders || c.orders || 0);
+    const createdMs = parseDateToMillisSafe(c.createdAt);
+    const accountAge = createdMs ? Math.floor((nowMs - createdMs) / (1000 * 60 * 60 * 24)) : 0;
+
+    if (count >= 2) {
+      c.segment = (daysSince != null && daysSince <= 30) ? 'active' : 'inactive';
+    } else if (count === 1) {
+      c.segment = (daysSince != null && daysSince <= 30) ? 'new' : 'inactive';
+    } else {
+      c.segment = accountAge <= 30 ? 'new' : 'inactive';
+    }
+    return c;
+  });
+
+  // Default sort: Latest order first, then total orders descending
+  safeCustomers.sort((a, b) => {
+    const diff = (b._lastOrderDateMs || 0) - (a._lastOrderDateMs || 0);
+    if (diff !== 0) return diff;
+    return (b.totalOrders || 0) - (a.totalOrders || 0);
+  });
+
+  let activeCount = 0;
+  let newCount = 0;
+  let inactiveCount = 0;
+  for (const c of safeCustomers) {
+    if (c.segment === 'active') activeCount++;
+    else if (c.segment === 'new') newCount++;
+    else if (c.segment === 'inactive') inactiveCount++;
+  }
+
+  const segmentCounts = {
+    all: safeCustomers.length,
+    active: activeCount,
+    new: newCount,
+    inactive: inactiveCount,
+  };
+
+  const cacheEntry = { timestamp: nowMs, customers: safeCustomers, segmentCounts };
+  platformCustomersCache = cacheEntry;
+  return cacheEntry;
+};
+
+/**
+ * Sorts platform customer records dynamically based on selected criteria
+ */
+const sortPlatformCustomerRecords = (list, sortBy = 'latest') => {
+  const sorted = [...list];
+  switch (sortBy) {
+    case 'orders_desc':
+      return sorted.sort((a, b) => {
+        const diff = (b.totalOrders || 0) - (a.totalOrders || 0);
+        if (diff !== 0) return diff;
+        return (b._lastOrderDateMs || 0) - (a._lastOrderDateMs || 0);
+      });
+    case 'spent_desc':
+      return sorted.sort((a, b) => {
+        const diff = (b.totalSpent || 0) - (a.totalSpent || 0);
+        if (diff !== 0) return diff;
+        return (b._lastOrderDateMs || 0) - (a._lastOrderDateMs || 0);
+      });
+    case 'oldest':
+      return sorted.sort((a, b) => {
+        const aMs = a._lastOrderDateMs || 0;
+        const bMs = b._lastOrderDateMs || 0;
+        if (aMs === 0 && bMs > 0) return 1;
+        if (bMs === 0 && aMs > 0) return -1;
+        return aMs - bMs;
+      });
+    case 'latest':
+    default:
+      return sorted.sort((a, b) => {
+        const diff = (b._lastOrderDateMs || 0) - (a._lastOrderDateMs || 0);
+        if (diff !== 0) return diff;
+        return (b.totalOrders || 0) - (a.totalOrders || 0);
+      });
+  }
+};
+
+/**
  * GET /api/super-admin/customers
- * List customers platform-wide
+ * List customers platform-wide (with server-side search, sorting, and pagination)
  */
 const getPlatformCustomers = async (req, res, next) => {
   try {
-    const [users, allOrders] = await Promise.all([
-      queryDocs('users', (ref) => ref.where('role', '==', 'customer')),
-      getAllOrdersFS({ includeTest: false }),
-    ]);
+    const { page = 1, limit = 50, search = '', segment = 'all', sortBy = 'latest' } = req.query;
 
-    // Exclude test users from platform directory
-    const activeUsers = users.filter((u) => !u.isTest && u.role === 'customer');
+    const { customers, segmentCounts } = await getAggregatedPlatformCustomers();
 
-    // Filter valid orders: exclude cancelled and failed payments
-    const validOrders = allOrders.filter(
-      (o) => !o.isTest && o.status !== 'Cancelled' && o.paymentStatus !== 'Failed'
+    let filtered = customers;
+
+    // Segment filter
+    if (segment && segment !== 'all') {
+      filtered = filtered.filter((c) => c.segment === segment);
+    }
+
+    // Search filter across name, phone, address, and email
+    const query = String(search || '').trim().toLowerCase();
+    if (query) {
+      filtered = filtered.filter((c) => {
+        const name = (c.name || '').toLowerCase();
+        const phone = (c.phone || '').toLowerCase();
+        const address = (c.address || '').toLowerCase();
+        const email = (c.email || '').toLowerCase();
+        const addressesMatch = Array.isArray(c.addresses) && c.addresses.some((a) =>
+          (a.line1 || '').toLowerCase().includes(query) || (a.city || '').toLowerCase().includes(query)
+        );
+        return name.includes(query) || phone.includes(query) || address.includes(query) || email.includes(query) || addressesMatch;
+      });
+    }
+
+    // Dynamic sorting
+    filtered = sortPlatformCustomerRecords(filtered, sortBy);
+
+    const total = filtered.length;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, Math.min(200, parseInt(limit, 10) || 50));
+    const totalPages = Math.ceil(total / limitNum) || 1;
+    const startIndex = (pageNum - 1) * limitNum;
+    const paginatedCustomers = filtered.slice(startIndex, startIndex + limitNum);
+
+    res.status(200).json({
+      success: true,
+      total,
+      page: pageNum,
+      limit: limitNum,
+      totalPages,
+      segmentCounts,
+      customers: paginatedCustomers,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * GET /api/super-admin/customers/export
+ * Export platform customers data as CSV matching filters
+ */
+const exportPlatformCustomers = async (req, res, next) => {
+  try {
+    const { search = '', segment = 'all', sortBy = 'latest' } = req.query;
+
+    const { customers } = await getAggregatedPlatformCustomers();
+
+    let filtered = customers;
+
+    if (segment && segment !== 'all') {
+      filtered = filtered.filter((c) => c.segment === segment);
+    }
+
+    const query = String(search || '').trim().toLowerCase();
+    if (query) {
+      filtered = filtered.filter((c) => {
+        const name = (c.name || '').toLowerCase();
+        const phone = (c.phone || '').toLowerCase();
+        const address = (c.address || '').toLowerCase();
+        const email = (c.email || '').toLowerCase();
+        const addressesMatch = Array.isArray(c.addresses) && c.addresses.some((a) =>
+          (a.line1 || '').toLowerCase().includes(query) || (a.city || '').toLowerCase().includes(query)
+        );
+        return name.includes(query) || phone.includes(query) || address.includes(query) || email.includes(query) || addressesMatch;
+      });
+    }
+
+    filtered = sortPlatformCustomerRecords(filtered, sortBy);
+
+    const escapeCsv = (val) => {
+      if (val == null) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const headers = [
+      'Customer ID',
+      'Customer Name',
+      'Phone Number',
+      'Email',
+      'Delivery Address',
+      'Wallet Balance (INR)',
+      'Segment',
+      'Total Orders',
+      'Total Spent (INR)',
+      'Last Order Date',
+      'Days Since Last Order',
+    ];
+
+    const rows = filtered.map((c) => {
+      const segLabel =
+        c.segment === 'active'
+          ? 'Active Repeat'
+          : c.segment === 'new'
+          ? 'New Customer'
+          : 'Inactive';
+      return [
+        escapeCsv(c.id),
+        escapeCsv(c.name || 'Customer'),
+        escapeCsv(c.phone),
+        escapeCsv(c.email || ''),
+        escapeCsv(c.address || ''),
+        Number(c.walletBalance || 0).toFixed(2),
+        escapeCsv(segLabel),
+        c.totalOrders || c.orders || 0,
+        c.totalSpent != null ? Number(c.totalSpent).toFixed(2) : '0.00',
+        escapeCsv(c.lastOrder || ''),
+        c.daysSinceLastOrder != null ? c.daysSinceLastOrder : 'N/A',
+      ].join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="teffes_platform_customers_${dateStr}.csv"`
     );
-
-    const customerMap = new Map();
-    const userIdToKeyMap = new Map();
-
-    const genericNames = ['verified gourmet user', 'valued customer', 'customer'];
-
-    // 1. Index registered users
-    for (const u of activeUsers) {
-      const copy = { ...u };
-      delete copy.password;
-      const cleanPhone = String(copy.phone || '').replace(/\D/g, '').slice(-10);
-      const uId = String(copy.id || copy._id || '').trim();
-
-      const key = cleanPhone || uId;
-      if (!key) continue;
-
-      if (uId) {
-        userIdToKeyMap.set(uId, key);
-      }
-
-      if (customerMap.has(key)) {
-        const existing = customerMap.get(key);
-        if (genericNames.includes((existing.name || '').trim().toLowerCase())) {
-          if (copy.name && !genericNames.includes(copy.name.trim().toLowerCase())) {
-            existing.name = copy.name;
-          }
-        }
-      } else {
-        const defaultAddress = (copy.addresses && copy.addresses.length > 0)
-          ? `${copy.addresses[0].line1 || ''}, ${copy.addresses[0].city || 'Ranchi'}`
-          : (copy.address || 'Ranchi');
-
-        customerMap.set(key, {
-          ...copy,
-          id: copy.id || copy._id || `cust_${key}`,
-          phone: cleanPhone ? `+91 ${cleanPhone}` : (copy.phone || 'Unknown'),
-          address: defaultAddress,
-          addresses: copy.addresses && copy.addresses.length > 0 ? copy.addresses : [{ line1: defaultAddress, city: 'Ranchi', isDefault: true }],
-          walletBalance: Number(copy.walletBalance) || 0,
-          totalOrders: 0,
-          orders: 0,
-          totalSpent: 0,
-          _orderIds: new Set(),
-        });
-      }
-    }
-
-    // 2. Unify with all orders across all stores
-    for (const o of validOrders) {
-      const oId = String(o.orderId || o.id || o._id || '');
-      const amt = Number(o.amount != null ? o.amount : o.totalAmount) || 0;
-      const rawPhone = o.customer?.phone || '';
-      const oPhone = String(rawPhone).replace(/\D/g, '').slice(-10);
-      const oUserId = o.customer?.userId ? String(o.customer.userId).trim() : null;
-
-      let key = oPhone;
-      if (!key && oUserId && userIdToKeyMap.has(oUserId)) {
-        key = userIdToKeyMap.get(oUserId);
-      } else if (!key && oUserId) {
-        key = oUserId;
-      }
-
-      if (!key) continue;
-
-      let entry = customerMap.get(key);
-      if (!entry) {
-        const orderAddress = o.customer?.address || o.shippingAddress?.address || 'Ranchi';
-        entry = {
-          id: oUserId || `cust_${key}`,
-          name: o.customer?.name || 'Customer',
-          phone: oPhone ? `+91 ${oPhone}` : (rawPhone || 'Unknown'),
-          email: o.customer?.email || '',
-          address: orderAddress,
-          addresses: [{ line1: orderAddress, city: 'Ranchi', isDefault: true }],
-          walletBalance: 0,
-          totalOrders: 0,
-          orders: 0,
-          totalSpent: 0,
-          _orderIds: new Set(),
-          createdAt: o.createdAt || new Date().toISOString(),
-        };
-        customerMap.set(key, entry);
-      }
-
-      // Name resolution: prefer real checkout name over generic placeholder
-      const currentNameLower = (entry.name || '').trim().toLowerCase();
-      const orderName = (o.customer?.name || '').trim();
-      if (orderName && (!entry.name || genericNames.includes(currentNameLower))) {
-        entry.name = orderName;
-      }
-
-      // Address resolution: update if address is default 'Ranchi'
-      if ((!entry.address || entry.address === 'Ranchi') && (o.customer?.address || o.shippingAddress?.address)) {
-        const addr = o.customer?.address || o.shippingAddress?.address;
-        entry.address = addr;
-        if (!entry.addresses || entry.addresses.length === 0 || entry.addresses[0].line1 === 'Ranchi') {
-          entry.addresses = [{ line1: addr, city: 'Ranchi', isDefault: true }];
-        }
-      }
-
-      // Mathematical order & spent calculation (strictly de-duplicated by order ID)
-      if (!entry._orderIds.has(oId)) {
-        entry._orderIds.add(oId);
-        entry.totalOrders = entry._orderIds.size;
-        entry.orders = entry.totalOrders;
-        entry.totalSpent = Math.round((entry.totalSpent + amt) * 100) / 100;
-      }
-
-      // Track latest order date across all customer orders
-      const oDateMs = parseDateMillis(o.createdAt);
-      if (oDateMs && (!entry._lastOrderDateMs || oDateMs > entry._lastOrderDateMs)) {
-        entry._lastOrderDateMs = oDateMs;
-        entry.lastOrderDate = new Date(oDateMs).toISOString();
-        entry.lastOrder = formatDDMMYYYY_IST(oDateMs);
-      }
-    }
-
-    const nowMs = Date.now();
-    const safeCustomers = Array.from(customerMap.values()).map((c) => {
-      delete c._orderIds;
-      const lastMs = c._lastOrderDateMs || null;
-      delete c._lastOrderDateMs;
-      c.totalSpent = Math.round((Number(c.totalSpent) || 0) * 100) / 100;
-
-      const daysSince = lastMs ? getCalendarDaysSinceOrderIST(lastMs, nowMs) : null;
-      c.daysSinceLastOrder = daysSince;
-
-      const count = Number(c.totalOrders || c.orders || 0);
-      const createdMs = parseDateMillis(c.createdAt);
-      const accountAge = createdMs ? Math.floor((nowMs - createdMs) / (1000 * 60 * 60 * 24)) : 0;
-
-      if (count >= 2) {
-        c.segment = (daysSince != null && daysSince <= 30) ? 'active' : 'inactive';
-      } else if (count === 1) {
-        c.segment = (daysSince != null && daysSince <= 30) ? 'new' : 'inactive';
-      } else {
-        c.segment = accountAge <= 30 ? 'new' : 'inactive';
-      }
-      return c;
-    });
-
-    // Sort customers with orders first, then totalOrders desc, totalSpent desc
-    safeCustomers.sort((a, b) => {
-      const orderDiff = (b.totalOrders || 0) - (a.totalOrders || 0);
-      if (orderDiff !== 0) return orderDiff;
-      const spentDiff = (b.totalSpent || 0) - (a.totalSpent || 0);
-      if (spentDiff !== 0) return spentDiff;
-      return parseDateMillis(b.createdAt) - parseDateMillis(a.createdAt);
-    });
-
-    res.status(200).json({ success: true, count: safeCustomers.length, customers: safeCustomers });
+    res.status(200).send(csvContent);
   } catch (error) {
     next(error);
   }
@@ -1184,6 +1424,7 @@ module.exports = {
   updateRider,
   deleteRider,
   getPlatformCustomers,
+  exportPlatformCustomers,
   getCoupons,
   createCoupon,
   updateCoupon,

@@ -57,9 +57,20 @@ const isTestOrderRecord = (o) =>
 const getUserOrders = async (userId, options = {}) => {
   if (!userId || typeof userId !== 'string') return [];
   const cleanId = userId.trim();
-  let orders = await queryDocs(ORDERS_COLLECTION, (ref) =>
-    ref.where('customer.userId', '==', cleanId)
-  );
+  const [nestedOrders, rootOrders] = await Promise.all([
+    queryDocs(ORDERS_COLLECTION, (ref) => ref.where('customer.userId', '==', cleanId)),
+    queryDocs(ORDERS_COLLECTION, (ref) => ref.where('userId', '==', cleanId)),
+  ]);
+  const seen = new Set();
+  const combined = [];
+  for (const o of [...nestedOrders, ...rootOrders]) {
+    const k = o.orderId || o.id;
+    if (!seen.has(k)) {
+      seen.add(k);
+      combined.push(o);
+    }
+  }
+  let orders = combined;
   if (!options.includeTest) {
     orders = orders.filter((o) => !isTestOrderRecord(o));
   }

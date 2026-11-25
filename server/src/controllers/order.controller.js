@@ -204,12 +204,12 @@ const createOrder = async (req, res, next) => {
 
     const resolvedFulfillmentType = isPickup ? 'pickup' : 'delivery';
 
+    let custLat = req.body.customerLat !== undefined ? Number(req.body.customerLat) : (req.body.lat !== undefined ? Number(req.body.lat) : null);
+    let custLng = req.body.customerLng !== undefined ? Number(req.body.customerLng) : (req.body.lng !== undefined ? Number(req.body.lng) : null);
+
     // ─── Delivery Radius Restriction Check (Pure Geolocation & Store Policy) ───
     if (!isPickup) {
       const maxRadius = typeof storeDoc?.deliveryRadiusKm === 'number' ? storeDoc.deliveryRadiusKm : 10;
-
-      let custLat = req.body.customerLat !== undefined ? Number(req.body.customerLat) : (req.body.lat !== undefined ? Number(req.body.lat) : null);
-      let custLng = req.body.customerLng !== undefined ? Number(req.body.customerLng) : (req.body.lng !== undefined ? Number(req.body.lng) : null);
 
       if ((!custLat || !custLng) && addressId) {
         const addrDoc = await getDoc('addresses', String(addressId)).catch(() => null);
@@ -339,8 +339,9 @@ const createOrder = async (req, res, next) => {
     const storeDeliveryFee = typeof storeDoc?.standardDeliveryFee === 'number' ? storeDoc.standardDeliveryFee : 40;
     const standardDeliveryFee = isPickup ? 0 : (itemsSubtotal >= freeThreshold ? 0 : storeDeliveryFee);
     const expressFee = isExpressSlot ? (typeof storeDoc?.expressDeliveryFee === 'number' ? storeDoc.expressDeliveryFee : 50) : (isAfterHours ? 0 : (Number(req.body.expressFee) || 0));
+    const rainSurgeFee = (!isPickup && storeDoc?.rainSurgeEnabled === true) ? (Number(storeDoc?.rainSurgeFee) || 15) : 0;
     const tipAmount = Number(req.body.tip) || 0;
-    const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + expressFee + tipAmount - verifiedDiscount);
+    const computedFinalAmount = Math.max(0, itemsSubtotal + standardDeliveryFee + expressFee + rainSurgeFee + tipAmount - verifiedDiscount);
     const finalAmount = amount !== undefined ? Number(amount) : (totalAmount !== undefined ? Number(totalAmount) : computedFinalAmount);
 
     let orderAddress = isPickup
@@ -476,6 +477,7 @@ const createOrder = async (req, res, next) => {
       itemsSubtotal,
       deliveryFee: standardDeliveryFee,
       expressFee,
+      rainSurgeFee,
       tipAmount,
       discountAmount: verifiedDiscount,
       couponCode: verifiedCouponSnapshot?.code || null,
@@ -643,10 +645,14 @@ const getMyOrders = async (req, res, next) => {
     if (phone) {
       const clean10 = phone.replace(/\D/g, '').slice(-10);
       if (clean10) {
-        const phoneOrders = await queryDocs('orders', (ref) => ref.where('customer.phone', '==', clean10));
-        const phoneOrdersFull = await queryDocs('orders', (ref) => ref.where('customer.phone', '==', `+91${clean10}`));
+        const [phoneOrders, phoneOrdersFull, rootPhoneOrders, rootPhoneOrdersFull] = await Promise.all([
+          queryDocs('orders', (ref) => ref.where('customer.phone', '==', clean10)),
+          queryDocs('orders', (ref) => ref.where('customer.phone', '==', `+91${clean10}`)),
+          queryDocs('orders', (ref) => ref.where('customerPhone', '==', clean10)),
+          queryDocs('orders', (ref) => ref.where('customerPhone', '==', `+91${clean10}`)),
+        ]);
         const seen = new Set(orders.map((o) => o.orderId || o.id));
-        for (const po of [...phoneOrders, ...phoneOrdersFull]) {
+        for (const po of [...phoneOrders, ...phoneOrdersFull, ...rootPhoneOrders, ...rootPhoneOrdersFull]) {
           const key = po.orderId || po.id;
           if (!seen.has(key)) {
             seen.add(key);

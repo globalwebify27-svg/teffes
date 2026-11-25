@@ -133,6 +133,21 @@ class LocationProvider with ChangeNotifier {
     } catch (_) {}
   }
 
+  Future<void> _clearPersistedSelectedAddress() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('selected_addr_id');
+      await prefs.remove('selected_addr_tag');
+      await prefs.remove('selected_addr_line1');
+      await prefs.remove('selected_addr_line2');
+      await prefs.remove('selected_addr_city');
+      await prefs.remove('selected_addr_pincode');
+      await prefs.remove('selected_addr_landmark');
+      await prefs.remove('selected_addr_lat');
+      await prefs.remove('selected_addr_lng');
+    } catch (_) {}
+  }
+
   void markPermissionPrompted() async {
     _hasPromptedPermission = true;
     notifyListeners();
@@ -371,11 +386,13 @@ class LocationProvider with ChangeNotifier {
         } else {
           if (!_isGpsDetected) {
             _selectedAddress = null;
+            _clearPersistedSelectedAddress();
           }
         }
       } else {
         _savedAddresses = [];
         _selectedAddress = null;
+        _clearPersistedSelectedAddress();
       }
     } catch (_) {
       // Gracefully ignore 401 when user is not yet logged in
@@ -677,13 +694,28 @@ class LocationProvider with ChangeNotifier {
       };
 
       final res = await _api.post(ApiEndpoints.addresses, data: payload);
-      if (res.data != null && res.data['address'] != null) {
-        final serverAddr = res.data['address'];
-        final serverLat = (serverAddr['latitude'] as num?)?.toDouble();
-        final serverLng = (serverAddr['longitude'] as num?)?.toDouble();
-        if (serverLat != null && serverLng != null && (lat == null || lng == null)) {
+      if (res.data != null && res.data['success'] == true) {
+        if (res.data['addresses'] is List) {
+          final serverList = (res.data['addresses'] as List)
+              .map((a) => AddressModel.fromJson(a as Map<String, dynamic>))
+              .toList();
+          if (serverList.isNotEmpty) {
+            _savedAddresses = serverList;
+            final newest = serverList.firstWhere(
+              (a) => a.line1.trim().toLowerCase() == line1.trim().toLowerCase() && a.pincode.trim() == cleanPin,
+              orElse: () => serverList.last,
+            );
+            _selectedAddress = newest;
+            await _persistSelectedAddress(newest);
+            notifyListeners();
+          }
+        } else if (res.data['address'] != null) {
+          final serverAddr = res.data['address'];
+          final serverId = (serverAddr['id'] ?? serverAddr['_id'])?.toString() ?? newAddress.id;
+          final serverLat = (serverAddr['latitude'] as num?)?.toDouble() ?? lat;
+          final serverLng = (serverAddr['longitude'] as num?)?.toDouble() ?? lng;
           final enriched = AddressModel(
-            id: serverAddr['_id'] ?? serverAddr['id'] ?? newAddress.id,
+            id: serverId,
             tag: newAddress.tag,
             line1: newAddress.line1,
             line2: newAddress.line2,
@@ -696,7 +728,7 @@ class LocationProvider with ChangeNotifier {
           );
           _selectedAddress = enriched;
           _savedAddresses[0] = enriched;
-          _persistSelectedAddress(enriched);
+          await _persistSelectedAddress(enriched);
           notifyListeners();
         }
       }
@@ -752,7 +784,7 @@ class LocationProvider with ChangeNotifier {
     }
     if (_selectedAddress?.id == id) {
       _selectedAddress = updatedAddress;
-      _persistSelectedAddress(updatedAddress);
+      await _persistSelectedAddress(updatedAddress);
     }
     notifyListeners();
 
@@ -769,7 +801,24 @@ class LocationProvider with ChangeNotifier {
         if (lng != null) 'longitude': lng,
       };
 
-      await _api.put('${ApiEndpoints.addresses}/$id', data: payload);
+      final res = await _api.put('${ApiEndpoints.addresses}/$id', data: payload);
+      if (res.data != null && res.data['addresses'] is List) {
+        final serverList = (res.data['addresses'] as List)
+            .map((a) => AddressModel.fromJson(a as Map<String, dynamic>))
+            .toList();
+        if (serverList.isNotEmpty) {
+          _savedAddresses = serverList;
+          final current = serverList.firstWhere(
+            (a) => a.id == id,
+            orElse: () => _selectedAddress ?? serverList.first,
+          );
+          if (_selectedAddress?.id == id) {
+            _selectedAddress = current;
+            await _persistSelectedAddress(current);
+          }
+          notifyListeners();
+        }
+      }
       return true;
     } catch (e) {
       debugPrint('Failed to update address in backend: $e');
@@ -780,12 +829,36 @@ class LocationProvider with ChangeNotifier {
   Future<bool> deleteAddress(String id) async {
     _savedAddresses.removeWhere((a) => a.id == id);
     if (_selectedAddress?.id == id) {
-      _selectedAddress = _savedAddresses.isNotEmpty ? _savedAddresses.first : null;
+      if (_savedAddresses.isNotEmpty) {
+        final fallback = _savedAddresses.firstWhere((a) => a.isDefault, orElse: () => _savedAddresses.first);
+        _selectedAddress = fallback;
+        await _persistSelectedAddress(fallback);
+      } else {
+        _selectedAddress = null;
+        await _clearPersistedSelectedAddress();
+      }
     }
     notifyListeners();
 
     try {
-      await _api.delete('${ApiEndpoints.addresses}/$id');
+      final res = await _api.delete('${ApiEndpoints.addresses}/$id');
+      if (res.data != null && res.data['addresses'] is List) {
+        final serverList = (res.data['addresses'] as List)
+            .map((a) => AddressModel.fromJson(a as Map<String, dynamic>))
+            .toList();
+        _savedAddresses = serverList;
+        if (_selectedAddress != null && !_savedAddresses.any((a) => a.id == _selectedAddress!.id)) {
+          if (_savedAddresses.isNotEmpty) {
+            final fallback = _savedAddresses.firstWhere((a) => a.isDefault, orElse: () => _savedAddresses.first);
+            _selectedAddress = fallback;
+            await _persistSelectedAddress(fallback);
+          } else {
+            _selectedAddress = null;
+            await _clearPersistedSelectedAddress();
+          }
+        }
+        notifyListeners();
+      }
       return true;
     } catch (e) {
       debugPrint('Failed to delete address on backend: $e');

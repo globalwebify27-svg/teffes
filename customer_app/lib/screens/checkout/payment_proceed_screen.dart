@@ -24,6 +24,8 @@ class PaymentProceedScreen extends StatefulWidget {
   final String storeId;
   final String storeName;
   final String instruction;
+  final double expressFee;
+  final double rainSurgeFee;
 
   const PaymentProceedScreen({
     super.key,
@@ -36,6 +38,8 @@ class PaymentProceedScreen extends StatefulWidget {
     this.storeId = 'S001',
     this.storeName = "TeFFe's Store",
     this.instruction = '',
+    this.expressFee = 0.0,
+    this.rainSurgeFee = 0.0,
   });
 
   @override
@@ -196,6 +200,8 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         }).toList(),
         'subtotal': cart.subtotal,
         'deliveryFee': widget.isPickup ? 0.0 : cart.deliveryFee,
+        'expressFee': widget.expressFee,
+        'rainSurgeFee': widget.rainSurgeFee,
         'discount': cart.couponDiscount,
         'couponCode': cart.appliedCoupon,
         'discountAmount': cart.couponDiscount,
@@ -208,6 +214,21 @@ class _PaymentProceedScreenState extends State<PaymentProceedScreen> {
         'transactionId': transactionId,
         'payuPaymentId': paymentId,
         'shippingAddress': widget.deliveryAddress.isNotEmpty ? widget.deliveryAddress : location.activeAddressString,
+        'address': widget.deliveryAddress.isNotEmpty ? widget.deliveryAddress : location.activeAddressString,
+        if (!widget.isPickup && (location.selectedAddress?.latitude ?? location.latitude) != null) ...{
+          'customerLat': location.selectedAddress?.latitude ?? location.latitude,
+          'lat': location.selectedAddress?.latitude ?? location.latitude,
+        },
+        if (!widget.isPickup && (location.selectedAddress?.longitude ?? location.longitude) != null) ...{
+          'customerLng': location.selectedAddress?.longitude ?? location.longitude,
+          'lng': location.selectedAddress?.longitude ?? location.longitude,
+        },
+        if (!widget.isPickup && location.selectedAddress != null && !location.selectedAddress!.id.startsWith('gps-'))
+          'addressId': location.selectedAddress!.id,
+        if (!widget.isPickup && location.selectedAddress?.pincode.isNotEmpty == true)
+          'pincode': location.selectedAddress!.pincode.replaceAll(RegExp(r'\D'), ''),
+        'customerName': auth.user?.name ?? 'Valued Customer',
+        'customerPhone': auth.user?.phone ?? '',
         'deliverySlot': widget.isPickup ? 'Store Pickup (Counter Takeaway)' : widget.deliverySlot,
         'storeId': widget.storeId,
         'storeName': widget.storeName,
