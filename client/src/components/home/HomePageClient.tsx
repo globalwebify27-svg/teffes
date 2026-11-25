@@ -508,7 +508,7 @@ export default function HomePageClient() {
                         <span>Net: {item.netWeight}</span>
                         <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.badge || "Standard Cut"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold line-clamp-1 group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px]">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold line-clamp-1 group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] product-card-title">
                         {item.name}
                       </h3>
                       <p className="font-body-sm text-body-sm text-slate-body mt-0.5 line-clamp-1 text-[11px] sm:text-[12px]">{item.description}</p>
@@ -517,18 +517,18 @@ export default function HomePageClient() {
 
                   <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
                     <div className="flex flex-col min-w-0 pr-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[13px] sm:text-[1.15rem] leading-tight">
+                      <div className="flex items-baseline gap-1 product-price-container">
+                        <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[13px] sm:text-[1.15rem] leading-tight product-selling-price">
                           ₹{item.price}
                         </span>
                         {origPrice > item.price && (
-                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11.5px] leading-none">
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11.5px] leading-none product-cutted-price">
                             ₹{origPrice}
                           </span>
                         )}
                       </div>
                       {discount && (
-                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5 product-discount-badge">
                           {discount}
                         </span>
                       )}
@@ -672,7 +672,7 @@ export default function HomePageClient() {
                         <span>Net: {item.netWeight}</span>
                         <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || "Standard Cut"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1 product-card-title">
                         {item.name}
                       </h3>
                       <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">{item.description}</p>
@@ -681,18 +681,18 @@ export default function HomePageClient() {
 
                   <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
                     <div className="flex flex-col min-w-0 pr-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[13px] sm:text-[1.15rem] leading-tight">
+                      <div className="flex items-baseline gap-1 product-price-container">
+                        <span className="font-headline-md text-headline-md text-on-surface font-extrabold text-[13px] sm:text-[1.15rem] leading-tight product-selling-price">
                           ₹{item.price}
                         </span>
                         {origPrice > item.price && (
-                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11.5px] leading-none">
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11.5px] leading-none product-cutted-price">
                             ₹{origPrice}
                           </span>
                         )}
                       </div>
                       {discount && (
-                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5 product-discount-badge">
                           {discount}
                         </span>
                       )}
@@ -838,7 +838,7 @@ export default function HomePageClient() {
                           <span>{product.netWeight || "Net Wt: Fresh Cut"}</span>
                           <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Serves 3-4"}</span>
                         </div>
-                        <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[15px] line-clamp-1">
+                        <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[15px] line-clamp-1 product-card-title">
                           {product.name}
                         </h3>
                         <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">
@@ -849,18 +849,18 @@ export default function HomePageClient() {
 
                     <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
                       <div className="flex flex-col min-w-0 pr-1">
-                        <div className="flex items-baseline gap-1">
-                          <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight">
+                        <div className="flex items-baseline gap-1 product-price-container">
+                          <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight product-selling-price">
                             ₹{product.price}
                           </span>
                           {product.originalPrice && product.originalPrice > product.price && (
-                            <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none">
+                            <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none product-cutted-price">
                               ₹{product.originalPrice}
                             </span>
                           )}
                         </div>
                         {discountText && (
-                          <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                          <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5 product-discount-badge">
                             {discountText}
                           </span>
                         )}
@@ -981,7 +981,7 @@ export default function HomePageClient() {
                         <span>{product.netWeight || "Net Wt: 1000g"}</span>
                         <span className="text-tertiary font-label-badge font-bold">{product.pieces || product.serves || "Bengali Cut"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1 product-card-title">
                         {product.name}
                       </h3>
                       <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">
@@ -992,18 +992,18 @@ export default function HomePageClient() {
 
                   <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
                     <div className="flex flex-col min-w-0 pr-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight">
+                      <div className="flex items-baseline gap-1 product-price-container">
+                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight product-selling-price">
                           ₹{product.price}
                         </span>
                         {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none">
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none product-cutted-price">
                             ₹{product.originalPrice}
                           </span>
                         )}
                       </div>
                       {discountText && (
-                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5 product-discount-badge">
                           {discountText}
                         </span>
                       )}
@@ -1157,7 +1157,7 @@ export default function HomePageClient() {
                         <span>{product.netWeight || "Daily Prep"}</span>
                         <span className="text-tag-amber font-label-badge font-bold">{product.pieces || "Chef Crafted"}</span>
                       </div>
-                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1">
+                      <h3 className="font-headline-sm text-headline-sm text-on-surface font-bold group-hover:text-primary transition-colors text-[13px] sm:text-[14.5px] line-clamp-1 product-card-title">
                         {product.name}
                       </h3>
                       <p className="font-body-sm text-body-sm text-slate-body mt-0.5 sm:mt-1 leading-snug text-[11px] sm:text-[12px] line-clamp-1 sm:line-clamp-2">
@@ -1168,18 +1168,18 @@ export default function HomePageClient() {
 
                   <div className="p-2 sm:p-4 pt-0 flex items-center justify-between gap-1.5 sm:gap-2 mt-auto">
                     <div className="flex flex-col min-w-0 pr-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight">
+                      <div className="flex items-baseline gap-1 product-price-container">
+                        <span className="font-headline-md text-headline-md font-extrabold text-on-surface text-[13px] sm:text-[1.15rem] leading-tight product-selling-price">
                           ₹{product.price}
                         </span>
                         {product.originalPrice && product.originalPrice > product.price && (
-                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none">
+                          <span className="font-body-sm text-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[12px] leading-none product-cutted-price">
                             ₹{product.originalPrice}
                           </span>
                         )}
                       </div>
                       {discountText && (
-                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5 product-discount-badge">
                           {discountText}
                         </span>
                       )}
@@ -1351,16 +1351,16 @@ export default function HomePageClient() {
           aria-label="Quick Checkout Bar"
           className="fixed bottom-5 inset-x-4 md:inset-x-auto md:right-8 md:w-[380px] z-40 animate-fade-in"
         >
-          <div className="bg-primary text-on-primary rounded-2xl p-4 shadow-2xl flex items-center justify-between border border-primary-container">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white">
+          <div className="bg-primary text-on-primary rounded-2xl p-4 shadow-2xl flex items-center justify-between border border-primary-container quick-checkout-inner">
+            <div className="flex items-center gap-3 min-w-0 pr-2">
+              <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center text-white shrink-0 quick-checkout-icon">
                 <span className="material-symbols-outlined text-[20px]">shopping_bag</span>
               </div>
-              <div>
-                <span className="font-headline-sm text-headline-sm font-bold block leading-none text-white text-[14.5px]">
+              <div className="min-w-0">
+                <span className="font-headline-sm text-headline-sm font-bold block leading-none text-white text-[14.5px] truncate quick-checkout-title">
                   {totalItemsCount} {totalItemsCount === 1 ? "Item" : "Items"} in Cart
                 </span>
-                <span className="font-body-sm text-body-sm text-on-primary-container leading-tight mt-1 block text-[12.5px]">
+                <span className="font-body-sm text-body-sm text-on-primary-container leading-tight mt-1 block text-[12.5px] quick-checkout-sub">
                   Subtotal: ₹{subtotal}
                 </span>
               </div>
@@ -1368,7 +1368,7 @@ export default function HomePageClient() {
             <button
               type="button"
               onClick={openCart}
-              className="px-5 py-2.5 bg-white text-primary rounded-full font-label-md text-label-md font-bold hover:bg-surface-container transition-all flex items-center gap-1.5 shadow-sm cursor-pointer border-none text-[13px] whitespace-nowrap"
+              className="px-5 py-2.5 bg-white text-primary rounded-full font-label-md text-label-md font-bold hover:bg-surface-container transition-all flex items-center gap-1.5 shadow-sm cursor-pointer border-none text-[13px] whitespace-nowrap shrink-0 quick-checkout-btn"
             >
               <span>Checkout</span>
               <span className="material-symbols-outlined text-[16px]">arrow_forward</span>

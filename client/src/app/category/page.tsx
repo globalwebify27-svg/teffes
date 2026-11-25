@@ -323,7 +323,7 @@ function CategoryContent() {
                       <span>Net: {item.netWeight}</span>
                       <span className="text-tertiary font-label-badge font-bold">{item.pieces || item.serves || item.cutType || "Standard Cut"}</span>
                     </div>
-                    <h3 className="font-headline-sm font-bold text-[13px] sm:text-[14px] text-gray-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug">
+                    <h3 className="font-headline-sm font-bold text-[13px] sm:text-[14px] text-gray-900 group-hover:text-primary transition-colors line-clamp-1 leading-snug product-card-title">
                       {item.name}
                     </h3>
                     <p className="font-body-sm text-slate-body mt-0.5 line-clamp-1 text-[11px] sm:text-[12px]">
@@ -334,18 +334,18 @@ function CategoryContent() {
                   {/* Pricing & Add to Cart */}
                   <div className="flex items-center justify-between mt-3 sm:mt-4 pt-2 sm:pt-3 border-t border-gray-100 gap-1.5 sm:gap-2">
                     <div className="flex flex-col min-w-0 pr-1">
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-headline-sm font-extrabold text-primary text-[13px] sm:text-[15px] leading-tight">
+                      <div className="flex items-baseline gap-1 product-price-container">
+                        <span className="font-headline-sm font-extrabold text-primary text-[13px] sm:text-[15px] leading-tight product-selling-price">
                           ₹{item.price}
                         </span>
                         {item.originalPrice > item.price && (
-                          <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11px] leading-none">
+                          <span className="font-body-sm text-slate-subtle line-through decoration-primary [text-decoration-color:#800020] decoration-[1px] text-[9.5px] sm:text-[11px] leading-none product-cutted-price">
                             ₹{item.originalPrice}
                           </span>
                         )}
                       </div>
                       {discount > 0 && (
-                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5">
+                        <span className="text-[8.5px] sm:text-[9.5px] font-bold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded leading-none whitespace-nowrap w-fit mt-0.5 product-discount-badge">
                           {discount}% OFF
                         </span>
                       )}

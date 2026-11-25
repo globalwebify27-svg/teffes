@@ -921,3 +921,55 @@ s {
   animation: shimmerWave 2s infinite cubic-bezier(0.4, 0, 0.2, 1);
   content: "";
 }
+
+/* Product card pricing & compact mobile alignment (<= 395px) */
+@media (max-width: 395px) {
+  .product-price-container {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0 !important;
+  }
+  .product-card-title {
+    font-size: 12px !important;
+    line-height: 1.25 !important;
+  }
+  .product-selling-price {
+    font-size: 12px !important;
+    line-height: 1.15 !important;
+  }
+  .product-cutted-price {
+    margin-top: 1.5px !important;
+    font-size: 9.5px !important;
+    line-height: 1 !important;
+  }
+  .product-discount-badge {
+    display: none !important;
+  }
+  .quick-checkout-inner {
+    padding: 8px 12px !important;
+    border-radius: 14px !important;
+  }
+  .quick-checkout-icon {
+    width: 28px !important;
+    height: 28px !important;
+  }
+  .quick-checkout-icon span {
+    font-size: 16px !important;
+  }
+  .quick-checkout-title {
+    font-size: 11.5px !important;
+    line-height: 1.2 !important;
+  }
+  .quick-checkout-sub {
+    font-size: 10px !important;
+    margin-top: 1px !important;
+  }
+  .quick-checkout-btn {
+    padding: 5px 10px !important;
+    font-size: 11px !important;
+    gap: 2px !important;
+  }
+  .quick-checkout-btn span {
+    font-size: 11px !important;
+  }
+}
