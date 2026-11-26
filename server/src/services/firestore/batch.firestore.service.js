@@ -58,17 +58,18 @@ const DEFAULT_BATCH_CONFIG = {
  * Merges store-specific overrides with production defaults.
  */
 const getStoreBatchConfig = async (storeId) => {
-  if (!storeId) return { ...DEFAULT_BATCH_CONFIG };
+  let cleanId = (!storeId || storeId === 'all') ? 'S001' : String(storeId).trim();
+  if (cleanId === 'S002') cleanId = 'S004';
   try {
-    const store = await getDoc(STORES_COLLECTION, String(storeId).trim());
+    const store = await getDoc(STORES_COLLECTION, cleanId);
     if (store && store.batchConfig) {
       return {
         maxBatchSize: Math.max(1, Number(store.batchConfig.maxBatchSize) || DEFAULT_BATCH_CONFIG.maxBatchSize),
-        maxDetourKm: Math.max(1, Number(store.batchConfig.maxDetourKm) || DEFAULT_BATCH_CONFIG.maxDetourKm),
-        maxTotalRouteKm: Math.max(2, Number(store.batchConfig.maxTotalRouteKm) || DEFAULT_BATCH_CONFIG.maxTotalRouteKm),
-        maxEstimatedMinutes: Math.max(15, Number(store.batchConfig.maxEstimatedMinutes) || DEFAULT_BATCH_CONFIG.maxEstimatedMinutes),
-        maxBatchWeightKg: Math.max(2, Number(store.batchConfig.maxBatchWeightKg) || DEFAULT_BATCH_CONFIG.maxBatchWeightKg),
-        handoverBufferMinutes: Math.max(2, Number(store.batchConfig.handoverBufferMinutes) || DEFAULT_BATCH_CONFIG.handoverBufferMinutes),
+        maxDetourKm: Math.max(0.1, Number(store.batchConfig.maxDetourKm) || DEFAULT_BATCH_CONFIG.maxDetourKm),
+        maxTotalRouteKm: Math.max(0.5, Number(store.batchConfig.maxTotalRouteKm) || DEFAULT_BATCH_CONFIG.maxTotalRouteKm),
+        maxEstimatedMinutes: Math.max(1, Number(store.batchConfig.maxEstimatedMinutes) || DEFAULT_BATCH_CONFIG.maxEstimatedMinutes),
+        maxBatchWeightKg: Math.max(0.5, Number(store.batchConfig.maxBatchWeightKg) || DEFAULT_BATCH_CONFIG.maxBatchWeightKg),
+        handoverBufferMinutes: Math.max(1, Number(store.batchConfig.handoverBufferMinutes) || DEFAULT_BATCH_CONFIG.handoverBufferMinutes),
       };
     }
   } catch (err) {
@@ -81,17 +82,17 @@ const getStoreBatchConfig = async (storeId) => {
  * Update store-specific batch configuration.
  */
 const updateStoreBatchConfig = async (storeId, newConfig) => {
-  if (!storeId) throw new Error('storeId is required');
-  const cleanStoreId = String(storeId).trim();
+  let cleanStoreId = (!storeId || storeId === 'all') ? 'S001' : String(storeId).trim();
+  if (cleanStoreId === 'S002') cleanStoreId = 'S004';
   const current = await getStoreBatchConfig(cleanStoreId);
 
   const updatedConfig = {
-    maxBatchSize: newConfig.maxBatchSize != null ? Math.max(1, parseInt(newConfig.maxBatchSize, 10)) : current.maxBatchSize,
-    maxDetourKm: newConfig.maxDetourKm != null ? Math.max(1, parseFloat(newConfig.maxDetourKm)) : current.maxDetourKm,
-    maxTotalRouteKm: newConfig.maxTotalRouteKm != null ? Math.max(2, parseFloat(newConfig.maxTotalRouteKm)) : current.maxTotalRouteKm,
-    maxEstimatedMinutes: newConfig.maxEstimatedMinutes != null ? Math.max(15, parseInt(newConfig.maxEstimatedMinutes, 10)) : current.maxEstimatedMinutes,
-    maxBatchWeightKg: newConfig.maxBatchWeightKg != null ? Math.max(2, parseFloat(newConfig.maxBatchWeightKg)) : current.maxBatchWeightKg,
-    handoverBufferMinutes: newConfig.handoverBufferMinutes != null ? Math.max(2, parseInt(newConfig.handoverBufferMinutes, 10)) : current.handoverBufferMinutes,
+    maxBatchSize: newConfig.maxBatchSize != null ? Math.max(1, parseInt(newConfig.maxBatchSize, 10) || 1) : current.maxBatchSize,
+    maxDetourKm: newConfig.maxDetourKm != null ? Math.max(0.1, parseFloat(newConfig.maxDetourKm) || 0.1) : current.maxDetourKm,
+    maxTotalRouteKm: newConfig.maxTotalRouteKm != null ? Math.max(0.5, parseFloat(newConfig.maxTotalRouteKm) || 0.5) : current.maxTotalRouteKm,
+    maxEstimatedMinutes: newConfig.maxEstimatedMinutes != null ? Math.max(1, parseInt(newConfig.maxEstimatedMinutes, 10) || 1) : current.maxEstimatedMinutes,
+    maxBatchWeightKg: newConfig.maxBatchWeightKg != null ? Math.max(0.5, parseFloat(newConfig.maxBatchWeightKg) || 0.5) : current.maxBatchWeightKg,
+    handoverBufferMinutes: newConfig.handoverBufferMinutes != null ? Math.max(1, parseInt(newConfig.handoverBufferMinutes, 10) || 1) : (current.handoverBufferMinutes || 5),
   };
 
   await updateDoc(STORES_COLLECTION, cleanStoreId, {
@@ -198,30 +199,63 @@ const evaluateRouteFeasibility = async ({ storeId, storeCoords, orders }) => {
   }
 
   // Multi-order case: Find optimal sequence via shortest total path
-  const perms = generatePermutations(orders);
-  let bestPerm = null;
+  let optimalOrders = orders;
   let bestDistance = Infinity;
 
-  for (const perm of perms) {
+  if (orders.length <= 4) {
+    const perms = generatePermutations(orders);
+    let bestPerm = null;
+
+    for (const perm of perms) {
+      let dist = 0;
+      let prevLat = hubLat;
+      let prevLng = hubLng;
+
+      for (const o of perm) {
+        const cLat = o.customer?.lat || o.deliveryAddress?.lat || hubLat;
+        const cLng = o.customer?.lng || o.deliveryAddress?.lng || hubLng;
+        dist += calculateRoadDistanceKm(prevLat, prevLng, cLat, cLng);
+        prevLat = cLat;
+        prevLng = cLng;
+      }
+
+      if (dist < bestDistance) {
+        bestDistance = dist;
+        bestPerm = perm;
+      }
+    }
+    optimalOrders = bestPerm || orders;
+  } else {
+    // Greedy Nearest Neighbor for N > 4 to safely handle large batches
+    const unvisited = [...orders];
+    const route = [];
+    let curLat = hubLat;
+    let curLng = hubLng;
     let dist = 0;
-    let prevLat = hubLat;
-    let prevLng = hubLng;
 
-    for (const o of perm) {
-      const cLat = o.customer?.lat || o.deliveryAddress?.lat || hubLat;
-      const cLng = o.customer?.lng || o.deliveryAddress?.lng || hubLng;
-      dist += calculateRoadDistanceKm(prevLat, prevLng, cLat, cLng);
-      prevLat = cLat;
-      prevLng = cLng;
+    while (unvisited.length > 0) {
+      let nearestIdx = 0;
+      let nearestDist = Infinity;
+      for (let i = 0; i < unvisited.length; i++) {
+        const o = unvisited[i];
+        const cLat = o.customer?.lat || o.deliveryAddress?.lat || curLat;
+        const cLng = o.customer?.lng || o.deliveryAddress?.lng || curLng;
+        const d = calculateRoadDistanceKm(curLat, curLng, cLat, cLng);
+        if (d < nearestDist) {
+          nearestDist = d;
+          nearestIdx = i;
+        }
+      }
+      const [nextStop] = unvisited.splice(nearestIdx, 1);
+      route.push(nextStop);
+      dist += nearestDist;
+      curLat = nextStop.customer?.lat || nextStop.deliveryAddress?.lat || curLat;
+      curLng = nextStop.customer?.lng || nextStop.deliveryAddress?.lng || curLng;
     }
-
-    if (dist < bestDistance) {
-      bestDistance = dist;
-      bestPerm = perm;
-    }
+    optimalOrders = route;
+    bestDistance = dist;
   }
 
-  const optimalOrders = bestPerm || orders;
   const optimalSequence = optimalOrders.map((o) => o.orderId || o.id);
 
   // 3. Detour check between consecutive stops
@@ -287,7 +321,8 @@ const createDeliveryBatchTransactional = async ({ storeId, riderId, orderIds, ad
     throw new Error('storeId, riderId, and non-empty orderIds array are required');
   }
 
-  const cleanStoreId = String(storeId).trim();
+  let cleanStoreId = (!storeId || storeId === 'all') ? 'S001' : String(storeId).trim();
+  if (cleanStoreId === 'S002') cleanStoreId = 'S004';
   const cleanRiderId = String(riderId).trim();
   const cleanOrderIds = Array.from(new Set(orderIds.map((id) => String(id).trim())));
   const db = getDb();

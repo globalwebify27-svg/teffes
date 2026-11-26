@@ -7202,18 +7202,31 @@ function RidersTab({ storeId }: { storeId?: string }) {
   const [defaultRiderDailyTarget, setDefaultRiderDailyTarget] = useState<number>(16);
   const [savingPayout, setSavingPayout] = useState(false);
   const [showRatesModal, setShowRatesModal] = useState(false);
-  const [draftRates, setDraftRates] = useState({
+  const [draftRates, setDraftRates] = useState<any>({
     baseDeliveryPay: 65,
     distanceIncentive: 15,
     peakHourSurge: 20,
     defaultRiderDailyTarget: 16,
   });
 
-  const isRatesDirty =
-    draftRates.baseDeliveryPay !== baseDeliveryPay ||
-    draftRates.distanceIncentive !== distanceIncentive ||
-    draftRates.peakHourSurge !== peakHourSurge ||
-    draftRates.defaultRiderDailyTarget !== defaultRiderDailyTarget;
+  const isRatesDirty = useMemo(() => {
+    const s1 = String(draftRates.baseDeliveryPay ?? "").trim();
+    const s2 = String(draftRates.distanceIncentive ?? "").trim();
+    const s3 = String(draftRates.peakHourSurge ?? "").trim();
+    const s4 = String(draftRates.defaultRiderDailyTarget ?? "").trim();
+
+    const n1 = Number(s1);
+    const n2 = Number(s2);
+    const n3 = Number(s3);
+    const n4 = Number(s4);
+
+    return (
+      (s1 !== "" && !isNaN(n1) && n1 !== Number(baseDeliveryPay)) ||
+      (s2 !== "" && !isNaN(n2) && n2 !== Number(distanceIncentive)) ||
+      (s3 !== "" && !isNaN(n3) && n3 !== Number(peakHourSurge)) ||
+      (s4 !== "" && !isNaN(n4) && n4 !== Number(defaultRiderDailyTarget))
+    );
+  }, [draftRates, baseDeliveryPay, distanceIncentive, peakHourSurge, defaultRiderDailyTarget]);
 
   // Cash Remittances & Fleet Collection
   const [remittances, setRemittances] = useState<any[]>([]);
@@ -7232,7 +7245,7 @@ function RidersTab({ storeId }: { storeId?: string }) {
     maxEstimatedMinutes: 45,
     maxBatchWeightKg: 10.0,
   });
-  const [draftBatchConfig, setDraftBatchConfig] = useState({
+  const [draftBatchConfig, setDraftBatchConfig] = useState<any>({
     maxBatchSize: 3,
     maxDetourKm: 3.5,
     maxTotalRouteKm: 15.0,
@@ -7242,12 +7255,27 @@ function RidersTab({ storeId }: { storeId?: string }) {
   const [showBatchConfigModal, setShowBatchConfigModal] = useState(false);
   const [savingBatchConfig, setSavingBatchConfig] = useState(false);
 
-  const isBatchConfigDirty =
-    draftBatchConfig.maxBatchSize !== batchConfig.maxBatchSize ||
-    draftBatchConfig.maxDetourKm !== batchConfig.maxDetourKm ||
-    draftBatchConfig.maxTotalRouteKm !== batchConfig.maxTotalRouteKm ||
-    draftBatchConfig.maxEstimatedMinutes !== batchConfig.maxEstimatedMinutes ||
-    draftBatchConfig.maxBatchWeightKg !== batchConfig.maxBatchWeightKg;
+  const isBatchConfigDirty = useMemo(() => {
+    const s1 = String(draftBatchConfig.maxBatchSize ?? "").trim();
+    const s2 = String(draftBatchConfig.maxDetourKm ?? "").trim();
+    const s3 = String(draftBatchConfig.maxTotalRouteKm ?? "").trim();
+    const s4 = String(draftBatchConfig.maxEstimatedMinutes ?? "").trim();
+    const s5 = String(draftBatchConfig.maxBatchWeightKg ?? "").trim();
+
+    const n1 = Number(s1);
+    const n2 = Number(s2);
+    const n3 = Number(s3);
+    const n4 = Number(s4);
+    const n5 = Number(s5);
+
+    return (
+      (s1 !== "" && !isNaN(n1) && n1 !== Number(batchConfig.maxBatchSize)) ||
+      (s2 !== "" && !isNaN(n2) && n2 !== Number(batchConfig.maxDetourKm)) ||
+      (s3 !== "" && !isNaN(n3) && n3 !== Number(batchConfig.maxTotalRouteKm)) ||
+      (s4 !== "" && !isNaN(n4) && n4 !== Number(batchConfig.maxEstimatedMinutes)) ||
+      (s5 !== "" && !isNaN(n5) && n5 !== Number(batchConfig.maxBatchWeightKg))
+    );
+  }, [draftBatchConfig, batchConfig]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -7255,7 +7283,7 @@ function RidersTab({ storeId }: { storeId?: string }) {
       const qStore = storeId ? `?storeId=${storeId}` : "";
       const [ridersResult, ordersResult, storeResult, remittancesResult, batchResult] = await Promise.allSettled([
         api.get<{ success: boolean; riders: any[] }>(`/store-admin/riders${qStore}`),
-        api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=all${storeId ? `&storeId=${storeId}` : ""}`),
+        api.get<{ success: boolean; orders: any[] }>(`/store-admin/orders?status=Ready,Out for Delivery${storeId ? `&storeId=${storeId}` : ""}`),
         api.get<{ success: boolean; store: any }>(`/store-admin/store-status${qStore}`),
         api.get<{ success: boolean; remittances: any[] }>(`/store-admin/remittances${qStore}`),
         api.get<{ success: boolean; settings: any; config: any }>(`/store-admin/batches/settings${qStore}`),
@@ -7349,24 +7377,28 @@ function RidersTab({ storeId }: { storeId?: string }) {
     if (!isRatesDirty) return;
     setSavingPayout(true);
     try {
-      const res = await api.patch<{ success: boolean; store: any }>("/store-admin/store-status", {
-        defaultRiderDailyTarget: Number(draftRates.defaultRiderDailyTarget),
+      const effectiveStoreId = storeId || "S001";
+      const qStore = `?storeId=${effectiveStoreId}`;
+      const payload = {
+        storeId: effectiveStoreId,
+        defaultRiderDailyTarget: Math.max(1, Number(draftRates.defaultRiderDailyTarget) || 1),
         riderPayoutSettings: {
-          baseDeliveryPay: Number(draftRates.baseDeliveryPay),
-          distanceIncentive: Number(draftRates.distanceIncentive),
-          peakHourSurge: Number(draftRates.peakHourSurge),
+          baseDeliveryPay: Math.max(0, Number(draftRates.baseDeliveryPay) || 0),
+          distanceIncentive: Math.max(0, Number(draftRates.distanceIncentive) || 0),
+          peakHourSurge: Math.max(0, Number(draftRates.peakHourSurge) || 0),
         },
-      });
+      };
+      const res = await api.patch<{ success: boolean; store: any }>(`/store-admin/store-status${qStore}`, payload);
       if (res.data.success) {
-        setBaseDeliveryPay(draftRates.baseDeliveryPay);
-        setDistanceIncentive(draftRates.distanceIncentive);
-        setPeakHourSurge(draftRates.peakHourSurge);
-        setDefaultRiderDailyTarget(draftRates.defaultRiderDailyTarget);
+        setBaseDeliveryPay(payload.riderPayoutSettings.baseDeliveryPay);
+        setDistanceIncentive(payload.riderPayoutSettings.distanceIncentive);
+        setPeakHourSurge(payload.riderPayoutSettings.peakHourSurge);
+        setDefaultRiderDailyTarget(payload.defaultRiderDailyTarget);
         setShowRatesModal(false);
-        toast.success("Rider payout rates & daily target saved. Rider app calculations updated immediately.", "Payout Rates Updated");
+        toast.success("Rider payout rates & daily target saved for this store.", "Payout Rates Updated");
       }
-    } catch (err) {
-      toast.error("Failed to update rider payout rates", "Save Error");
+    } catch (err: any) {
+      toast.error(err?.response?.data?.message || err.message || "Failed to update rider payout rates", "Save Error");
     } finally {
       setSavingPayout(false);
     }
@@ -7376,20 +7408,33 @@ function RidersTab({ storeId }: { storeId?: string }) {
     if (!isBatchConfigDirty) return;
     setSavingBatchConfig(true);
     try {
-      const res = await api.patch<{ success: boolean; settings?: any; config?: any; message?: string }>("/store-admin/batches/settings", draftBatchConfig);
+      const effectiveStoreId = storeId || "S001";
+      const qStore = `?storeId=${effectiveStoreId}`;
+      const payload = {
+        storeId: effectiveStoreId,
+        maxBatchSize: Math.max(1, parseInt(String(draftBatchConfig.maxBatchSize), 10) || 1),
+        maxDetourKm: Math.max(0.1, parseFloat(String(draftBatchConfig.maxDetourKm)) || 0.1),
+        maxTotalRouteKm: Math.max(0.5, parseFloat(String(draftBatchConfig.maxTotalRouteKm)) || 0.5),
+        maxEstimatedMinutes: Math.max(5, parseInt(String(draftBatchConfig.maxEstimatedMinutes), 10) || 5),
+        maxBatchWeightKg: Math.max(0.5, parseFloat(String(draftBatchConfig.maxBatchWeightKg)) || 0.5),
+      };
+      const res = await api.patch<{ success: boolean; settings?: any; config?: any; message?: string }>(
+        `/store-admin/batches/settings${qStore}`,
+        payload
+      );
       const bs = res.data?.settings || res.data?.config;
       if (res.data?.success && bs) {
         const cfg = {
-          maxBatchSize: Number(bs.maxBatchSize) || 3,
-          maxDetourKm: Number(bs.maxDetourKm) || 3.5,
-          maxTotalRouteKm: Number(bs.maxTotalRouteKm) || 15.0,
-          maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || 45,
-          maxBatchWeightKg: Number(bs.maxBatchWeightKg) || 10.0,
+          maxBatchSize: Number(bs.maxBatchSize) || payload.maxBatchSize,
+          maxDetourKm: Number(bs.maxDetourKm) || payload.maxDetourKm,
+          maxTotalRouteKm: Number(bs.maxTotalRouteKm) || payload.maxTotalRouteKm,
+          maxEstimatedMinutes: Number(bs.maxEstimatedMinutes) || payload.maxEstimatedMinutes,
+          maxBatchWeightKg: Number(bs.maxBatchWeightKg) || payload.maxBatchWeightKg,
         };
         setBatchConfig(cfg);
         setDraftBatchConfig(cfg);
         setShowBatchConfigModal(false);
-        toast.success("Multi-order batch limits updated. Feasibility checks will use new thresholds.", "Batch Policy Updated");
+        toast.success("Multi-order batch limits updated for this store.", "Batch Policy Updated");
       } else {
         toast.error(res.data?.message || "Failed to update batch limits", "Settings Error");
       }
@@ -7601,53 +7646,6 @@ function RidersTab({ storeId }: { storeId?: string }) {
               Default daily orders target set for active hub riders
             </span>
           </div>
-        </div>
-
-        {/* Multi-Order Batching Live Policy Banner */}
-        <div style={{
-          background: "#f8fafc",
-          border: "1px solid #e2e8f0",
-          borderRadius: "12px",
-          padding: "14px 18px",
-          marginTop: "16px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "12px"
-        }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <span className="material-symbols-outlined text-[20px]" style={{ color: "#0284c7" }}>alt_route</span>
-              <span style={{ fontWeight: 800, fontSize: "0.92rem", color: "#0f172a" }}>Multi-Order Batch Dispatch Policy</span>
-              <span style={{ fontSize: "0.7rem", background: "#e0f2fe", color: "#0369a1", fontWeight: 700, padding: "2px 8px", borderRadius: "99px" }}>
-                Configurable Limits
-              </span>
-            </div>
-            <p style={{ margin: "4px 0 0 0", fontSize: "0.78rem", color: "#64748b" }}>
-              Max {batchConfig.maxBatchSize} orders/trip &bull; Max detour: {batchConfig.maxDetourKm} km &bull; Max route: {batchConfig.maxTotalRouteKm} km &bull; Max time: {batchConfig.maxEstimatedMinutes} min &bull; Max weight: {batchConfig.maxBatchWeightKg} kg
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              setDraftBatchConfig({ ...batchConfig });
-              setShowBatchConfigModal(true);
-            }}
-            style={{
-              padding: "7px 14px",
-              borderRadius: "8px",
-              background: "#fff",
-              border: "1px solid #cbd5e1",
-              fontSize: "0.8rem",
-              fontWeight: 700,
-              color: "#334155",
-              cursor: "pointer",
-              boxShadow: "0 1px 2px rgba(0,0,0,0.05)"
-            }}
-          >
-            Configure Rules
-          </button>
         </div>
       </div>
 
@@ -8187,8 +8185,8 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     min={0}
-                    value={draftRates.baseDeliveryPay}
-                    onChange={(e) => setDraftRates({ ...draftRates, baseDeliveryPay: Math.max(0, Number(e.target.value)) })}
+                    value={draftRates.baseDeliveryPay ?? ""}
+                    onChange={(e) => setDraftRates((prev: any) => ({ ...prev, baseDeliveryPay: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px 10px 32px",
@@ -8218,8 +8216,8 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     min={0}
-                    value={draftRates.distanceIncentive}
-                    onChange={(e) => setDraftRates({ ...draftRates, distanceIncentive: Math.max(0, Number(e.target.value)) })}
+                    value={draftRates.distanceIncentive ?? ""}
+                    onChange={(e) => setDraftRates((prev: any) => ({ ...prev, distanceIncentive: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px 10px 32px",
@@ -8249,8 +8247,8 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     min={0}
-                    value={draftRates.peakHourSurge}
-                    onChange={(e) => setDraftRates({ ...draftRates, peakHourSurge: Math.max(0, Number(e.target.value)) })}
+                    value={draftRates.peakHourSurge ?? ""}
+                    onChange={(e) => setDraftRates((prev: any) => ({ ...prev, peakHourSurge: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px 10px 32px",
@@ -8279,8 +8277,8 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     min={1}
-                    value={draftRates.defaultRiderDailyTarget}
-                    onChange={(e) => setDraftRates({ ...draftRates, defaultRiderDailyTarget: Math.max(1, Number(e.target.value)) })}
+                    value={draftRates.defaultRiderDailyTarget ?? ""}
+                    onChange={(e) => setDraftRates((prev: any) => ({ ...prev, defaultRiderDailyTarget: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px",
@@ -8455,8 +8453,8 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     min={1}
-                    value={draftBatchConfig.maxBatchSize}
-                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxBatchSize: Math.max(1, Number(e.target.value) || 1) })}
+                    value={draftBatchConfig.maxBatchSize ?? ""}
+                    onChange={(e) => setDraftBatchConfig((prev: any) => ({ ...prev, maxBatchSize: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px",
@@ -8486,10 +8484,9 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     step="0.1"
-                    min={0.5}
-                    max={10.0}
-                    value={draftBatchConfig.maxDetourKm}
-                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxDetourKm: Math.max(0.5, Math.min(10.0, Number(e.target.value) || 1.0)) })}
+                    min={0.1}
+                    value={draftBatchConfig.maxDetourKm ?? ""}
+                    onChange={(e) => setDraftBatchConfig((prev: any) => ({ ...prev, maxDetourKm: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px",
@@ -8519,10 +8516,9 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     step="0.5"
-                    min={5.0}
-                    max={30.0}
-                    value={draftBatchConfig.maxTotalRouteKm}
-                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxTotalRouteKm: Math.max(5.0, Math.min(30.0, Number(e.target.value) || 5.0)) })}
+                    min={0.5}
+                    value={draftBatchConfig.maxTotalRouteKm ?? ""}
+                    onChange={(e) => setDraftBatchConfig((prev: any) => ({ ...prev, maxTotalRouteKm: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px",
@@ -8552,10 +8548,9 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     step="5"
-                    min={20}
-                    max={90}
-                    value={draftBatchConfig.maxEstimatedMinutes}
-                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxEstimatedMinutes: Math.max(20, Math.min(90, Number(e.target.value) || 20)) })}
+                    min={5}
+                    value={draftBatchConfig.maxEstimatedMinutes ?? ""}
+                    onChange={(e) => setDraftBatchConfig((prev: any) => ({ ...prev, maxEstimatedMinutes: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px",
@@ -8585,10 +8580,9 @@ function RidersTab({ storeId }: { storeId?: string }) {
                   <input
                     type="number"
                     step="0.5"
-                    min={2.0}
-                    max={25.0}
-                    value={draftBatchConfig.maxBatchWeightKg}
-                    onChange={(e) => setDraftBatchConfig({ ...draftBatchConfig, maxBatchWeightKg: Math.max(2.0, Math.min(25.0, Number(e.target.value) || 2.0)) })}
+                    min={0.5}
+                    value={draftBatchConfig.maxBatchWeightKg ?? ""}
+                    onChange={(e) => setDraftBatchConfig((prev: any) => ({ ...prev, maxBatchWeightKg: e.target.value }))}
                     style={{
                       width: "100%",
                       padding: "10px 14px",

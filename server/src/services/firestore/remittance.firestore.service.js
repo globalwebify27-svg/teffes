@@ -22,17 +22,26 @@ const generateRemittanceId = () => {
  * Calculate current Cash in Hand for a rider:
  * Sum of delivered COD cash collected from orders minus confirmed remittances.
  */
-const calculateRiderCashInHand = async (riderId, riderPhone = '') => {
+const calculateRiderCashInHand = async (riderId, riderPhone = '', options = {}) => {
   if (!riderId) return 0;
   const cleanId = String(riderId).trim();
   const cleanPhone = (riderPhone || '').replace(/\D/g, '');
 
-  // 1. Fetch delivered orders assigned to this rider
-  const orders = await queryDocs(ORDERS_COLLECTION, (ref) =>
-    ref.where('status', '==', 'Delivered')
-  );
+  // 1. Fetch delivered orders assigned to this rider (using in-memory store orders if provided)
+  let orders = options.orders;
+  if (!orders) {
+    if (options.storeId) {
+      const { getStoreOrders } = require('./order.firestore.service');
+      orders = await getStoreOrders(options.storeId);
+    } else {
+      orders = await queryDocs(ORDERS_COLLECTION, (ref) =>
+        ref.where('status', '==', 'Delivered')
+      );
+    }
+  }
 
-  const riderDeliveredCodOrders = orders.filter((o) => {
+  const riderDeliveredCodOrders = (orders || []).filter((o) => {
+    if (o.status !== 'Delivered') return false;
     const oRiderId = o.rider?.riderId || o.rider?.id || o.riderId;
     const oRiderPhone = (o.rider?.phone || '').replace(/\D/g, '');
 
@@ -52,12 +61,17 @@ const calculateRiderCashInHand = async (riderId, riderPhone = '') => {
     return sum + val;
   }, 0);
 
-  // 2. Fetch confirmed remittances for this rider
-  const remittances = await queryDocs(REMITTANCES_COLLECTION, (ref) =>
-    ref.where('riderId', '==', cleanId)
-  );
+  // 2. Fetch confirmed remittances for this rider (using store remittances if provided)
+  let remittances = options.remittances;
+  if (!remittances) {
+    remittances = await queryDocs(REMITTANCES_COLLECTION, (ref) =>
+      ref.where('riderId', '==', cleanId)
+    );
+  } else {
+    remittances = remittances.filter((r) => String(r.riderId || '').trim() === cleanId);
+  }
 
-  const confirmedRemittances = remittances.filter((r) => r.status === 'Confirmed');
+  const confirmedRemittances = (remittances || []).filter((r) => r.status === 'Confirmed');
   const totalRemitted = confirmedRemittances.reduce((sum, r) => sum + (Number(r.amount) || 0), 0);
 
   const net = (Number(totalCollected) || 0) - (Number(totalRemitted) || 0);

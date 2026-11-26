@@ -73,6 +73,7 @@ const {
 const resolveStoreId = (rawStoreId) => {
   if (!rawStoreId) return 'S001';
   const clean = String(rawStoreId).trim();
+  if (clean === 'all') return 'S001';
   return (clean === 'S002' || clean === 'S004') ? 'S004' : clean;
 };
 
@@ -392,10 +393,11 @@ const getOrders = async (req, res, next) => {
     });
     const availableAreas = Array.from(set).sort();
 
-    // Filter by status
+    // Filter by status (supports single status or comma-separated list like "Ready,Out for Delivery")
     let filtered = allStoreOrders;
     if (status && status !== 'All' && status !== 'all') {
-      filtered = filtered.filter((o) => o.status === status);
+      const allowedStatuses = status.split(',').map((s) => s.trim().toLowerCase());
+      filtered = filtered.filter((o) => allowedStatuses.includes(String(o.status || '').trim().toLowerCase()));
     }
 
     // Filter by area
@@ -1916,11 +1918,19 @@ const getRiders = async (req, res, next) => {
     if (storeRiders.length === 0) storeRiders = allRiders;
 
     let activeOrders = [];
+    let storeOrders = [];
     try {
-      const orders = await getStoreOrders(storeId);
-      activeOrders = (orders || []).filter((o) => o.status === 'Out for Delivery');
+      storeOrders = await getStoreOrders(storeId);
+      activeOrders = (storeOrders || []).filter((o) => o.status === 'Out for Delivery');
     } catch (orderErr) {
       console.warn('[StoreAdmin] Error fetching store orders for rider status sync:', orderErr.message);
+    }
+
+    let storeRemittances = [];
+    try {
+      storeRemittances = await getStoreRemittancesFS(storeId);
+    } catch (remitErr) {
+      // Non-blocking
     }
 
     const activeRiderIdentifiers = new Set();
@@ -1964,7 +1974,11 @@ const getRiders = async (req, res, next) => {
         }
 
         try {
-          copy.cashInHand = await calculateRiderCashInHand(idStr, r.phone);
+          copy.cashInHand = await calculateRiderCashInHand(idStr, r.phone, {
+            orders: storeOrders,
+            remittances: storeRemittances,
+            storeId,
+          });
         } catch (cashErr) {
           copy.cashInHand = 0;
         }
@@ -2056,7 +2070,8 @@ const assignRiderToOrder = async (req, res, next) => {
  */
 const getStoreStatus = async (req, res, next) => {
   try {
-    const storeId = getEffectiveStoreId(req);
+    let storeId = getEffectiveStoreId(req);
+    if (!storeId || storeId === 'all') storeId = 'S001';
     let store = await getStoreById(storeId);
     if (!store) {
       store = await createStoreFS({
@@ -2083,7 +2098,8 @@ const getStoreStatus = async (req, res, next) => {
  */
 const updateStoreStatus = async (req, res, next) => {
   try {
-    const storeId = getEffectiveStoreId(req);
+    let storeId = getEffectiveStoreId(req);
+    if (!storeId || storeId === 'all') storeId = 'S001';
 
     const store = await updateStoreFS(storeId, req.body);
     res.status(200).json({ success: true, store });
@@ -2447,9 +2463,10 @@ const createDeliveryBatch = async (req, res, next) => {
  */
 const getStoreBatchSettings = async (req, res, next) => {
   try {
-    const storeId = getEffectiveStoreId(req);
+    let storeId = getEffectiveStoreId(req);
+    if (!storeId || storeId === 'all') storeId = 'S001';
     const config = await getStoreBatchConfig(storeId);
-    res.status(200).json({ success: true, config });
+    res.status(200).json({ success: true, config, settings: config });
   } catch (error) {
     next(error);
   }
@@ -2461,7 +2478,8 @@ const getStoreBatchSettings = async (req, res, next) => {
  */
 const updateStoreBatchSettings = async (req, res, next) => {
   try {
-    const storeId = getEffectiveStoreId(req);
+    let storeId = getEffectiveStoreId(req);
+    if (!storeId || storeId === 'all') storeId = 'S001';
     const config = await updateStoreBatchConfig(storeId, req.body);
     res.status(200).json({
       success: true,
