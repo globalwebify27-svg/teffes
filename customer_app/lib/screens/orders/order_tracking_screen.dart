@@ -791,7 +791,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> with SingleTi
       }
 
       return {
-        'badge': 'RIDER ON THE ROAD',
+        'badge': 'RIDER ON THE WAY',
         'title': 'Arriving in $transitMins min',
         'sub': 'Dispatched fresh from ${order.storeName ?? "Teffes store"}',
       };

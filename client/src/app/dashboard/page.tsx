@@ -1099,14 +1099,14 @@ export default function DashboardPage() {
         const fallbackImg = nameLower.includes("mutton")
           ? "https://images.unsplash.com/photo-1603048588665-791ca8aea617?auto=format&fit=crop&w=200&q=80"
           : (nameLower.includes("fish") || nameLower.includes("prawn"))
-          ? "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=200&q=80"
-          : nameLower.includes("egg")
-          ? "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=200&q=80"
-          : (nameLower.includes("boneless") || nameLower.includes("breast"))
-          ? "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=200&q=80"
-          : (nameLower.includes("drumstick") || nameLower.includes("leg"))
-          ? "https://images.unsplash.com/photo-1588767763784-48667a421685?auto=format&fit=crop&w=200&q=80"
-          : "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80";
+            ? "https://images.unsplash.com/photo-1519708227418-c8fd9a32b7a2?auto=format&fit=crop&w=200&q=80"
+            : nameLower.includes("egg")
+              ? "https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?auto=format&fit=crop&w=200&q=80"
+              : (nameLower.includes("boneless") || nameLower.includes("breast"))
+                ? "https://images.unsplash.com/photo-1604503468506-a8da13d82791?auto=format&fit=crop&w=200&q=80"
+                : (nameLower.includes("drumstick") || nameLower.includes("leg"))
+                  ? "https://images.unsplash.com/photo-1588767763784-48667a421685?auto=format&fit=crop&w=200&q=80"
+                  : "https://images.unsplash.com/photo-1587593810167-a84920ea0781?auto=format&fit=crop&w=200&q=80";
 
         return {
           name: `${it.name}${it.netWeight ? ` (${it.netWeight})` : ""}`,
@@ -2256,6 +2256,7 @@ export default function DashboardPage() {
               {(() => {
                 const status = trackingOrder.status || trackingOrder.rawOrder?.status || "Placed";
                 const isDelivered = status === "Delivered";
+                const isCancelled = status === "Cancelled" || status === "Rejected";
                 const isOutForDelivery = status === "Out for Delivery";
                 const transitMins = trackingOrder.remainingTransitMinutes != null ? trackingOrder.remainingTransitMinutes : 15;
                 const isNearDoorstep = isOutForDelivery && (transitMins <= 5 || trackingOrder.etaStage === "NEAR_DOORSTEP");
@@ -2318,7 +2319,14 @@ export default function DashboardPage() {
                 let bannerColor = "bg-amber-50 border-amber-200/80 text-amber-950";
                 let iconColor = "bg-amber-500/20 text-amber-800";
 
-                if (isDelivered) {
+                if (isCancelled) {
+                  badgeText = "Order Cancelled";
+                  mainHeading = "Order Cancelled";
+                  subHeading = trackingOrder.cancellationReason ? `Reason: ${trackingOrder.cancellationReason}` : "This order was cancelled";
+                  iconName = "cancel";
+                  bannerColor = "bg-rose-50 border-rose-200 text-rose-950";
+                  iconColor = "bg-rose-500/20 text-rose-800";
+                } else if (isDelivered) {
                   badgeText = "Order Completed";
                   mainHeading = "Delivered Fresh";
                   subHeading = "Delivered directly to your kitchen";
@@ -2333,7 +2341,7 @@ export default function DashboardPage() {
                   bannerColor = "bg-orange-50 border-orange-300 text-orange-950";
                   iconColor = "bg-orange-500 text-white animate-bounce";
                 } else if (isOutForDelivery) {
-                  badgeText = "Rider on the Road";
+                  badgeText = "Rider on the Way";
                   mainHeading = `Arriving in ${transitMins} min`;
                   subHeading = `Dispatched fresh from ${trackingOrder.storeName || "TeFFe's — Doranda Hub"}`;
                   iconName = "two_wheeler";

@@ -2062,6 +2062,16 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         </span>
                       )}
                       {(() => {
+                        const statusLower = String(o.status || "").toLowerCase().trim();
+                        if (
+                          statusLower === "cancelled" ||
+                          statusLower === "rejected" ||
+                          statusLower === "delivered" ||
+                          statusLower === "completed"
+                        ) {
+                          return null;
+                        }
+
                         const isMorningSlot = Boolean(
                           o.isNextDayOrder ||
                           (o.deliverySlot && (
@@ -2465,30 +2475,6 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                       </>
                     )}
                   </div>
-
-                  {(o.status === "Pending" || o.status === "Cutting" || o.status === "Ready") && (
-                    <button
-                      type="button"
-                      onClick={() => openEditOrderModal(o)}
-                      title="Open delay & item adjustment modal"
-                      style={{
-                        background: "#fffbeb",
-                        border: "1px solid #fcd34d",
-                        borderRadius: "6px",
-                        padding: "4px 10px",
-                        fontSize: "0.72rem",
-                        fontWeight: 700,
-                        color: "#b45309",
-                        cursor: "pointer",
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: "4px",
-                      }}
-                    >
-                      <span className="material-symbols-outlined text-[14px]">more_time</span>
-                      <span>+ Delay / Edit</span>
-                    </button>
-                  )}
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px", paddingTop: "10px", borderTop: "1px solid #f5f2ed" }}>

@@ -268,61 +268,6 @@ export default function StoreAdminInventoryLogsTab() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-      {/* ─── Header Info Card ────────────────────────────────────────── */}
-      <div
-        style={{
-          background: "#fff",
-          border: "1px solid #ede8e0",
-          borderRadius: "14px",
-          padding: "20px",
-          boxShadow: "0 2px 8px rgba(0,0,0,0.03)",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "16px",
-        }}
-      >
-        <div>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <span className="material-symbols-outlined text-[24px]" style={{ color: "#941717" }}>
-              manage_history
-            </span>
-            <h2 style={{ fontSize: "1.2rem", fontWeight: 800, color: "#171410", margin: 0 }}>
-              Store Inventory Activity Logs
-            </h2>
-          </div>
-          <p style={{ margin: "4px 0 0 0", fontSize: "0.83rem", color: "#73695b" }}>
-            Immutable audit record of all fresh additions, de-freeze thawing, customer order deductions, and waste routings.
-          </p>
-        </div>
-
-        <button
-          type="button"
-          onClick={fetchLogs}
-          disabled={loading}
-          style={{
-            background: "#faf8f5",
-            border: "1px solid #ede8e0",
-            borderRadius: "8px",
-            padding: "8px 14px",
-            fontSize: "0.82rem",
-            fontWeight: 700,
-            color: "#423b32",
-            cursor: loading ? "not-allowed" : "pointer",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "6px",
-            transition: "all 150ms ease",
-          }}
-        >
-          <span className={`material-symbols-outlined text-[18px] ${loading ? "animate-spin" : ""}`}>
-            refresh
-          </span>
-          <span>Refresh</span>
-        </button>
-      </div>
-
       {/* ─── Filter Controls Card ────────────────────────────────────── */}
       <div
         style={{
@@ -410,7 +355,7 @@ export default function StoreAdminInventoryLogsTab() {
           </div>
 
           {/* Start Date */}
-          <div style={{ flex: "0 1 160px", minWidth: "140px" }}>
+          <div style={{ flex: "1 1 140px", minWidth: "130px" }}>
             <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#52483e", marginBottom: "6px" }}>
               Start Date
             </label>
@@ -430,12 +375,13 @@ export default function StoreAdminInventoryLogsTab() {
                 color: "#1e293b",
                 outline: "none",
                 boxSizing: "border-box",
+                height: "38px",
               }}
             />
           </div>
 
           {/* End Date */}
-          <div style={{ flex: "0 1 160px", minWidth: "140px" }}>
+          <div style={{ flex: "1 1 140px", minWidth: "130px" }}>
             <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#52483e", marginBottom: "6px" }}>
               End Date
             </label>
@@ -455,36 +401,73 @@ export default function StoreAdminInventoryLogsTab() {
                 color: "#1e293b",
                 outline: "none",
                 boxSizing: "border-box",
+                height: "38px",
               }}
             />
           </div>
 
-          {/* Reset Filters Button */}
-          {(startDate || endDate || actionType !== "all" || search) && (
-            <div>
+          {/* Action Buttons: Refresh & Reset */}
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", flex: "0 0 auto" }}>
+            <button
+              type="button"
+              onClick={fetchLogs}
+              disabled={loading}
+              title="Refresh logs from server"
+              style={{
+                height: "38px",
+                background: "#faf8f5",
+                border: "1px solid #cbd5e1",
+                borderRadius: "8px",
+                padding: "0 14px",
+                fontSize: "0.82rem",
+                fontWeight: 700,
+                color: "#423b32",
+                cursor: loading ? "not-allowed" : "pointer",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                transition: "all 150ms ease",
+                whiteSpace: "nowrap",
+                boxSizing: "border-box",
+              }}
+            >
+              <span className={`material-symbols-outlined text-[18px] ${loading ? "animate-spin" : ""}`}>
+                refresh
+              </span>
+              <span>Refresh</span>
+            </button>
+
+            {/* Reset Filters Button */}
+            {(startDate || endDate || actionType !== "all" || search) && (
               <button
                 type="button"
                 onClick={resetFilters}
+                title="Reset all filters"
                 style={{
+                  height: "38px",
                   background: "#fef2f2",
                   border: "1px solid #fecaca",
                   borderRadius: "8px",
-                  padding: "8px 14px",
+                  padding: "0 14px",
                   fontSize: "0.82rem",
                   fontWeight: 700,
                   color: "#991b1b",
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
+                  justifyContent: "center",
                   gap: "6px",
                   transition: "all 150ms ease",
+                  whiteSpace: "nowrap",
+                  boxSizing: "border-box",
                 }}
               >
                 <span className="material-symbols-outlined text-[17px]">filter_alt_off</span>
                 <span>Reset</span>
               </button>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
 

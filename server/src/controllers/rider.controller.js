@@ -120,7 +120,7 @@ const getDashboard = async (req, res, next) => {
 
     // Check if rider has an active delivery batch
     const activeBatchDoc = await getActiveBatchForRider(riderId);
-    if (activeBatchDoc && activeBatchDoc.status === 'In-Transit') {
+    if (activeBatchDoc && (activeBatchDoc.status === 'In-Transit' || activeBatchDoc.status === 'In Transit')) {
       const activeId = activeBatchDoc.activeOrderId;
       activeOrder = riderOrders.find((o) => (o.orderId === activeId || o.id === activeId || o._id === activeId)) || null;
 
@@ -812,6 +812,32 @@ const completeDelivery = async (req, res, next) => {
           });
 
           nextBatchOrder = await getOrderByIdFS(nextOrderId);
+          if (nextBatchOrder) {
+            const nextTargetId = nextBatchOrder.id || nextBatchOrder._id || nextOrderId;
+            const nextUpdate = {
+              etaStage: 'IN_TRANSIT',
+              remainingTransitMinutes: 15,
+              updatedAt: new Date().toISOString(),
+            };
+            await updateDoc('orders', nextTargetId, nextUpdate).catch((err) =>
+              console.warn('[RiderController] Failed to advance next batch order etaStage:', err.message)
+            );
+            const updatedNext = { ...nextBatchOrder, ...nextUpdate };
+            emitOrderStatusUpdate(nextBatchOrder.orderId || nextOrderId, updatedNext);
+
+            if (nextBatchOrder.customer?.userId) {
+              notificationService.sendToUser(nextBatchOrder.customer.userId, {
+                title: 'Rider is On the Way',
+                body: `Rider ${order.rider?.name || 'Partner'} is now heading to your doorstep with fresh cuts!`,
+                data: {
+                  notificationType: 'ORDER_STATUS',
+                  orderId: nextBatchOrder.orderId || nextOrderId,
+                  status: 'Out for Delivery',
+                  clickAction: `/dashboard?orderId=${nextBatchOrder.orderId || nextOrderId}`,
+                },
+              }).catch((err) => console.warn('[FCM] Next batch stop customer alert error:', err.message));
+            }
+          }
         }
       }
     }

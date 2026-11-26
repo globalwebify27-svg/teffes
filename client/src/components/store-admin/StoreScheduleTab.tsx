@@ -824,7 +824,7 @@ export default function StoreScheduleTab({
                             <span>
                               {sch.mode === "closed"
                                 ? "Closed all day"
-                                : `${formatTime12(sch.openTime)} &mdash; ${formatTime12(sch.closeTime)}`}
+                                : `${formatTime12(sch.openTime)} – ${formatTime12(sch.closeTime)}`}
                             </span>
                           </div>
 
