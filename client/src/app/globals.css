@@ -973,3 +973,30 @@ s {
     font-size: 11px !important;
   }
 }
+
+/* Mid Banner (Pure Protein / View All Cuts) below 390px */
+@media (max-width: 389.98px) {
+  .protein-banner-content {
+    padding-left: 12px !important;
+    padding-right: 12px !important;
+    gap: 8px !important;
+  }
+  .protein-banner-text {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+  .protein-banner-badge {
+    font-size: 9.5px !important;
+    letter-spacing: 0.05em !important;
+  }
+  .protein-banner-title {
+    font-size: 1.05rem !important;
+    line-height: 1.2 !important;
+    margin-top: 2px !important;
+  }
+  .protein-banner-btn {
+    padding: 6px 11px !important;
+    font-size: 11px !important;
+    flex-shrink: 0 !important;
+  }
+}

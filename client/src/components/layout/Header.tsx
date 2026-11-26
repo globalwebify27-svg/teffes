@@ -247,6 +247,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Mobile Menu Toggle Button */}
             <button
               type="button"
+              suppressHydrationWarning
               className={`lg:hidden p-1.5 sm:p-2 rounded-xl transition-colors cursor-pointer flex items-center justify-center border-none bg-transparent ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
@@ -321,6 +322,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Mobile Search Toggle Icon */}
             <button
               type="button"
+              suppressHydrationWarning
               className={`md:hidden p-1.5 sm:p-2 rounded-full transition-colors border-none bg-transparent ${
                 isScrolled
                   ? "text-white hover:bg-white/15"
@@ -448,6 +450,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
                 >
                   <button
                     type="button"
+                    suppressHydrationWarning
                     onClick={handleUserClick}
                     className="w-full h-full rounded-full flex items-center justify-center overflow-hidden bg-white shadow-xs p-0 border-none cursor-pointer select-none"
                     aria-label={`My Account (${profileProgress.percentage}% profile completed)`}
@@ -483,6 +486,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
               ) : (
                 <button
                   type="button"
+                  suppressHydrationWarning
                   onClick={handleUserClick}
                   className={`w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center overflow-hidden transition-all cursor-pointer p-0 shadow-sm shrink-0 ${
                     isScrolled
@@ -592,6 +596,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
 
               <button
                 type="button"
+                suppressHydrationWarning
                 onClick={() => setMobileMenuOpen(false)}
                 className="w-8 h-8 rounded-full bg-white/20 text-white flex items-center justify-center cursor-pointer border-none"
                 aria-label="Close menu"
@@ -809,6 +814,7 @@ export default function Header({ searchQuery = "", onSearchChange }: HeaderProps
             {/* Close / Cut Modal Button */}
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => setShowLoginModal(false)}
               className="absolute top-4 right-4 w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-600 flex items-center justify-center border-none cursor-pointer transition-colors"
               aria-label="Close login modal"

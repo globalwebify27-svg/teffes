@@ -572,12 +572,12 @@ export default function HomePageClient() {
             className="w-full h-44 md:h-52 object-cover object-center"
             src="https://hfoods.com.sg/wp-content/uploads/2024/07/Lamb.jpg"
           />
-          <div className="absolute inset-0 bg-black/50 flex items-center justify-between px-6 sm:px-12 md:px-16 text-white">
-            <div>
-              <span className="font-label-badge text-label-badge uppercase tracking-widest text-primary-fixed font-bold text-[11px] whitespace-nowrap">
+          <div className="absolute inset-0 bg-black/50 flex items-center justify-between px-6 sm:px-12 md:px-16 text-white protein-banner-content">
+            <div className="protein-banner-text min-w-0 pr-1 sm:pr-2">
+              <span className="font-label-badge text-label-badge uppercase tracking-widest text-primary-fixed font-bold text-[11px] whitespace-nowrap protein-banner-badge">
                 Hygienically Cut &amp; Packed
               </span>
-              <h3 className="font-headline-lg text-white font-extrabold mt-0.5 text-[1.4rem] sm:text-[1.8rem]">
+              <h3 className="font-headline-lg text-white font-extrabold mt-0.5 text-[1.4rem] sm:text-[1.8rem] protein-banner-title">
                 Pure Protein. Zero Preservatives.
               </h3>
               <p className="font-body-sm text-body-sm text-white/90 mt-1 hidden sm:block max-w-lg">
@@ -585,7 +585,7 @@ export default function HomePageClient() {
               </p>
             </div>
             <a
-              className="px-5 py-2.5 bg-surface-card text-primary rounded-full font-label-md text-label-md hover:bg-white transition-colors shadow-md shrink-0 font-bold text-decoration-none cursor-pointer whitespace-nowrap"
+              className="px-5 py-2.5 bg-surface-card text-primary rounded-full font-label-md text-label-md hover:bg-white transition-colors shadow-md shrink-0 font-bold text-decoration-none cursor-pointer whitespace-nowrap protein-banner-btn"
               href="#chicken-section"
             >
               View All Cuts

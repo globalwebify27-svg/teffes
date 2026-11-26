@@ -163,6 +163,7 @@ export default function NavbarSearch({
         </span>
         <input
           type="text"
+          suppressHydrationWarning
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           onFocus={() => {
@@ -186,6 +187,7 @@ export default function NavbarSearch({
           ) : query.trim() ? (
             <button
               type="button"
+              suppressHydrationWarning
               onClick={() => {
                 setQuery("");
                 setResults([]);
