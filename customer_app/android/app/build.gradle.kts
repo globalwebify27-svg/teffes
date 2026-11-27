@@ -57,6 +57,17 @@ android {
             )
         }
     }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+        jniLibs {
+            useLegacyPackaging = true
+            pickFirsts += "**/libc++_shared.so"
+            pickFirsts += "**/libfbjni.so"
+        }
+    }
 }
 
 dependencies {
