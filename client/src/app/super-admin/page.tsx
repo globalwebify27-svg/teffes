@@ -6640,13 +6640,16 @@ function HomepageSeoTab() {
     <div className="flex flex-col gap-6">
       {/* Top Banner with Action Controls & Unsaved Status — Sticky on scroll */}
       <div
-        className="sticky top-0 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-4 sm:p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4"
         style={{
+          position: "sticky",
+          top: "16px",
+          zIndex: 40,
           border: isDirty ? "1.5px solid #f59e0b" : "1px solid #ede8e0",
           boxShadow: isDirty
             ? "0 8px 24px -4px rgba(245,158,11,0.22), 0 2px 6px rgba(0,0,0,0.04)"
             : "0 6px 18px -4px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.02)",
         }}
+        className="bg-white/95 backdrop-blur-md rounded-2xl p-4 sm:p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div
@@ -7138,59 +7141,6 @@ function HomepageSeoTab() {
                   />
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Bottom Action Footer for convenient saving right at the end of the form */}
-          <div
-            className="rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-all shadow-sm"
-            style={{
-              background: isDirty ? "#fffbeb" : "#ffffff",
-              border: isDirty ? "1.5px solid #f59e0b" : "1px solid #ede8e0",
-            }}
-          >
-            <div className="flex items-center gap-2.5">
-              <span className="material-symbols-outlined text-[22px]" style={{ color: isDirty ? "#b45309" : "#059669" }}>
-                {isDirty ? "pending_actions" : "check_circle"}
-              </span>
-              <div>
-                <div className="text-xs sm:text-sm font-bold" style={{ color: isDirty ? "#b45309" : "#171410" }}>
-                  {isDirty ? "You have unsaved changes" : "All settings saved"}
-                </div>
-                <div className="text-[11px] text-[#73695b]">
-                  {isDirty ? "Click Save Changes to update your live website immediately." : "Live website is serving authoritative metadata."}
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2.5 justify-end w-full sm:w-auto">
-              {isDirty && (
-                <button
-                  type="button"
-                  onClick={handleDiscard}
-                  disabled={submitting}
-                  className="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-[#d1cbbf] bg-[#f5f2eb] text-[#423b32] hover:bg-[#ede8e0] transition-colors"
-                >
-                  Discard
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={() => handleSave()}
-                disabled={submitting}
-                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-white rounded-lg shadow-md transition-all"
-                style={{
-                  background: "#941717",
-                  opacity: submitting ? 0.7 : 1,
-                  cursor: submitting ? "not-allowed" : "pointer",
-                  boxShadow: "0 2px 8px rgba(148,23,23,0.3)",
-                }}
-              >
-                <span className="material-symbols-outlined text-[18px]">
-                  {submitting ? "sync" : "save"}
-                </span>
-                <span>{submitting ? "Saving Changes…" : "Save Changes"}</span>
-              </button>
             </div>
           </div>
         </form>
@@ -8041,7 +7991,7 @@ export default function SuperAdminPage() {
       </aside>
 
       {/* ─── Main Content ────────────────────────────────────────────── */}
-      <main style={{ flex: 1, padding: isMobile ? "16px 12px" : "28px 24px", overflowY: "auto", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
+      <main style={{ flex: 1, padding: isMobile ? "16px 12px" : "28px 24px", minWidth: 0, width: "100%", boxSizing: "border-box" }}>
         {/* Unified Page Header */}
         {(() => {
           const currentTab = TABS.find((t) => t.key === activeTab);
