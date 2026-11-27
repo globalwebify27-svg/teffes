@@ -6638,18 +6638,19 @@ function HomepageSeoTab() {
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Top Banner with Action Controls & Unsaved Status — Sticky on scroll */}
+      {/* Top Banner with Action Controls & Unsaved Status — Sticky on scroll flush to top */}
       <div
         style={{
           position: "sticky",
-          top: "16px",
+          top: "0px",
           zIndex: 40,
+          background: "#ffffff",
           border: isDirty ? "1.5px solid #f59e0b" : "1px solid #ede8e0",
           boxShadow: isDirty
             ? "0 8px 24px -4px rgba(245,158,11,0.22), 0 2px 6px rgba(0,0,0,0.04)"
-            : "0 6px 18px -4px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.02)",
+            : "0 6px 18px -4px rgba(0,0,0,0.08), 0 1px 3px rgba(0,0,0,0.02)",
         }}
-        className="bg-white/95 backdrop-blur-md rounded-2xl p-4 sm:p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4"
+        className="rounded-2xl p-4 sm:p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4"
       >
         <div className="flex items-center gap-3 min-w-0">
           <div
@@ -7145,8 +7146,8 @@ function HomepageSeoTab() {
           </div>
         </form>
 
-        {/* RIGHT COLUMN: Live Previews */}
-        <div className="xl:col-span-5 flex flex-col gap-5 xl:sticky xl:top-20 w-full">
+        {/* RIGHT COLUMN: Live Previews — Sticking cleanly below the top Save bar */}
+        <div className="xl:col-span-5 flex flex-col gap-5 xl:sticky xl:top-[94px] w-full">
 
           {/* Preview Selector Header */}
           <div className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 shadow-sm">
