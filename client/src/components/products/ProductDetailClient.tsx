@@ -998,9 +998,13 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
                   <div>
                     <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-2.5">
                       <img
-                        src={item.image}
+                        src={item.image || "/teffes-logo-maroon.png"}
                         alt={item.name}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "/teffes-logo-maroon.png";
+                        }}
                       />
                     </div>
                     <h4 className="font-headline-sm font-bold text-sm text-gray-900 line-clamp-1 group-hover:text-primary transition-colors">

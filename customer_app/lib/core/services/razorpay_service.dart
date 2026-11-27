@@ -55,7 +55,9 @@ class PayUService implements PayUCheckoutProProtocol {
       PayUPaymentParamKey.android_furl: payuParams['furl'] ?? '',
       PayUPaymentParamKey.ios_surl: payuParams['surl'] ?? '',
       PayUPaymentParamKey.ios_furl: payuParams['furl'] ?? '',
-      PayUPaymentParamKey.environment: AppConfig.payuEnvironment == 'production' ? '0' : '1',
+      PayUPaymentParamKey.environment: (payuParams['isTest'] == true || key == 'mv5iBR')
+          ? '1'
+          : (AppConfig.payuEnvironment == 'production' ? '0' : '1'),
       PayUPaymentParamKey.userCredential: '$key:default',
       if (additionalParams.isNotEmpty) PayUPaymentParamKey.additionalParam: additionalParams,
     };

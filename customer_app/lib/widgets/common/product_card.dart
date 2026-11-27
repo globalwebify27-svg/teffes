@@ -128,7 +128,7 @@ class ProductCard extends StatelessWidget {
                             shape: BoxShape.circle,
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withOpacity(0.12),
+                                color: Colors.black.withValues(alpha: 0.12),
                                 blurRadius: 4,
                                 offset: const Offset(0, 1),
                               ),
@@ -292,21 +292,38 @@ class ProductCard extends StatelessWidget {
                   )
                 else
                   const SizedBox.shrink(),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.star_rounded, size: 14, color: AppColors.ratingStar),
-                    const SizedBox(width: 2),
-                    Text(
-                      '${product.rating} (${product.reviewsCount})',
-                      style: const TextStyle(
-                        fontSize: 11,
+                if (product.reviewsCount > 0)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.star_rounded, size: 14, color: AppColors.ratingStar),
+                      const SizedBox(width: 2),
+                      Text(
+                        '${product.rating.toStringAsFixed(1)} (${product.reviewsCount})',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'New Cut',
+                      style: TextStyle(
+                        fontSize: 10,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: Color(0xFF475569),
                       ),
                     ),
-                  ],
-                ),
+                  ),
               ],
             ),
             const SizedBox(height: 8),

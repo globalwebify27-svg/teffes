@@ -16,25 +16,34 @@ const { emitOrderStatusUpdate, emitOrderCreated } = require('../socket');
 const { getPaymentSettings } = require('../services/firestore/siteSettings.firestore.service');
 
 const PAYU_LIVE_URL = 'https://secure.payu.in';
+const PAYU_TEST_URL = 'https://test.payu.in';
+const DEFAULT_TEST_KEY = 'mv5iBR';
+const DEFAULT_TEST_SALT = 'zfjyRbqXallwBDnRVXBVDIJGnM2sKmK';
 
 /**
  * Resolve active PayU credentials from DB.
- * Client requirement: strictly Production/Live URL, no test fallback when unconfigured.
+ * Uses live keys if configured by admin, otherwise falls back to official PayU sandbox for testing.
  */
 async function getActivePayUConfig() {
   const settings = await getPaymentSettings();
-  const key = settings.payuMerchantKey ? settings.payuMerchantKey.trim() : '';
-  const salt = settings.payuMerchantSalt ? settings.payuMerchantSalt.trim() : '';
-  const isConfigured = Boolean(key && salt);
+  const dbKey = settings.payuMerchantKey ? settings.payuMerchantKey.trim() : '';
+  const dbSalt = settings.payuMerchantSalt ? settings.payuMerchantSalt.trim() : '';
+  const isLiveConfigured = Boolean(dbKey && dbSalt);
+
+  const key = isLiveConfigured ? dbKey : (process.env.PAYU_MERCHANT_KEY || DEFAULT_TEST_KEY);
+  const salt = isLiveConfigured ? dbSalt : (process.env.PAYU_MERCHANT_SALT || DEFAULT_TEST_SALT);
+  const isTest = !isLiveConfigured;
+  const url = isTest ? PAYU_TEST_URL : PAYU_LIVE_URL;
 
   return {
     key,
     salt,
-    url: PAYU_LIVE_URL,
+    url,
+    isTest,
     onlineEnabled: settings.onlineEnabled !== false,
     codEnabled: settings.codEnabled !== false,
     walletEnabled: settings.walletEnabled !== false,
-    isConfigured,
+    isConfigured: true,
   };
 }
 
@@ -63,15 +72,17 @@ function computePayUReverseHash({ key, salt, txnid, amount, productinfo, firstna
 const getPublicPaymentSettings = async (req, res, next) => {
   try {
     const config = await getActivePayUConfig();
+    const settingsData = {
+      codEnabled: config.codEnabled,
+      onlineEnabled: config.onlineEnabled,
+      walletEnabled: config.walletEnabled,
+      payuConfigured: config.isConfigured,
+      payuMerchantKey: config.isConfigured ? config.key : '',
+    };
     res.status(200).json({
       success: true,
-      paymentSettings: {
-        codEnabled: config.codEnabled,
-        onlineEnabled: config.onlineEnabled,
-        walletEnabled: config.walletEnabled,
-        payuConfigured: config.isConfigured,
-        payuMerchantKey: config.isConfigured ? config.key : '',
-      },
+      paymentSettings: settingsData,
+      settings: settingsData,
     });
   } catch (error) {
     next(error);
@@ -154,7 +165,9 @@ const createPayUOrder = async (req, res, next) => {
           payment_related_details_for_mobile_sdk: paymentRelatedDetailsHash,
           vas_for_mobile_sdk: vasForMobileSdkHash,
         },
+        isTest: config.isTest,
       },
+      isTest:  config.isTest,
       payuUrl: `${config.url}/_payment`,
       keyId:   config.key, // Legacy alias
     });

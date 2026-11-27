@@ -357,4 +357,21 @@ class ProductsProvider with ChangeNotifier {
       return null;
     }
   }
+
+  List<ProductModel> getRelatedProducts(ProductModel currentProduct, {int limit = 4}) {
+    final cat = currentProduct.category.toLowerCase();
+    final inCat = _products
+        .where((p) => p.id != currentProduct.id && p.inStock && (p.category.toLowerCase() == cat || (cat.contains('fish') && p.category.toLowerCase().contains('fish'))))
+        .toList();
+    if (inCat.length >= limit) {
+      return inCat.take(limit).toList();
+    }
+    final existingIds = inCat.map((p) => p.id).toSet();
+    existingIds.add(currentProduct.id);
+    final additional = _products
+        .where((p) => !existingIds.contains(p.id) && p.inStock)
+        .take(limit - inCat.length)
+        .toList();
+    return [...inCat, ...additional];
+  }
 }

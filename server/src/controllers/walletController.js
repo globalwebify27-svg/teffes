@@ -4,19 +4,28 @@ const { getUserById } = require('../services/firestore/user.firestore.service');
 const { getPaymentSettings } = require('../services/firestore/siteSettings.firestore.service');
 
 const PAYU_LIVE_URL = 'https://secure.payu.in';
+const PAYU_TEST_URL = 'https://test.payu.in';
+const DEFAULT_TEST_KEY = 'mv5iBR';
+const DEFAULT_TEST_SALT = 'zfjyRbqXallwBDnRVXBVDIJGnM2sKmK';
 
 async function getActivePayUConfig() {
   const settings = await getPaymentSettings();
-  const key = settings.payuMerchantKey ? settings.payuMerchantKey.trim() : '';
-  const salt = settings.payuMerchantSalt ? settings.payuMerchantSalt.trim() : '';
-  const isConfigured = Boolean(key && salt);
+  const dbKey = settings.payuMerchantKey ? settings.payuMerchantKey.trim() : '';
+  const dbSalt = settings.payuMerchantSalt ? settings.payuMerchantSalt.trim() : '';
+  const isLiveConfigured = Boolean(dbKey && dbSalt);
+
+  const key = isLiveConfigured ? dbKey : (process.env.PAYU_MERCHANT_KEY || DEFAULT_TEST_KEY);
+  const salt = isLiveConfigured ? dbSalt : (process.env.PAYU_MERCHANT_SALT || DEFAULT_TEST_SALT);
+  const isTest = !isLiveConfigured;
+  const url = isTest ? PAYU_TEST_URL : PAYU_LIVE_URL;
 
   return {
     key,
     salt,
-    url: PAYU_LIVE_URL,
+    url,
+    isTest,
     onlineEnabled: settings.onlineEnabled !== false,
-    isConfigured,
+    isConfigured: true,
   };
 }
 
@@ -205,6 +214,16 @@ exports.createWalletTopupOrder = async (req, res, next) => {
       email,
     });
 
+    const paymentRelatedDetailsHash = crypto
+      .createHash('sha512')
+      .update(`${config.key}|payment_related_details_for_mobile_sdk|default|${config.salt}`)
+      .digest('hex');
+
+    const vasForMobileSdkHash = crypto
+      .createHash('sha512')
+      .update(`${config.key}|vas_for_mobile_sdk|default|${config.salt}`)
+      .digest('hex');
+
     res.status(200).json({
       success: true,
       payuParams: {
@@ -218,7 +237,14 @@ exports.createWalletTopupOrder = async (req, res, next) => {
         surl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/payment/wallet-success`,
         furl: `${process.env.CLIENT_URL || 'http://localhost:3000'}/payment/wallet-failure`,
         hash,
+        hashes: {
+          payment: hash,
+          payment_related_details_for_mobile_sdk: paymentRelatedDetailsHash,
+          vas_for_mobile_sdk: vasForMobileSdkHash,
+        },
+        isTest: config.isTest,
       },
+      isTest:  config.isTest,
       payuUrl: `${config.url}/_payment`,
       keyId:   config.key,
       amount:  numAmount,

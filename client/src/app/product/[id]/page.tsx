@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import ProductDetailClient from "@/components/products/ProductDetailClient";
 import { fetchProductById } from "@/lib/products";
 import {
@@ -37,6 +38,9 @@ export default async function ProductDetailPage({ params }: ProductPageProps) {
   ]);
 
   const product = data?.product;
+  if (!product) {
+    notFound();
+  }
   const productJsonLd = product ? buildProductJsonLd(product, settings.canonicalUrl) : null;
 
   return (

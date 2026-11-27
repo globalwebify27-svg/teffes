@@ -84,11 +84,11 @@ const productSchema = new mongoose.Schema(
     },
     rating: {
       type: Number,
-      default: 4.8,
+      default: 0,
     },
     ratingCount: {
       type: Number,
-      default: 100,
+      default: 0,
     },
     baseRating: {
       type: Number,

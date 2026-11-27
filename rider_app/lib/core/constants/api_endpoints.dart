@@ -17,17 +17,17 @@ class ApiEndpoints {
     }
 
     if (kIsWeb) {
-      return 'https://teffes.onrender.com/api';
+      return 'https://teffes.com/api';
     }
 
     try {
-      if (Platform.isAndroid) {
-        return 'https://teffes.onrender.com/api';
+      if (Platform.isAndroid || Platform.isIOS) {
+        return 'https://teffes.com/api';
       }
     } catch (_) {
       // ignore
     }
-    return 'https://teffes.onrender.com/api';
+    return 'https://teffes.com/api';
   }
 
   // Auth

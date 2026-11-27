@@ -22,12 +22,12 @@ class ApiEndpoints {
     }
 
     if (kIsWeb) {
-      return 'https://teffes.onrender.com/api';
+      return 'https://teffes.com/api';
     }
 
     try {
       if (Platform.isAndroid || Platform.isIOS) {
-        return 'https://teffes.onrender.com/api';
+        return 'https://teffes.com/api';
       }
       if (Platform.isMacOS || Platform.isWindows || Platform.isLinux) {
         return 'http://localhost:5000/api';
@@ -36,7 +36,7 @@ class ApiEndpoints {
       // ignore
     }
 
-    return 'https://teffes.onrender.com/api';
+    return 'https://teffes.com/api';
   }
 
   // Auth
@@ -45,6 +45,7 @@ class ApiEndpoints {
   static const String firebaseLogin = '/auth/firebase-login';
   static const String getMe = '/auth/me';
   static const String updateMe = '/auth/me';
+  static const String deleteMe = '/auth/me';
 
   // Products & Stores
   static const String stores = '/stores';

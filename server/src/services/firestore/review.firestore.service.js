@@ -39,8 +39,8 @@ const computeProductRatingStats = async (productId) => {
     product = await getDoc(PRODUCTS_COLLECTION, cleanProductId);
   }
 
-  const baseRating = Number(product?.baseRating || 4.8);
-  const baseCount = Number(product?.baseRatingCount || 100);
+  const baseRating = Number(product?.baseRating || 0);
+  const baseCount = Number(product?.baseRatingCount || 0);
 
   const reviews = await queryDocs(REVIEWS_COLLECTION, (ref) =>
     ref.where('productId', '==', cleanProductId)
@@ -53,7 +53,7 @@ const computeProductRatingStats = async (productId) => {
   const averageRating =
     totalRatings > 0
       ? parseFloat((((baseRating * baseCount) + liveRatingsSum) / totalRatings).toFixed(1))
-      : baseRating;
+      : 0;
 
   return {
     reviews: reviews.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')),

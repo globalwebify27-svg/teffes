@@ -208,8 +208,8 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
   Future<void> _fetchPaymentSettings() async {
     try {
       final res = await ApiClient().get('/payment/settings');
-      if (res.data != null && res.data['success'] == true && res.data['settings'] != null) {
-        final s = res.data['settings'];
+      final s = res.data != null ? (res.data['paymentSettings'] ?? res.data['settings']) : null;
+      if (res.data != null && res.data['success'] == true && s != null) {
         if (mounted) {
           setState(() {
             _codEnabled = s['codEnabled'] != false;

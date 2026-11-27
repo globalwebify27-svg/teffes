@@ -199,9 +199,21 @@ const getProductById = async (id, options = {}) => {
 
   // Fetch related products in the same category
   const allInCat = await queryDocs(COLLECTION, (ref) =>
-    ref.where('category', '==', product.category).limit(5)
+    ref.where('category', '==', product.category).limit(10)
   );
-  const related = allInCat.filter((p) => p.id !== product.id).slice(0, 4);
+  let related = allInCat
+    .filter((p) => p.id !== product.id && !p.id.startsWith('test_') && !p.id.startsWith('phase') && !p.id.startsWith('e2e_'))
+    .slice(0, 4);
+
+  // If fewer than 4 related products in same category (e.g. Mutton), backfill with other real fresh cuts
+  if (related.length < 4) {
+    const fallbackDocs = await queryDocs(COLLECTION, (ref) => ref.limit(20));
+    const excludeIds = new Set([product.id, ...related.map((r) => r.id)]);
+    const additional = fallbackDocs
+      .filter((p) => !excludeIds.has(p.id) && !p.id.startsWith('test_') && !p.id.startsWith('phase') && !p.id.startsWith('e2e_'))
+      .slice(0, 4 - related.length);
+    related = [...related, ...additional];
+  }
 
   return { product, related };
 };

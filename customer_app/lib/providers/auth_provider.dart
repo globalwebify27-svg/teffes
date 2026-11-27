@@ -413,4 +413,28 @@ class AuthProvider with ChangeNotifier {
     await prefs.remove('auth_token');
     notifyListeners();
   }
+
+  /// Permanently deletes the current authenticated customer account
+  Future<bool> deleteAccount() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final res = await _api.delete(ApiEndpoints.deleteMe);
+      final isSuccess = res.statusCode == 200 || (res.data != null && res.data['success'] == true);
+      if (isSuccess) {
+        try {
+          await _firebaseAuth.currentUser?.delete();
+        } catch (_) {}
+        await logout();
+        return true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint('[Delete Account Error] $e');
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
 }

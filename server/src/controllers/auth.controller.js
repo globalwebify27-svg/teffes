@@ -358,8 +358,28 @@ const getMeHandler = (req, res) => {
 const deleteMeHandler = async (req, res, next) => {
   try {
     const userId = String(req.user?.id || req.user?._id);
-    await updateDoc('users', userId, { isActive: false, updatedAt: new Date().toISOString() });
-    res.status(200).json({ success: true, message: 'Account deactivated successfully' });
+    if (!userId || userId === 'undefined') {
+      return res.status(400).json({ success: false, message: 'Invalid user session' });
+    }
+    const userDoc = await getDoc('users', userId);
+
+    // Permanently remove the user document from Firestore (personal details, saved addresses, cart)
+    // This ensures when they sign in again with the same phone in the future, a fresh account is created.
+    await deleteDoc('users', userId);
+
+    // If linked to Firebase Auth UID, delete from Firebase Auth too
+    if (userDoc?.firebaseUid) {
+      try {
+        const auth = getAuthInstance();
+        if (auth) {
+          await auth.deleteUser(userDoc.firebaseUid);
+        }
+      } catch (fbErr) {
+        console.warn(`[Delete Account] Firebase auth deleteUser warning: ${fbErr.message}`);
+      }
+    }
+
+    res.status(200).json({ success: true, message: 'Account permanently deleted successfully' });
   } catch (error) {
     next(error);
   }

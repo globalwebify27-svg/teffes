@@ -48,8 +48,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _fetchPaymentSettings() async {
     try {
       final res = await ApiClient().get('/payment/settings');
-      if (res.data != null && res.data['success'] == true && res.data['settings'] != null) {
-        final s = res.data['settings'];
+      final s = res.data != null ? (res.data['paymentSettings'] ?? res.data['settings']) : null;
+      if (res.data != null && res.data['success'] == true && s != null) {
         if (mounted) {
           setState(() {
             _onlineEnabled = s['onlineEnabled'] != false;
@@ -421,6 +421,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ],
                       ),
                     ),
+                    const SizedBox(height: 14),
                     if (!_onlineEnabled || !_payuConfigured)
                       Container(
                         padding: const EdgeInsets.all(10),
@@ -491,9 +492,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   debugPrint('[Wallet PayU Error] $e');
                                   setModalState(() => isRecharging = false);
                                   if (context.mounted) {
+                                    String errorMsg = 'Failed to initiate PayU payment';
+                                    if (e is DioException && e.response?.data is Map && e.response!.data['message'] != null) {
+                                      errorMsg = e.response!.data['message'].toString();
+                                    } else {
+                                      errorMsg = e.toString();
+                                    }
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       SnackBar(
-                                        content: Text('Failed to initiate PayU payment: $e'),
+                                        content: Text(errorMsg),
                                         backgroundColor: Colors.red.shade800,
                                       ),
                                     );
@@ -885,6 +892,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Delivered Order Receipt Modal (Replaces live tracking for already delivered orders)
   void _showOrderReceiptModal(BuildContext context, OrderModel ord) {
+    final isCancelled = ord.status.toLowerCase() == 'cancelled';
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -915,7 +923,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
                       ),
                       Text(
-                        'Completed • ${ord.placedAt}',
+                        isCancelled ? 'Order Cancelled • ${ord.placedAt}' : 'Completed • ${ord.placedAt}',
                         style: const TextStyle(fontSize: 11.5, color: AppColors.textMuted),
                       ),
                     ],
@@ -923,15 +931,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
-                      color: AppColors.hygieneLight,
+                      color: isCancelled ? const Color(0xFFFFEBEE) : AppColors.hygieneLight,
                       borderRadius: BorderRadius.circular(6),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.check_circle_rounded, size: 14, color: AppColors.hygieneDark),
-                        SizedBox(width: 4),
-                        Text('Delivered', style: TextStyle(color: AppColors.hygieneDark, fontWeight: FontWeight.bold, fontSize: 11)),
+                        Icon(
+                          isCancelled ? Icons.cancel_rounded : Icons.check_circle_rounded,
+                          size: 14,
+                          color: isCancelled ? Colors.red.shade800 : AppColors.hygieneDark,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isCancelled ? 'Cancelled' : (ord.status.isNotEmpty ? ord.status : 'Delivered'),
+                          style: TextStyle(
+                            color: isCancelled ? Colors.red.shade800 : AppColors.hygieneDark,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -940,7 +959,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               const SizedBox(height: 12),
               const Divider(height: 1, color: AppColors.borderHairline),
               const SizedBox(height: 12),
-              const Text('Items Prepared & Delivered', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+              Text(
+                isCancelled ? 'Ordered Items (Cancelled)' : 'Items Prepared & Delivered',
+                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+              ),
               const SizedBox(height: 8),
               ...ord.items.map((item) {
                 return Padding(
@@ -977,13 +999,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Total Amount Paid', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800)),
+                  Text(
+                    isCancelled ? 'Order Total' : 'Total Amount Paid',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+                  ),
                   Text(
                     CurrencyFormatter.format(ord.amount),
                     style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w900, color: AppColors.primaryMaroon),
                   ),
                 ],
               ),
+              if (isCancelled && ord.cancellationReason != null && ord.cancellationReason!.trim().isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Cancellation Reason',
+                        style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold, color: Colors.red),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        ord.cancellationReason!,
+                        style: const TextStyle(fontSize: 11, color: Color(0xFFB71C1C), fontWeight: FontWeight.w500),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               if (ord.isModified || (ord.modificationReason != null && ord.modificationReason!.trim().isNotEmpty)) ...[
                 const SizedBox(height: 8),
                 Container(
@@ -1027,40 +1078,56 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
               const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: const Color(0xFF047857),
-                        side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      icon: const Icon(Icons.star_rate_rounded, size: 16, color: Color(0xFFD97706)),
-                      label: const Text('Rate on Play Store', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _openPlayStoreRating();
-                      },
+              if (isCancelled)
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.surfaceSubtle,
+                      foregroundColor: AppColors.textPrimary,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      elevation: 0,
                     ),
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('Close Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.surfaceSubtle,
-                        foregroundColor: AppColors.textPrimary,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                        elevation: 0,
+                )
+              else
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: const Color(0xFF047857),
+                          side: const BorderSide(color: Color(0xFF10B981), width: 1.2),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        icon: const Icon(Icons.star_rate_rounded, size: 16, color: Color(0xFFD97706)),
+                        label: const Text('Rate on Play Store', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          _openPlayStoreRating();
+                        },
                       ),
-                      onPressed: () => Navigator.pop(ctx),
-                      child: const Text('Close Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                     ),
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.surfaceSubtle,
+                          foregroundColor: AppColors.textPrimary,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          elevation: 0,
+                        ),
+                        onPressed: () => Navigator.pop(ctx),
+                        child: const Text('Close Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
         ),
@@ -1130,6 +1197,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text('Sign Out', style: TextStyle(fontWeight: FontWeight.w700)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context, AuthProvider auth) {
+    bool isDeleting = false;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(borderRadius: AppDimensions.roundedLg),
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 24),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Delete Account?',
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: Colors.red),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Are you sure you want to delete your Teffe\'s account? This action is permanent and cannot be undone.',
+                  style: TextStyle(fontSize: 13, color: AppColors.textPrimary, height: 1.4),
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFFFCDD2)),
+                  ),
+                  child: const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '• All saved addresses & profile details will be removed.',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFFB71C1C), height: 1.3),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '• Remaining wallet balance & active carts will be lost.',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFFB71C1C), height: 1.3),
+                      ),
+                      SizedBox(height: 4),
+                      Text(
+                        '• You will be immediately logged out of this device.',
+                        style: TextStyle(fontSize: 11.5, color: Color(0xFFB71C1C), height: 1.3),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: isDeleting ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel', style: TextStyle(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade700,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: isDeleting
+                    ? null
+                    : () async {
+                        setDialogState(() => isDeleting = true);
+                        final messenger = ScaffoldMessenger.of(context);
+                        final success = await auth.deleteAccount();
+                        if (dialogCtx.mounted) Navigator.pop(dialogCtx);
+                        if (success) {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Your account has been deleted successfully.'),
+                              backgroundColor: Colors.black87,
+                            ),
+                          );
+                        } else {
+                          messenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Failed to delete account. Please try again or contact support.'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      },
+                child: isDeleting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                      )
+                    : const Text('Delete Permanently', style: TextStyle(fontWeight: FontWeight.w700)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1658,6 +1833,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     const SizedBox(height: 12),
                     ...auth.myOrders.map((ord) {
                       final isLive = ord.isActive;
+                      final isCancelled = ord.status.toLowerCase() == 'cancelled';
+                      final Color badgeBg = isLive
+                          ? Colors.amber.shade100
+                          : isCancelled
+                              ? const Color(0xFFFFEBEE)
+                              : AppColors.hygieneLight;
+                      final Color badgeTextColor = isLive
+                          ? Colors.amber.shade900
+                          : isCancelled
+                              ? Colors.red.shade800
+                              : AppColors.hygieneDark;
+                      final IconData badgeIcon = isLive
+                          ? Icons.two_wheeler_rounded
+                          : isCancelled
+                              ? Icons.cancel_rounded
+                              : Icons.check_circle_rounded;
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         padding: const EdgeInsets.all(12),
@@ -1679,22 +1870,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
                                   decoration: BoxDecoration(
-                                    color: isLive ? Colors.amber.shade100 : AppColors.hygieneLight,
+                                    color: badgeBg,
                                     borderRadius: BorderRadius.circular(4),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
                                       Icon(
-                                        isLive ? Icons.two_wheeler_rounded : Icons.check_circle_rounded,
+                                        badgeIcon,
                                         size: 12,
-                                        color: isLive ? Colors.amber.shade900 : AppColors.hygieneDark,
+                                        color: badgeTextColor,
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
                                         ord.status,
                                         style: TextStyle(
-                                          color: isLive ? Colors.amber.shade900 : AppColors.hygieneDark,
+                                          color: badgeTextColor,
                                           fontWeight: FontWeight.bold,
                                           fontSize: 10.5,
                                         ),
@@ -2111,8 +2302,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             const SizedBox(height: AppDimensions.spaceXl),
 
-            // 8. Logout Button
-            if (auth.isAuthenticated)
+            // 8. Logout & Delete Account Actions
+            if (auth.isAuthenticated) ...[
               SizedBox(
                 width: double.infinity,
                 child: TextButton.icon(
@@ -2121,6 +2312,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onPressed: () => _confirmLogout(context, auth),
                 ),
               ),
+              const SizedBox(height: 6),
+              SizedBox(
+                width: double.infinity,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.delete_forever_outlined, color: Colors.grey, size: 18),
+                  label: const Text(
+                    'Delete Account',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 12.5,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  onPressed: () => _confirmDeleteAccount(context, auth),
+                ),
+              ),
+            ],
           ],
         ),
       ),
