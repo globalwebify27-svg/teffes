@@ -6637,97 +6637,57 @@ function HomepageSeoTab() {
   const descLen = formData.metaDescription.length;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-      {/* Top Banner with Action Controls & Unsaved Status */}
+    <div className="flex flex-col gap-6">
+      {/* Top Banner with Action Controls & Unsaved Status — Sticky on scroll */}
       <div
+        className="sticky top-0 z-30 bg-white/95 backdrop-blur-md rounded-2xl p-4 sm:p-5 transition-all flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4"
         style={{
-          background: "#fff",
-          border: isDirty ? "1px solid #f59e0b" : "1px solid #ede8e0",
-          borderRadius: "14px",
-          padding: "18px 22px",
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          flexWrap: "wrap",
-          gap: "14px",
-          boxShadow: isDirty ? "0 4px 14px rgba(245,158,11,0.12)" : "0 1px 4px rgba(0,0,0,0.02)",
-          transition: "all 200ms ease",
+          border: isDirty ? "1.5px solid #f59e0b" : "1px solid #ede8e0",
+          boxShadow: isDirty
+            ? "0 8px 24px -4px rgba(245,158,11,0.22), 0 2px 6px rgba(0,0,0,0.04)"
+            : "0 6px 18px -4px rgba(0,0,0,0.06), 0 1px 3px rgba(0,0,0,0.02)",
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+        <div className="flex items-center gap-3 min-w-0">
           <div
+            className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{
-              width: "42px",
-              height: "42px",
-              borderRadius: "10px",
               background: isDirty ? "#fef3c7" : "#eff6ff",
               color: isDirty ? "#b45309" : "#1d4ed8",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
             }}
           >
-            <span className="material-symbols-outlined text-[24px]">
+            <span className="material-symbols-outlined text-[22px] sm:text-[24px]">
               {isDirty ? "edit_note" : "travel_explore"}
             </span>
           </div>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              <h2 style={{ margin: 0, fontSize: "1.05rem", fontWeight: 800, color: "#171410" }}>
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-base sm:text-lg font-extrabold text-[#171410] truncate">
                 Homepage Search Engine Optimization (SEO)
               </h2>
               {isDirty ? (
-                <span
-                  style={{
-                    background: "#fef3c7",
-                    color: "#b45309",
-                    fontSize: "0.72rem",
-                    fontWeight: 700,
-                    padding: "3px 8px",
-                    borderRadius: "6px",
-                    border: "1px solid #fde68a",
-                  }}
-                >
+                <span className="bg-[#fef3c7] text-[#b45309] text-[11px] font-bold px-2 py-0.5 rounded-md border border-[#fde68a] whitespace-nowrap">
                   Unsaved Changes
                 </span>
               ) : (
-                <span
-                  style={{
-                    background: "#ecfdf5",
-                    color: "#059669",
-                    fontSize: "0.72rem",
-                    fontWeight: 700,
-                    padding: "3px 8px",
-                    borderRadius: "6px",
-                    border: "1px solid #a7f3d0",
-                  }}
-                >
+                <span className="bg-[#ecfdf5] text-[#059669] text-[11px] font-bold px-2 py-0.5 rounded-md border border-[#a7f3d0] whitespace-nowrap">
                   Live &amp; Synced
                 </span>
               )}
             </div>
-            <p style={{ margin: "2px 0 0 0", fontSize: "0.78rem", color: "#73695b" }}>
+            <p className="text-xs text-[#73695b] mt-0.5 line-clamp-1 sm:line-clamp-none">
               Configure search crawler meta tags, canonical URL, social Open Graph cards, and schema.org JSON-LD
             </p>
           </div>
         </div>
 
-        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+        <div className="flex items-center gap-2.5 justify-end w-full md:w-auto">
           {isDirty && (
             <button
               type="button"
               onClick={handleDiscard}
               disabled={submitting}
-              style={{
-                background: "#f5f2eb",
-                border: "1px solid #d1cbbf",
-                borderRadius: "8px",
-                padding: "8px 14px",
-                color: "#423b32",
-                fontSize: "0.82rem",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
+              className="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-[#d1cbbf] bg-[#f5f2eb] text-[#423b32] hover:bg-[#ede8e0] transition-colors whitespace-nowrap"
             >
               Discard Changes
             </button>
@@ -6737,20 +6697,12 @@ function HomepageSeoTab() {
             type="button"
             onClick={() => handleSave()}
             disabled={submitting}
+            className="flex-1 md:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-white rounded-lg shadow-md transition-all whitespace-nowrap"
             style={{
               background: "#941717",
-              color: "#fff",
-              border: "none",
-              borderRadius: "8px",
-              padding: "9px 22px",
-              fontSize: "0.85rem",
-              fontWeight: 700,
-              cursor: submitting ? "not-allowed" : "pointer",
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              boxShadow: "0 2px 8px rgba(148,23,23,0.3)",
               opacity: submitting ? 0.7 : 1,
+              cursor: submitting ? "not-allowed" : "pointer",
+              boxShadow: "0 2px 8px rgba(148,23,23,0.3)",
             }}
           >
             <span className="material-symbols-outlined text-[18px]">
@@ -6762,31 +6714,30 @@ function HomepageSeoTab() {
       </div>
 
       {/* Grid: Settings Form (Left) + Real-time SERP Preview (Right) */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(420px, 1fr))", gap: "24px", alignItems: "start" }}>
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 sm:gap-6 items-start">
 
         {/* LEFT COLUMN: Input Configuration Form */}
-        <form onSubmit={handleSave} noValidate style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+        <form onSubmit={handleSave} noValidate className="xl:col-span-7 flex flex-col gap-5 w-full">
 
           {/* Card 1: Core Search Metadata */}
-          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
-              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>search</span>
-              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+          <div className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3.5 pb-2.5 border-b border-[#f3efe9]">
+              <span className="material-symbols-outlined text-[20px] text-[#941717]">search</span>
+              <h3 className="m-0 text-sm sm:text-base font-bold text-[#171410]">
                 1. Core Search Engine Metadata
               </h3>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
+            <div className="flex flex-col gap-3.5 sm:gap-4">
               {/* Meta Title */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                  <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#423b32" }}>
+                <div className="flex justify-between items-center mb-1 gap-2 flex-wrap">
+                  <label className="text-xs sm:text-sm font-bold text-[#423b32]">
                     Meta Title *
                   </label>
                   <span
+                    className="text-[11px] font-bold"
                     style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 700,
                       color: titleLen >= 45 && titleLen <= 65 ? "#059669" : titleLen > 65 ? "#dc2626" : "#73695b",
                     }}
                   >
@@ -6799,30 +6750,22 @@ function HomepageSeoTab() {
                   placeholder="e.g. Teffes — Fresh Meat, Chicken, Fish & Mutton in Ranchi"
                   value={formData.metaTitle}
                   onChange={e => setFormData({ ...formData, metaTitle: e.target.value })}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1cbbf",
-                    width: "100%",
-                    fontSize: "0.875rem",
-                    boxSizing: "border-box",
-                  }}
+                  className="w-full px-3 py-2 sm:py-2.5 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717] transition-all box-border"
                 />
-                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                <div className="text-[11px] text-[#73695b] mt-1">
                   Appears as the clickable headline link in Google and browser tab title.
                 </div>
               </div>
 
               {/* Meta Description */}
               <div>
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px" }}>
-                  <label style={{ fontSize: "0.8rem", fontWeight: 700, color: "#423b32" }}>
+                <div className="flex justify-between items-center mb-1 gap-2 flex-wrap">
+                  <label className="text-xs sm:text-sm font-bold text-[#423b32]">
                     Meta Description *
                   </label>
                   <span
+                    className="text-[11px] font-bold"
                     style={{
-                      fontSize: "0.72rem",
-                      fontWeight: 700,
                       color: descLen >= 120 && descLen <= 165 ? "#059669" : descLen > 165 ? "#dc2626" : "#73695b",
                     }}
                   >
@@ -6835,24 +6778,16 @@ function HomepageSeoTab() {
                   placeholder="Order 100% fresh, hygienic, antibiotic-free Chicken, Tender Mutton, River Fish in Ranchi..."
                   value={formData.metaDescription}
                   onChange={e => setFormData({ ...formData, metaDescription: e.target.value })}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1cbbf",
-                    width: "100%",
-                    fontSize: "0.875rem",
-                    boxSizing: "border-box",
-                    resize: "vertical",
-                  }}
+                  className="w-full px-3 py-2 sm:py-2.5 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717] transition-all resize-y box-border"
                 />
-                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                <div className="text-[11px] text-[#73695b] mt-1">
                   Summary snippet displayed beneath your page title in search engine results.
                 </div>
               </div>
 
               {/* Meta Keywords */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                <label className="block text-xs sm:text-sm font-bold text-[#423b32] mb-1">
                   Meta Keywords (Optional)
                 </label>
                 <input
@@ -6860,23 +6795,16 @@ function HomepageSeoTab() {
                   placeholder="fresh meat in Ranchi, chicken delivery, fish, mutton, teffes"
                   value={formData.metaKeywords}
                   onChange={e => setFormData({ ...formData, metaKeywords: e.target.value })}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1cbbf",
-                    width: "100%",
-                    fontSize: "0.875rem",
-                    boxSizing: "border-box",
-                  }}
+                  className="w-full px-3 py-2 sm:py-2.5 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717] transition-all box-border"
                 />
-                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                <div className="text-[11px] text-[#73695b] mt-1">
                   Comma-separated keyword tags rendered as optional metadata tag.
                 </div>
               </div>
 
               {/* Canonical Homepage URL */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                <label className="block text-xs sm:text-sm font-bold text-[#423b32] mb-1">
                   Canonical Homepage URL *
                 </label>
                 <input
@@ -6885,16 +6813,9 @@ function HomepageSeoTab() {
                   placeholder="https://teffes.com"
                   value={formData.canonicalUrl}
                   onChange={e => setFormData({ ...formData, canonicalUrl: e.target.value })}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1cbbf",
-                    width: "100%",
-                    fontSize: "0.875rem",
-                    boxSizing: "border-box",
-                  }}
+                  className="w-full px-3 py-2 sm:py-2.5 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717] transition-all box-border"
                 />
-                <div style={{ fontSize: "0.72rem", color: "#73695b", marginTop: "3px" }}>
+                <div className="text-[11px] text-[#73695b] mt-1">
                   The authoritative canonical URL prevents duplicate content ranking penalties.
                 </div>
               </div>
@@ -6902,120 +6823,80 @@ function HomepageSeoTab() {
           </div>
 
           {/* Card 2: Website Identity & Branding */}
-          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
-              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>badge</span>
-              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+          <div className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3.5 pb-2.5 border-b border-[#f3efe9]">
+              <span className="material-symbols-outlined text-[20px] text-[#941717]">badge</span>
+              <h3 className="m-0 text-sm sm:text-base font-bold text-[#171410]">
                 2. Website Identity &amp; Branding
               </h3>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "14px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "14px" }}>
-                <div>
-                  <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
-                    Website / Brand Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="TeFFe"
-                    value={formData.websiteName}
-                    onChange={e => setFormData({ ...formData, websiteName: e.target.value })}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: "8px",
-                      border: "1px solid #d1cbbf",
-                      width: "100%",
-                      fontSize: "0.875rem",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                </div>
+            <div className="flex flex-col gap-3.5 sm:gap-4">
+              <div>
+                <label className="block text-xs sm:text-sm font-bold text-[#423b32] mb-1">
+                  Website / Brand Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="TeFFe"
+                  value={formData.websiteName}
+                  onChange={e => setFormData({ ...formData, websiteName: e.target.value })}
+                  className="w-full px-3 py-2 sm:py-2.5 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717] transition-all box-border"
+                />
               </div>
 
               {/* Logo URL with Upload Button */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                <label className="block text-xs sm:text-sm font-bold text-[#423b32] mb-1">
                   Brand Logo URL
                 </label>
-                <div style={{ display: "flex", gap: "10px", alignItems: "center" }}>
+                <div className="flex flex-col sm:flex-row gap-2.5 sm:gap-3 items-stretch sm:items-center">
                   <input
                     type="text"
                     placeholder="/teffes-logo-white.png or https://..."
                     value={formData.logoUrl}
                     onChange={e => setFormData({ ...formData, logoUrl: e.target.value })}
-                    style={{
-                      padding: "10px 12px",
-                      borderRadius: "8px",
-                      border: "1px solid #d1cbbf",
-                      flex: 1,
-                      fontSize: "0.875rem",
-                      boxSizing: "border-box",
-                    }}
+                    className="flex-1 px-3 py-2 sm:py-2.5 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717] transition-all box-border"
                   />
-                  <FileUploadButton
-                    folder="branding"
-                    label="Upload Logo"
-                    onUploadSuccess={(url) => {
-                      setFormData({ ...formData, logoUrl: url });
-                      setLogoLoadError(false);
-                    }}
-                  />
+                  <div className="flex-shrink-0">
+                    <FileUploadButton
+                      folder="branding"
+                      label="Upload Logo"
+                      onUploadSuccess={(url) => {
+                        setFormData({ ...formData, logoUrl: url });
+                        setLogoLoadError(false);
+                      }}
+                    />
+                  </div>
                 </div>
+
                 {formData.logoUrl && (
-                  <div
-                    style={{
-                      marginTop: "10px",
-                      padding: "12px",
-                      background: "#faf8f5",
-                      border: "1px solid #ede8e0",
-                      borderRadius: "10px",
-                      display: "flex",
-                      flexDirection: "column",
-                      gap: "10px",
-                    }}
-                  >
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#423b32", display: "flex", alignItems: "center", gap: "6px" }}>
-                        <span className="material-symbols-outlined text-[16px]" style={{ color: "#941717" }}>visibility</span>
+                  <div className="mt-3 p-3 bg-[#faf8f5] border border-[#ede8e0] rounded-xl flex flex-col gap-2.5">
+                    <div className="flex justify-between items-center gap-2 flex-wrap">
+                      <span className="text-xs font-bold text-[#423b32] flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-[16px] text-[#941717]">visibility</span>
                         Logo Live Preview
                       </span>
-                      <div style={{ display: "flex", gap: "8px" }}>
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
                           onClick={() => {
                             setFormData({ ...formData, logoUrl: "/teffes-logo-white.png" });
                             setLogoLoadError(false);
                           }}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "#1d4ed8",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            padding: 0,
-                          }}
+                          className="bg-transparent border-none text-[#1d4ed8] text-[11px] font-semibold cursor-pointer p-0 hover:underline"
                         >
                           Reset to Default
                         </button>
-                        <span style={{ color: "#d1cbbf" }}>•</span>
+                        <span className="text-[#d1cbbf]">•</span>
                         <button
                           type="button"
                           onClick={() => {
                             setFormData({ ...formData, logoUrl: "" });
                             setLogoLoadError(false);
                           }}
-                          style={{
-                            background: "transparent",
-                            border: "none",
-                            color: "#dc2626",
-                            fontSize: "0.72rem",
-                            fontWeight: 600,
-                            cursor: "pointer",
-                            padding: 0,
-                          }}
+                          className="bg-transparent border-none text-[#dc2626] text-[11px] font-semibold cursor-pointer p-0 hover:underline"
                         >
                           Clear
                         </button>
@@ -7023,68 +6904,32 @@ function HomepageSeoTab() {
                     </div>
 
                     {logoLoadError ? (
-                      <div
-                        style={{
-                          padding: "10px 14px",
-                          background: "#fef2f2",
-                          border: "1px solid #fecaca",
-                          borderRadius: "8px",
-                          fontSize: "0.78rem",
-                          color: "#991b1b",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "8px",
-                        }}
-                      >
+                      <div className="p-2.5 sm:p-3 bg-[#fef2f2] border border-[#fecaca] rounded-lg text-xs text-[#991b1b] flex items-center gap-2">
                         <span className="material-symbols-outlined text-[18px]">broken_image</span>
-                        <span>Logo could not be loaded from this URL. If testing on localhost, ensure local backend is running or deploy to Render.</span>
+                        <span>Logo could not be loaded from this URL. If testing on localhost, ensure backend is running or deploy to VPS.</span>
                       </div>
                     ) : (
-                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                         {/* Dark background preview */}
-                        <div
-                          style={{
-                            background: "#0f172a",
-                            borderRadius: "8px",
-                            padding: "14px 18px",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            minHeight: "65px",
-                            border: "1px solid #1e293b",
-                          }}
-                        >
+                        <div className="bg-[#0f172a] rounded-lg p-3 sm:p-4 flex flex-col items-center justify-center min-h-[65px] border border-[#1e293b]">
                           <img
                             src={formData.logoUrl}
                             alt="Logo on dark background"
-                            style={{ maxHeight: "36px", maxWidth: "100%", objectFit: "contain" }}
+                            className="max-h-9 max-w-full object-contain"
                             onError={() => setLogoLoadError(true)}
                           />
-                          <span style={{ fontSize: "0.68rem", color: "#94a3b8", marginTop: "6px" }}>Dark Nav Context</span>
+                          <span className="text-[11px] text-[#94a3b8] mt-1.5">Dark Nav Context</span>
                         </div>
 
                         {/* Light background preview */}
-                        <div
-                          style={{
-                            background: "#ffffff",
-                            borderRadius: "8px",
-                            padding: "14px 18px",
-                            display: "flex",
-                            flexDirection: "column",
-                            alignItems: "center",
-                            justifyContent: "center",
-                            minHeight: "65px",
-                            border: "1px solid #e2e8f0",
-                          }}
-                        >
+                        <div className="bg-white rounded-lg p-3 sm:p-4 flex flex-col items-center justify-center min-h-[65px] border border-[#e2e8f0]">
                           <img
                             src={formData.logoUrl}
                             alt="Logo on light background"
-                            style={{ maxHeight: "36px", maxWidth: "100%", objectFit: "contain" }}
+                            className="max-h-9 max-w-full object-contain"
                             onError={() => setLogoLoadError(true)}
                           />
-                          <span style={{ fontSize: "0.68rem", color: "#64748b", marginTop: "6px" }}>Light Page Context</span>
+                          <span className="text-[11px] text-[#64748b] mt-1.5">Light Page Context</span>
                         </div>
                       </div>
                     )}
@@ -7094,7 +6939,7 @@ function HomepageSeoTab() {
 
               {/* Business Description */}
               <div>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#423b32", marginBottom: "4px" }}>
+                <label className="block text-xs sm:text-sm font-bold text-[#423b32] mb-1">
                   Business Description (Schema.org Organization)
                 </label>
                 <textarea
@@ -7102,32 +6947,24 @@ function HomepageSeoTab() {
                   placeholder="Teffes is Ranchi's trusted fresh meat delivery platform offering farm-fresh chicken, tender goat mutton..."
                   value={formData.businessDescription}
                   onChange={e => setFormData({ ...formData, businessDescription: e.target.value })}
-                  style={{
-                    padding: "10px 12px",
-                    borderRadius: "8px",
-                    border: "1px solid #d1cbbf",
-                    width: "100%",
-                    fontSize: "0.875rem",
-                    boxSizing: "border-box",
-                    resize: "vertical",
-                  }}
+                  className="w-full px-3 py-2 sm:py-2.5 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717] transition-all resize-y box-border"
                 />
               </div>
             </div>
           </div>
 
           {/* Card 3: Social Profile URLs */}
-          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
-              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>share</span>
-              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+          <div className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3.5 pb-2.5 border-b border-[#f3efe9]">
+              <span className="material-symbols-outlined text-[20px] text-[#941717]">share</span>
+              <h3 className="m-0 text-sm sm:text-base font-bold text-[#171410]">
                 3. Social Profile URLs (SameAs Schema)
               </h3>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
               <div>
-                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                <label className="block text-xs font-bold text-[#423b32] mb-1">
                   Instagram URL
                 </label>
                 <input
@@ -7138,11 +6975,11 @@ function HomepageSeoTab() {
                     ...formData,
                     socialLinks: { ...formData.socialLinks, instagram: e.target.value }
                   })}
-                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                <label className="block text-xs font-bold text-[#423b32] mb-1">
                   Facebook URL
                 </label>
                 <input
@@ -7153,11 +6990,11 @@ function HomepageSeoTab() {
                     ...formData,
                     socialLinks: { ...formData.socialLinks, facebook: e.target.value }
                   })}
-                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                <label className="block text-xs font-bold text-[#423b32] mb-1">
                   YouTube Channel URL
                 </label>
                 <input
@@ -7168,11 +7005,11 @@ function HomepageSeoTab() {
                     ...formData,
                     socialLinks: { ...formData.socialLinks, youtube: e.target.value }
                   })}
-                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                 />
               </div>
               <div>
-                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                <label className="block text-xs font-bold text-[#423b32] mb-1">
                   Twitter / X URL
                 </label>
                 <input
@@ -7183,25 +7020,25 @@ function HomepageSeoTab() {
                     ...formData,
                     socialLinks: { ...formData.socialLinks, twitter: e.target.value }
                   })}
-                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                 />
               </div>
             </div>
           </div>
 
           {/* Card 4: Business Contact & Public Address */}
-          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "14px", borderBottom: "1px solid #f3efe9", paddingBottom: "10px" }}>
-              <span className="material-symbols-outlined text-[20px]" style={{ color: "#941717" }}>contact_support</span>
-              <h3 style={{ margin: 0, fontSize: "0.95rem", fontWeight: 700, color: "#171410" }}>
+          <div className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex items-center gap-2 mb-3.5 pb-2.5 border-b border-[#f3efe9]">
+              <span className="material-symbols-outlined text-[20px] text-[#941717]">contact_support</span>
+              <h3 className="m-0 text-sm sm:text-base font-bold text-[#171410]">
                 4. Verified Business Contact &amp; Public Address
               </h3>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+            <div className="flex flex-col gap-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-3.5">
                 <div>
-                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  <label className="block text-xs font-bold text-[#423b32] mb-1">
                     Public Support Phone
                   </label>
                   <input
@@ -7211,11 +7048,11 @@ function HomepageSeoTab() {
                       ...formData,
                       contactDetails: { ...formData.contactDetails, phone: e.target.value }
                     })}
-                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  <label className="block text-xs font-bold text-[#423b32] mb-1">
                     Public Support Email
                   </label>
                   <input
@@ -7225,13 +7062,13 @@ function HomepageSeoTab() {
                       ...formData,
                       contactDetails: { ...formData.contactDetails, email: e.target.value }
                     })}
-                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                   />
                 </div>
               </div>
 
               <div>
-                <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                <label className="block text-xs font-bold text-[#423b32] mb-1">
                   Street Address
                 </label>
                 <input
@@ -7244,13 +7081,13 @@ function HomepageSeoTab() {
                       address: { ...formData.contactDetails.address, street: e.target.value }
                     }
                   })}
-                  style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                  className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                 />
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "10px" }}>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  <label className="block text-xs font-bold text-[#423b32] mb-1">
                     City
                   </label>
                   <input
@@ -7263,11 +7100,11 @@ function HomepageSeoTab() {
                         address: { ...formData.contactDetails.address, city: e.target.value }
                       }
                     })}
-                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  <label className="block text-xs font-bold text-[#423b32] mb-1">
                     State
                   </label>
                   <input
@@ -7280,11 +7117,11 @@ function HomepageSeoTab() {
                         address: { ...formData.contactDetails.address, state: e.target.value }
                       }
                     })}
-                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                   />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 700, color: "#423b32", marginBottom: "3px" }}>
+                  <label className="block text-xs font-bold text-[#423b32] mb-1">
                     Postal Code
                   </label>
                   <input
@@ -7297,37 +7134,85 @@ function HomepageSeoTab() {
                         address: { ...formData.contactDetails.address, postalCode: e.target.value }
                       }
                     })}
-                    style={{ padding: "8px 10px", borderRadius: "6px", border: "1px solid #d1cbbf", width: "100%", fontSize: "0.82rem", boxSizing: "border-box" }}
+                    className="w-full px-3 py-2 rounded-lg border border-[#d1cbbf] text-xs sm:text-sm box-border focus:outline-none focus:ring-2 focus:ring-[#941717]/20 focus:border-[#941717]"
                   />
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Bottom Action Footer for convenient saving right at the end of the form */}
+          <div
+            className="rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 transition-all shadow-sm"
+            style={{
+              background: isDirty ? "#fffbeb" : "#ffffff",
+              border: isDirty ? "1.5px solid #f59e0b" : "1px solid #ede8e0",
+            }}
+          >
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-outlined text-[22px]" style={{ color: isDirty ? "#b45309" : "#059669" }}>
+                {isDirty ? "pending_actions" : "check_circle"}
+              </span>
+              <div>
+                <div className="text-xs sm:text-sm font-bold" style={{ color: isDirty ? "#b45309" : "#171410" }}>
+                  {isDirty ? "You have unsaved changes" : "All settings saved"}
+                </div>
+                <div className="text-[11px] text-[#73695b]">
+                  {isDirty ? "Click Save Changes to update your live website immediately." : "Live website is serving authoritative metadata."}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2.5 justify-end w-full sm:w-auto">
+              {isDirty && (
+                <button
+                  type="button"
+                  onClick={handleDiscard}
+                  disabled={submitting}
+                  className="px-3.5 py-2 text-xs sm:text-sm font-semibold rounded-lg border border-[#d1cbbf] bg-[#f5f2eb] text-[#423b32] hover:bg-[#ede8e0] transition-colors"
+                >
+                  Discard
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => handleSave()}
+                disabled={submitting}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-2 px-5 py-2.5 text-xs sm:text-sm font-bold text-white rounded-lg shadow-md transition-all"
+                style={{
+                  background: "#941717",
+                  opacity: submitting ? 0.7 : 1,
+                  cursor: submitting ? "not-allowed" : "pointer",
+                  boxShadow: "0 2px 8px rgba(148,23,23,0.3)",
+                }}
+              >
+                <span className="material-symbols-outlined text-[18px]">
+                  {submitting ? "sync" : "save"}
+                </span>
+                <span>{submitting ? "Saving Changes…" : "Save Changes"}</span>
+              </button>
+            </div>
+          </div>
         </form>
 
         {/* RIGHT COLUMN: Live Previews */}
-        <div style={{ position: "sticky", top: "20px", display: "flex", flexDirection: "column", gap: "20px" }}>
+        <div className="xl:col-span-5 flex flex-col gap-5 xl:sticky xl:top-20 w-full">
 
           {/* Preview Selector Header */}
-          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "16px 20px" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "14px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                <span className="material-symbols-outlined text-[18px]" style={{ color: "#941717" }}>visibility</span>
-                <span style={{ fontSize: "0.88rem", fontWeight: 700, color: "#171410" }}>Live Search &amp; Social Preview</span>
+          <div className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex justify-between items-center mb-3.5 gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-[18px] text-[#941717]">visibility</span>
+                <span className="text-xs sm:text-sm font-bold text-[#171410]">Live Search &amp; Social Preview</span>
               </div>
-              <div style={{ display: "flex", background: "#f5f2eb", padding: "3px", borderRadius: "8px" }}>
+              <div className="flex bg-[#f5f2eb] p-0.5 rounded-lg">
                 <button
                   type="button"
                   onClick={() => setActivePreview("google")}
+                  className="px-2.5 py-1 rounded-md text-xs font-bold transition-all"
                   style={{
-                    padding: "4px 10px",
-                    borderRadius: "6px",
-                    border: "none",
                     background: activePreview === "google" ? "#fff" : "transparent",
                     color: activePreview === "google" ? "#941717" : "#73695b",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
                     boxShadow: activePreview === "google" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                   }}
                 >
@@ -7336,15 +7221,10 @@ function HomepageSeoTab() {
                 <button
                   type="button"
                   onClick={() => setActivePreview("social")}
+                  className="px-2.5 py-1 rounded-md text-xs font-bold transition-all"
                   style={{
-                    padding: "4px 10px",
-                    borderRadius: "6px",
-                    border: "none",
                     background: activePreview === "social" ? "#fff" : "transparent",
                     color: activePreview === "social" ? "#941717" : "#73695b",
-                    fontSize: "0.75rem",
-                    fontWeight: 700,
-                    cursor: "pointer",
                     boxShadow: activePreview === "social" ? "0 1px 3px rgba(0,0,0,0.06)" : "none",
                   }}
                 >
@@ -7356,66 +7236,31 @@ function HomepageSeoTab() {
             {/* Google SERP Card Preview */}
             {activePreview === "google" && (
               <div
-                style={{
-                  background: "#ffffff",
-                  border: "1px solid #dadce0",
-                  borderRadius: "10px",
-                  padding: "16px",
-                  fontFamily: "Arial, sans-serif",
-                }}
+                className="bg-white border border-[#dadce0] rounded-xl p-3.5 sm:p-4 break-words overflow-hidden"
+                style={{ fontFamily: "Arial, sans-serif" }}
               >
                 {/* Search Header Breadcrumb */}
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-                  <div
-                    style={{
-                      width: "24px",
-                      height: "24px",
-                      borderRadius: "50%",
-                      background: "#941717",
-                      color: "#fff",
-                      fontSize: "12px",
-                      fontWeight: 800,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="w-6 h-6 rounded-full bg-[#941717] text-white text-[12px] font-extrabold flex items-center justify-center flex-shrink-0">
                     T
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    <span style={{ fontSize: "14px", color: "#202124", lineHeight: 1.2, fontWeight: 500 }}>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs sm:text-sm text-[#202124] leading-tight font-medium truncate">
                       {formData.websiteName || "TeFFe"}
                     </span>
-                    <span style={{ fontSize: "12px", color: "#4d5156", lineHeight: 1.2 }}>
+                    <span className="text-[11px] text-[#4d5156] leading-tight truncate">
                       {formData.canonicalUrl || "https://teffes.com"}
                     </span>
                   </div>
                 </div>
 
                 {/* Blue Clickable Title */}
-                <h4
-                  style={{
-                    margin: "4px 0 6px 0",
-                    color: "#1a0dab",
-                    fontSize: "18px",
-                    lineHeight: 1.3,
-                    fontWeight: 400,
-                    textDecoration: "none",
-                    cursor: "pointer",
-                  }}
-                >
+                <h4 className="my-1.5 text-[#1a0dab] text-base sm:text-lg leading-snug font-normal cursor-pointer hover:underline break-words">
                   {formData.metaTitle || "Teffes — Fresh Meat, Chicken, Fish & Mutton in Ranchi"}
                 </h4>
 
                 {/* Description Snippet */}
-                <p
-                  style={{
-                    margin: 0,
-                    fontSize: "13px",
-                    color: "#4d5156",
-                    lineHeight: 1.5,
-                  }}
-                >
+                <p className="m-0 text-xs sm:text-[13px] text-[#4d5156] leading-relaxed break-words">
                   {formData.metaDescription || "Order 100% fresh, hygienic, antibiotic-free Chicken, Tender Mutton, River Fish in Ranchi..."}
                 </p>
               </div>
@@ -7423,43 +7268,32 @@ function HomepageSeoTab() {
 
             {/* Social Card Preview */}
             {activePreview === "social" && (
-              <div
-                style={{
-                  background: "#f9fafb",
-                  border: "1px solid #e5e7eb",
-                  borderRadius: "10px",
-                  overflow: "hidden",
-                }}
-              >
+              <div className="bg-[#f9fafb] border border-[#e5e7eb] rounded-xl overflow-hidden w-full">
                 <div
+                  className="h-32 sm:h-36 flex items-center justify-center p-4"
                   style={{
-                    height: "140px",
                     background: "linear-gradient(135deg, #1a1210 0%, #941717 100%)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    padding: "20px",
                   }}
                 >
                   {formData.logoUrl ? (
                     <img
                       src={formData.logoUrl}
                       alt="Brand"
-                      style={{ maxHeight: "60px", maxWidth: "80%", objectFit: "contain" }}
+                      className="max-h-14 max-w-[80%] object-contain"
                       onError={(e) => { (e.target as HTMLElement).style.display = "none"; }}
                     />
                   ) : (
-                    <span style={{ color: "#fff", fontSize: "1.5rem", fontWeight: 800 }}>{formData.websiteName}</span>
+                    <span className="text-white text-xl sm:text-2xl font-extrabold">{formData.websiteName}</span>
                   )}
                 </div>
-                <div style={{ padding: "14px" }}>
-                  <div style={{ fontSize: "11px", textTransform: "uppercase", color: "#6b7280", letterSpacing: "0.5px", fontWeight: 700 }}>
+                <div className="p-3 sm:p-3.5">
+                  <div className="text-[10px] uppercase text-[#6b7280] font-bold tracking-wider">
                     {new URL(formData.canonicalUrl || "https://teffes.com").hostname}
                   </div>
-                  <div style={{ fontSize: "14px", fontWeight: 700, color: "#111827", margin: "4px 0" }}>
+                  <div className="text-xs sm:text-sm font-bold text-[#111827] my-1 line-clamp-2">
                     {formData.metaTitle}
                   </div>
-                  <div style={{ fontSize: "12px", color: "#4b5563", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+                  <div className="text-[11px] sm:text-xs text-[#4b5563] leading-relaxed line-clamp-2">
                     {formData.metaDescription}
                   </div>
                 </div>
@@ -7468,24 +7302,24 @@ function HomepageSeoTab() {
           </div>
 
           {/* Quick Structured Data JSON-LD Verified Preview */}
-          <div style={{ background: "#fff", border: "1px solid #ede8e0", borderRadius: "14px", padding: "16px 20px" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "8px" }}>
-              <span className="material-symbols-outlined text-[18px]" style={{ color: "#059669" }}>verified</span>
-              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#171410" }}>
+          <div className="bg-white border border-[#ede8e0] rounded-2xl p-4 sm:p-5 shadow-sm">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="material-symbols-outlined text-[18px] text-[#059669]">verified</span>
+              <span className="text-xs sm:text-sm font-bold text-[#171410]">
                 Active JSON-LD Schema Types
               </span>
             </div>
-            <p style={{ margin: "0 0 10px 0", fontSize: "0.75rem", color: "#73695b" }}>
+            <p className="m-0 mb-2.5 text-[11px] sm:text-xs text-[#73695b]">
               Generated automatically into server-rendered HTML for search engines:
             </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-              <div style={{ background: "#faf8f5", padding: "8px 12px", borderRadius: "6px", fontSize: "0.78rem", border: "1px solid #ede8e0" }}>
-                <span style={{ fontWeight: 700, color: "#941717" }}>schema.org/WebSite</span>
-                <span style={{ color: "#73695b", marginLeft: "6px" }}>→ {formData.canonicalUrl}</span>
+            <div className="flex flex-col gap-1.5">
+              <div className="bg-[#faf8f5] p-2 sm:p-2.5 rounded-lg text-xs border border-[#ede8e0] break-all">
+                <span className="font-bold text-[#941717]">schema.org/WebSite</span>
+                <span className="text-[#73695b] ml-1.5">→ {formData.canonicalUrl}</span>
               </div>
-              <div style={{ background: "#faf8f5", padding: "8px 12px", borderRadius: "6px", fontSize: "0.78rem", border: "1px solid #ede8e0" }}>
-                <span style={{ fontWeight: 700, color: "#941717" }}>schema.org/Organization</span>
-                <span style={{ color: "#73695b", marginLeft: "6px" }}>→ {formData.websiteName} ({formData.contactDetails.address.city}, {formData.contactDetails.address.state})</span>
+              <div className="bg-[#faf8f5] p-2 sm:p-2.5 rounded-lg text-xs border border-[#ede8e0] break-all">
+                <span className="font-bold text-[#941717]">schema.org/Organization</span>
+                <span className="text-[#73695b] ml-1.5">→ {formData.websiteName} ({formData.contactDetails.address.city}, {formData.contactDetails.address.state})</span>
               </div>
             </div>
           </div>
