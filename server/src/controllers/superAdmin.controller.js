@@ -784,16 +784,28 @@ const getAggregatedPlatformCustomers = async () => {
         }
       }
     } else {
-      const defaultAddress = (copy.addresses && copy.addresses.length > 0)
-        ? `${copy.addresses[0].line1 || ''}, ${copy.addresses[0].city || 'Ranchi'}`
-        : (copy.address || 'Ranchi');
+      const firstAddr = copy.addresses && copy.addresses.length > 0 ? copy.addresses[0] : null;
+      let defaultAddress = '';
+      if (firstAddr) {
+        const line = (firstAddr.line1 || firstAddr.street || firstAddr.address || firstAddr.formattedAddress || '').trim();
+        const city = (firstAddr.city || 'Ranchi').trim();
+        const pin = (firstAddr.pincode || firstAddr.postalCode || '').trim();
+        if (line) {
+          defaultAddress = line;
+          if (city && !line.toLowerCase().includes(city.toLowerCase())) defaultAddress += `, ${city}`;
+          if (pin && !line.includes(pin)) defaultAddress += ` - ${pin}`;
+        }
+      }
+      if (!defaultAddress) {
+        defaultAddress = (copy.address || 'Ranchi').replace(/^,\s*/, '').trim() || 'Ranchi';
+      }
 
       customerMap.set(key, {
         ...copy,
         id: copy.id || copy._id || `CUST-${key}`,
         phone: cleanPhone ? `+91 ${cleanPhone}` : (copy.phone || 'Unknown'),
         address: defaultAddress,
-        addresses: copy.addresses && copy.addresses.length > 0 ? copy.addresses : [{ line1: defaultAddress, city: 'Ranchi', isDefault: true }],
+        addresses: copy.addresses && copy.addresses.length > 0 ? copy.addresses : [{ line1: defaultAddress, street: defaultAddress, city: 'Ranchi', isDefault: true }],
         walletBalance: Number(copy.walletBalance) || 0,
         totalOrders: 0,
         orders: 0,
@@ -847,12 +859,13 @@ const getAggregatedPlatformCustomers = async () => {
       entry.name = orderName;
     }
 
-    // Address resolution: update if address is default 'Ranchi'
-    if ((!entry.address || entry.address === 'Ranchi') && (o.customer?.address || o.shippingAddress?.address)) {
-      const addr = o.customer?.address || o.shippingAddress?.address;
-      entry.address = addr;
-      if (!entry.addresses || entry.addresses.length === 0 || entry.addresses[0].line1 === 'Ranchi') {
-        entry.addresses = [{ line1: addr, city: 'Ranchi', isDefault: true }];
+    // Address resolution: update if address is default or empty
+    const isGenericAddr = !entry.address || entry.address.trim() === 'Ranchi' || entry.address.trim().startsWith(',');
+    const orderAddr = (o.customer?.address || o.shippingAddress?.address || o.shippingAddress?.line1 || o.shippingAddress?.street || '').trim();
+    if ((isGenericAddr || !entry.addresses || entry.addresses.length === 0) && orderAddr) {
+      entry.address = orderAddr;
+      if (!entry.addresses || entry.addresses.length === 0 || !entry.addresses[0].line1 && !entry.addresses[0].street) {
+        entry.addresses = [{ line1: orderAddr, street: orderAddr, city: 'Ranchi', isDefault: true }];
       }
     }
 

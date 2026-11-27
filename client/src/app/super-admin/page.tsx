@@ -3802,7 +3802,14 @@ function OrdersTab() {
                         </div>
                       )}
                     </td>
-                    <td style={{ padding: "14px 16px" }}><Badge label={o.status} color={o.status === "Delivered" ? "#059669" : o.status === "Pending" ? "#941717" : "#d97706"} /></td>
+                    <td style={{ padding: "14px 16px" }}>
+                      <Badge label={o.status} color={o.status === "Delivered" ? "#059669" : o.status === "Pending" ? "#941717" : o.status === "Cancelled" ? "#dc2626" : "#d97706"} />
+                      {(o.status === "Cancelled" || o.status === "Rejected") && o.cancellationReason && (
+                        <div style={{ fontSize: "0.72rem", color: "#b91c1c", background: "#fef2f2", border: "1px solid #fecaca", borderRadius: "4px", padding: "2px 6px", marginTop: "4px", fontWeight: 600, maxWidth: "200px", lineHeight: 1.3 }}>
+                          <strong>Reason:</strong> {o.cancellationReason}
+                        </div>
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -4846,7 +4853,20 @@ function CustomersTab() {
                       <td style={{ padding: "14px 16px" }}>
                         <div style={{ fontWeight: 700, color: "#171410" }}>{c.name || "Customer"}</div>
                         <div style={{ color: "#73695b", fontSize: "0.75rem", marginTop: "2px" }}>
-                          {c.addresses && c.addresses.length > 0 && c.addresses[0].line1 ? `${c.addresses[0].line1}${c.addresses[0].city ? `, ${c.addresses[0].city}` : ""}` : (c.address || "Ranchi")}
+                          {(() => {
+                            const firstAddr = Array.isArray(c.addresses) && c.addresses.length > 0 ? c.addresses[0] : null;
+                            const line = (firstAddr?.line1 || firstAddr?.street || firstAddr?.address || firstAddr?.formattedAddress || "").trim();
+                            const city = (firstAddr?.city || "").trim();
+                            const pin = (firstAddr?.pincode || "").trim();
+                            if (line) {
+                              const parts = [line];
+                              if (city && !line.toLowerCase().includes(city.toLowerCase())) parts.push(city);
+                              if (pin && !line.includes(pin)) parts.push(pin);
+                              return parts.join(", ");
+                            }
+                            const cleanAddr = (c.address || "Ranchi").replace(/^,\s*/, "").trim();
+                            return cleanAddr || "Ranchi";
+                          })()}
                         </div>
                       </td>
                       <td style={{ padding: "14px 16px", whiteSpace: "nowrap" }}>

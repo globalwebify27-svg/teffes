@@ -2002,25 +2002,44 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         </span>
                       )}
                       {(o.status === "Cancelled" || o.status === "Rejected") && (
-                        <span
-                          title={o.cancellationReason ? `Reason: ${o.cancellationReason}` : undefined}
-                          style={{
-                            background: "#fef2f2",
-                            color: "#dc2626",
-                            border: "1px solid #fecaca",
-                            padding: "1.5px 6px",
-                            borderRadius: "5px",
-                            fontSize: "0.68rem",
-                            fontWeight: 700,
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "3px",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          <span className="material-symbols-outlined text-[12px]">cancel</span>
-                          Cancelled
-                        </span>
+                        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                          <span
+                            style={{
+                              background: "#fef2f2",
+                              color: "#dc2626",
+                              border: "1px solid #fecaca",
+                              padding: "2px 8px",
+                              borderRadius: "6px",
+                              fontSize: "0.72rem",
+                              fontWeight: 700,
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            <span className="material-symbols-outlined text-[13px]">cancel</span>
+                            Cancelled
+                          </span>
+                          {o.cancellationReason && (
+                            <span
+                              style={{
+                                background: "#fff1f2",
+                                color: "#be123c",
+                                border: "1px solid #fecdd3",
+                                padding: "2px 8px",
+                                borderRadius: "6px",
+                                fontSize: "0.72rem",
+                                fontWeight: 700,
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                              }}
+                            >
+                              <span>Reason: {o.cancellationReason}</span>
+                            </span>
+                          )}
+                        </div>
                       )}
                       {(o.status === "Delivered" || o.status === "Completed") && (
                         <span style={{
@@ -2307,6 +2326,35 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                       }}>
                         <span className="material-symbols-outlined text-[15px] text-amber-700">note_alt</span>
                         <span><strong>Customer Instruction:</strong> {o.deliveryInstruction || o.customer?.deliveryInstruction}</span>
+                      </div>
+                    )}
+                    {(o.status === "Cancelled" || o.status === "Rejected") && (
+                      <div style={{
+                        marginTop: "8px",
+                        background: "#fef2f2",
+                        border: "1.5px solid #fecaca",
+                        borderRadius: "8px",
+                        padding: "7px 12px",
+                        fontSize: "0.82rem",
+                        color: "#991b1b",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        boxShadow: "0 1px 3px rgba(220, 38, 38, 0.08)",
+                      }}>
+                        <span className="material-symbols-outlined text-[18px] text-red-600 flex-shrink-0">cancel</span>
+                        <div>
+                          <span style={{ fontWeight: 800, color: "#991b1b" }}>Order Cancelled</span>
+                          {o.cancellationReason ? (
+                            <span style={{ marginLeft: "8px", color: "#b91c1c", fontWeight: 600 }}>
+                              <strong>Reason:</strong> {o.cancellationReason}
+                            </span>
+                          ) : (
+                            <span style={{ marginLeft: "8px", color: "#6b7280", fontStyle: "italic" }}>
+                              (No cancellation reason provided)
+                            </span>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
