@@ -7,6 +7,7 @@ import { isAuthenticated, getStoredUser, updateUserInStorage } from "@/lib/auth"
 import api from "@/lib/api";
 import { useLocation } from "@/context/LocationContext";
 import { toast } from "@/lib/toast";
+import { trackEvent } from "@/lib/metaPixel";
 
 interface CrossSellItemData {
   id: string;
@@ -1029,9 +1030,14 @@ export default function CartDrawer() {
 
       const res = await api.post<{ success: boolean; order: { orderId: string } }>("/orders", orderPayload);
       if (res.data.success) {
+        const placedOrderId = res.data.order?.orderId || "";
+        trackEvent("Purchase", {
+          currency: "INR",
+          value: finalPayable,
+          order_id: placedOrderId,
+        });
         clearCart();
         closeCart();
-        const placedOrderId = res.data.order?.orderId || "";
         if (typeof window !== "undefined") {
           sessionStorage.setItem("justPlacedOrderId", placedOrderId);
         }
@@ -1184,6 +1190,12 @@ export default function CartDrawer() {
         paymentStatus: 'Paid',
         transactionId: payuRes.data.payuParams.txnid,
       }));
+
+      trackEvent("InitiateCheckout", {
+        currency: "INR",
+        value: finalPayable,
+        num_items: items.length,
+      });
 
       // Redirect to PayU payment page via hidden form POST
       submitPayUForm(payuRes.data.payuParams, payuRes.data.payuUrl);

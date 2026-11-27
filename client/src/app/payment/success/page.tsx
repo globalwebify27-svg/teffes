@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { useCart } from "@/lib/cart";
+import { trackEvent } from "@/lib/metaPixel";
 
 export default function PaymentSuccessPage() {
   const router = useRouter();
@@ -21,6 +22,11 @@ export default function PaymentSuccessPage() {
         if (typeof window !== "undefined") {
           sessionStorage.setItem("justPlacedOrderId", placedOrderId);
         }
+        trackEvent("Purchase", {
+          currency: "INR",
+          value: Number(orderPayload?.amount || orderPayload?.total || 0),
+          order_id: placedOrderId,
+        });
         clearCart();
         setStatus("success");
         setTimeout(() => router.replace(`/dashboard?orderPlaced=true&orderId=${placedOrderId}`), 1500);

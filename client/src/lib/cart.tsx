@@ -5,6 +5,7 @@ import { Product } from "./products";
 import { isAuthenticated } from "./auth";
 import { useRouter } from "next/navigation";
 import { toast } from "./toast";
+import { trackEvent } from "./metaPixel";
 
 export interface CartItem {
   product: Product;
@@ -177,6 +178,14 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         },
       ];
     });
+    trackEvent("AddToCart", {
+      content_ids: [product.id],
+      content_name: product.name,
+      content_type: "product",
+      value: product.price,
+      currency: "INR",
+    });
+
     return true;
   };
 
