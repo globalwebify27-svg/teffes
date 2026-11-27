@@ -210,6 +210,16 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         item.product.id === productId ? { ...item, quantity } : item
       )
     );
+
+    if (currentItem && quantity > currentItem.quantity) {
+      trackEvent("AddToCart", {
+        content_ids: [currentItem.product.id],
+        content_name: currentItem.product.name,
+        content_type: "product",
+        value: currentItem.product.price,
+        currency: "INR",
+      });
+    }
   };
 
   const getItemQuantity = (productId: string) => {
