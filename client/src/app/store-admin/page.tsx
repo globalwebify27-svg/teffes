@@ -2002,44 +2002,24 @@ function LiveOrdersTab({ onOrderAdvanced, storeData }: { onOrderAdvanced?: (orde
                         </span>
                       )}
                       {(o.status === "Cancelled" || o.status === "Rejected") && (
-                        <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
-                          <span
-                            style={{
-                              background: "#fef2f2",
-                              color: "#dc2626",
-                              border: "1px solid #fecaca",
-                              padding: "2px 8px",
-                              borderRadius: "6px",
-                              fontSize: "0.72rem",
-                              fontWeight: 700,
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              whiteSpace: "nowrap",
-                            }}
-                          >
-                            <span className="material-symbols-outlined text-[13px]">cancel</span>
-                            Cancelled
-                          </span>
-                          {o.cancellationReason && (
-                            <span
-                              style={{
-                                background: "#fff1f2",
-                                color: "#be123c",
-                                border: "1px solid #fecdd3",
-                                padding: "2px 8px",
-                                borderRadius: "6px",
-                                fontSize: "0.72rem",
-                                fontWeight: 700,
-                                display: "inline-flex",
-                                alignItems: "center",
-                                gap: "4px",
-                              }}
-                            >
-                              <span>Reason: {o.cancellationReason}</span>
-                            </span>
-                          )}
-                        </div>
+                        <span
+                          style={{
+                            background: "#fef2f2",
+                            color: "#dc2626",
+                            border: "1px solid #fecaca",
+                            padding: "2px 8px",
+                            borderRadius: "6px",
+                            fontSize: "0.72rem",
+                            fontWeight: 700,
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <span className="material-symbols-outlined text-[13px]">cancel</span>
+                          Cancelled
+                        </span>
                       )}
                       {(o.status === "Delivered" || o.status === "Completed") && (
                         <span style={{
