@@ -57,6 +57,11 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet" />
+      </head>
+      <body
+        className={`${plusJakartaSans.variable} font-body-md text-body-md text-on-surface antialiased bg-background`}
+        suppressHydrationWarning
+      >
         {/* Google Analytics (GA4) */}
         <Script
           strategy="afterInteractive"
@@ -70,16 +75,9 @@ export default function RootLayout({
             window.dataLayer = window.dataLayer || [];
             function gtag(){dataLayer.push(arguments);}
             gtag('js', new Date());
-            gtag('config', 'G-WL00137CK8', {
-              page_path: window.location.pathname,
-            });
+            gtag('config', 'G-WL00137CK8');
           `}
         </Script>
-      </head>
-      <body
-        className={`${plusJakartaSans.variable} font-body-md text-body-md text-on-surface antialiased bg-background`}
-        suppressHydrationWarning
-      >
         <LocationProvider>
           <CartProvider>
             <WishlistProvider>
