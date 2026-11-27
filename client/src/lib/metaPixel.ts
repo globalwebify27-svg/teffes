@@ -8,11 +8,16 @@ declare global {
 }
 
 export const trackEvent = (event: string, options: Record<string, any> = {}) => {
-  if (typeof window !== "undefined" && typeof window.fbq === "function") {
-    try {
-      window.fbq("track", event, options);
-    } catch (e) {
-      console.warn("[MetaPixel] Failed to track event:", event, e);
+  if (typeof window !== "undefined") {
+    if (typeof window.fbq === "function") {
+      try {
+        window.fbq("track", event, options);
+        console.log(`[Meta Pixel] Tracked "${event}":`, options);
+      } catch (e) {
+        console.warn("[Meta Pixel] Failed to track event:", event, e);
+      }
+    } else {
+      console.warn("[Meta Pixel] fbq not initialized yet for event:", event);
     }
   }
 };
@@ -21,8 +26,9 @@ export const trackCustomEvent = (event: string, options: Record<string, any> = {
   if (typeof window !== "undefined" && typeof window.fbq === "function") {
     try {
       window.fbq("trackCustom", event, options);
+      console.log(`[Meta Pixel] Custom Tracked "${event}":`, options);
     } catch (e) {
-      console.warn("[MetaPixel] Failed to track custom event:", event, e);
+      console.warn("[Meta Pixel] Failed to track custom event:", event, e);
     }
   }
 };
