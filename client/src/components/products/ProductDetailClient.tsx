@@ -293,6 +293,7 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
                       <button
                         key={`media-thumb-${idx}`}
                         type="button"
+                        suppressHydrationWarning
                         onClick={() => setSelectedMediaIndex(idx)}
                         onMouseEnter={() => setSelectedMediaIndex(idx)}
                         className={`relative w-16 h-16 sm:w-18 sm:h-18 rounded-2xl overflow-hidden border-2 cursor-pointer transition-all p-0.5 bg-white shrink-0 ${
@@ -455,6 +456,7 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
                         <div className="flex items-center gap-1 bg-white/90 backdrop-blur-md p-1 rounded-full shadow-lg border border-white/80">
                           <button
                             type="button"
+                            suppressHydrationWarning
                             onClick={(e) => {
                               e.stopPropagation();
                               setZoomMode("circular");
@@ -472,6 +474,7 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
 
                           <button
                             type="button"
+                            suppressHydrationWarning
                             onClick={(e) => {
                               e.stopPropagation();
                               setZoomMode("window");
@@ -985,18 +988,18 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
         {/* ─── Related Products ("You May Also Like") ──────────────────────── */}
         {relatedProducts.length > 0 && (
           <section className="mt-8 mb-16">
-            <h2 className="font-headline-md font-extrabold text-on-surface text-xl mb-4">
+            <h2 className="font-headline-md font-extrabold text-on-surface text-lg sm:text-xl mb-3 sm:mb-4">
               You May Also Like
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               {relatedProducts.map((item) => (
                 <div
                   key={item.id}
                   onClick={() => router.push(`/product/${item.id}`)}
-                  className="bg-white rounded-2xl overflow-hidden border border-gray-200/70 p-3 shadow-xs hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
+                  className="bg-white rounded-2xl overflow-hidden border border-gray-200/70 p-2.5 sm:p-3 shadow-xs hover:shadow-md transition-all cursor-pointer group flex flex-col justify-between"
                 >
                   <div>
-                    <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-2.5">
+                    <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-100 mb-2">
                       <img
                         src={item.image || "/teffes-logo-maroon.png"}
                         alt={item.name}
@@ -1007,18 +1010,18 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
                         }}
                       />
                     </div>
-                    <h4 className="font-headline-sm font-bold text-sm text-gray-900 line-clamp-1 group-hover:text-primary transition-colors">
+                    <h4 className="font-headline-sm font-bold text-xs sm:text-sm text-gray-900 line-clamp-1 group-hover:text-primary transition-colors">
                       {item.name}
                     </h4>
-                    <div className="flex items-center justify-between text-xs text-slate-body mt-0.5">
-                      <span>{item.netWeight ? `Net: ${item.netWeight}` : "Fresh Cut"}</span>
-                      {item.pieces && <span className="text-tertiary font-label-badge font-bold">{item.pieces}</span>}
+                    <div className="flex items-center justify-between text-[11px] sm:text-xs text-slate-body mt-0.5">
+                      <span className="truncate">{item.netWeight ? `Net: ${item.netWeight}` : "Fresh Cut"}</span>
+                      {item.pieces && <span className="text-tertiary font-label-badge font-bold shrink-0 ml-1">{item.pieces}</span>}
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mt-3 pt-2 border-t border-gray-100">
-                    <span className="font-bold text-primary text-base">₹{item.price}</span>
-                    <span className="text-xs font-bold text-primary hover:underline">View Cut →</span>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+                    <span className="font-bold text-primary text-sm sm:text-base">₹{item.price}</span>
+                    <span className="text-[11px] sm:text-xs font-bold text-primary hover:underline">View Cut →</span>
                   </div>
                 </div>
               ))}
