@@ -83,36 +83,32 @@ const normalizeItemName = (str) => {
 };
 
 /**
- * Smart matcher linking a cart/order item to a store's butchery inventory item.
+ * Strict ID-Only matcher linking a cart/order item to a store's butchery inventory item.
+ * Strictly adheres to immutable product and inventory item IDs to guarantee 100% accuracy
+ * and eliminate any possibility of false cross-cut collisions.
  */
 const matchCartItemToInventory = (cartItem, invList) => {
-  if (!invList || invList.length === 0) return null;
-  const normProd = normalizeItemName(cartItem.name);
-  const prodWords = normProd.split(' ').filter((w) => w.length > 2);
+  if (!cartItem || !invList || !Array.isArray(invList) || invList.length === 0) return null;
+
+  const targetId = String(cartItem.id || cartItem.productId || '').trim();
+  if (!targetId) return null;
 
   for (const inv of invList) {
-    if (inv.itemId === cartItem.id || inv.itemId === cartItem.productId) return inv;
-    const normInv = normalizeItemName(inv.item);
-    if (normInv === normProd || normInv.includes(normProd) || normProd.includes(normInv)) {
+    if (!inv) continue;
+    // Direct match against inv.itemId (e.g. 'prod-28643429')
+    if (inv.itemId && String(inv.itemId).trim() === targetId) {
+      return inv;
+    }
+    // Direct match against doc ID or prefixed ID (e.g. 'S001_prod-28643429')
+    if (inv.id && (String(inv.id).trim() === targetId || String(inv.id).endsWith(`_${targetId}`))) {
+      return inv;
+    }
+    if (inv._id && (String(inv._id).trim() === targetId || String(inv._id).endsWith(`_${targetId}`))) {
       return inv;
     }
   }
 
-  let best = null;
-  let bestScore = 0;
-  for (const inv of invList) {
-    const normInv = normalizeItemName(inv.item);
-    const invWords = normInv.split(' ').filter((w) => w.length > 2);
-    let score = 0;
-    for (const w of prodWords) {
-      if (invWords.includes(w)) score++;
-    }
-    if (score > bestScore && score >= 1) {
-      bestScore = score;
-      best = inv;
-    }
-  }
-  return bestScore >= 1 ? best : null;
+  return null;
 };
 
 /**
