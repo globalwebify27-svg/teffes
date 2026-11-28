@@ -3127,10 +3127,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                           final prod = cartItem.product;
                           final bool isItemOutOfStock = !prod.inStock ||
                               (_selectedStore != null &&
-                                  (_selectedStore!.outOfStockProductIds.contains(prod.id) ||
-                                   _selectedStore!.outOfStockItems.any((name) =>
-                                       prod.name.toLowerCase().contains(name.toLowerCase()) ||
-                                       name.toLowerCase().contains(prod.name.toLowerCase()))));
+                                  _selectedStore!.outOfStockProductIds.contains(prod.id));
 
                           return Container(
                             margin: isItemOutOfStock ? const EdgeInsets.symmetric(horizontal: 10, vertical: 4) : EdgeInsets.zero,
@@ -3637,10 +3634,7 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                     final p = cartItem.product;
                     return !p.inStock ||
                         (selStore != null &&
-                            (selStore.outOfStockProductIds.contains(p.id) ||
-                             selStore.outOfStockItems.any((name) =>
-                                 p.name.toLowerCase().contains(name.toLowerCase()) ||
-                                 name.toLowerCase().contains(p.name.toLowerCase()))));
+                            selStore.outOfStockProductIds.contains(p.id));
                   });
                   final bool isStoreOperational = selStore != null && selStore.isStoreOperational;
                   final bool isCheckoutBlocked = cart.subtotal < 200 || (auth.isAuthenticated && !isLocationMissing && (isOutOfRadius || needsPincodeVerification)) || hasOutOfStockItems || !isStoreOperational;

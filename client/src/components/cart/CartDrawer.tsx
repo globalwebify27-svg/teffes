@@ -687,13 +687,10 @@ export default function CartDrawer() {
   const isUnderMinOrder = subtotal < MIN_ORDER_AMOUNT;
   const amountForMinOrder = Math.max(0, MIN_ORDER_AMOUNT - subtotal);
 
-  // Helper to determine if an individual cart item is out of stock at current store
+  // Helper to determine if an individual cart item is out of stock at current store (strictly ID-based)
   const isCartItemOutOfStock = (item: CartItem) => {
     if (item.product.inStock === false) return true;
     if (selectedStore?.outOfStockProductIds && selectedStore.outOfStockProductIds.includes(item.product.id)) return true;
-    if (selectedStore?.outOfStockItems && selectedStore.outOfStockItems.some((s: string) =>
-      s.toLowerCase().includes(item.product.name.toLowerCase()) || item.product.name.toLowerCase().includes(s.toLowerCase())
-    )) return true;
     return false;
   };
 
