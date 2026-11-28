@@ -223,18 +223,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text('Mobile Number', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                  Row(
+                    children: const [
+                      Text('Mobile Number', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      SizedBox(width: 6),
+                      Icon(Icons.lock_outline_rounded, size: 14, color: AppColors.textMuted),
+                    ],
+                  ),
                   const SizedBox(height: 4),
                   TextField(
                     controller: phoneController,
-                    keyboardType: TextInputType.phone,
+                    readOnly: true,
+                    enabled: false,
+                    style: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       prefixText: '+91 ',
+                      prefixStyle: const TextStyle(color: AppColors.textSecondary, fontWeight: FontWeight.w600),
                       filled: true,
                       fillColor: AppColors.surfaceSubtle,
+                      suffixIcon: const Tooltip(
+                        message: 'Phone number cannot be changed',
+                        child: Icon(Icons.lock_rounded, size: 16, color: AppColors.textMuted),
+                      ),
                       border: OutlineInputBorder(borderRadius: AppDimensions.roundedMd, borderSide: BorderSide.none),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Phone number is linked to your account and cannot be modified.',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
@@ -249,12 +267,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ? null
                           : () async {
                               setModalState(() => isSaving = true);
-                              final rawPhone = phoneController.text.trim();
-                              final formattedPhone = rawPhone.startsWith('+91') ? rawPhone : '+91 $rawPhone';
                               await auth.updateProfileDetails(
                                 name: nameController.text.trim(),
                                 email: emailController.text.trim(),
-                                phone: formattedPhone,
+                                phone: auth.user?.phone ?? ('+91 ${phoneController.text.trim()}'),
                               );
                               if (ctx.mounted) Navigator.pop(ctx);
                               if (context.mounted) {

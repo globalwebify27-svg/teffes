@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:sms_autofill/sms_autofill.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_dimensions.dart';
 import '../../providers/auth_provider.dart';
@@ -16,17 +17,16 @@ class LoginScreen extends StatefulWidget {
   State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
+class _LoginScreenState extends State<LoginScreen> with CodeAutoFill {
   final TextEditingController _phoneController = TextEditingController();
 
-  // Unified 6-Digit OTP Controller & FocusNode for Native OS Autofill, Clipboard, & SMS Auto-Verification
+  // Unified 6-Digit OTP Controller & FocusNode for Native OS Autofill, SMS User Consent & Auto-Verification
   final TextEditingController _otpController = TextEditingController();
   final FocusNode _otpFocusNode = FocusNode();
 
   bool _isOtpSent = false;
   String? _verificationId;
   int? _resendToken;
-  final String _testOtp = '123456';
   int _resendTimerSeconds = 30;
   Timer? _countdownTimer;
 
@@ -69,49 +69,26 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addObserver(this);
+    listenForCode();
+  }
+
+  @override
+  void codeUpdated() {
+    debugPrint('[LoginScreen] SMS User Consent codeUpdated: $code');
+    if (code != null && code!.isNotEmpty) {
+      _fillOtp(code!);
+    }
   }
 
   @override
   void dispose() {
-    WidgetsBinding.instance.removeObserver(this);
+    cancel();
+    unregisterListener();
     _countdownTimer?.cancel();
     _phoneController.dispose();
     _otpController.dispose();
     _otpFocusNode.dispose();
     super.dispose();
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _isOtpSent && _currentOtp.length < 6) {
-      _checkClipboardForOtp();
-    }
-  }
-
-  /// Automatically reads and populates OTP if user copied the code from SMS/Notification bar
-  Future<void> _checkClipboardForOtp() async {
-    try {
-      final data = await Clipboard.getData(Clipboard.kTextPlain);
-      final text = data?.text?.trim() ?? '';
-      if (text.isEmpty) return;
-      final match = RegExp(r'\b\d{6}\b').firstMatch(text);
-      if (match != null) {
-        final code = match.group(0)!;
-        if (code != _currentOtp && code.length == 6) {
-          _fillOtp(code);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text('Auto-detected OTP $code from SMS'),
-                backgroundColor: const Color(0xFF065F46),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-        }
-      }
-    } catch (_) {}
   }
 
   void _startResendTimer() {
@@ -183,9 +160,9 @@ class _LoginScreenState extends State<LoginScreen> with WidgetsBindingObserver {
         });
         _clearOtpBoxes();
         _startResendTimer();
+        listenForCode();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _otpFocusNode.requestFocus();
-          _checkClipboardForOtp();
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
