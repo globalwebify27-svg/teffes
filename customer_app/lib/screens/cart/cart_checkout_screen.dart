@@ -2268,58 +2268,82 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                       margin: const EdgeInsets.all(AppDimensions.spaceMd),
                       padding: const EdgeInsets.all(AppDimensions.spaceMd),
                       decoration: BoxDecoration(
-                        color: Colors.white,
+                        color: location.selectedAddress == null
+                            ? AppColors.primaryMaroon.withOpacity(0.04)
+                            : Colors.white,
                         borderRadius: AppDimensions.roundedLg,
-                        border: Border.all(color: AppColors.borderHairline),
+                        border: Border.all(
+                          color: location.selectedAddress == null
+                              ? AppColors.primaryMaroon.withOpacity(0.25)
+                              : AppColors.borderHairline,
+                        ),
                         boxShadow: AppDimensions.cardShadow,
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           if (location.selectedAddress == null) ...[
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                Container(
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primaryMaroon.withOpacity(0.08),
-                                    borderRadius: BorderRadius.circular(10),
+                            InkWell(
+                              onTap: () => location.savedAddresses.isNotEmpty
+                                  ? _showAddressPicker(context, location)
+                                  : _showAddAddressDialog(context, location),
+                              borderRadius: AppDimensions.roundedLg,
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryMaroon.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: const Icon(Icons.add_location_alt_rounded, color: AppColors.primaryMaroon, size: 20),
                                   ),
-                                  child: const Icon(Icons.add_location_alt_rounded, color: AppColors.primaryMaroon, size: 20),
-                                ),
-                                const SizedBox(width: 10),
-                                const Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        'No delivery address added',
-                                        style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13, color: AppColors.textPrimary),
-                                      ),
-                                      SizedBox(height: 2),
-                                      Text(
-                                        'Add an address to deliver your order',
-                                        style: TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
-                                      ),
-                                    ],
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const Text(
+                                          'DELIVERY ADDRESS NEEDED',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 12.5,
+                                            letterSpacing: 0.5,
+                                            color: AppColors.primaryMaroon,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          location.savedAddresses.isNotEmpty
+                                              ? 'Select a saved address or add a new one'
+                                              : 'Please add a delivery address to proceed',
+                                          style: const TextStyle(fontSize: 11.5, color: AppColors.textSecondary),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: AppColors.primaryMaroon,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    minimumSize: Size.zero,
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                    elevation: 0,
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.primaryMaroon,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      elevation: 0,
+                                    ),
+                                    onPressed: () => location.savedAddresses.isNotEmpty
+                                        ? _showAddressPicker(context, location)
+                                        : _showAddAddressDialog(context, location),
+                                    child: Text(
+                                      location.savedAddresses.isNotEmpty ? 'SELECT' : '+ ADD',
+                                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5),
+                                    ),
                                   ),
-                                  onPressed: () => _showAddAddressDialog(context, location),
-                                  child: const Text('+ ADD', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11.5)),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ] else ...[
                             Row(
@@ -2340,12 +2364,20 @@ class _CartCheckoutScreenState extends State<CartCheckoutScreen> {
                                           ),
                                           GestureDetector(
                                             onTap: () => _showAddressPicker(context, location),
-                                            child: const Text(
-                                              'CHANGE',
-                                              style: TextStyle(
-                                                color: AppColors.primaryMaroon,
-                                                fontWeight: FontWeight.w800,
-                                                fontSize: 11.5,
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: AppColors.primaryLight.withOpacity(0.5),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: const Text(
+                                                'CHANGE',
+                                                style: TextStyle(
+                                                  color: AppColors.primaryMaroon,
+                                                  fontWeight: FontWeight.w800,
+                                                  fontSize: 11.5,
+                                                  letterSpacing: 0.5,
+                                                ),
                                               ),
                                             ),
                                           ),

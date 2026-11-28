@@ -83,6 +83,17 @@ class LocationProvider with ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       _hasPromptedPermission = prefs.getBool('has_prompted_location_permission') ?? false;
       final savedId = prefs.getString('selected_addr_id');
+      final savedLine1 = prefs.getString('selected_addr_line1') ?? '';
+
+      // Purge any legacy fake fallback "Live Location" that was previously cached
+      if (savedId != null && (savedId.startsWith('gps-') && (savedLine1 == 'Live Location' || savedLine1.isEmpty))) {
+        await _clearPersistedSelectedAddress();
+        _selectedAddress = null;
+        _isGpsDetected = false;
+        notifyListeners();
+        return;
+      }
+
       if (savedId != null && _selectedAddress == null) {
         _selectedAddress = AddressModel(
           id: savedId,
@@ -165,8 +176,7 @@ class LocationProvider with ChangeNotifier {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
-        // Location service disabled on device
-        _fallbackGpsLocation(userTriggered);
+        // Location service disabled on device - do not invent fake address
         _isLoading = false;
         notifyListeners();
         return false;
@@ -176,7 +186,7 @@ class LocationProvider with ChangeNotifier {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
-          _fallbackGpsLocation(userTriggered);
+          // Permission denied by user - do not invent fake address
           _isLoading = false;
           notifyListeners();
           return false;
@@ -184,7 +194,7 @@ class LocationProvider with ChangeNotifier {
       }
 
       if (permission == LocationPermission.deniedForever) {
-        _fallbackGpsLocation(userTriggered);
+        // Permission permanently denied - do not invent fake address
         _isLoading = false;
         notifyListeners();
         return false;
@@ -203,54 +213,58 @@ class LocationProvider with ChangeNotifier {
         position = await Geolocator.getLastKnownPosition();
       }
 
-      double detectedLat = position?.latitude ?? 23.3441;
-      double detectedLng = position?.longitude ?? 85.3096;
+      if (position == null) {
+        _isLoading = false;
+        notifyListeners();
+        return false;
+      }
+
+      double detectedLat = position.latitude;
+      double detectedLng = position.longitude;
 
       String localityName = 'Current Location';
-      String line1 = 'Live Location';
+      String line1 = 'Current Location';
       String? line2;
       String city = 'Ranchi';
       String pincode = '834001';
 
-      if (position != null) {
-        bool resolvedLive = false;
-        try {
-          // Google Geocoding via TeFFe backend proxy (API key protected on server)
-          final res = await _api.get(
-            ApiEndpoints.reverseGeocode,
-            queryParameters: {
-              'lat': position.latitude,
-              'lng': position.longitude,
-            },
-          );
+      bool resolvedLive = false;
+      try {
+        // Google Geocoding via TeFFe backend proxy (API key protected on server)
+        final res = await _api.get(
+          ApiEndpoints.reverseGeocode,
+          queryParameters: {
+            'lat': position.latitude,
+            'lng': position.longitude,
+          },
+        );
 
-          if (res.data != null &&
-              res.data['success'] == true &&
-              res.data['provider'] != 'fallback' &&
-              res.data['locality'] != 'Kishore Ganj') {
-            line1 = res.data['addressLine'] ?? 'Live Location';
-            localityName = res.data['locality'] ?? res.data['city'] ?? 'Current Location';
-            city = res.data['city'] ?? 'Ranchi';
-            pincode = res.data['pincode'] ?? '834001';
-            line2 = city;
-            if (res.data['latitude'] != null) detectedLat = (res.data['latitude'] as num).toDouble();
-            if (res.data['longitude'] != null) detectedLng = (res.data['longitude'] as num).toDouble();
-            resolvedLive = true;
-          }
-        } catch (e) {
-          debugPrint('Backend reverse geocoding error: $e');
+        if (res.data != null &&
+            res.data['success'] == true &&
+            res.data['provider'] != 'fallback' &&
+            res.data['locality'] != 'Kishore Ganj') {
+          line1 = res.data['addressLine'] ?? 'Current Location';
+          localityName = res.data['locality'] ?? res.data['city'] ?? 'Current Location';
+          city = res.data['city'] ?? 'Ranchi';
+          pincode = res.data['pincode'] ?? '834001';
+          line2 = city;
+          if (res.data['latitude'] != null) detectedLat = (res.data['latitude'] as num).toDouble();
+          if (res.data['longitude'] != null) detectedLng = (res.data['longitude'] as num).toDouble();
+          resolvedLive = true;
         }
+      } catch (e) {
+        debugPrint('Backend reverse geocoding error: $e');
+      }
 
-        // If backend proxy didn't resolve live locality or returned fallback, query Nominatim directly
-        if (!resolvedLive) {
-          await _reverseGeocodeNominatim(position.latitude, position.longitude, (l1, loc, c, p) {
-            line1 = l1;
-            localityName = loc;
-            city = c;
-            pincode = p;
-            line2 = c;
-          });
-        }
+      // If backend proxy didn't resolve live locality or returned fallback, query Nominatim directly
+      if (!resolvedLive) {
+        await _reverseGeocodeNominatim(position.latitude, position.longitude, (l1, loc, c, p) {
+          line1 = l1;
+          localityName = loc;
+          city = c;
+          pincode = p;
+          line2 = c;
+        });
       }
 
       final gpsLocation = AddressModel(
@@ -273,29 +287,9 @@ class LocationProvider with ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('detectGpsLocation error: $e');
-      _fallbackGpsLocation(userTriggered);
       _isLoading = false;
       notifyListeners();
       return false;
-    }
-  }
-
-  void _fallbackGpsLocation(bool userTriggered) {
-    if (_selectedAddress == null || userTriggered) {
-      final fallback = AddressModel(
-        id: 'gps-${DateTime.now().millisecondsSinceEpoch}',
-        tag: 'Current Location',
-        line1: 'Live Location',
-        line2: 'Ranchi',
-        city: 'Ranchi',
-        pincode: '834001',
-        latitude: 23.3441,
-        longitude: 85.3096,
-        isDefault: false,
-      );
-      _selectedAddress = fallback;
-      _isGpsDetected = true;
-      _persistSelectedAddress(fallback);
     }
   }
 
