@@ -7,7 +7,7 @@ import { isAuthenticated, getStoredUser, updateUserInStorage } from "@/lib/auth"
 import api from "@/lib/api";
 import { useLocation } from "@/context/LocationContext";
 import { toast } from "@/lib/toast";
-import { trackEvent } from "@/lib/metaPixel";
+import { trackEvent, formatMetaCatalogId } from "@/lib/metaPixel";
 
 interface CrossSellItemData {
   id: string;
@@ -905,6 +905,18 @@ export default function CartDrawer() {
       console.warn("Failed to fetch wallet balance:", err);
     }
 
+    try {
+      trackEvent("InitiateCheckout", {
+        content_ids: items.map((i) => formatMetaCatalogId(i.product.id)),
+        content_type: "product",
+        currency: "INR",
+        value: finalPayable,
+        num_items: items.length,
+      });
+    } catch (e) {
+      console.warn("Failed to track InitiateCheckout:", e);
+    }
+
     setView("payment");
   };
 
@@ -1032,8 +1044,11 @@ export default function CartDrawer() {
       if (res.data.success) {
         const placedOrderId = res.data.order?.orderId || "";
         trackEvent("Purchase", {
+          content_ids: items.map((i) => formatMetaCatalogId(i.product.id)),
+          content_type: "product",
           currency: "INR",
           value: finalPayable,
+          num_items: items.length,
           order_id: placedOrderId,
         });
         clearCart();
@@ -1192,6 +1207,8 @@ export default function CartDrawer() {
       }));
 
       trackEvent("InitiateCheckout", {
+        content_ids: items.map((i) => formatMetaCatalogId(i.product.id)),
+        content_type: "product",
         currency: "INR",
         value: finalPayable,
         num_items: items.length,

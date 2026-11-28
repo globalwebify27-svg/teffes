@@ -10,6 +10,7 @@ import { toast } from "@/lib/toast";
 import { isYouTubeUrl, getYouTubeEmbedUrl, getYouTubeThumbnailUrl } from "@/lib/videoUtils";
 import { ProductDetailSkeleton } from "@/components/common/Skeletons";
 import ProductQuantityStepper from "@/components/products/ProductQuantityStepper";
+import { trackEvent, formatMetaCatalogId } from "@/lib/metaPixel";
 
 export type ProductMediaItem =
   | { type: "image"; url: string }
@@ -58,6 +59,18 @@ export default function ProductDetailClient({ productId, initialProduct }: Produ
       isMounted = false;
     };
   }, [productId, initialProduct]);
+
+  useEffect(() => {
+    if (product && product.id) {
+      trackEvent("ViewContent", {
+        content_ids: [formatMetaCatalogId(product.id)],
+        content_name: product.name,
+        content_type: "product",
+        value: product.price,
+        currency: "INR",
+      });
+    }
+  }, [product?.id]);
 
   const { addToCart, updateQuantity, getItemQuantity, openCart } = useCart();
   const { isInWishlist, toggleWishlist } = useWishlist();

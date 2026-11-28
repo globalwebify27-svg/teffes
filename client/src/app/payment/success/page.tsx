@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import api from "@/lib/api";
 import { useCart } from "@/lib/cart";
-import { trackEvent } from "@/lib/metaPixel";
+import { trackEvent, formatMetaCatalogId } from "@/lib/metaPixel";
 
 export default function PaymentSuccessPage() {
   const router = useRouter();
@@ -22,9 +22,14 @@ export default function PaymentSuccessPage() {
         if (typeof window !== "undefined") {
           sessionStorage.setItem("justPlacedOrderId", placedOrderId);
         }
+        const orderItems: any[] = Array.isArray(orderPayload?.items) ? orderPayload.items : [];
+        const contentIds = orderItems.map((i: any) => formatMetaCatalogId(i.productId || i.id));
         trackEvent("Purchase", {
+          content_ids: contentIds,
+          content_type: "product",
           currency: "INR",
           value: Number(orderPayload?.amount || orderPayload?.total || 0),
+          num_items: orderItems.length,
           order_id: placedOrderId,
         });
         clearCart();

@@ -5,7 +5,7 @@ import { Product } from "./products";
 import { isAuthenticated } from "./auth";
 import { useRouter } from "next/navigation";
 import { toast } from "./toast";
-import { trackEvent } from "./metaPixel";
+import { trackEvent, formatMetaCatalogId } from "./metaPixel";
 
 export interface CartItem {
   product: Product;
@@ -179,7 +179,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       ];
     });
     trackEvent("AddToCart", {
-      content_ids: [product.id],
+      content_ids: [formatMetaCatalogId(product.id)],
       content_name: product.name,
       content_type: "product",
       value: product.price,
@@ -213,7 +213,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
 
     if (currentItem && quantity > currentItem.quantity) {
       trackEvent("AddToCart", {
-        content_ids: [currentItem.product.id],
+        content_ids: [formatMetaCatalogId(currentItem.product.id)],
         content_name: currentItem.product.name,
         content_type: "product",
         value: currentItem.product.price,
